@@ -57,6 +57,26 @@ Rosetta), and builds there. **The reference dump is never modified.** See
 `tools/refharness/instrumented/README.md` for the trace format and the run
 command (`SAUER_TRACE=<path> sauer_client`).
 
+**Results.** A real 26 s capture (`tools/refharness/traces/session1.csv`, 5273
+steps, 23 jump takeoffs) was replayed through the documented model by
+`tools/refharness/validate_trace.py`, split so collision can't pollute the test:
+
+| Environment | Steps | Exact match | Notes |
+| --- | --- | --- | --- |
+| Flat floor (`floor.z == 1`) | 2686 | **100.0%** | max vel error 1e-5 |
+| Free air (`PHYS_FALL`) | 2465 | **97.3%** | misses are jump pads / collisions, not model errors |
+
+This confirms the velocity model (friction, forward/airborne multipliers, jump,
+gravity) matches the original in real play. Residual air misses coincide with
+external events (e.g. a jump pad at step 3143) and collision steps — which need
+geometry to reproduce.
+
+**Replay prerequisites.** The capture map is `packages/base/church51.ogz`.
+The A2 patch now also logs the **map name** and external movement events
+(**jump pads, teleports**) to `SAUER_TRACE.events` (`step,time,event`), so A3 can
+resync at them instead of diverging (e.g. the jump pad at step 3143).
+`session1.csv` predates this and must be re-captured with the current build.
+
 ---
 
 ## A3 — Input-replay differential
