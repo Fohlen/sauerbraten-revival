@@ -1,0 +1,179 @@
+# Architecture
+
+Sauerbraten Revival — core technical decisions. See [movement-physics.md](movement-physics.md)
+for the ported movement model and [movement-verification.md](movement-verification.md)
+for how we prove movement fidelity.
+
+## Decision summary
+
+| Concern | Decision |
+| --- | --- |
+| World representation | Native **octree**, **dynamic at runtime** (GDExtension) |
+| Original octree code | Reuse `octa.cpp`/`octa.h` **core**; port editor *algorithms*; do **not** copy `octaedit.cpp` plumbing |
+| Rendering | Incremental per-chunk `ArrayMesh`; Sauerbraten blend/lightmap shader |
+| Collision & movement | Our own ported octree traversal (`move`/`collide`/steps), validated against the original |
+| Level format | `Level.tscn` (entities/config) + **Godot binary `Resource`** world blob. **No `.ogz`, no CubeScript** |
+| Editor | Runtime, in-game, Godot UI + **command system** |
+| World mutations | All are **serializable commands** (editor, game modes, network) |
+| Config | Godot-native: `ProjectSettings`, `ConfigFile`, `Resource`, `InputMap` |
+| Networking | Steamworks; replicate movement + commands; server-authoritative world |
+| Modding | Data-first Resources + versioned API; Workshop packs via `load_resource_pack` |
+
+---
+
+## 1. World model: a dynamic octree
+
+Sauerbraten's octree is a good structure — it was never the problem. `.ogz` and
+CubeScript were. We keep octree-style editing and collision, but:
+
+- **No octree serialization to `.ogz`.** The octree lives in memory and is saved
+  as a Godot binary `Resource`.
+- **No `remip`-only statics assumption.** The octree is a *live, mutable* world
+  structure, not just an editor-time one.
+
+Rationale: the octree simultaneously serves editing (variable-size cubes),
+collision (log-time traversal), and compact storage of large solid regions.
+Nothing else gives all three as cleanly for cube geometry.
+
+### Runtime mutability (the "crumbling walls" requirement)
+
+Cube 2's world is effectively static geometry at play time; only a few entity
+types move. We explicitly want to overcome this. The world must support
+**real-time structural changes**:
+
+- A race mode where walls crumble, floors fall away, and new geometry appears.
+- Any game mode can mutate the world through the same command API the editor uses.
+
+Consequences:
+- **Mesh updates are incremental** — only dirty chunks are re-meshed, within a
+  per-frame budget to avoid hitches.
+- **Collision is live** — the movement code always queries the current octree,
+  so structural changes affect players immediately.
+- **Determinism** — a world mutation is a command; replaying the same command
+  stream reconstructs the same world.
+
+---
+
+## 2. Command system (editor + game modes + network)
+
+Every world mutation is expressed as a command with an inverse:
+
+```
+Command { op, args, inverse }
+```
+
+- **Editor UI** issues commands (add cube, delete cube, texture face, fill, remip, paste).
+- **Game modes** issue commands (e.g. `crumbling_wall` schedules repeated cube
+  removals; `spawn_platform` adds geometry). Modes get a safe, data-driven API —
+  not raw memory access.
+- **Undo/redo** is a command stack (inverse ops).
+- **Networking** replicates the command stream; a server-authoritative world plus
+  client prediction for the local player.
+
+This one mechanism covers live editing, dynamic geometry, undo, and coop-edit
+sync. It is also the foundation for multiplayer and Workshop content.
+
+---
+
+## 3. Reusing the original octree code (feasibility)
+
+| Original file | LOC | GL refs | Action |
+| --- | --- | --- | --- |
+| `octa.cpp` core | 1880 | **0** | **Reuse** behind a small compatibility shim |
+| `octa.h` (structs) | — | — | Reuse/adapt |
+| `octaedit.cpp` | 3003 | 19 | **Port the algorithms**, reimplement UI/undo/selection plumbing |
+| `octarender.cpp` | 1803 | 45 | **Replace** with a Godot mesh emitter (reuse face-selection logic) |
+| `worldio.cpp` | 1388 | — | **Delete**, replaced by our `Resource` format |
+| octree traversal (`physics.cpp`) | ~500 | 0 | **Reuse/port** for collision |
+
+`octa.cpp` depends on only a handful of globals (`worldroot`, `worldsize`,
+`worldscale`, `allocnodes`, `lu`, `isempty`, `isentirelysolid`, `octastep`,
+`lookupmaterial`) — shimmable. `octaedit.cpp` is entangled with rendering, GUI,
+undo, VBOs and compression; copying it would drag in much of the engine. We
+therefore port its algorithms and rebuild the plumbing Godot-native.
+
+Language split:
+- **C++ / GDExtension**: octree, meshing, collision queries, save/load, command application.
+- **GDScript**: editor UI, game logic, menus, HUD.
+
+---
+
+## 4. Level format
+
+- `Level.tscn`: entities (typed Godot nodes — spawns, flags, pickups, mapmodels),
+  game-mode settings, a reference to the world `Resource` and material manifest.
+- **World blob**: a Godot binary `Resource` (`worldroot` octree + per-face
+  material indices + surface data + version field).
+- **Material manifest**: face/material index → `ShaderMaterial`. No texture-name
+  resolution from scripts.
+- Saved/loaded by the GDExtension, versioned for forward migration.
+
+This format is what the editor writes, what the converter produces, and what
+mods ship.
+
+---
+
+## 5. Material & lighting fidelity (staged)
+
+We work up from approximate to exact, keeping the data model stable so we never
+have to rewrite world data to improve rendering:
+
+1. **Approximate**: base texture + tint, single layer, dynamic Godot lighting.
+2. **Blended**: Sauerbraten multi-layer material blending and per-face texture
+   coordinates.
+3. **Exact**: original lightmaps, envmaps, decals, and the full surface model.
+
+The material manifest/shader is the pluggable seam; world data does not change
+between stages.
+
+---
+
+## 6. Config, the Godot-native way
+
+| Need | Mechanism |
+| --- | --- |
+| Input, keybinds | `InputMap` (runtime-remappable) |
+| User settings | `ConfigFile` in `user://` |
+| Content defs (weapons, modes, entities) | typed `Resource` (`.tres`) |
+| Server / game rules | `ConfigFile` / JSON + project overrides |
+| Build/editor options | `ProjectSettings` |
+
+No CubeScript, no interpreter, no cross-map ambiguity.
+
+---
+
+## 7. Modding & Workshop
+
+**Content mods are easy** — Resources, ConfigFiles, our world format, and model
+imports cover maps, materials, entities, weapon stats, and mode parameters.
+
+**Two tiers, explicitly:**
+
+| Tier | Contents | Safety |
+| --- | --- | --- |
+| Data (default) | maps, materials, models, sounds, entity defs, mode *parameters* | Safe |
+| Code (opt-in) | GDScript module / GDExtension (custom rules, total conversions) | Arbitrary code execution — trusted authors only |
+
+- **Package**: a `.pck` (or folder) with a `mod.json` manifest: `id`, `name`,
+  `author`, `version`, `api_version`, `dependencies`, `load_priority`, `contents[]`.
+- **Loading**: enumerate subscribed Workshop content at startup, validate the
+  manifest/API version, load in deterministic order via `load_resource_pack`.
+- **UGC loop**: edit a map live in-game → save our format → upload to Workshop →
+  subscribers download and play. Maps made in coop edit become Workshop content.
+- **Multiplayer parity**: content hashes/IDs in the manifest let matchmaking
+  require identical mods/maps.
+
+---
+
+## 8. Movement verification (Plan A)
+
+Full detail in [movement-verification.md](movement-verification.md). Summary:
+
+- **A1** — standalone C++ harness running the *original* movement functions at
+  fixed 5 ms steps with scripted inputs; emits golden CSV traces.
+- **A2** — instrument the original client to log full-precision per-frame state + inputs.
+- **A3** — input-replay: one input file drives both engines; diff traces.
+- **A4** — determinism check on the original.
+
+The port must be run at a fixed 200 Hz step and match the harness. This is
+non-negotiable: movement is the product.
