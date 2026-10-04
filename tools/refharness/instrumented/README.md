@@ -1,0 +1,61 @@
+# A2 — Instrumented Client (movement capture)
+
+Builds a **patched copy** of the original Sauerbraten client that logs the local
+player's full-precision per-5 ms state and inputs to CSV, so the port can be
+diffed against real gameplay. See
+[`docs/movement-verification.md`](../../../docs/movement-verification.md).
+
+The reference dump is **never modified**: `build_instrumented.sh` copies its
+`src/` into an ignored `instrumented/build/` directory, applies the patches, and
+builds there. Delete `instrumented/build/` to clean up.
+
+## Patches
+
+| Patch | Purpose |
+| --- | --- |
+| `patches/a2-trace.patch` | Adds the `SAUER_TRACE` CSV logger to `engine/physics.cpp`. |
+| `patches/macos-arm64.patch` | Builds native arm64 against Homebrew SDL2 (the Makefile otherwise forces x86_64, which cannot run here). |
+
+## Prerequisites (macOS / arm64)
+
+```sh
+brew install sdl2 sdl2_image sdl2_mixer
+```
+
+## Build
+
+```sh
+tools/refharness/build_instrumented.sh
+# optional: SAUER_REF=/path/to/dump tools/refharness/build_instrumented.sh
+```
+
+## Capture a trace
+
+Run from the **reference root** so `data/` and `packages/` resolve, with the
+trace path in `SAUER_TRACE`:
+
+```sh
+cd "$SAUER_REF"
+SAUER_TRACE=/tmp/sauer-trace.csv \
+  /abs/path/to/tools/refharness/instrumented/build/sauer_client -q"$HOME/.sauerbraten"
+```
+
+Then: start a local game / load a map, move (walk, strafe, jump, ramps, stairs),
+and quit. The CSV is written to `SAUER_TRACE`.
+
+> The logger records every `ENT_PLAYER` physics step, i.e. the local player at
+> 200 Hz. Bots/monsters are `ENT_AI` and are excluded.
+
+## Trace format
+
+```
+step,time,move,strafe,jumping,yaw,pitch,ox,oy,oz,vx,vy,vz,fx,fy,fz,physstate,timeinair,floorx,floory,floorz
+```
+
+- `move`/`strafe`/`jumping`: inputs at that step.
+- `yaw`/`pitch`: absolute view angles (deltas are recoverable).
+- `o`/`vel`/`falling`: position and the two velocity accumulators.
+- `physstate`: `0..7` (`PHYS_*`).
+- `floor`: floor normal.
+
+These are the **golden inputs + outputs** for A3 input-replay differential testing.

@@ -49,15 +49,13 @@ the inputs (`move`, `strafe`, `jumping`, yaw/pitch deltas) to CSV.
 
 **Deliverable:** a patched (separate) original build + a capture script.
 
-**Build constraint (macOS):** the r6889 snapshot ships only a prebuilt **x86_64**
-app (Rosetta) and a 2020 Xcode project; no macOS SDL2 libraries are bundled.
-Rebuilding the GUI client here is non-trivial. Options, in order of preference:
-1. Build the original headless and instrument that.
-2. Use the prebuilt app for human A/B (Track B) and lean on a headless reference
-   simulator (extended A1 with collision) for the automated A3 diff.
-
-If neither is viable, A2 can be deferred until collision exists — the velocity
-model is already covered by A1.
+**Implemented (macOS/arm64).** `tools/refharness/build_instrumented.sh` copies the
+reference `src/` into an ignored build dir, applies `patches/a2-trace.patch`
+(the `SAUER_TRACE` logger) and `patches/macos-arm64.patch` (native arm64 against
+Homebrew SDL2 — the Makefile otherwise forces x86_64, which cannot run without
+Rosetta), and builds there. **The reference dump is never modified.** See
+`tools/refharness/instrumented/README.md` for the trace format and the run
+command (`SAUER_TRACE=<path> sauer_client`).
 
 ---
 

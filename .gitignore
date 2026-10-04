@@ -5,3 +5,4 @@
 # native reference harness artifacts
 tools/refharness/refharness
 tools/refharness/out/
+tools/refharness/instrumented/build/
