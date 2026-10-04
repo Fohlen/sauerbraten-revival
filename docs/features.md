@@ -18,6 +18,8 @@ Living inventory. Order reflects intent, not schedule. MVP target:
 6. **Combat & spawns** — weapons/hitscan, flags, scoring, respawns.
 7. **Modes** — FFA, insta CTF, effic CTF, coop edit.
 8. **Community / online** — Steamworks networking, Workshop, UGC.
+9. **Demos & replays** — record/playback of the movement + command stream. A
+   product feature and the vehicle for visual A/B against the original.
 
 > Rationale: movement's *velocity model* is proven, but collision can only be
 > validated against the real maps the trace was captured on. So map loading
@@ -97,6 +99,15 @@ Living inventory. Order reflects intent, not schedule. MVP target:
 - [ ] Server-authoritative world; client prediction.
 - [ ] Steam Workshop upload/download; content hashes and parity.
 - [ ] Matchmaking, friends, achievements.
+
+## 9. Demos & replays
+
+- [ ] Record/playback the replicated stream (movement + world commands).
+- [ ] Shares the networking serialization, so it lands with #8.
+- [ ] **Visual A/B** against the original: play the same demo in both engines.
+- [ ] Not used for A3 — demos replay quantized *outputs* and carry no `jumping`
+      input, so they can't re-simulate movement. A3 uses the captured
+      `SAUER_TRACE` fixtures (`tools/refharness/traces/`).
 
 ---
 
