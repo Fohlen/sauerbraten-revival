@@ -1,22 +1,24 @@
 --- a/engine/physics.cpp
 +++ b/engine/physics.cpp
-@@ -5,6 +5,8 @@
+@@ -5,6 +5,9 @@
  
  #include "engine.h"
  #include "mpr.h"
 +#include <stdio.h>
 +#include <stdlib.h>
++#include <stdarg.h>
  
  const int MAXCLIPPLANES = 1024;
  static clipplanes clipcache[MAXCLIPPLANES];
-@@ -1678,8 +1680,37 @@
+@@ -1678,8 +1681,54 @@
  // moveres indicated the physics precision (which is lower for monsters and multiplayer prediction)
  // local is false for multiplayer prediction
  
 +// --- A2 movement trace (sauerbraten-revival movement verification) -----------
-+// Enabled by setting SAUER_TRACE=<path> in the environment. Logs the exact
-+// per-5ms state + inputs for ENT_PLAYER so the port can be diffed against it.
-+static FILE *a2tracefile = NULL;
++// SAUER_TRACE=<path> logs the exact per-5ms ENT_PLAYER state + inputs.
++// SAUER_TRACE.events logs external movement events (map change, jump pads,
++// teleports) so a replay does not diverge at them.
++static FILE *a2tracefile = NULL, *a2eventfile = NULL;
 +static bool a2tracechecked = false;
 +static int a2tracestep = 0, a2tracetime = 0;
 +static void a2traceinit()
@@ -28,6 +30,10 @@
 +    a2tracefile = fopen(path, "w");
 +    if(a2tracefile) fprintf(a2tracefile,
 +        "step,time,move,strafe,jumping,yaw,pitch,ox,oy,oz,vx,vy,vz,fx,fy,fz,physstate,timeinair,floorx,floory,floorz\n");
++    char epath[1024];
++    snprintf(epath, sizeof(epath), "%s.events", path);
++    a2eventfile = fopen(epath, "w");
++    if(a2eventfile) fprintf(a2eventfile, "step,time,event\n");
 +}
 +static void a2tracelog(physent *pl, int curtime)
 +{
@@ -40,6 +46,18 @@
 +        pl->falling.x, pl->falling.y, pl->falling.z,
 +        pl->physstate, (int)pl->timeinair, pl->floor.x, pl->floor.y, pl->floor.z);
 +}
++void a2traceevent(const char *fmt, ...)
++{
++    a2traceinit();
++    if(!a2eventfile) return;
++    fprintf(a2eventfile, "%d,%d,", a2tracestep, a2tracetime);
++    va_list args;
++    va_start(args, fmt);
++    vfprintf(a2eventfile, fmt, args);
++    va_end(args);
++    fprintf(a2eventfile, "\n");
++    fflush(a2eventfile);
++}
 +
  bool moveplayer(physent *pl, int moveres, bool local, int curtime)
  {
@@ -47,7 +65,7 @@
      int material = lookupmaterial(vec(pl->o.x, pl->o.y, pl->o.z + (3*pl->aboveeye - pl->eyeheight)/4));
      bool water = isliquid(material&MATF_VOLUME);
      bool floating = pl->type==ENT_PLAYER && (pl->state==CS_EDITING || pl->state==CS_SPECTATOR);
-@@ -1741,6 +1772,8 @@
+@@ -1741,6 +1790,8 @@
  
      if(pl->state==CS_ALIVE && (pl->o.z < 0 || material&MAT_DEATH)) game::suicide(pl);
  
@@ -56,3 +74,49 @@
      return true;
  }
  
+--- a/fpsgame/game.h
++++ b/fpsgame/game.h
+@@ -3,6 +3,9 @@
+ 
+ #include "cube.h"
+ 
++// A2 movement-trace hook (defined in engine/physics.cpp; client builds only)
++extern void a2traceevent(const char *fmt, ...);
++
+ // console message types
+ 
+ enum
+--- a/fpsgame/entities.cpp
++++ b/fpsgame/entities.cpp
+@@ -274,6 +274,9 @@
+                 else d->vel = vec(0, 0, 0);
+                 entinmap(d);
+                 updatedynentcache(d);
++#ifndef STANDALONE
++                if(d==player1) a2traceevent("teleport,%d,%.3f,%.3f,%.3f", n, d->o.x, d->o.y, d->o.z);
++#endif
+                 ai::inferwaypoints(d, ents[n]->o, ents[e]->o, 16.f);
+                 break;
+             }
+@@ -326,6 +329,9 @@
+ 				d->physstate = PHYS_FALL;
+                 d->timeinair = 1;
+                 d->vel = v;
++#ifndef STANDALONE
++                if(d==player1) a2traceevent("jumppad,%d,%.3f,%.3f,%.3f", n, v.x, v.y, v.z);
++#endif
+                 break;
+             }
+         }
+--- a/fpsgame/fps.cpp
++++ b/fpsgame/fps.cpp
+@@ -673,6 +673,9 @@
+         else findplayerspawn(player1, -1);
+         entities::resetspawns();
+         copystring(clientmap, name ? name : "");
++#ifndef STANDALONE
++        a2traceevent("map,%s", name ? name : "");
++#endif
+ 
+         sendmapinfo();
+     }

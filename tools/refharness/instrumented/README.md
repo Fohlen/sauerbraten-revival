@@ -59,3 +59,17 @@ step,time,move,strafe,jumping,yaw,pitch,ox,oy,oz,vx,vy,vz,fx,fy,fz,physstate,tim
 - `floor`: floor normal.
 
 These are the **golden inputs + outputs** for A3 input-replay differential testing.
+
+## Events file (`SAUER_TRACE.events`)
+
+External movement effects are logged separately (same path + `.events`) so A3 can
+resync instead of diverging:
+
+```
+step,time,event
+<step>,<time>,map,<mapname>
+<step>,<time>,jumppad,<entity>,<vx>,<vy>,<vz>
+<step>,<time>,teleport,<entity>,<x>,<y>,<z>
+```
+
+`step`/`time` use the same clock as the step trace, so events line up exactly.

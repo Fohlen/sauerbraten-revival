@@ -18,7 +18,7 @@ The archive's internal prefix is `sauerbraten-code-r6889/`.
 
 | Patch | Applies to | Purpose |
 | --- | --- | --- |
-| `a2-trace.patch` | `src/engine/physics.cpp` | Adds the `SAUER_TRACE` per-5 ms CSV logger. |
+| `a2-trace.patch` | `src/engine/physics.cpp`, `src/fpsgame/{game.h,entities.cpp,fps.cpp}` | Adds the `SAUER_TRACE` per-5 ms CSV logger, plus `SAUER_TRACE.events` (map name, jump pads, teleports). fpsgame calls are `#ifndef STANDALONE` so the server build is unaffected. |
 | `macos-arm64.patch` | `src/Makefile` | Native arm64 build against Homebrew SDL2 (the Makefile otherwise forces x86_64, which can't run here without Rosetta). |
 
 All patches are `-p1` and are meant to be applied **from within `src/`** (paths
