@@ -1,0 +1,97 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1_player"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+
+[sub_resource type="Sky" id="Sky_sky"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_env"]
+background_mode = 2
+sky = SubResource("Sky_sky")
+ambient_light_source = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_level"]
+albedo_color = Color(0.55, 0.55, 0.6, 1)
+
+[node name="TestLevel" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+position = Vector3(0, 200, 0)
+rotation = Vector3(-0.9, 0.5, 0)
+shadow_enabled = true
+
+[node name="Floor" type="CSGBox3D" parent="."]
+position = Vector3(0, -4, 0)
+size = Vector3(400, 8, 400)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="WallNorth" type="CSGBox3D" parent="."]
+position = Vector3(0, 60, -200)
+size = Vector3(400, 120, 8)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="WallSouth" type="CSGBox3D" parent="."]
+position = Vector3(0, 60, 200)
+size = Vector3(400, 120, 8)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="WallEast" type="CSGBox3D" parent="."]
+position = Vector3(200, 60, 0)
+size = Vector3(8, 120, 400)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="WallWest" type="CSGBox3D" parent="."]
+position = Vector3(-200, 60, 0)
+size = Vector3(8, 120, 400)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="Platform" type="CSGBox3D" parent="."]
+position = Vector3(0, 36, -140)
+size = Vector3(100, 8, 80)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="Ramp" type="CSGBox3D" parent="."]
+position = Vector3(0, 18, -60)
+rotation = Vector3(0.32175, 0, 0)
+size = Vector3(80, 4, 120)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="SteepRamp" type="CSGBox3D" parent="."]
+position = Vector3(130, 12, -60)
+rotation = Vector3(0.7854, 0, 0)
+size = Vector3(80, 4, 80)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="PillarA" type="CSGBox3D" parent="."]
+position = Vector3(60, 30, 60)
+size = Vector3(12, 60, 12)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="PillarB" type="CSGBox3D" parent="."]
+position = Vector3(-70, 30, 30)
+size = Vector3(12, 60, 12)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="Block" type="CSGBox3D" parent="."]
+position = Vector3(30, 4, 120)
+size = Vector3(40, 8, 40)
+material = SubResource("StandardMaterial3D_level")
+use_collision = true
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+position = Vector3(0, 1, 40)

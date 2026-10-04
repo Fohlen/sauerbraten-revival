@@ -1,0 +1,31 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 4.1
+height = 15.0
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_dummy"]
+radius = 4.1
+height = 15.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dummy"]
+albedo_color = Color(0.8, 0.35, 0.2, 1)
+
+[node name="Player" type="CharacterBody3D"]
+script = ExtResource("1_player")
+floor_max_angle = 0.5221
+floor_snap_length = 4.1
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7.5, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Dummy" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7.5, 0)
+mesh = SubResource("CapsuleMesh_dummy")
+surface_material_override/0 = SubResource("StandardMaterial3D_dummy")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 14, 0)
