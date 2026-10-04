@@ -7,7 +7,7 @@ Living inventory. Order reflects intent, not schedule. MVP target:
 
 1. **Movement (velocity model)** — done and validated. See
    [movement-verification.md](movement-verification.md).
-2. **World core** — native, dynamic octree (GDExtension): structure, collision
+2. **World core** — native, dynamic octree (C#/.NET): structure, collision
    traversal, incremental meshing, our `Resource` format, Godot rendering.
 3. **Old-content conversion & loading** — one-time bake of hand-picked classic
    maps → our format; render and load. Gets real geometry in-engine.
@@ -40,7 +40,7 @@ Living inventory. Order reflects intent, not schedule. MVP target:
 
 ## 2. World core (dynamic octree)
 
-- [ ] Reuse `octa.cpp` core via GDExtension with a compatibility shim.
+- [ ] Port the `octa.cpp` core to C# with a small compatibility shim.
 - [ ] Collision traversal (`move`/`collide` primitives).
 - [ ] Incremental per-chunk mesh emission within a frame budget.
 - [ ] Live collision against the mutable octree.
@@ -128,7 +128,7 @@ This is a first-class feature, not a side effect.
 ## Cross-cutting: modding
 
 - Data-first mods (Resources, ConfigFiles, our maps) are safe and easy.
-- Opt-in code mods (GDScript/GDExtension) for total conversions; require trust.
+- Opt-in code mods (C#) for total conversions; require trust.
 - Workshop packaging: `.pck`/folder + `mod.json` manifest, API-versioned,
   load-ordered, multiplayer-parity-checked. See
   [architecture.md §7](architecture.md#7-modding--workshop).

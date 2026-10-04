@@ -2,6 +2,13 @@
 .godot/
 /android/
 
+# .NET / Godot C# build output
+.mono/
+bin/
+obj/
+.vs/
+*.user
+
 # native reference harness artifacts
 tools/refharness/refharness
 tools/refharness/out/

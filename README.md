@@ -1,8 +1,8 @@
 # Sauerbraten Revival
 
-A revival/port of **Cube 2: Sauerbraten** built in **Godot 4**. The goal is to
-recreate the original's iconic movement and feel first, then the in-game editor
-(a defining feature) and the game on top of it.
+A revival/port of **Cube 2: Sauerbraten** built in **Godot 4 (.NET / C#)**. The
+goal is to recreate the original's iconic movement and feel first, then the in-game
+editor (a defining feature) and the game on top of it.
 
 - MVP modes: **insta CTF**, **effic CTF**, **FFA**, **coop edit**.
 - World: a native, **runtime-mutable octree** (live editing + dynamic geometry).
@@ -46,14 +46,17 @@ Work proceeds in **stages**.
 | --- | --- |
 | `docs/` | Design, architecture, roadmap, physics reference |
 | `scenes/` | Godot scenes (`test_level.tscn`, `player.tscn`) |
-| `scripts/` | GDScript (movement prototype, game logic) |
+| `scripts/` | C# (movement, and later world/game logic) |
+| `SauerbratenRevival.csproj` | C# project (Godot .NET) |
 | `tools/refharness/` | A1 reference harness running the original movement code |
 | `tools/refharness/patches/` | Patches to the reference source + [apply/rollback workflow](tools/refharness/patches/README.md) |
 
 ## Running the prototype
 
-Open the project in **Godot 4.7** and run. Input is WASD + Space; mouse look is
-captured (Esc releases). Physics runs at 200 Hz to match the original.
+Requires the **Godot .NET editor** (`Godot_mono` 4.7) — the standard build can't
+load C#. Open the project and run; `dotnet build` also builds the assembly. Input
+is WASD + Space; mouse look is captured (Esc releases). Physics runs at 200 Hz to
+match the original.
 
 ## Reference source
 

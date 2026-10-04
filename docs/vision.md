@@ -40,8 +40,8 @@ Exactly four: **insta CTF**, **effic CTF**, **FFA**, and **coop edit**.
 | Area | Choice |
 | --- | --- |
 | Engine | Godot 4 (Forward+, Jolt) |
-| World/collision/meshing | C++ GDExtension (reusing original octree core) |
-| Editor UI / game logic | GDScript |
+| World/collision/meshing | C# (.NET) — reusing original octree algorithms |
+| Editor UI / game logic | C# (.NET) |
 | Networking / content | Steamworks |
 | Assets | Original packages → our format / glTF, converted offline |
 

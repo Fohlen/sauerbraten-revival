@@ -8,7 +8,7 @@ for how we prove movement fidelity.
 
 | Concern | Decision |
 | --- | --- |
-| World representation | Native **octree**, **dynamic at runtime** (GDExtension) |
+| World representation | Native **octree**, **dynamic at runtime** (C#/.NET) |
 | Original octree code | Reuse `octa.cpp`/`octa.h` **core**; port editor *algorithms*; do **not** copy `octaedit.cpp` plumbing |
 | Rendering | Incremental per-chunk `ArrayMesh`; Sauerbraten blend/lightmap shader |
 | Collision & movement | Our own ported octree traversal (`move`/`collide`/steps), validated against the original |
@@ -79,12 +79,12 @@ sync. It is also the foundation for multiplayer and Workshop content.
 
 | Original file | LOC | GL refs | Action |
 | --- | --- | --- | --- |
-| `octa.cpp` core | 1880 | **0** | **Reuse** behind a small compatibility shim |
-| `octa.h` (structs) | — | — | Reuse/adapt |
+| `octa.cpp` core | 1880 | **0** | **Port to C#** behind a small shim |
+| `octa.h` (structs) | — | — | Port/adapt to C# |
 | `octaedit.cpp` | 3003 | 19 | **Port the algorithms**, reimplement UI/undo/selection plumbing |
 | `octarender.cpp` | 1803 | 45 | **Replace** with a Godot mesh emitter (reuse face-selection logic) |
 | `worldio.cpp` | 1388 | — | **Delete**, replaced by our `Resource` format |
-| octree traversal (`physics.cpp`) | ~500 | 0 | **Reuse/port** for collision |
+| octree traversal (`physics.cpp`) | ~500 | 0 | **Port to C#** for collision |
 
 `octa.cpp` depends on only a handful of globals (`worldroot`, `worldsize`,
 `worldscale`, `allocnodes`, `lu`, `isempty`, `isentirelysolid`, `octastep`,
@@ -92,9 +92,11 @@ sync. It is also the foundation for multiplayer and Workshop content.
 undo, VBOs and compression; copying it would drag in much of the engine. We
 therefore port its algorithms and rebuild the plumbing Godot-native.
 
-Language split:
-- **C++ / GDExtension**: octree, meshing, collision queries, save/load, command application.
-- **GDScript**: editor UI, game logic, menus, HUD.
+Language: **C# (.NET)** for everything — octree, meshing, collision queries,
+save/load, command application, editor, game logic, HUD. C# `int` is 32-bit and
+`float` is 32-bit, which matches the original C++ better than GDScript. (The A1
+reference harness stays C++ as an offline dev tool; see
+[movement-verification.md](movement-verification.md).)
 
 ---
 
@@ -106,7 +108,7 @@ Language split:
   material indices + surface data + version field).
 - **Material manifest**: face/material index → `ShaderMaterial`. No texture-name
   resolution from scripts.
-- Saved/loaded by the GDExtension, versioned for forward migration.
+- Saved/loaded by the world layer (C#), versioned for forward migration.
 
 This format is what the editor writes, what the converter produces, and what
 mods ship.
@@ -152,7 +154,7 @@ imports cover maps, materials, entities, weapon stats, and mode parameters.
 | Tier | Contents | Safety |
 | --- | --- | --- |
 | Data (default) | maps, materials, models, sounds, entity defs, mode *parameters* | Safe |
-| Code (opt-in) | GDScript module / GDExtension (custom rules, total conversions) | Arbitrary code execution — trusted authors only |
+| Code (opt-in) | C# compiled against the game assembly — runtime loading TBD | Arbitrary code execution — trusted authors only |
 
 - **Package**: a `.pck` (or folder) with a `mod.json` manifest: `id`, `name`,
   `author`, `version`, `api_version`, `dependencies`, `load_priority`, `contents[]`.
