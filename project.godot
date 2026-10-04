@@ -12,17 +12,17 @@ config_version=5
 
 config/name="Sauerbraten Revival"
 run/main_scene="res://scenes/test_level.tscn"
-config/features=PackedStringArray("4.7", "Forward Plus")
+config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 config/icon="res://icon.svg"
-
-[dotnet]
-
-project/assembly_name="SauerbratenRevival"
 
 [display]
 
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[dotnet]
+
+project/assembly_name="SauerbratenRevival"
 
 [input]
 
@@ -54,8 +54,8 @@ jump={
 
 [physics]
 
-3d/physics_engine="Jolt Physics"
 common/physics_ticks_per_second=200
+3d/physics_engine="Jolt Physics"
 
 [rendering]
 
