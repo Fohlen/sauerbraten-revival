@@ -115,7 +115,7 @@
          entities::resetspawns();
          copystring(clientmap, name ? name : "");
 +#ifndef STANDALONE
-+        a2traceevent("map,%s", name ? name : "");
++        if(name && *name) a2traceevent("map,%s", name);
 +#endif
  
          sendmapinfo();
