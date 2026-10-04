@@ -48,6 +48,7 @@ Work proceeds in **stages**.
 | `scenes/` | Godot scenes (`test_level.tscn`, `player.tscn`) |
 | `scripts/` | GDScript (movement prototype, game logic) |
 | `tools/refharness/` | A1 reference harness running the original movement code |
+| `tools/refharness/patches/` | Patches to the reference source + [apply/rollback workflow](tools/refharness/patches/README.md) |
 
 ## Running the prototype
 
@@ -56,5 +57,10 @@ captured (Esc releases). Physics runs at 200 Hz to match the original.
 
 ## Reference source
 
-The original engine source is an external snapshot of **Sauerbraten SVN r6889**
-(used read-only as reference and for the A1 harness). It is not part of this repo.
+The original engine source is a read-only snapshot of **Sauerbraten SVN r6889**,
+kept as the pristine zip archive
+`/Users/fohlen/Downloads/sauerbraten-code-r6889.zip` (extracted alongside it for
+use). It is not part of this repo and is **never modified** — patches are applied
+to a copy at build time. See
+[`tools/refharness/patches/README.md`](tools/refharness/patches/README.md) for the
+apply/rollback workflow.
