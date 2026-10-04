@@ -181,6 +181,24 @@ Helpers:
 - `findfloor` (`physics.cpp:1299`), `landing` (`physics.cpp:1283`),
   `falling` (`physics.cpp:1270`).
 
+### Step-up is what makes ramps and stairs walkable
+
+When the player collides while standing on a floor/slope, `move()` calls
+`trystepup(d, dir, obstacle, STAIRHEIGHT, floor)` (`physics.cpp:1362`). It:
+
+- raises the body by up to `STAIRHEIGHT = 4.1` and checks for free space above;
+- has a `cansmooth` branch that walks shallow slopes *continuously* via a
+  `smoothdir` with vertical component `1/scale` (scale 1 or 2);
+- uses `-obstacle.xy` as the climb direction for slope obstacles
+  (`obstacle.z` in `[0, SLOPEZ)`).
+
+Without this, a small vertical lip (e.g. the base of a rotated box ramp) blocks
+movement. Sauerbraten does **not** require authors to round corners: the engine
+steps over lips up to 4.1 units. The player's rounded capsule (`COLLIDE_ELLIPSE`
+→ `EntCapsule`, `mpr.h:164`) plus the `fuzzycollidesolid` margin/cutoff filters
+and the `bs.add(1)` guard (`physics.cpp:1055`) are what stop it catching on small
+edges.
+
 ---
 
 ## 4. Timing (`physicsframe`, `physics.cpp:1749`)
@@ -203,8 +221,11 @@ gravity, jump) but uses Godot's `CharacterBody3D.move_and_slide()` for collision
 Known deviations to close later:
 
 - Collision volume is a capsule, not the original capsule/cylinder+plane model.
-- No faithful `trystepup`/`trystepdown`: Godot has no automatic up-stepping, so
-  stairs are not yet climbable.
+- **`trystepup`/`trystepdown` are not yet ported — and they are required, not
+  optional.** Godot's `move_and_slide()` has no up-step, so the prototype cannot
+  climb a ramp lip or stairs. The port must reproduce `STAIRHEIGHT = 4.1`, the
+  `cansmooth` slope branch (vertical `1/scale` component), and the step-down
+  state. This is the single biggest movement deviation to close.
 - No octree/cube world; the prototype collides with ordinary Godot colliders.
 - `moveres` sub-stepping is approximated by running the whole controller at 200 Hz.
 - Water, crouch, spectator-float, and the exact slope-slide gravity are not ported yet.

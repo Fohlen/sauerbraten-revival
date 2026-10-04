@@ -24,7 +24,12 @@ Living inventory. Order reflects intent, not schedule. MVP target:
 - [x] First playable `CharacterBody3D` prototype of the velocity model.
 - [ ] **Plan A verification harness** (A1–A4) — see
       [movement-verification.md](movement-verification.md).
-- [ ] Ported octree collision: `move`, `collide`, `trystepup`, `trystepdown`.
+- [ ] **Port `trystepup`/`trystepdown` exactly** (`STAIRHEIGHT = 4.1`, the
+      `cansmooth` slope branch, the `1/scale` vertical component). This is what
+      makes ramps and stairs traversable without jumping; Godot's
+      `move_and_slide()` has no up-step. **Required, not optional.**
+- [ ] Validate step-up against the reference (ramp base lip, 4-unit stairs).
+- [ ] Ported octree collision: `move`, `collide`.
 - [ ] Fixed-step deterministic simulation (200 Hz, `moveres` substeps).
 - [ ] Water, spectator/float, slope sliding, wall sliding, head bumps.
 
@@ -32,6 +37,7 @@ Living inventory. Order reflects intent, not schedule. MVP target:
 
 - [ ] Reuse `octa.cpp` core via GDExtension with a compatibility shim.
 - [ ] Port editor algorithms (add/remove/fill/texture/remip/select).
+- [ ] Ported collision **including exact `trystepup`/`trystepdown`** (see §1).
 - [ ] Incremental per-chunk mesh emission within a frame budget.
 - [ ] Live collision against the mutable octree.
 - [ ] `Resource`-based world save/load (replaces `.ogz`).

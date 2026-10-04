@@ -49,6 +49,16 @@ the inputs (`move`, `strafe`, `jumping`, yaw/pitch deltas) to CSV.
 
 **Deliverable:** a patched (separate) original build + a capture script.
 
+**Build constraint (macOS):** the r6889 snapshot ships only a prebuilt **x86_64**
+app (Rosetta) and a 2020 Xcode project; no macOS SDL2 libraries are bundled.
+Rebuilding the GUI client here is non-trivial. Options, in order of preference:
+1. Build the original headless and instrument that.
+2. Use the prebuilt app for human A/B (Track B) and lean on a headless reference
+   simulator (extended A1 with collision) for the automated A3 diff.
+
+If neither is viable, A2 can be deferred until collision exists — the velocity
+model is already covered by A1.
+
 ---
 
 ## A3 — Input-replay differential
@@ -76,6 +86,22 @@ then *any* divergence from our port is our bug, and we never have to reason abou
 nondeterminism.
 
 **Deliverable:** a gate in CI / the task runner.
+
+---
+
+## Collision acceptance criteria (layer 2)
+
+Once our own collision is ported, these must match the original. **Step-up is
+mandatory** — see `movement-physics.md` and `physics.cpp:1102`.
+
+- Walk onto the base of a ~18° ramp with no jump (base lip ~1 u) — must succeed
+  via `trystepup`.
+- Climb 4-unit steps (below `STAIRHEIGHT = 4.1`) without jumping; 5-unit steps
+  must block.
+- Walk down steps/slopes without airborne hops (`trystepdown`, `PHYS_STEP_DOWN`).
+- Continuous ramp walk with no hop, via the `cansmooth` branch.
+- Wall slide preserves tangential speed (`slideagainst`/`recalcdir`).
+- Match `FLOORZ`/`SLOPEZ` cutoffs: ~18° and 30° surfaces walkable; >60° is wall.
 
 ---
 
