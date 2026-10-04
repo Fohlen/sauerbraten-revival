@@ -73,3 +73,7 @@ step,time,event
 ```
 
 `step`/`time` use the same clock as the step trace, so events line up exactly.
+
+> Captured traces live in `traces/`. The whole `tools/` tree is excluded from
+> Godot's importer via `tools/.gdignore`, so these `.csv` files are not imported
+> as translations.
