@@ -79,10 +79,11 @@ from `ExportRelease` builds.
 ## Inspecting a map
 
 `scenes/map_viewer.tscn` is a dev tool: it reads a legacy `.ogz` from the
-reference dump, builds the runtime octree, chunks it and displays the untextured
-geometry. It defaults to church51 (`OgzPath` overrides) and is a `[Tool]` scene,
-so the geometry also shows in the editor viewport. This is not the shipping path
-— the importer converts maps to the native format later.
+reference dump, builds the runtime octree, chunks it and displays the geometry
+with **diffuse textures** resolved from the committed metadata catalogue
+(`metadata-catalogue/<map>.json`) and the map's **cubemap skybox**. It defaults to church51 (`OgzPath` overrides)
+and is a `[Tool]` scene, so it also builds in the editor viewport. This is not
+the shipping path — the importer converts maps to the native format later.
 
 While running, the camera is Sauerbraten's coop-edit flycam: **WASD** flies in the
 look direction (look down and you descend), the **mouse** looks/tilts, **Shift**

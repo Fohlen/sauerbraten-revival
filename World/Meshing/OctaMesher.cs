@@ -1,18 +1,24 @@
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Materials;
 
 namespace SauerbratenRevival.World.Meshing;
 
 /// <summary>
 /// Godot-native mesher: walks the runtime <see cref="Octa"/> and emits
 /// <see cref="ArrayMesh"/>es (one surface per texture). This is the stage-B
-/// replacement for octarender.cpp — geometry only for now; merges, T-joints,
-/// sky, grass, lightmaps and material layers are deliberate follow-ups.
+/// replacement for octarender.cpp — merges, T-joints, sky, grass, lightmaps and
+/// blending are deliberate follow-ups.
 ///
 /// The world is split into fixed-size chunks of <c>chunkSize</c> world units.
 /// A chunk's vertices are stored relative to its origin; place the chunk node at
 /// <see cref="MeshChunk.Origin"/>. Positions are in Sauerbraten coordinates
 /// (Z-up); the parent node carries the Z-up → Y-up rotation.
+///
+/// When a <see cref="MaterialSet"/> is supplied, each surface gets its vslot's
+/// material and per-face world-space UVs (octarender.cpp calctexgen). UVs are
+/// computed from absolute world positions even though vertices are chunk-local,
+/// because the texture mapping tiles in world space.
 ///
 /// Chunk assignment is by the leaf cube's origin, so a cube larger than a chunk
 /// may spill outside its nominal bounds. That is correct for rendering (Godot
@@ -22,8 +28,13 @@ namespace SauerbratenRevival.World.Meshing;
 public sealed class OctaMesher
 {
     private readonly Octa _octa;
+    private readonly MaterialSet? _materials;
 
-    public OctaMesher(Octa octa) => _octa = octa;
+    public OctaMesher(Octa octa, MaterialSet? materials = null)
+    {
+        _octa = octa;
+        _materials = materials;
+    }
 
     /// <summary>Mesh the whole world as a single chunk.</summary>
     public ArrayMesh Build() => BuildChunked(_octa.WorldSize).Chunks is { Count: > 0 } chunks
@@ -46,7 +57,7 @@ public sealed class OctaMesher
         {
             var builder = builders[key];
             if (builder.TriangleCount == 0) continue;
-            result.Chunks.Add(new MeshChunk { Origin = key * chunkSize, Mesh = builder.Build() });
+            result.Chunks.Add(new MeshChunk { Origin = key * chunkSize, Mesh = builder.Build(_materials) });
             result.TriangleCount += builder.TriangleCount;
             result.SurfaceCount += builder.TextureCount;
         }
@@ -89,7 +100,7 @@ public sealed class OctaMesher
                     builder = new ArrayMeshBuilder();
                     chunks[key] = builder;
                 }
-                EmitFace(c, orient, childCo - key * chunkSize, size, builder);
+                EmitFace(c, orient, childCo, key * chunkSize, size, builder);
             }
         }
     }
@@ -115,20 +126,30 @@ public sealed class OctaMesher
         return nb == null || !(nb.IsEntirelySolid() && nsize >= size);
     }
 
-    private static void EmitFace(Cube c, int orient, Vector3I co, int size, ArrayMeshBuilder builder)
+    private void EmitFace(Cube c, int orient, Vector3I absCo, Vector3I origin, int size, ArrayMeshBuilder builder)
     {
         System.Span<Vector3I> v = stackalloc Vector3I[4];
         c.GenFaceVerts(orient, v);
 
         int order = c.FaceConvexity(orient) < 0 ? 1 : 0;
-        Vector3 p0 = ToWorld(v[(order + 0) & 3], co, size);
-        Vector3 p1 = ToWorld(v[(order + 1) & 3], co, size);
-        Vector3 p2 = ToWorld(v[(order + 2) & 3], co, size);
-        Vector3 p3 = ToWorld(v[(order + 3) & 3], co, size);
+        Vector3 a0 = ToWorld(v[(order + 0) & 3], absCo, size);
+        Vector3 a1 = ToWorld(v[(order + 1) & 3], absCo, size);
+        Vector3 a2 = ToWorld(v[(order + 2) & 3], absCo, size);
+        Vector3 a3 = ToWorld(v[(order + 3) & 3], absCo, size);
+        var localOrigin = new Vector3(origin.X, origin.Y, origin.Z);
+        Vector3 p0 = a0 - localOrigin, p1 = a1 - localOrigin, p2 = a2 - localOrigin, p3 = a3 - localOrigin;
 
         Vector3 normal = (p1 - p0).Cross(p2 - p0);
         normal = normal.LengthSquared() < 1e-9f ? AxisNormal(orient) : normal.Normalized();
-        builder.AddQuad(c.Texture[orient], p0, p1, p2, p3, normal);
+
+        int vslot = c.Texture[orient];
+        int dim = orient >> 1;
+        Vector2 uv0 = _materials?.Uv(vslot, dim, a0) ?? Vector2.Zero;
+        Vector2 uv1 = _materials?.Uv(vslot, dim, a1) ?? Vector2.Zero;
+        Vector2 uv2 = _materials?.Uv(vslot, dim, a2) ?? Vector2.Zero;
+        Vector2 uv3 = _materials?.Uv(vslot, dim, a3) ?? Vector2.Zero;
+
+        builder.AddQuad(vslot, p0, p1, p2, p3, uv0, uv1, uv2, uv3, normal);
     }
 
     private static Vector3 ToWorld(Vector3I v, Vector3I co, int size) => new(

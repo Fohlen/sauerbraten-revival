@@ -219,8 +219,15 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   a geometry-only `ArrayMesh` (positions, flat normals, indices; one surface per
   texture via `ArrayMeshBuilder`). Positions are in Sauerbraten coordinates
   (Z-up); the scene node carries the Z-up → Y-up rotation.
-- **Chunking** — `OctaMesher.BuildChunked(chunkSize)` splits the world into
-  fixed-size spatial chunks (`ChunkedWorldMesh`/`MeshChunk`), each an
-  `ArrayMesh` + origin.
-- **Deferred** — exact `visibletris` culling, face merges, T-joints, sky and
-  grass, material/lightmap layers, and incremental dirty-chunk rebuilds.
+- **Materials (C1)** — `World/Materials/`: `MetadataCatalogue` loads the
+  engine-exported slot/vslot data, `MaterialBuilder` ports `calctexgen` and
+  builds one Godot `StandardMaterial3D` per vslot (diffuse texture + tint), and
+  the mesher emits per-face world-space UVs. Textures come through an
+  `ITextureSource` seam (`DumpTextureSource` for the dev viewer; the importer
+  will supply Godot resources).
+- **Sky (C2)** — `SkyBuilder` reads the map's <c>skybox</c> mapvar, loads the
+  six cubemap faces through the same `ITextureSource`, and builds a Godot
+  `Cubemap` + `shader_type sky` material for the `WorldEnvironment`.
+- **Deferred** — exact `visibletris` culling, face merges, T-joints, grass,
+  normal/glow/spec/alpha and blended layers, material (water/lava) surfaces,
+  lightmaps, and incremental dirty-chunk rebuilds.

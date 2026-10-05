@@ -76,6 +76,14 @@ public sealed class OgzMap
     public List<OgzVSlot> VSlots = new();
     public Cube[] WorldRoot = Array.Empty<Cube>();
 
+    /// <summary>Look up a string map variable (e.g. <c>skybox</c>).</summary>
+    public string? GetVarString(string name)
+    {
+        foreach (var v in Vars)
+            if (v.Type == 2 && v.Name == name) return v.StringValue;
+        return null;
+    }
+
     /// <summary>Wrap the parsed octree in the runtime <see cref="Octa"/>.</summary>
     public Octa ToOcta()
     {

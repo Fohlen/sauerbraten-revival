@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Godot;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 
 namespace SauerbratenRevival.World.Ogz;
@@ -15,8 +16,9 @@ namespace SauerbratenRevival.World.Ogz;
 ///
 /// It is a <c>[Tool]</c> script so the geometry also appears in the editor. It
 /// defaults to church51 from the reference dump (<c>SAUER_REF</c>) and can be
-/// overridden via <see cref="OgzPath"/>. Geometry is untextured; the camera is
-/// the coop-edit flycam (see <see cref="FreeFlyCamera"/>): WASD + mouse look.
+/// overridden via <see cref="OgzPath"/>. Diffuse textures come from the map's
+/// metadata catalogue; the camera is the coop-edit flycam (see
+/// <see cref="FreeFlyCamera"/>): WASD + mouse look.
 ///
 /// Tool scripts only rebuild when the scene is (re)opened, so after editing this
 /// script close and reopen <c>scenes/map_viewer.tscn</c> (or restart the editor).
@@ -51,17 +53,24 @@ public partial class OgzMapViewer : Node3D
 
         var map = OgzReader.Read(path);
         var octa = map.ToOcta();
-        var chunked = new OctaMesher(octa).BuildChunked(ChunkSize);
 
-        // No culling for inspection: geometry is visible regardless of winding.
-        var material = new StandardMaterial3D
-        {
-            AlbedoColor = MeshTint,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-        };
+        // Materials: committed catalogue for this map + textures loaded from the dump.
+        string mapName = Path.GetFileNameWithoutExtension(path);
+        var textures = new DumpTextureSource(ReferenceRoot);
+        var catalogue = MetadataCatalogue.TryLoadForMap(mapName);
+        MaterialSet? materials = catalogue != null ? MaterialBuilder.Build(catalogue, textures) : null;
+        if (materials == null) GD.PushWarning($"[viewer] no metadata catalogue for '{mapName}'; showing untextured geometry.");
+        ApplySky(map, textures);
+
+        var chunked = new OctaMesher(octa, materials).BuildChunked(ChunkSize);
 
         var world = new Node3D { Name = "World", RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
         AddChild(world);
+
+        // Fallback so geometry is still visible if there is no catalogue.
+        StandardMaterial3D? fallback = materials == null
+            ? new StandardMaterial3D { AlbedoColor = MeshTint, CullMode = BaseMaterial3D.CullModeEnum.Disabled }
+            : null;
 
         Aabb bounds = default;
         bool hasBounds = false;
@@ -72,7 +81,7 @@ public partial class OgzMapViewer : Node3D
                 Name = $"Chunk_{chunk.Origin.X}_{chunk.Origin.Y}_{chunk.Origin.Z}",
                 Mesh = chunk.Mesh,
                 Position = new Vector3(chunk.Origin.X, chunk.Origin.Y, chunk.Origin.Z),
-                MaterialOverride = material,
+                MaterialOverride = fallback,
             });
 
             var aabb = chunk.Mesh.GetAabb();
@@ -97,6 +106,19 @@ public partial class OgzMapViewer : Node3D
         }
 #endif
         GD.Print($"[viewer] {path}: chunks={chunked.Chunks.Count} triangles={chunked.TriangleCount}");
+    }
+
+    private void ApplySky(OgzMap map, ITextureSource textures)
+    {
+        // Runtime only: don't dirty the edited scene's environment in the IDE.
+        if (Engine.IsEditorHint()) return;
+        var sky = SkyBuilder.Build(textures, map.GetVarString("skybox"));
+        if (sky == null) return;
+        var worldEnvironment = GetNodeOrNull<WorldEnvironment>("WorldEnvironment");
+        if (worldEnvironment == null) return;
+        worldEnvironment.Environment ??= new Godot.Environment();
+        worldEnvironment.Environment.Sky = sky;
+        worldEnvironment.Environment.BackgroundMode = Godot.Environment.BGMode.Sky;
     }
 
     private Camera3D AddLightAndCamera(Vector3 centre, float radius)
