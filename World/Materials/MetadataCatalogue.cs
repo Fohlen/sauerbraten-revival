@@ -10,6 +10,8 @@ public sealed class CatalogueSlot
 {
     public int Index;
     public string? DiffusePath;
+    public string? NormalPath;
+    public string? GlowPath;
     public string Shader = "";
 }
 
@@ -22,6 +24,7 @@ public sealed class CatalogueVSlot
     public int Rotation;
     public int OffsetX, OffsetY;
     public Vector3 Color = Vector3.One;
+    public Vector3 Glow = Vector3.One;
     public float AlphaFront = 0.5f, AlphaBack;
 }
 
@@ -55,10 +58,12 @@ public sealed class MetadataCatalogue
             };
             foreach (var t in s.GetProperty("textures").EnumerateArray())
             {
-                if (t.GetProperty("type").GetString() == "diffuse")
+                string? path = t.GetProperty("path").GetString();
+                switch (t.GetProperty("type").GetString())
                 {
-                    slot.DiffusePath = t.GetProperty("path").GetString();
-                    break;
+                    case "diffuse": slot.DiffusePath = path; break;
+                    case "normal": slot.NormalPath = path; break;
+                    case "glow": slot.GlowPath = path; break;
                 }
             }
             catalogue.Slots[slot.Index] = slot;
@@ -68,6 +73,7 @@ public sealed class MetadataCatalogue
         {
             var off = v.GetProperty("offset");
             var color = v.GetProperty("color");
+            var glow = v.GetProperty("glow");
             var alpha = v.GetProperty("alpha");
             var vs = new CatalogueVSlot
             {
@@ -78,6 +84,7 @@ public sealed class MetadataCatalogue
                 OffsetX = off[0].GetInt32(),
                 OffsetY = off[1].GetInt32(),
                 Color = new Vector3((float)color[0].GetDouble(), (float)color[1].GetDouble(), (float)color[2].GetDouble()),
+                Glow = new Vector3((float)glow[0].GetDouble(), (float)glow[1].GetDouble(), (float)glow[2].GetDouble()),
                 AlphaFront = (float)alpha[0].GetDouble(),
                 AlphaBack = (float)alpha[1].GetDouble(),
             };

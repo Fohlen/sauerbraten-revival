@@ -31,6 +31,8 @@ public static class MaterialBuilder
         {
             catalogue.Slots.TryGetValue(vs.Slot, out var slot);
             Texture2D? albedo = slot?.DiffusePath != null ? textures.Get(slot.DiffusePath) : null;
+            Texture2D? normal = slot?.NormalPath != null ? textures.Get(slot.NormalPath) : null;
+            Texture2D? glow = slot?.GlowPath != null ? textures.Get(slot.GlowPath) : null;
             Vector2I texSize = slot?.DiffusePath != null ? textures.Size(slot.DiffusePath) : new Vector2I(64, 64);
 
             var material = new StandardMaterial3D
@@ -40,6 +42,19 @@ public static class MaterialBuilder
                 TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled, // winding not verified yet
             };
+
+            if (normal != null)
+            {
+                material.NormalEnabled = true;
+                material.NormalTexture = normal;
+            }
+            if (glow != null)
+            {
+                material.EmissionEnabled = true;
+                material.EmissionTexture = glow;
+                material.Emission = new Color(vs.Glow.X, vs.Glow.Y, vs.Glow.Z);
+                material.EmissionEnergyMultiplier = 1.0f;
+            }
 
             var uv = new TexGen[3];
             for (int dim = 0; dim < 3; dim++) uv[dim] = CalcTexGen(vs, dim, texSize);

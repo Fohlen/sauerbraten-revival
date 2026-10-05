@@ -53,14 +53,19 @@ public class MaterialBuilderTest : TestClass
         var textures = new DumpTextureSource(TestData.ReferenceRoot);
         var set = MaterialBuilder.Build(catalogue, textures);
 
-        int count = 0, withTexture = 0;
+        int count = 0, withTexture = 0, withNormal = 0, withGlow = 0;
         foreach (var pair in set.Materials)
         {
             count++;
-            if (pair.Value is StandardMaterial3D { AlbedoTexture: not null }) withTexture++;
+            if (pair.Value is not StandardMaterial3D m) continue;
+            if (m.AlbedoTexture != null) withTexture++;
+            if (m.NormalEnabled && m.NormalTexture != null) withNormal++;
+            if (m.EmissionEnabled && m.EmissionTexture != null) withGlow++;
         }
         TestAssert.Equal(149, count, "materials built");
         TestAssert.True(withTexture > 0, "materials carry albedo textures");
+        TestAssert.True(withNormal > 0, "materials carry normal maps");
+        TestAssert.True(withGlow > 0, "materials carry glow maps");
 
         var defaultTex = textures.Get("textures/default.png");
         TestAssert.True(defaultTex != null, "default.png loads from the dump");

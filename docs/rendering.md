@@ -228,6 +228,10 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
 - **Sky (C2)** — `SkyBuilder` reads the map's <c>skybox</c> mapvar, loads the
   six cubemap faces through the same `ITextureSource`, and builds a Godot
   `Cubemap` + `shader_type sky` material for the `WorldEnvironment`.
-- **Deferred** — exact `visibletris` culling, face merges, T-joints, grass,
-  normal/glow/spec/alpha and blended layers, material (water/lava) surfaces,
-  lightmaps, and incremental dirty-chunk rebuilds.
+- **Normal + glow** — `MaterialBuilder` also sets `NormalTexture` and
+  `EmissionTexture`/`Emission` from the catalogue's `normal`/`glow` layers and the
+  vslot `glowcolor`.
+- **TODO (deferred)** — **specular maps** (packed/non-PBR), **alpha/transparency**
+  (`alphafront`/`alphaback`, `LAYER_*`), blended layers, material (water/lava)
+  surfaces, exact `visibletris` culling, face merges, T-joints, grass, lightmaps,
+  and incremental dirty-chunk rebuilds.

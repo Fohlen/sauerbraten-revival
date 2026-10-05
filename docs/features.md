@@ -49,7 +49,15 @@ See [rendering.md](rendering.md) for the ArrayMesh + RenderingServer approach.
 - [ ] LOD integration via `ArrayMesh.add_lod()` for distance-based simplification.
 - [ ] Live collision against the mutable octree (rendering and collision decoupled).
 - [ ] `Resource`-based world save/load (compact binary format).
-- [ ] Material manifest + blend shader (approximate → exact).
+- [x] Material manifest: diffuse + tint (`MaterialBuilder`, `calctexgen`).
+- [x] Normal maps.
+- [x] Glow (emission) maps.
+- [ ] **TODO (deferred): Specular maps** — Sauer's spec is packed (into normal/diffuse
+      alpha) and uses a non-PBR model; approximate via roughness first, exact needs a
+      ported shader. See [rendering.md](rendering.md).
+- [ ] **TODO (deferred): Alpha / transparency** — `alphafront`/`alphaback`,
+      `LAYER_TOP`/`LAYER_BOTTOM`/`LAYER_DUP`; front/back needs two materials or a shader.
+- [ ] Blend shader (multi-layer materials, approximate → exact).
 
 ## 3. OGZ import pipeline
 
