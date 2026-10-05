@@ -85,6 +85,15 @@ with **diffuse textures** resolved from the committed metadata catalogue
 and is a `[Tool]` scene, so it also builds in the editor viewport. This is not
 the shipping path — the importer converts maps to the native format later.
 
+Mapmodels are converted to glTF once (assimp) before viewing:
+
+```sh
+tools/model-import/import_models.py metadata-catalogue/church51.json
+```
+
+Output goes to the git-ignored `assets/models/`, which Godot imports as Resources
+(the viewer loads the imported scenes, so they render in the editor too).
+
 While running, the camera is Sauerbraten's coop-edit flycam: **WASD** flies in the
 look direction (look down and you descend), the **mouse** looks/tilts, **Shift**
 sprints, **Esc** releases the cursor (click to recapture).

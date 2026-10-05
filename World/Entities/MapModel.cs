@@ -6,11 +6,8 @@ namespace SauerbratenRevival.World.Entities;
 /// <summary>
 /// A map model (<c>ET_MAPMODEL</c>). Position and yaw come from the entity;
 /// <see cref="ModelPath"/> is the engine's registered model name, resolved through
-/// the metadata catalogue.
-///
-/// If <see cref="GlbPath"/> points at an assimp-converted glTF (see
-/// <c>tools/model-import</c>) it is loaded at runtime; otherwise a placeholder box
-/// is shown so placement can still be verified.
+/// the metadata catalogue. The converted glTF (see <c>tools/model-import</c>) is
+/// loaded from Godot's imported Resources, with an OS-path fallback.
 /// </summary>
 [Tool]
 [GlobalClass]
@@ -27,37 +24,25 @@ public partial class MapModel : Node3D
     [Export] public float ModelScale { get; set; } = 1.0f;
     [Export] public Vector3 ModelTranslation { get; set; }
 
-    [Export] public bool ShowGizmo { get; set; } = true;
-    [Export] public float GizmoSize { get; set; } = 16.0f;
-
     /// <summary>Skin/normal material, applied to the loaded model (built by the builder).</summary>
     public Material? SkinMaterial { get; set; }
 
-    /// <summary>True once a converted glTF was loaded (false for a placeholder box).</summary>
+    /// <summary>True once a converted glTF was loaded.</summary>
     public bool ModelLoaded { get; private set; }
 
     public override void _Ready()
     {
-        bool editor = Engine.IsEditorHint();
-        bool loaded = false;
-
         bool haveRes = !string.IsNullOrEmpty(GlbPath) && ResourceLoader.Exists(GlbPath);
         bool haveOs = !string.IsNullOrEmpty(GlbOsPath) && File.Exists(GlbOsPath);
         if (haveRes || haveOs)
         {
-            loaded = TryLoadModel();
-            if (loaded) ModelLoaded = true;
+            if (TryLoadModel()) ModelLoaded = true;
             else GD.PushWarning($"[mapmodel] failed to load '{GlbPath ?? GlbOsPath}'");
         }
         else
         {
             GD.PushWarning($"[mapmodel] no converted glTF for '{ModelPath}' (glb={GlbPath ?? GlbOsPath ?? "<null>"})");
         }
-
-        // Editor locator: dynamically-added nodes get no editor gizmo, so drop a
-        // small marker at each mapmodel. At runtime it only appears if the mesh
-        // failed to load, so it doesn't obscure the real model.
-        if (ShowGizmo && (editor || !loaded)) AddChild(CreateGizmo());
     }
 
     private bool TryLoadModel()
@@ -85,9 +70,6 @@ public partial class MapModel : Node3D
             Position = ModelTranslation,
         };
 
-        // Flatten the generated glTF scene into plain MeshInstance3Ds. The
-        // nested glTF scene subtree doesn't rasterise reliably in the editor's
-        // tool viewport, whereas a flat MeshInstance3D does.
         if (CopyMeshes(scene, holder) == 0) return false;
 
         AddChild(holder);
@@ -112,17 +94,4 @@ public partial class MapModel : Node3D
         if (node is MeshInstance3D mesh) mesh.MaterialOverride = material;
         foreach (var child in node.GetChildren()) ApplyMaterial(child, material);
     }
-
-    private MeshInstance3D CreateGizmo() => new()
-    {
-        Name = "EditorMarker",
-        Mesh = new SphereMesh { Radius = Mathf.Max(GizmoSize, 1.0f) * 0.25f, Height = Mathf.Max(GizmoSize, 1.0f) * 0.5f },
-        MaterialOverride = new StandardMaterial3D
-        {
-            AlbedoColor = new Color(1.0f, 0.6f, 0.1f),
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-        },
-        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-    };
 }
