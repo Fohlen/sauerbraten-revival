@@ -4,16 +4,6 @@ using Godot;
 
 namespace SauerbratenRevival.World.Ogz;
 
-/// <summary>worldio.cpp: <c>enum { OCTSAV_CHILDREN = 0, OCTSAV_EMPTY, OCTSAV_SOLID, OCTSAV_NORMAL, OCTSAV_LODCUBE }</c>.</summary>
-public enum OgzCubeType : byte
-{
-    Children = 0,
-    Empty = 1,
-    Solid = 2,
-    Normal = 3,
-    Lod = 4,
-}
-
 /// <summary>worldio.cpp: <c>octaheader</c>. The r6889 header is 40 bytes (adds <c>numvslots</c> over the v29 docs).</summary>
 public sealed class OgzHeader
 {
@@ -39,7 +29,7 @@ public sealed class OgzVar
     public string StringValue = "";
 }
 
-/// <summary>shared/ents.h: <c>struct entity</c> plus the fpsgame-specific fields stay raw here.</summary>
+/// <summary>shared/ents.h: <c>struct entity</c>; fpsgame-specific fields stay raw here.</summary>
 public sealed class OgzEntity
 {
     public Vector3 Position;
@@ -70,43 +60,11 @@ public sealed class OgzVSlot
     public Vector3 ColorScale = Vector3.One;
 }
 
-/// <summary>worldio.cpp: a face's <c>surfaceinfo</c> plus the vertices reconstructed from the file.</summary>
-public sealed class OgzSurface
-{
-    public byte Lmid0, Lmid1;
-
-    /// <summary>The raw <c>verts</c> byte read from the file (the vertmask).</summary>
-    public byte VertMask;
-
-    /// <summary>The relocated offset into the cube's vertex list (engine's <c>surf.verts</c> after load).</summary>
-    public int VertOffset;
-
-    public byte NumVerts;
-    public VertInfo[] Vertices = Array.Empty<VertInfo>();
-
-    public int TotalVerts => (NumVerts & Octa.LAYER_DUP) != 0
-        ? (NumVerts & Octa.MAXFACEVERTS) * 2
-        : NumVerts & Octa.MAXFACEVERTS;
-
-    public bool Used => Lmid0 != 0 || Lmid1 != 0 || (NumVerts & ~Octa.LAYER_TOP) != 0;
-}
-
-/// <summary>worldio.cpp: one octree node. Children != null means an internal node (OCTSAV_CHILDREN or LODCUBE).</summary>
-public sealed class OgzCube
-{
-    public OgzCubeType Type;
-    public ushort[] Texture = new ushort[6];
-    public byte[] Edges = new byte[12];
-    public ushort Material;
-    public byte Merged;
-    public OgzSurface?[]? Surfaces;
-    public OgzCube[]? Children;
-
-    public bool IsEmpty => Type == OgzCubeType.Empty;
-    public bool IsEntirelySolid => Type == OgzCubeType.Solid;
-}
-
-/// <summary>The parsed contents of an OGZ map, up to (and including) the octree.</summary>
+/// <summary>
+/// The parsed contents of an OGZ map. <see cref="WorldRoot"/> is the runtime
+/// octree (the reader builds <see cref="Cube"/>/<see cref="CubeExt"/> directly),
+/// so there is no separate conversion pass.
+/// </summary>
 public sealed class OgzMap
 {
     public OgzHeader Header = new();
@@ -116,5 +74,21 @@ public sealed class OgzMap
     public List<ushort> TexMru = new();
     public List<OgzEntity> Entities = new();
     public List<OgzVSlot> VSlots = new();
-    public OgzCube[] WorldRoot = Array.Empty<OgzCube>();
+    public Cube[] WorldRoot = Array.Empty<Cube>();
+
+    /// <summary>Wrap the parsed octree in the runtime <see cref="Octa"/>.</summary>
+    public Octa ToOcta()
+    {
+        int worldscale = 0;
+        while ((1 << worldscale) < Header.WorldSize) worldscale++;
+        return new Octa(worldscale, Header.WorldSize, WorldRoot, CountAllocNodes(WorldRoot));
+    }
+
+    private static int CountAllocNodes(Cube[] cubes)
+    {
+        int count = 1; // worldio.cpp newcubes() allocated this cube[8] block
+        foreach (var c in cubes)
+            if (c.Children != null) count += CountAllocNodes(c.Children);
+        return count;
+    }
 }

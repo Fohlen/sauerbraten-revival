@@ -14,31 +14,13 @@ namespace SauerbratenRevival.Tests;
 /// </summary>
 public class OgzReaderTest : TestClass
 {
-    private static readonly string JsonPath =
-        ProjectSettings.GlobalizePath("res://metadata-catalogue/church51.json");
-
-    // The OGZ files are not committed; read the map from the read-only reference
-    // dump (same SAUER_REF the refharness build uses).
-    private static readonly string ReferenceRoot =
-        System.Environment.GetEnvironmentVariable("SAUER_REF")
-        ?? "/Users/fohlen/Downloads/sauerbraten-code-r6889";
-
-    private static readonly string OgzPath =
-        Path.Combine(ReferenceRoot, "packages", "base", "church51.ogz");
-
     private static JsonElement Catalogue()
     {
-        using var doc = JsonDocument.Parse(File.ReadAllText(JsonPath));
+        using var doc = JsonDocument.Parse(File.ReadAllText(TestData.CataloguePath));
         return doc.RootElement.Clone();
     }
 
-    private static OgzMap ReadMap()
-    {
-        if (!File.Exists(OgzPath))
-            throw new FileNotFoundException(
-                $"OGZ test map not found at '{OgzPath}'. Set SAUER_REF to the reference dump root.", OgzPath);
-        return OgzReader.Read(OgzPath);
-    }
+    private static OgzMap ReadMap() => TestData.ReadMap();
 
     public OgzReaderTest(Node testScene) : base(testScene) { }
 

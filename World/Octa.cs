@@ -105,6 +105,37 @@ public sealed class Cube
         Faces[d] = f | ((uint)v << shift);
     }
 
+    // ---- face geometry (octa.cpp) ----
+
+    /// <summary>octa.cpp:733 <c>flataxisface(c, orient)</c>.</summary>
+    public bool FlatAxisFace(int orient)
+    {
+        uint face = Faces[orient >> 1];
+        if ((orient & 1) != 0) face >>= 4;
+        return (face & 0x0F0F0F0Fu) == 0x01010101u * (face & 0x0Fu);
+    }
+
+    /// <summary>octa.cpp:750 <c>touchingface(c, orient)</c>.</summary>
+    public bool TouchingFace(int orient)
+    {
+        uint face = Faces[orient >> 1];
+        return (orient & 1) != 0
+            ? (face & 0xF0F0F0F0u) == 0x80808080u
+            : (face & 0x0F0F0F0Fu) == 0u;
+    }
+
+    /// <summary>octa.cpp:673 <c>genfaceverts(c, orient, v)</c>.</summary>
+    public void GenFaceVerts(int orient, System.Span<Vector3I> v) => CubeGeometry.GenFaceVerts(this, orient, v);
+
+    /// <summary>octa.cpp:802 <c>faceconvexity(c, orient)</c>.</summary>
+    public int FaceConvexity(int orient)
+    {
+        if (FlatAxisFace(orient)) return 0;
+        System.Span<Vector3I> v = stackalloc Vector3I[4];
+        GenFaceVerts(orient, v);
+        return CubeGeometry.FaceConvexity(v);
+    }
+
     /// <summary>octa.h: <c>edgemake(a, b)</c>.</summary>
     public static byte EdgeMake(int a, int b) => (byte)((b << 4) | a);
 
@@ -130,6 +161,9 @@ public struct SurfaceInfo
         (NumVerts & Octa.LAYER_DUP) != 0
             ? (NumVerts & Octa.MAXFACEVERTS) * 2
             : NumVerts & Octa.MAXFACEVERTS;
+
+    /// <summary>octa.h: <c>surfaceinfo::used()</c>.</summary>
+    public bool Used() => Lmid0 != 0 || Lmid1 != 0 || (NumVerts & ~Octa.LAYER_TOP) != 0;
 }
 
 /// <summary>octa.h: <c>struct vertinfo</c>.</summary>
@@ -142,6 +176,10 @@ public struct VertInfo
 public sealed class CubeExt
 {
     public SurfaceInfo[] Surfaces { get; } = new SurfaceInfo[6];
+
+    /// <summary>octa.h: <c>cubeext::verts()</c>. Flat storage indexed by SurfaceInfo.Verts.</summary>
+    public VertInfo[] Verts { get; set; } = System.Array.Empty<VertInfo>();
+
     public int TJoints { get; set; } = -1;
     public byte MaxVerts { get; set; }
 }
@@ -191,6 +229,15 @@ public sealed class Octa
         NewMap(worldscale);
     }
 
+    /// <summary>Build an Octa from an already-constructed root (used by the OGZ importer).</summary>
+    internal Octa(int worldscale, int worldsize, Cube[] root, int allocNodes)
+    {
+        WorldScale = worldscale;
+        WorldSize = worldsize;
+        WorldRoot = root;
+        AllocNodes = allocNodes;
+    }
+
     /// <summary>Create an empty (solid) world at the given scale.</summary>
     public void NewMap(int worldscale)
     {
@@ -238,6 +285,22 @@ public sealed class Octa
             scale--;
             c = c.Children[OctaStep(o.X, o.Y, o.Z, scale)];
         }
+        return c;
+    }
+
+    /// <summary>As <see cref="LeafCube(Vector3I)"/>, also returning the leaf cube's edge length.</summary>
+    public Cube? LeafCube(Vector3I o, out int leafSize)
+    {
+        leafSize = 0;
+        if (!InsideWorld(o)) return null;
+        int scale = WorldScale - 1;
+        Cube c = WorldRoot[OctaStep(o.X, o.Y, o.Z, scale)];
+        while (c.Children != null)
+        {
+            scale--;
+            c = c.Children[OctaStep(o.X, o.Y, o.Z, scale)];
+        }
+        leafSize = 1 << scale;
         return c;
     }
 

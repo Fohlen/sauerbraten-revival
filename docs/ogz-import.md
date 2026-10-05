@@ -157,7 +157,8 @@ blend map are not parsed yet.
 
 ```csharp
 OgzMap map = OgzReader.Read("church51.ogz");
-// map.Header, map.Vars, map.Entities, map.VSlots, map.WorldRoot (OgzCube[8])
+// map.Header, map.Vars, map.Entities, map.VSlots, map.WorldRoot (runtime Cube[8])
+Octa world = map.ToOcta();
 ```
 
 Key structures:

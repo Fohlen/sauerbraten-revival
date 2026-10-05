@@ -74,6 +74,10 @@ When an octree mutation occurs:
 
 This spreads large edits across frames, avoiding hitches.
 
+> **Status:** chunking is not implemented yet — `OctaMesher` currently builds a
+> single whole-map `ArrayMesh`. The `ArrayMeshBuilder` grouping is already
+> per-texture, so splitting it per chunk is the next step.
+
 ---
 
 ## Collision detection
@@ -202,3 +206,17 @@ This bypasses the scene tree for world geometry while still using Godot's render
 **Conclusion**: The ArrayMesh approach is sufficient for a faithful port. The
 gameplay feel depends on movement physics and collision, which use the original
 algorithms. Rendering differences are cosmetic and can be tuned to match.
+
+---
+
+## Implementation status
+
+- **Runtime octree** — `World/Ogz/OgzReader.cs` builds the runtime `Cube`/
+  `CubeExt` octree directly while parsing (edges, textures, material, children,
+  surface verts); `OgzMap.ToOcta()` wraps it as an `Octa`.
+- **Mesher (stage B)** — `World/Meshing/OctaMesher.cs` walks the `Octa` and emits
+  a geometry-only `ArrayMesh` (positions, flat normals, indices; one surface per
+  texture via `ArrayMeshBuilder`). Positions are in Sauerbraten coordinates
+  (Z-up); the scene node carries the Z-up → Y-up rotation.
+- **Deferred** — exact `visibletris` culling, face merges, T-joints, sky and
+  grass, material/lightmap layers, and per-chunk meshing (next stage).

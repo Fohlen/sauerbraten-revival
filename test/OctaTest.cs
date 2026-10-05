@@ -1,6 +1,7 @@
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
+using SauerbratenRevival.World.Ogz;
 
 namespace SauerbratenRevival.Tests;
 
@@ -52,6 +53,20 @@ public class OctaTest : TestClass
         var c = new Cube();
         c.SetCubeEdge(0, 1, 1, 0xAB);
         TestAssert.Equal(0xAB, c.CubeEdge(0, 1, 1), "CubeEdge/SetCubeEdge roundtrip");
+    }
+
+    [Test]
+    public void LoadedMapWrapsToOcta()
+    {
+        var map = TestData.ReadMap();
+        var octa = map.ToOcta();
+
+        TestAssert.Equal(map.Header.WorldSize, octa.WorldSize, "worldsize");
+        TestAssert.True(ReferenceEquals(map.WorldRoot, octa.WorldRoot), "root is shared, not copied");
+        TestAssert.True(octa.AllocNodes > 0, "allocnodes counted");
+
+        var stats = OgzGeometry.Compute(octa.WorldRoot);
+        TestAssert.True(stats.Nodes > 0 && stats.Leaves > 0, "geometry walk over the Octa");
     }
 
     [Test]

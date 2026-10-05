@@ -12,6 +12,10 @@ namespace SauerbratenRevival.World.Ogz;
 /// load path in src/engine/worldio.cpp up to and including the octree; lightmaps,
 /// PVS and the blend map are not parsed yet.
 ///
+/// The octree is built directly into the runtime <see cref="Cube"/>/<see cref="CubeExt"/>
+/// structures, so an imported map is immediately usable by the mesher, collision,
+/// and editor.
+///
 /// The published (incoherency.co.uk) documentation describes version 29; r6889
 /// adds a <c>numvslots</c> header field and the modern <c>surfaceinfo</c> vertex
 /// encoding, both handled here.
@@ -53,7 +57,7 @@ public sealed class OgzReader
         return Read(reader);
     }
 
-    /// <summary>Read and parse an OGZ map from a decompressed stream.</summary>
+    /// <summary>Read and parse a decompressed OGZ map.</summary>
     public static OgzMap Read(BinaryReader reader)
     {
         var map = new OgzMap();
@@ -207,9 +211,9 @@ public sealed class OgzReader
 
     // ---- octree (worldio.cpp loadchildren / loadc, mapversion >= 32 path) ----
 
-    private OgzCube[] ReadChildren(int[] co, int size)
+    private Cube[] ReadChildren(int[] co, int size)
     {
-        var cubes = new OgzCube[8];
+        var cubes = new Cube[8];
         for (int i = 0; i < 8; i++)
         {
             var childCo = new[]
@@ -223,9 +227,9 @@ public sealed class OgzReader
         return cubes;
     }
 
-    private OgzCube ReadCube(int[] co, int size)
+    private Cube ReadCube(int[] co, int size)
     {
-        var cube = new OgzCube();
+        var cube = new Cube();
         int octsav = _r.ReadByte();
         int octtype = octsav & 0x7;
         bool hasChildren = false;
@@ -233,16 +237,14 @@ public sealed class OgzReader
         switch (octtype)
         {
             case 0: // OCTSAV_CHILDREN
-                cube.Type = OgzCubeType.Children;
                 cube.Children = ReadChildren(co, size >> 1);
                 return cube;
             case 4: // OCTSAV_LODCUBE
-                cube.Type = OgzCubeType.Lod;
                 hasChildren = true;
                 break;
-            case 1: cube.Type = OgzCubeType.Empty; break;
-            case 2: cube.Type = OgzCubeType.Solid; break;
-            case 3: cube.Type = OgzCubeType.Normal; cube.Edges = ReadExact(_r, 12); break;
+            case 1: cube.EmptyFaces(); break;
+            case 2: cube.SolidFaces(); break;
+            case 3: PackEdges(cube, ReadExact(_r, 12)); break;
             default: throw new InvalidDataException($"unknown octree cube type {octtype}");
         }
 
@@ -258,43 +260,43 @@ public sealed class OgzReader
         return cube;
     }
 
-    private void ReadSurfaces(OgzCube cube, int[] co, int size)
+    private void ReadSurfaces(Cube cube, int[] co, int size)
     {
         int surfmask = _r.ReadByte();
         _r.ReadByte(); // totalverts (only used for allocation in the engine)
 
-        cube.Surfaces = new OgzSurface?[6];
-        int offset = 0;
+        var ext = new CubeExt();
+        var verts = new List<VertInfo>();
         for (int i = 0; i < 6; i++)
         {
             if ((surfmask & (1 << i)) == 0) continue;
 
-            var surf = new OgzSurface
-            {
-                Lmid0 = _r.ReadByte(),
-                Lmid1 = _r.ReadByte(),
-                VertMask = _r.ReadByte(),
-                NumVerts = _r.ReadByte(),
-            };
-            int numverts = surf.TotalVerts;
+            byte lmid0 = _r.ReadByte(), lmid1 = _r.ReadByte();
+            byte vertmask = _r.ReadByte(), numvertsByte = _r.ReadByte();
+            int numverts = (numvertsByte & Octa.LAYER_DUP) != 0
+                ? (numvertsByte & Octa.MAXFACEVERTS) * 2
+                : numvertsByte & Octa.MAXFACEVERTS;
+
+            var surf = new SurfaceInfo { Lmid0 = lmid0, Lmid1 = lmid1, NumVerts = numvertsByte };
             if (numverts == 0)
             {
-                surf.VertOffset = 0;
-                cube.Surfaces[i] = surf;
+                ext.Surfaces[i] = surf;
                 continue;
             }
-            surf.VertOffset = offset;
-            offset += numverts;
-            surf.Vertices = ReadSurfaceVertices(cube, i, co, size, surf, numverts);
-            cube.Surfaces[i] = surf;
+
+            surf.Verts = (byte)verts.Count;
+            verts.AddRange(ReadSurfaceVertices(cube, i, co, size, vertmask, numvertsByte, numverts));
+            ext.Surfaces[i] = surf;
         }
+
+        ext.Verts = verts.ToArray();
+        cube.Ext = ext;
     }
 
-    private VertInfo[] ReadSurfaceVertices(OgzCube cube, int orient, int[] co, int size, OgzSurface surf, int numverts)
+    private VertInfo[] ReadSurfaceVertices(Cube cube, int orient, int[] co, int size, byte vertmask, byte numvertsByte, int numverts)
     {
         var verts = new VertInfo[numverts];
-        int vertmask = surf.VertMask;
-        int layerverts = surf.NumVerts & Octa.MAXFACEVERTS;
+        int layerverts = numvertsByte & Octa.MAXFACEVERTS;
         int dim = orient >> 1;
         int vc = Octa.C[dim], vr = Octa.R[dim];
         int[] vo = { (co[0] & 0xFFF) << 3, (co[1] & 0xFFF) << 3, (co[2] & 0xFFF) << 3 };
@@ -345,7 +347,7 @@ public sealed class OgzReader
                 v2.U = _r.ReadUInt16(); v2.V = _r.ReadUInt16();
                 v1.U = v0.U; v1.V = v2.V;
                 v3.U = v2.U; v3.V = v0.V;
-                if ((surf.NumVerts & Octa.LAYER_DUP) != 0)
+                if ((numvertsByte & Octa.LAYER_DUP) != 0)
                 {
                     ref VertInfo b0 = ref verts[4 + uvorder];
                     ref VertInfo b1 = ref verts[4 + ((uvorder + 1) & 3)];
@@ -381,7 +383,7 @@ public sealed class OgzReader
             }
         }
 
-        if ((surf.NumVerts & Octa.LAYER_DUP) != 0)
+        if ((numvertsByte & Octa.LAYER_DUP) != 0)
         {
             for (int k = 0; k < layerverts; k++)
             {
@@ -396,35 +398,26 @@ public sealed class OgzReader
         return verts;
     }
 
-    // genfaceverts (octa.cpp): face corner bits, with x1/y1/z1 mapped to 1.
-    // orient -> [vert][axis], axis = x/y/z in {0,1}.
-    private static readonly int[][][] FaceCorner =
+    private static void PackEdges(Cube cube, byte[] edges)
     {
-        new[] { new[] { 0, 1, 1 }, new[] { 0, 1, 0 }, new[] { 0, 0, 0 }, new[] { 0, 0, 1 } }, // -X
-        new[] { new[] { 1, 1, 1 }, new[] { 1, 0, 1 }, new[] { 1, 0, 0 }, new[] { 1, 1, 0 } }, // +X
-        new[] { new[] { 1, 0, 1 }, new[] { 0, 0, 1 }, new[] { 0, 0, 0 }, new[] { 1, 0, 0 } }, // -Y
-        new[] { new[] { 0, 1, 0 }, new[] { 0, 1, 1 }, new[] { 1, 1, 1 }, new[] { 1, 1, 0 } }, // +Y
-        new[] { new[] { 0, 0, 0 }, new[] { 0, 1, 0 }, new[] { 1, 1, 0 }, new[] { 1, 0, 0 } }, // -Z
-        new[] { new[] { 0, 0, 1 }, new[] { 1, 0, 1 }, new[] { 1, 1, 1 }, new[] { 0, 1, 1 } }, // +Z
-    };
-
-    private static int[][] GenFaceVerts(OgzCube c, int orient)
-    {
-        var res = new int[4][];
-        for (int n = 0; n < 4; n++)
-        {
-            int x = FaceCorner[orient][n][0], y = FaceCorner[orient][n][1], z = FaceCorner[orient][n][2];
-            res[n] = new[]
-            {
-                EdgeGet(c.Edges[z * 2 + y], x),
-                EdgeGet(c.Edges[4 + x * 2 + z], y),
-                EdgeGet(c.Edges[8 + y * 2 + x], z),
-            };
-        }
-        return res;
+        for (int d = 0; d < 3; d++)
+            cube.Faces[d] =
+                (uint)edges[d * 4] |
+                ((uint)edges[d * 4 + 1] << 8) |
+                ((uint)edges[d * 4 + 2] << 16) |
+                ((uint)edges[d * 4 + 3] << 24);
     }
 
-    private static int EdgeGet(byte edge, int coord) => coord != 0 ? (edge >> 4) & 0xF : edge & 0xF;
+    // genfaceverts lives in CubeGeometry; the reader keeps an int[][] adapter so
+    // the surface-vertex math below stays in plain integer arrays.
+    private static int[][] GenFaceVerts(Cube c, int orient)
+    {
+        System.Span<Vector3I> v = stackalloc Vector3I[4];
+        CubeGeometry.GenFaceVerts(c, orient, v);
+        var res = new int[4][];
+        for (int n = 0; n < 4; n++) res[n] = new[] { v[n].X, v[n].Y, v[n].Z };
+        return res;
+    }
 
     private static void SetXyz(VertInfo[] verts, int k, int[] v, int size, int[] vo)
     {

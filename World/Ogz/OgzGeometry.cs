@@ -27,14 +27,14 @@ public static class OgzGeometry
     private const ulong FnvOffset = 14695981039346656037UL;
     private const ulong FnvPrime = 1099511628211UL;
 
-    public static OgzGeometryStats Compute(OgzCube[] root)
+    public static OgzGeometryStats Compute(Cube[] root)
     {
         var stats = new OgzGeometryStats { Checksum = FnvOffset };
         Walk(root, root.Length, stats);
         return stats;
     }
 
-    private static void Walk(OgzCube[] cubes, int n, OgzGeometryStats stats)
+    private static void Walk(Cube[] cubes, int n, OgzGeometryStats stats)
     {
         for (int i = 0; i < n; i++)
         {
@@ -49,17 +49,15 @@ public static class OgzGeometry
 
             stats.Leaves++;
             byte type;
-            if (c.Type == OgzCubeType.Empty) { type = 1; stats.Empty++; }
-            else if (c.Type == OgzCubeType.Solid) { type = 2; stats.Solid++; }
+            if (c.IsEmpty()) { type = 1; stats.Empty++; }
+            else if (c.IsEntirelySolid()) { type = 2; stats.Solid++; }
             else { type = 3; stats.Normal++; }
 
-            if (c.Surfaces != null)
+            if (c.Ext != null)
             {
                 for (int j = 0; j < 6; j++)
                 {
-                    var surf = c.Surfaces[j];
-                    if (surf == null) continue;
-                    int totalVerts = surf.TotalVerts;
+                    int totalVerts = c.Ext.Surfaces[j].TotalVerts();
                     if (totalVerts > 0) stats.Surfaces++;
                     stats.Verts += totalVerts;
                 }
@@ -75,7 +73,8 @@ public static class OgzGeometry
                 HashUShort(stats, t);
             }
             if (type == 3)
-                for (int j = 0; j < 12; j++) HashByte(stats, c.Edges[j]);
+                for (int j = 0; j < 12; j++)
+                    HashByte(stats, (byte)((c.Faces[j / 4] >> ((j % 4) * 8)) & 0xFF));
         }
     }
 
