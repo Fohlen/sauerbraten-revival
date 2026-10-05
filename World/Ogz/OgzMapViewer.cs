@@ -15,7 +15,8 @@ namespace SauerbratenRevival.World.Ogz;
 ///
 /// It is a <c>[Tool]</c> script so the geometry also appears in the editor. It
 /// defaults to church51 from the reference dump (<c>SAUER_REF</c>) and can be
-/// overridden via <see cref="OgzPath"/>. Geometry is untextured.
+/// overridden via <see cref="OgzPath"/>. Geometry is untextured; the camera is
+/// the coop-edit flycam (see <see cref="FreeFlyCamera"/>): WASD + mouse look.
 ///
 /// Tool scripts only rebuild when the scene is (re)opened, so after editing this
 /// script close and reopen <c>scenes/map_viewer.tscn</c> (or restart the editor).
@@ -107,7 +108,12 @@ public partial class OgzMapViewer : Node3D
             ShadowEnabled = true,
         });
 
-        var camera = new Camera3D { Name = "Camera3D", Fov = 75 };
+        var camera = new FreeFlyCamera
+        {
+            Name = "Camera3D",
+            Fov = 75,
+            Far = Mathf.Max(radius * 8.0f, 1000.0f),
+        };
         camera.Position = centre + new Vector3(0, radius * 0.6f, radius * 1.3f);
         AddChild(camera);
         camera.LookAt(centre, Vector3.Up);

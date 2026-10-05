@@ -80,9 +80,13 @@ from `ExportRelease` builds.
 
 `scenes/map_viewer.tscn` is a dev tool: it reads a legacy `.ogz` from the
 reference dump, builds the runtime octree, chunks it and displays the untextured
-geometry. Set `OgzPath` on the root node (or rely on `SAUER_REF`) and run the
-scene. This is not the shipping path — the importer converts maps to the native
-format later.
+geometry. It defaults to church51 (`OgzPath` overrides) and is a `[Tool]` scene,
+so the geometry also shows in the editor viewport. This is not the shipping path
+— the importer converts maps to the native format later.
+
+While running, the camera is Sauerbraten's coop-edit flycam: **WASD** flies in the
+look direction (look down and you descend), the **mouse** looks/tilts, **Shift**
+sprints, **Esc** releases the cursor (click to recapture).
 
 ## Reference source
 
