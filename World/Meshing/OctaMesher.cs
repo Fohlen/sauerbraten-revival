@@ -1,15 +1,23 @@
+using System.Collections.Generic;
 using Godot;
 
 namespace SauerbratenRevival.World.Meshing;
 
 /// <summary>
-/// Godot-native mesher: walks the runtime <see cref="Octa"/> and emits an
-/// <see cref="ArrayMesh"/> (one surface per texture). This is the stage-B
+/// Godot-native mesher: walks the runtime <see cref="Octa"/> and emits
+/// <see cref="ArrayMesh"/>es (one surface per texture). This is the stage-B
 /// replacement for octarender.cpp — geometry only for now; merges, T-joints,
 /// sky, grass, lightmaps and material layers are deliberate follow-ups.
 ///
-/// Positions are emitted in Sauerbraten coordinates (Z-up). The scene node is
-/// expected to carry the Z-up → Y-up rotation.
+/// The world is split into fixed-size chunks of <c>chunkSize</c> world units.
+/// A chunk's vertices are stored relative to its origin; place the chunk node at
+/// <see cref="MeshChunk.Origin"/>. Positions are in Sauerbraten coordinates
+/// (Z-up); the parent node carries the Z-up → Y-up rotation.
+///
+/// Chunk assignment is by the leaf cube's origin, so a cube larger than a chunk
+/// may spill outside its nominal bounds. That is correct for rendering (Godot
+/// culls by the mesh AABB); an incremental-update pass should invalidate every
+/// chunk a changed cube's AABB overlaps.
 /// </summary>
 public sealed class OctaMesher
 {
@@ -17,14 +25,43 @@ public sealed class OctaMesher
 
     public OctaMesher(Octa octa) => _octa = octa;
 
-    public ArrayMesh Build()
+    /// <summary>Mesh the whole world as a single chunk.</summary>
+    public ArrayMesh Build() => BuildChunked(_octa.WorldSize).Chunks is { Count: > 0 } chunks
+        ? chunks[0].Mesh
+        : new ArrayMesh();
+
+    /// <summary>Mesh the world into chunks of <paramref name="chunkSize"/> world units (power of two).</summary>
+    public ChunkedWorldMesh BuildChunked(int chunkSize = 512)
     {
-        var builder = new ArrayMeshBuilder();
-        Walk(_octa.WorldRoot, Vector3I.Zero, _octa.WorldSize >> 1, builder);
-        return builder.Build();
+        if (chunkSize <= 0) chunkSize = 512;
+
+        var builders = new Dictionary<Vector3I, ArrayMeshBuilder>();
+        Walk(_octa.WorldRoot, Vector3I.Zero, _octa.WorldSize >> 1, chunkSize, builders);
+
+        var result = new ChunkedWorldMesh { ChunkSize = chunkSize };
+        var keys = new List<Vector3I>(builders.Keys);
+        keys.Sort(CompareKeys); // deterministic order
+
+        foreach (var key in keys)
+        {
+            var builder = builders[key];
+            if (builder.TriangleCount == 0) continue;
+            result.Chunks.Add(new MeshChunk { Origin = key * chunkSize, Mesh = builder.Build() });
+            result.TriangleCount += builder.TriangleCount;
+            result.SurfaceCount += builder.TextureCount;
+        }
+        return result;
     }
 
-    private void Walk(Cube[] cubes, Vector3I co, int size, ArrayMeshBuilder builder)
+    private static int CompareKeys(Vector3I a, Vector3I b)
+    {
+        int c = a.Z.CompareTo(b.Z);
+        if (c != 0) return c;
+        c = a.Y.CompareTo(b.Y);
+        return c != 0 ? c : a.X.CompareTo(b.X);
+    }
+
+    private void Walk(Cube[] cubes, Vector3I co, int size, int chunkSize, Dictionary<Vector3I, ArrayMeshBuilder> chunks)
     {
         for (int i = 0; i < 8; i++)
         {
@@ -36,7 +73,7 @@ public sealed class OctaMesher
 
             if (c.Children != null)
             {
-                Walk(c.Children, childCo, size >> 1, builder);
+                Walk(c.Children, childCo, size >> 1, chunkSize, chunks);
                 continue;
             }
 
@@ -45,7 +82,14 @@ public sealed class OctaMesher
             for (int orient = 0; orient < 6; orient++)
             {
                 if (!FaceVisible(c, orient, childCo, size)) continue;
-                EmitFace(c, orient, childCo, size, builder);
+
+                var key = new Vector3I(childCo.X / chunkSize, childCo.Y / chunkSize, childCo.Z / chunkSize);
+                if (!chunks.TryGetValue(key, out var builder))
+                {
+                    builder = new ArrayMeshBuilder();
+                    chunks[key] = builder;
+                }
+                EmitFace(c, orient, childCo - key * chunkSize, size, builder);
             }
         }
     }

@@ -9,13 +9,13 @@ namespace SauerbratenRevival.World;
 [GlobalClass]
 public partial class Map : Node3D
 {
-    [Export] public int WorldScale { get; set; } = 10;
+	[Export] public int WorldScale { get; set; } = 10;
 
-    public Octa World { get; private set; } = null!;
+	public Octa World { get; private set; } = null!;
 
-    public override void _Ready()
-    {
-        World = new Octa(WorldScale);
-        GD.Print($"[Map] worldscale={WorldScale} worldsize={World.WorldSize} allocnodes={World.AllocNodes}");
-    }
+	public override void _Ready()
+	{
+		World = new Octa(WorldScale);
+		GD.Print($"[Map] worldscale={WorldScale} worldsize={World.WorldSize} allocnodes={World.AllocNodes}");
+	}
 }
