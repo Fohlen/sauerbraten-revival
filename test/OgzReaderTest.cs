@@ -14,10 +14,17 @@ namespace SauerbratenRevival.Tests;
 /// </summary>
 public class OgzReaderTest : TestClass
 {
-    private static readonly string CatalogueDir =
-        ProjectSettings.GlobalizePath("res://metadata-catalogue/church51");
-    private static readonly string OgzPath = Path.Combine(CatalogueDir, "church51.ogz");
-    private static readonly string JsonPath = Path.Combine(CatalogueDir, "church51.json");
+    private static readonly string JsonPath =
+        ProjectSettings.GlobalizePath("res://metadata-catalogue/church51.json");
+
+    // The OGZ files are not committed; read the map from the read-only reference
+    // dump (same SAUER_REF the refharness build uses).
+    private static readonly string ReferenceRoot =
+        System.Environment.GetEnvironmentVariable("SAUER_REF")
+        ?? "/Users/fohlen/Downloads/sauerbraten-code-r6889";
+
+    private static readonly string OgzPath =
+        Path.Combine(ReferenceRoot, "packages", "base", "church51.ogz");
 
     private static JsonElement Catalogue()
     {
@@ -25,12 +32,20 @@ public class OgzReaderTest : TestClass
         return doc.RootElement.Clone();
     }
 
+    private static OgzMap ReadMap()
+    {
+        if (!File.Exists(OgzPath))
+            throw new FileNotFoundException(
+                $"OGZ test map not found at '{OgzPath}'. Set SAUER_REF to the reference dump root.", OgzPath);
+        return OgzReader.Read(OgzPath);
+    }
+
     public OgzReaderTest(Node testScene) : base(testScene) { }
 
     [Test]
     public void HeaderMatchesCatalogue()
     {
-        var map = OgzReader.Read(OgzPath);
+        var map = ReadMap();
         var cat = Catalogue();
 
         TestAssert.Equal("OCTA", map.Header.Magic, "magic");
@@ -44,7 +59,7 @@ public class OgzReaderTest : TestClass
     [Test]
     public void EntityPositionsMatchCatalogue()
     {
-        var map = OgzReader.Read(OgzPath);
+        var map = ReadMap();
         var cat = Catalogue();
         var ents = cat.GetProperty("entities");
         TestAssert.Equal(ents.GetArrayLength(), map.Entities.Count, "entity count");
@@ -72,7 +87,7 @@ public class OgzReaderTest : TestClass
     [Test]
     public void VSlotsMatchCatalogue()
     {
-        var map = OgzReader.Read(OgzPath);
+        var map = ReadMap();
         var cat = Catalogue();
         int compared = 0, changedFields = 0;
 
@@ -146,7 +161,7 @@ public class OgzReaderTest : TestClass
     [Test]
     public void GeometryMatchesCatalogue()
     {
-        var map = OgzReader.Read(OgzPath);
+        var map = ReadMap();
         var stats = OgzGeometry.Compute(map.WorldRoot);
         GD.Print($"[ogz] geometry: nodes={stats.Nodes} leaves={stats.Leaves} " +
                  $"empty={stats.Empty} solid={stats.Solid} normal={stats.Normal} " +

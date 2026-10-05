@@ -58,6 +58,9 @@ public sealed class OgzReader
     {
         var map = new OgzMap();
         ReadHeader(reader, map.Header);
+        if (map.Header.Version < 32)
+            throw new NotSupportedException(
+                $"OGZ version {map.Header.Version} uses the legacy surface format; only v32+ is supported.");
         var self = new OgzReader(reader, map.Header.Version);
         self.ReadVars(map);
         self.ReadGameIdent(map);

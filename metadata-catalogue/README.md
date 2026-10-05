@@ -4,12 +4,13 @@ Ground-truth metadata for the maps we import into Sauerbraten Revival, exported
 from the **original** Sauerbraten client (patched with
 [`tools/refharness/patches/ogz-metadata.patch`](../tools/refharness/patches/ogz-metadata.patch)).
 
-Each map gets its own directory:
+Only the **JSON** is committed. The legacy `.ogz` files are large binary game
+assets and stay in the read-only reference dump; the OGZ reader tests read them
+from `$SAUER_REF/packages/base/<map>.ogz`.
 
 | File | Contents |
 | --- | --- |
-| `<map>.ogz` | The legacy map file — input to the importer and the OGZ reader tests. |
-| `<map>.json` | Resolved `slots`/`vslots`/`mapmodels`/`entities`/`sounds`, plus a `geometry` block used as ground truth by the OGZ reader tests. |
+| `<map>.json` | Resolved `slots`/`vslots`/`mapmodels`/`entities`/`sounds`, plus a `geometry` block (cube-tree counts, surface/vertex totals, per-vslot face histogram and a canonical FNV-1a checksum). |
 
 The exporter only emits what the map actually uses (geometry-referenced textures,
 entity-referenced mapmodels and sounds). See [`docs/ogz-import.md`](../docs/ogz-import.md).
@@ -22,16 +23,18 @@ Build the patched reference client once:
 tools/refharness/build_instrumented.sh
 ```
 
-Then load the map from the reference dump root with `SAUER_METADATA` pointing
-straight at the catalogue file:
+Then load the map from the reference dump root, writing the export to `/tmp`
+(never into the repo), and copy the JSON in manually:
 
 ```sh
 cd /path/to/sauerbraten-code-r6889
-SAUER_METADATA=/abs/path/to/metadata-catalogue/church51/church51.json \
+SAUER_METADATA=/tmp/church51.json \
   /abs/path/to/tools/refharness/instrumented/build/sauer_client \
   -q/tmp/sauer-meta-home -lbase/church51
+
+cp /tmp/church51.json /abs/path/to/metadata-catalogue/church51.json
 ```
 
-The `geometry` block (cube-tree counts, per-vslot face histogram and a canonical
-FNV-1a checksum) is asserted byte-for-byte by
-[`test/OgzReaderTest.cs`](../test/OgzReaderTest.cs).
+The `geometry` block is asserted by
+[`test/OgzReaderTest.cs`](../test/OgzReaderTest.cs), which reads the map itself
+from `SAUER_REF` (defaults to `/Users/fohlen/Downloads/sauerbraten-code-r6889`).

@@ -1,7 +1,2 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
-
-# Godot / OGZ import test data is binary.
-*.ogz binary
-*.png binary
-*.jpg binary
