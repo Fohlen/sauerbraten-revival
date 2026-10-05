@@ -38,24 +38,36 @@ Living inventory. Order reflects intent, not schedule. MVP target:
       **97.3% free-air** exact matches (air misses = jump pads/collisions).
 - [ ] **A3** input-replay differential — blocked on map geometry (see #4).
 
-## 2. World core (dynamic octree)
+## 2. World core (dynamic octree + rendering)
+
+See [rendering.md](rendering.md) for the ArrayMesh + RenderingServer approach.
 
 - [ ] Port the `octa.cpp` core to C# with a small compatibility shim.
-- [ ] Collision traversal (`move`/`collide` primitives).
-- [ ] Incremental per-chunk mesh emission within a frame budget.
-- [ ] Live collision against the mutable octree.
-- [ ] `Resource`-based world save/load (replaces `.ogz`).
+- [ ] Collision traversal (`move`/`collide` primitives) — octree-based, not Godot physics.
+- [ ] **Chunked ArrayMesh emitter**: octree → per-chunk ArrayMesh → RenderingServer.
+- [ ] Per-frame update budget (max N chunks/frame) to avoid hitches.
+- [ ] LOD integration via `ArrayMesh.add_lod()` for distance-based simplification.
+- [ ] Live collision against the mutable octree (rendering and collision decoupled).
+- [ ] `Resource`-based world save/load (compact binary format).
 - [ ] Material manifest + blend shader (approximate → exact).
 
-## 3. Old-content conversion & loading
+## 3. OGZ import pipeline
 
-- [ ] Headless converter reusing original `worldio.cpp` to re-serialize
-      octree + entities + materials into our format.
+See [ogz-import.md](ogz-import.md) for full architecture.
+
+- [ ] **Metadata export patch**: CubeScript patch to original client that
+      exports texture slots, mapmodels, lights, etc. to JSON on map load.
+- [ ] **Generate metadata**: Run patched client on all target maps, commit
+      JSON to `data/metadata/`.
+- [ ] **OGZ parser**: C# binary parser for `.ogz` octree + entities.
+- [ ] **Importer**: OGZ + metadata → native octree `Resource` + `Level.tscn`.
 - [ ] Render + load hand-picked classic maps.
 - [ ] First target: `packages/base/church51.ogz` (matches trace fixture
-      `session1.csv`; no map `.cfg`, stock textures).
-- [ ] Lightmap import / rebake.
+      `session1.csv`).
+- [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers, mapmodels) map by map.
+
+**New maps use our compact binary format only** — no OGZ at runtime.
 
 ## 4. Movement refinement (collision)
 

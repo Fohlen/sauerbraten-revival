@@ -10,7 +10,7 @@ for how we prove movement fidelity.
 | --- | --- |
 | World representation | Native **octree**, **dynamic at runtime** (C#/.NET) |
 | Original octree code | Reuse `octa.cpp`/`octa.h` **core**; port editor *algorithms*; do **not** copy `octaedit.cpp` plumbing |
-| Rendering | Incremental per-chunk `ArrayMesh`; Sauerbraten blend/lightmap shader |
+| Rendering | Incremental per-chunk `ArrayMesh` → `RenderingServer`; Godot Forward+; see [rendering.md](rendering.md) |
 | Collision & movement | Our own ported octree traversal (`move`/`collide`/steps), validated against the original |
 | Level format | `Level.tscn` (entities/config) + **Godot binary `Resource`** world blob. **No `.ogz`, no CubeScript** |
 | Editor | Runtime, in-game, Godot UI + **command system** |
@@ -82,8 +82,8 @@ sync. It is also the foundation for multiplayer and Workshop content.
 | `octa.cpp` core | 1880 | **0** | **Port to C#** behind a small shim |
 | `octa.h` (structs) | — | — | Port/adapt to C# |
 | `octaedit.cpp` | 3003 | 19 | **Port the algorithms**, reimplement UI/undo/selection plumbing |
-| `octarender.cpp` | 1803 | 45 | **Replace** with a Godot mesh emitter (reuse face-selection logic) |
-| `worldio.cpp` | 1388 | — | **Delete**, replaced by our `Resource` format |
+| `octarender.cpp` | 1803 | 45 | **Replace** with ArrayMesh emitter → RenderingServer; see [rendering.md](rendering.md) |
+| `worldio.cpp` | 1388 | — | **Port for OGZ import only**; see [ogz-import.md](ogz-import.md). Native format is `Resource`. |
 | octree traversal (`physics.cpp`) | ~500 | 0 | **Port to C#** for collision |
 
 `octa.cpp` depends on only a handful of globals (`worldroot`, `worldsize`,

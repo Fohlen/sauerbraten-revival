@@ -37,6 +37,8 @@ Work proceeds in **stages**.
 | [vision.md](docs/vision.md) | High-level goal, scope, non-goals, tech stack. |
 | [architecture.md](docs/architecture.md) | Core technical decisions: dynamic octree, command system, format, rendering, modding. |
 | [features.md](docs/features.md) | Feature inventory and roadmap (MVP modes). |
+| [rendering.md](docs/rendering.md) | ArrayMesh + RenderingServer rendering strategy; collision decoupling; LOD. |
+| [ogz-import.md](docs/ogz-import.md) | One-time OGZ import pipeline; metadata export patch; native format. |
 | [movement-physics.md](docs/movement-physics.md) | Reverse-engineered original movement/physics (SVN r6889), with source citations. |
 | [movement-verification.md](docs/movement-verification.md) | Plan A: how we prove movement fidelity against the original (A1–A4). |
 
