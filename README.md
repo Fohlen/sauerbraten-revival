@@ -76,6 +76,14 @@ This is the GoDotTest runner rather than a `dotnet test` adapter because the
 world core uses Godot types and lives in the game assembly. Tests are excluded
 from `ExportRelease` builds.
 
+## Inspecting a map
+
+`scenes/map_viewer.tscn` is a dev tool: it reads a legacy `.ogz` from the
+reference dump, builds the runtime octree, chunks it and displays the untextured
+geometry. Set `OgzPath` on the root node (or rely on `SAUER_REF`) and run the
+scene. This is not the shipping path — the importer converts maps to the native
+format later.
+
 ## Reference source
 
 The original engine source is a read-only snapshot of **Sauerbraten SVN r6889**,

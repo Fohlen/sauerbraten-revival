@@ -74,9 +74,10 @@ When an octree mutation occurs:
 
 This spreads large edits across frames, avoiding hitches.
 
-> **Status:** chunking is not implemented yet — `OctaMesher` currently builds a
-> single whole-map `ArrayMesh`. The `ArrayMeshBuilder` grouping is already
-> per-texture, so splitting it per chunk is the next step.
+> **Status:** implemented as fixed-size spatial chunks
+> (`OctaMesher.BuildChunked`, default 512 world units). Each chunk is one
+> `ArrayMesh` positioned at its origin (`MeshChunk`). Dirty-tracking and the
+> per-frame rebuild budget are still to come.
 
 ---
 
@@ -218,5 +219,8 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   a geometry-only `ArrayMesh` (positions, flat normals, indices; one surface per
   texture via `ArrayMeshBuilder`). Positions are in Sauerbraten coordinates
   (Z-up); the scene node carries the Z-up → Y-up rotation.
+- **Chunking** — `OctaMesher.BuildChunked(chunkSize)` splits the world into
+  fixed-size spatial chunks (`ChunkedWorldMesh`/`MeshChunk`), each an
+  `ArrayMesh` + origin.
 - **Deferred** — exact `visibletris` culling, face merges, T-joints, sky and
-  grass, material/lightmap layers, and per-chunk meshing (next stage).
+  grass, material/lightmap layers, and incremental dirty-chunk rebuilds.
