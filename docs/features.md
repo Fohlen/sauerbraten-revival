@@ -75,7 +75,8 @@ See [ogz-import.md](ogz-import.md) for full architecture.
 - [x] **Entity lights** — `ET_LIGHT` → `OmniLight3D`, attached `ET_SPOTLIGHT` →
       `SpotLight3D` (`LightBuilder`; attr1 radius, attr2/3/4 colour, spot attr1 = cone angle).
 - [x] **Playerstarts** — `ET_PLAYERSTART` → `SpawnPoint` (`Marker3D` with `Team`/`Yaw`; facing from `vecfromyawpitch`).
-- [ ] **Entities, one at a time** — mapmodels, sounds (verified individually).
+- [x] **Mapmodels** — `ET_MAPMODEL` → `MapModel`; source OBJ/MD2/MD3/MD5/IQM converted to glTF with **assimp** (`tools/model-import/import_models.py` → git-ignored `assets/models/`, imported by Godot), with `mdlscale`/`mdltrans`/skin applied. Note `animmodel::loaded()` scales by `1/4`.
+- [ ] **Entities, one at a time** — sounds (verified individually).
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers, mapmodels) map by map.
 

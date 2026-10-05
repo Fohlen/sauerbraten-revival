@@ -34,6 +34,7 @@ public static class MapModelBuilder
                 Yaw = e.Attr1,
                 ModelPath = name,
                 GlbPath = info?.GlbPath,
+                GlbOsPath = info?.GlbOsPath,
                 ModelScale = info?.Scale ?? 1.0f,
                 ModelTranslation = info?.Translation ?? Vector3.Zero,
                 SkinMaterial = BuildSkin(info, textures, skinCache),

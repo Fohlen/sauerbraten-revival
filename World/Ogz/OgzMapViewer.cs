@@ -65,15 +65,24 @@ public partial class OgzMapViewer : Node3D
 
         var chunked = new OctaMesher(octa, materials).BuildChunked(ChunkSize);
 
-        // Converted mapmodels (assimp), if the model-import tool has been run.
-        string modelsDir = ProjectSettings.GlobalizePath("res://tools/model-import/out");
-        var modelCatalog = ModelCatalog.Load(Path.Combine(modelsDir, "models.json"), modelsDir);
+        // Converted mapmodels (assimp), imported by Godot as Resources.
+        const string modelsResDir = "res://assets/models";
+        string modelsDir = ProjectSettings.GlobalizePath(modelsResDir);
+        var modelCatalog = ModelCatalog.Load(Path.Combine(modelsDir, "models.json"), modelsDir, modelsResDir);
 
         var world = new Node3D { Name = "World", RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
         AddChild(world);
         world.AddChild(LightBuilder.Build(map));
         world.AddChild(PlayerStartBuilder.Build(map));
-        world.AddChild(MapModelBuilder.Build(map, catalogue, modelCatalog, textures));
+        var mapModels = MapModelBuilder.Build(map, catalogue, modelCatalog, textures);
+        world.AddChild(mapModels);
+        int loadedModels = 0, totalModels = 0;
+        foreach (var child in mapModels.GetChildren())
+        {
+            totalModels++;
+            if (child is MapModel { ModelLoaded: true }) loadedModels++;
+        }
+        GD.Print($"[viewer] mapmodels: {loadedModels}/{totalModels} loaded");
 
         // Fallback so geometry is still visible if there is no catalogue.
         StandardMaterial3D? fallback = materials == null

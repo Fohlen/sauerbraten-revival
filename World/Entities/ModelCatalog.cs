@@ -9,7 +9,13 @@ namespace SauerbratenRevival.World.Entities;
 public sealed class ModelInfo
 {
     public string Name = "";
+
+    /// <summary><c>res://</c> path of the imported glTF (used by the editor/game).</summary>
     public string? GlbPath;
+
+    /// <summary>OS path of the glTF on disk (used by tests / as a runtime fallback).</summary>
+    public string? GlbOsPath;
+
     public float Scale = 1.0f;
     public Vector3 Translation;
     public string? Skin;
@@ -26,7 +32,7 @@ public sealed class ModelCatalog
 
     public ModelInfo? Get(string name) => Models.GetValueOrDefault(name);
 
-    public static ModelCatalog? Load(string jsonPath, string glbDir)
+    public static ModelCatalog? Load(string jsonPath, string glbOsDir, string glbResDir)
     {
         if (!File.Exists(jsonPath)) return null;
 
@@ -40,7 +46,11 @@ public sealed class ModelCatalog
             var info = new ModelInfo { Name = entry.Name };
 
             if (v.TryGetProperty("glb", out var glb) && glb.ValueKind == JsonValueKind.String)
-                info.GlbPath = Path.Combine(glbDir, glb.GetString()!);
+            {
+                string file = glb.GetString()!;
+                info.GlbPath = $"{glbResDir.TrimEnd('/')}/{file}";
+                info.GlbOsPath = Path.Combine(glbOsDir, file);
+            }
             if (v.TryGetProperty("scale", out var scale)) info.Scale = (float)scale.GetDouble();
             if (v.TryGetProperty("skin", out var skin) && skin.ValueKind == JsonValueKind.String)
                 info.Skin = skin.GetString();

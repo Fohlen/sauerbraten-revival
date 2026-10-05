@@ -185,7 +185,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("catalogue")
     ap.add_argument("--ref", default=os.environ.get("SAUER_REF", "/Users/fohlen/Downloads/sauerbraten-code-r6889"))
-    ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "model-import", "out"))
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    ap.add_argument("--out", default=os.path.join(repo_root, "assets", "models"))
     ap.add_argument("--assimp", default="assimp")
     args = ap.parse_args()
 

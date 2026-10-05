@@ -21,7 +21,9 @@ public partial class MapModel : Node3D
     /// <summary>attr1: facing yaw in degrees (Sauerbraten convention).</summary>
     [Export] public float Yaw { get; set; }
 
+    /// <summary>Imported glTF (<c>res://</c>) or, as a fallback, an OS path.</summary>
     [Export] public string? GlbPath { get; set; }
+    [Export] public string? GlbOsPath { get; set; }
     [Export] public float ModelScale { get; set; } = 1.0f;
     [Export] public Vector3 ModelTranslation { get; set; }
 
@@ -31,27 +33,49 @@ public partial class MapModel : Node3D
     /// <summary>Skin/normal material, applied to the loaded model (built by the builder).</summary>
     public Material? SkinMaterial { get; set; }
 
+    /// <summary>True once a converted glTF was loaded (false for a placeholder box).</summary>
+    public bool ModelLoaded { get; private set; }
+
     public override void _Ready()
     {
-        if (!string.IsNullOrEmpty(GlbPath) && File.Exists(GlbPath))
+        bool editor = Engine.IsEditorHint();
+        bool loaded = false;
+
+        bool haveRes = !string.IsNullOrEmpty(GlbPath) && ResourceLoader.Exists(GlbPath);
+        bool haveOs = !string.IsNullOrEmpty(GlbOsPath) && File.Exists(GlbOsPath);
+        if (haveRes || haveOs)
         {
-            if (TryLoadModel()) return;
-            GD.PushWarning($"[mapmodel] failed to load '{GlbPath}'");
+            loaded = TryLoadModel();
+            if (loaded) ModelLoaded = true;
+            else GD.PushWarning($"[mapmodel] failed to load '{GlbPath ?? GlbOsPath}'");
         }
-        else if (!string.IsNullOrEmpty(ModelPath))
+        else
         {
-            GD.PushWarning($"[mapmodel] no converted glTF for '{ModelPath}'");
+            GD.PushWarning($"[mapmodel] no converted glTF for '{ModelPath}' (glb={GlbPath ?? GlbOsPath ?? "<null>"})");
         }
-        if (ShowGizmo) AddChild(CreateGizmo());
+
+        // Editor locator: dynamically-added nodes get no editor gizmo, so drop a
+        // small marker at each mapmodel. At runtime it only appears if the mesh
+        // failed to load, so it doesn't obscure the real model.
+        if (ShowGizmo && (editor || !loaded)) AddChild(CreateGizmo());
     }
 
     private bool TryLoadModel()
     {
-        var document = new GltfDocument();
-        var state = new GltfState();
-        if (document.AppendFromFile(GlbPath!, state) != Error.Ok) return false;
-
-        var scene = document.GenerateScene(state);
+        // Prefer Godot's imported Resource (renders in the editor too); fall back
+        // to parsing the glTF directly from disk.
+        Node? scene = null;
+        if (!string.IsNullOrEmpty(GlbPath) && ResourceLoader.Exists(GlbPath))
+        {
+            var packed = ResourceLoader.Load<PackedScene>(GlbPath);
+            if (packed != null) scene = packed.Instantiate();
+        }
+        else if (!string.IsNullOrEmpty(GlbOsPath) && File.Exists(GlbOsPath))
+        {
+            var document = new GltfDocument();
+            var state = new GltfState();
+            if (document.AppendFromFile(GlbOsPath!, state) == Error.Ok) scene = document.GenerateScene(state);
+        }
         if (scene == null) return false;
 
         var holder = new Node3D
@@ -60,11 +84,27 @@ public partial class MapModel : Node3D
             Scale = Vector3.One * ModelScale,
             Position = ModelTranslation,
         };
-        holder.AddChild(scene);
-        AddChild(holder);
 
-        if (SkinMaterial != null) ApplyMaterial(scene, SkinMaterial);
+        // Flatten the generated glTF scene into plain MeshInstance3Ds. The
+        // nested glTF scene subtree doesn't rasterise reliably in the editor's
+        // tool viewport, whereas a flat MeshInstance3D does.
+        if (CopyMeshes(scene, holder) == 0) return false;
+
+        AddChild(holder);
+        if (SkinMaterial != null) ApplyMaterial(holder, SkinMaterial);
         return true;
+    }
+
+    private static int CopyMeshes(Node source, Node3D target)
+    {
+        int count = 0;
+        if (source is MeshInstance3D { Mesh: not null } mesh)
+        {
+            target.AddChild(new MeshInstance3D { Name = mesh.Name, Mesh = mesh.Mesh, Transform = mesh.Transform });
+            count++;
+        }
+        foreach (var child in source.GetChildren()) count += CopyMeshes(child, target);
+        return count;
     }
 
     private static void ApplyMaterial(Node node, Material material)
@@ -75,8 +115,8 @@ public partial class MapModel : Node3D
 
     private MeshInstance3D CreateGizmo() => new()
     {
-        Name = "Gizmo",
-        Mesh = new BoxMesh { Size = Vector3.One * Mathf.Max(GizmoSize, 1.0f) },
+        Name = "EditorMarker",
+        Mesh = new SphereMesh { Radius = Mathf.Max(GizmoSize, 1.0f) * 0.25f, Height = Mathf.Max(GizmoSize, 1.0f) * 0.5f },
         MaterialOverride = new StandardMaterial3D
         {
             AlbedoColor = new Color(1.0f, 0.6f, 0.1f),
