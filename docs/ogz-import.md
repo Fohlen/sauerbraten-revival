@@ -59,7 +59,7 @@ This is parsed directly in C# — the format is documented and stable.
 
 The `.ogz` file stores **indices**, not paths:
 - Face texture → `vslots[index]` → `slots[slot.index]` → texture path.
-- Mapmodel entity → `mapmodels[attr1]` → model path.
+- Mapmodel entity → `mapmodels[attr2]` → model path.
 - Lights, sounds, particles → need attribute interpretation.
 
 This metadata is **not** in the `.ogz` file — it's set by the map's `.cfg`
@@ -123,6 +123,21 @@ A small patch to the original Sauerbraten client that, on map load, writes:
   ]
 }
 ```
+
+The concrete implementation is
+[`tools/refharness/patches/ogz-metadata.patch`](../tools/refharness/patches/ogz-metadata.patch).
+It adds `engine/metadata.cpp` and an `exportmapmetadata()` call at the end of
+`load_world()`, after the map config has been executed — so slot, mapmodel and
+sound indices are fully resolved. It emits **only** what the map actually uses:
+it walks the octree (the same traversal `compactvslots()` uses) for the vslots
+the geometry references and the slots those resolve to, and resolves only the
+mapmodels and map sounds the entity list references. This matters because the
+engine's `slots` and `mapmodels` tables are global registries populated by every
+exec'd `package.cfg` / `default_map_models.cfg`, not by the map. When the
+`SAUER_METADATA` environment variable points at an output file, loading a map
+writes the JSON there; otherwise the patch is completely inert. See
+[`tools/refharness/patches/README.md`](../tools/refharness/patches/README.md) for
+how to build the patched client.
 
 This patch is applied once to a copy of the original source, the modified client
 is run on each map, and the JSON output is committed to the repository.

@@ -1,0 +1,313 @@
+--- a/engine/engine.h
++++ b/engine/engine.h
+@@ -486,6 +486,9 @@
+ 
+ extern void resetmap();
+ extern void startmap(const char *name);
++
++// ogz import metadata export (sauerbraten-revival)
++extern void exportmapmetadata(const char *mapname);
+ 
+ // rendermodel
+ struct mapmodelinfo { string name; model *m; };
+@@ -567,6 +570,7 @@
+ extern void checkmapsounds();
+ extern void updatesounds();
+ extern void preloadmapsounds();
++extern const char *mapsoundname(int n);
+ 
+ extern void initmumble();
+ extern void closemumble();
+--- a/engine/sound.cpp
++++ b/engine/sound.cpp
+@@ -552,6 +552,14 @@
+ 
+ void mapsound(char *name, int *vol, int *maxuses) { intret(mapsounds.addsound(name, *vol, *maxuses < 0 ? 0 : max(1, *maxuses))); }
+ COMMAND(mapsound, "sii");
++
++const char *mapsoundname(int n)
++{
++    if(!mapsounds.configs.inrange(n)) return NULL;
++    soundconfig &config = mapsounds.configs[n];
++    if(config.numslots <= 0 || !mapsounds.slots.inrange(config.slots)) return NULL;
++    return mapsounds.slots[config.slots].sample->name;
++}
+ 
+ void altsound(char *name, int *vol) { gamesounds.addalt(name, *vol); }
+ COMMAND(altsound, "si");
+--- a/engine/worldio.cpp
++++ b/engine/worldio.cpp
+@@ -1272,7 +1272,11 @@
+     if(maptitle[0] && strcmp(maptitle, "Untitled Map by Unknown")) conoutf(CON_ECHO, "%s", maptitle);
+ 
+     startmap(cname ? cname : mname);
+-    
++
++#ifndef STANDALONE
++    exportmapmetadata(game::getclientmap());
++#endif
++
+     return true;
+ }
+ 
+--- a/Makefile
++++ b/Makefile
+@@ -98,6 +98,7 @@
+ 	engine/lightmap.o \
+ 	engine/main.o \
+ 	engine/material.o \
++	engine/metadata.o \
+ 	engine/menus.o \
+ 	engine/movie.o \
+ 	engine/normal.o	\
+--- a/engine/metadata.cpp
++++ b/engine/metadata.cpp
+@@ -0,0 +1,248 @@
++// metadata.cpp: one-time OGZ import metadata export (sauerbraten-revival)
++//
++// This file is added by a patch to Sauerbraten SVN r6889 and is not part of the
++// original engine. When SAUER_METADATA is set to an output path, loading a map
++// writes a JSON description of the resolved texture slots, variant slots,
++// mapmodels, entities and map sounds to that path. The offline OGZ importer
++// consumes this JSON to turn stored indices back into asset paths.
++//
++// See docs/ogz-import.md for the pipeline this feeds.
++
++#include "engine.h"
++
++#ifndef STANDALONE
++
++static void jsonstring(FILE *f, const char *s)
++{
++    fputc('"', f);
++    if(s) for(const char *p = s; *p; p++)
++    {
++        unsigned char c = (unsigned char)*p;
++        switch(c)
++        {
++            case '"':  fputs("\\\"", f); break;
++            case '\\': fputs("\\\\", f); break;
++            case '\n': fputs("\\n", f); break;
++            case '\r': fputs("\\r", f); break;
++            case '\t': fputs("\\t", f); break;
++            default:
++                if(c < 0x20) fprintf(f, "\\u%04x", c);
++                else fputc(c, f);
++                break;
++        }
++    }
++    fputc('"', f);
++}
++
++static void jsonparams(FILE *f, const vector<SlotShaderParam> &params)
++{
++    fputc('[', f);
++    loopv(params)
++    {
++        const SlotShaderParam &p = params[i];
++        if(i) fputc(',', f);
++        fputs("{\"name\":", f); jsonstring(f, p.name);
++        fprintf(f, ",\"val\":[%g,%g,%g,%g]}", p.val[0], p.val[1], p.val[2], p.val[3]);
++    }
++    fputc(']', f);
++}
++
++static const char *slottextypename(int type)
++{
++    switch(type)
++    {
++        case TEX_DIFFUSE: return "diffuse";
++        case TEX_UNKNOWN: return "unknown";
++        case TEX_DECAL:   return "decal";
++        case TEX_NORMAL:  return "normal";
++        case TEX_GLOW:    return "glow";
++        case TEX_SPEC:    return "spec";
++        case TEX_DEPTH:   return "depth";
++        case TEX_ALPHA:   return "alpha";
++        case TEX_ENVMAP:  return "envmap";
++        default:          return "unknown";
++    }
++}
++
++// The engine registers every texture from every exec'd package.cfg, so `slots`
++// is the full *available* set, not the set the map uses. Walk the octree the
++// same way compactvslots() does and mark the vslots the geometry references
++// (plus any layer vslots they point at).
++static void markusedvslots(cube *c, int n, vector<uchar> &used)
++{
++    loopi(n)
++    {
++        if(c[i].children) markusedvslots(c[i].children, 8, used);
++        else loopj(6)
++        {
++            ushort t = c[i].texture[j];
++            if(vslots.inrange(t)) used[t] = 1;
++        }
++    }
++}
++
++void exportmapmetadata(const char *mapname)
++{
++    const char *out = getenv("SAUER_METADATA");
++    if(!out || !*out) return;
++    FILE *f = fopen(out, "w");
++    if(!f) { conoutf(CON_WARN, "could not write map metadata to %s", out); return; }
++
++    vector<uchar> usedvslots;
++    loopv(vslots) usedvslots.add(0);
++    markusedvslots(worldroot, 8, usedvslots);
++    loopv(vslots)
++    {
++        if(!usedvslots[i]) continue;
++        int layer = vslots[i]->layer, guard = 0;
++        while(layer && vslots.inrange(layer) && !usedvslots[layer] && guard++ < 64)
++        {
++            usedvslots[layer] = 1;
++            layer = vslots[layer]->layer;
++        }
++    }
++    vector<uchar> usedslots;
++    loopv(slots) usedslots.add(0);
++    loopv(vslots) if(usedvslots[i] && vslots[i]->slot)
++    {
++        int index = vslots[i]->slot->index;
++        if(slots.inrange(index)) usedslots[index] = 1;
++    }
++    int numusedvslots = 0, numusedslots = 0;
++    loopv(usedvslots) if(usedvslots[i]) numusedvslots++;
++    loopv(usedslots) if(usedslots[i]) numusedslots++;
++
++    // Mapmodels are registered the same way (default_map_models.cfg lists every
++    // available model). Only a handful are placed by the map, so resolve just
++    // the ones its entities reference.
++    vector<extentity *> &ents = entities::getents();
++    vector<int> usedmodels;
++    loopv(ents)
++    {
++        extentity &e = *ents[i];
++        const char *type = entities::entname(e.type);
++        int model = e.type == ET_MAPMODEL ? e.attr2
++                  : !strcmp(type, "teleport") && e.attr2 > 0 ? e.attr2 : -1;
++        if(model >= 0 && mapmodelname(model) && usedmodels.find(model) < 0) usedmodels.add(model);
++    }
++    usedmodels.sort();
++    int nummapmodels = 0;
++    while(mapmodelname(nummapmodels)) nummapmodels++;
++
++    // Map sounds are already map-scoped (cleared by resetmap(), then redefined
++    // by the map's cfg), but a map can still define more than its entities use.
++    // Sound indices live on ET_SOUND.attr1 and on JUMPPAD/TELEPORT.attr4 (the
++    // latter are fpsgame-specific, so match on the engine's type name).
++    vector<int> usedsounds;
++    loopv(ents)
++    {
++        extentity &e = *ents[i];
++        int sound = e.type == ET_SOUND ? e.attr1 : -1;
++        if(sound < 0 && e.attr4 > 0)
++        {
++            const char *type = entities::entname(e.type);
++            if(!strcmp(type, "jumppad") || !strcmp(type, "teleport")) sound = e.attr4;
++        }
++        if(sound >= 0 && mapsoundname(sound) && usedsounds.find(sound) < 0) usedsounds.add(sound);
++    }
++    usedsounds.sort();
++    int nummapsounds = 0;
++    while(mapsoundname(nummapsounds)) nummapsounds++;
++
++    fprintf(f, "{\n");
++    fputs("\"mapname\":", f); jsonstring(f, mapname); fputs(",\n", f);
++    fprintf(f, "\"worldsize\":%d,\n", worldsize);
++
++    fputs("\"slots\":[\n", f);
++    bool firstslot = true;
++    loopv(slots)
++    {
++        if(!usedslots[i]) continue;
++        Slot &s = *slots[i];
++        if(!firstslot) fputs(",\n", f);
++        firstslot = false;
++        fprintf(f, "{\"index\":%d", s.index);
++        fputs(",\"textures\":[", f);
++        loopvj(s.sts)
++        {
++            Slot::Tex &t = s.sts[j];
++            if(j) fputc(',', f);
++            fputs("{\"type\":", f); jsonstring(f, slottextypename(t.type));
++            fputs(",\"path\":", f); jsonstring(f, t.name);
++            fputc('}', f);
++        }
++        fputs("],\"shader\":", f);
++        jsonstring(f, s.shader ? s.shader->name : NULL);
++        fputs(",\"params\":", f);
++        jsonparams(f, s.params);
++        fputc('}', f);
++    }
++    fputs("\n],\n", f);
++
++    fputs("\"vslots\":[\n", f);
++    bool firstvslot = true;
++    loopv(vslots)
++    {
++        if(!usedvslots[i]) continue;
++        VSlot &v = *vslots[i];
++        if(!firstvslot) fputs(",\n", f);
++        firstvslot = false;
++        fprintf(f, "{\"index\":%d,\"slot\":%d", v.index, v.slot ? v.slot->index : -1);
++        fprintf(f, ",\"scale\":%g,\"rotation\":%d", v.scale, v.rotation);
++        fprintf(f, ",\"offset\":[%d,%d]", v.offset.x, v.offset.y);
++        fprintf(f, ",\"scroll\":[%g,%g]", v.scroll.x, v.scroll.y);
++        fprintf(f, ",\"layer\":%d", v.layer);
++        fprintf(f, ",\"alpha\":[%g,%g]", v.alphafront, v.alphaback);
++        fprintf(f, ",\"color\":[%g,%g,%g]", v.colorscale.x, v.colorscale.y, v.colorscale.z);
++        fprintf(f, ",\"glow\":[%g,%g,%g]", v.glowcolor.x, v.glowcolor.y, v.glowcolor.z);
++        fputs(",\"params\":", f);
++        jsonparams(f, v.params);
++        fputc('}', f);
++    }
++    fputs("\n],\n", f);
++
++    fputs("\"mapmodels\":[\n", f);
++    bool firstmodel = true;
++    loopv(usedmodels)
++    {
++        int index = usedmodels[i];
++        if(!firstmodel) fputs(",\n", f);
++        firstmodel = false;
++        fprintf(f, "{\"index\":%d,\"path\":", index);
++        jsonstring(f, mapmodelname(index));
++        fputc('}', f);
++    }
++    fputs("\n],\n", f);
++
++    fputs("\"entities\":[\n", f);
++    loopv(ents)
++    {
++        extentity &e = *ents[i];
++        if(i) fputs(",\n", f);
++        fprintf(f, "{\"index\":%d,\"type\":", i);
++        jsonstring(f, entities::entname(e.type));
++        fprintf(f, ",\"position\":[%g,%g,%g]", e.o.x, e.o.y, e.o.z);
++        fprintf(f, ",\"attr1\":%d,\"attr2\":%d,\"attr3\":%d,\"attr4\":%d,\"attr5\":%d",
++                e.attr1, e.attr2, e.attr3, e.attr4, e.attr5);
++        fputc('}', f);
++    }
++    fputs("\n],\n", f);
++
++    fputs("\"sounds\":[\n", f);
++    bool firstsound = true;
++    loopv(usedsounds)
++    {
++        int index = usedsounds[i];
++        if(!firstsound) fputs(",\n", f);
++        firstsound = false;
++        fprintf(f, "{\"index\":%d,\"path\":", index);
++        jsonstring(f, mapsoundname(index));
++        fputc('}', f);
++    }
++    fputs("\n]\n}\n", f);
++
++    fclose(f);
++    conoutf("exported map metadata to %s (%d/%d slots, %d/%d vslots, %d/%d mapmodels, %d/%d sounds used)", out, numusedslots, slots.length(), numusedvslots, vslots.length(), usedmodels.length(), nummapmodels, usedsounds.length(), nummapsounds);
++}
++
++#endif

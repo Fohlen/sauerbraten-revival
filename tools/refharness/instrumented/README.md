@@ -13,8 +13,9 @@ builds there. Delete `instrumented/build/` to clean up.
 
 | Patch | Purpose |
 | --- | --- |
-| `patches/a2-trace.patch` | Adds the `SAUER_TRACE` CSV logger to `engine/physics.cpp`. |
-| `patches/macos-arm64.patch` | Builds native arm64 against Homebrew SDL2 (the Makefile otherwise forces x86_64, which cannot run here). |
+| `../patches/a2-trace.patch` | Adds the `SAUER_TRACE` CSV logger to `engine/physics.cpp`. |
+| `../patches/macos-arm64.patch` | Builds native arm64 against Homebrew SDL2 (the Makefile otherwise forces x86_64, which cannot run here). |
+| `../patches/ogz-metadata.patch` | Adds the `SAUER_METADATA` JSON exporter on map load (see [`../patches/README.md`](../patches/README.md)). |
 
 ## Prerequisites (macOS / arm64)
 
