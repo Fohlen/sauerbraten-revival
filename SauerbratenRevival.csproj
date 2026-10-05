@@ -4,10 +4,17 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RootNamespace>SauerbratenRevival</RootNamespace>
     <Nullable>enable</Nullable>
+    <!-- Test sources are excluded from exported/release builds. -->
+    <DefaultItemExcludes Condition="'$(Configuration)' == 'ExportRelease'">$(DefaultItemExcludes);test/**/*</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- tools/ holds dev-only projects (C++ harness, .NET tests); not part of the game assembly. -->
+    <!-- tools/ holds dev-only projects (C++ harness); not part of the game assembly. -->
     <Compile Remove="tools/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- GoDotTest runs the unit tests inside the Godot runtime (see test/). -->
+    <PackageReference Include="Chickensoft.GoDotTest" Version="2.0.47" />
   </ItemGroup>
 </Project>

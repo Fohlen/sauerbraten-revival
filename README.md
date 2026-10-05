@@ -47,8 +47,11 @@ Work proceeds in **stages**.
 | Path | Contents |
 | --- | --- |
 | `docs/` | Design, architecture, roadmap, physics reference |
-| `scenes/` | Godot scenes (`test_level.tscn`, `player.tscn`) |
+| `scenes/` | Godot scenes (entry `Main.tscn`, `test_level.tscn`, `player.tscn`) |
 | `scripts/` | C# (movement, and later world/game logic) |
+| `World/` | Pure world core: octree primitives, OGZ reader (`World/Ogz/`) |
+| `test/` | Unit tests, run by GoDotTest |
+| `metadata-catalogue/` | Engine-exported ground truth for imported maps |
 | `SauerbratenRevival.csproj` | C# project (Godot .NET) |
 | `tools/refharness/` | A1 reference harness running the original movement code |
 | `tools/refharness/patches/` | Patches to the reference source + [apply/rollback workflow](tools/refharness/patches/README.md) |
@@ -59,6 +62,19 @@ Requires the **Godot .NET editor** (`Godot_mono` 4.7) — the standard build can
 load C#. Open the project and run; `dotnet build` also builds the assembly. Input
 is WASD + Space; mouse look is captured (Esc releases). Physics runs at 200 Hz to
 match the original.
+
+## Running tests
+
+Unit tests use [GoDotTest](https://github.com/chickensoft-games/GoDotTest) and run
+the game's C# unit tests inside the Godot runtime (not `dotnet test`):
+
+```sh
+./run-tests.sh            # headless; set GODOT=/path/to/Godot if needed
+```
+
+This is the GoDotTest runner rather than a `dotnet test` adapter because the
+world core uses Godot types and lives in the game assembly. Tests are excluded
+from `ExportRelease` builds.
 
 ## Reference source
 

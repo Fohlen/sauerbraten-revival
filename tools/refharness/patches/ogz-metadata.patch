@@ -62,7 +62,7 @@
  	engine/normal.o	\
 --- a/engine/metadata.cpp
 +++ b/engine/metadata.cpp
-@@ -0,0 +1,248 @@
+@@ -0,0 +1,324 @@
 +// metadata.cpp: one-time OGZ import metadata export (sauerbraten-revival)
 +//
 +// This file is added by a patch to Sauerbraten SVN r6889 and is not part of the
@@ -146,6 +146,59 @@
 +    }
 +}
 +
++// Geometry ground truth for the OGZ reader tests: the cube-tree shape, leaf
++// classification, texture assignment and a checksum over the canonical cube
++// fields a reader reconstructs from the file. FNV-1a/64 over, per node:
++//   0x00                                  (internal node)
++//   0x01/0x02/0x03 + material + 6 textures  (empty/solid/normal leaf)
++//   + 12 edge bytes for normal leaves
++// `merged` is excluded because allchanged() recomputes it after load.
++static void hashbyte64(unsigned long long &h, uchar b) { h = (h ^ b) * 1099511628211ULL; }
++static void hashushort64(unsigned long long &h, ushort v)
++{
++    hashbyte64(h, uchar(v & 0xFF));
++    hashbyte64(h, uchar((v >> 8) & 0xFF));
++}
++static void geometrywalk(cube *c, int n, int &nodes, int &leaves, int &empty, int &solid, int &normal,
++                         int &surfaces, int &verts, vector<int> &texcounts, unsigned long long &hash)
++{
++    loopi(n)
++    {
++        if(c[i].children)
++        {
++            nodes++;
++            hashbyte64(hash, 0);
++            geometrywalk(c[i].children, 8, nodes, leaves, empty, solid, normal, surfaces, verts, texcounts, hash);
++        }
++        else
++        {
++            leaves++;
++            uchar type;
++            if(isempty(c[i])) { type = 1; empty++; }
++            else if(isentirelysolid(c[i])) { type = 2; solid++; }
++            else { type = 3; normal++; }
++            if(c[i].ext) loopj(6)
++            {
++                // Not gated on surf.used(): initlights() may have set lmids on faces
++                // that carry no geometry, whereas totalverts() is exactly the vertex
++                // count reconstructed from the file.
++                int totalverts = c[i].ext->surfaces[j].totalverts();
++                if(totalverts > 0) surfaces++;
++                verts += totalverts;
++            }
++            hashbyte64(hash, type);
++            hashushort64(hash, c[i].material);
++            loopj(6)
++            {
++                ushort t = c[i].texture[j];
++                if(texcounts.inrange(t)) texcounts[t]++;
++                hashushort64(hash, t);
++            }
++            if(type == 3) loopj(12) hashbyte64(hash, c[i].edges[j]);
++        }
++    }
++}
++
 +void exportmapmetadata(const char *mapname)
 +{
 +    const char *out = getenv("SAUER_METADATA");
@@ -176,6 +229,12 @@
 +    int numusedvslots = 0, numusedslots = 0;
 +    loopv(usedvslots) if(usedvslots[i]) numusedvslots++;
 +    loopv(usedslots) if(usedslots[i]) numusedslots++;
++
++    int gnodes = 0, gleaves = 0, gempty = 0, gsolid = 0, gnormal = 0, gsurfaces = 0, gverts = 0;
++    unsigned long long ghash = 14695981039346656037ULL;
++    vector<int> gtexcounts;
++    loopv(vslots) gtexcounts.add(0);
++    geometrywalk(worldroot, 8, gnodes, gleaves, gempty, gsolid, gnormal, gsurfaces, gverts, gtexcounts, ghash);
 +
 +    // Mapmodels are registered the same way (default_map_models.cfg lists every
 +    // available model). Only a handful are placed by the map, so resolve just
@@ -217,6 +276,23 @@
 +    fprintf(f, "{\n");
 +    fputs("\"mapname\":", f); jsonstring(f, mapname); fputs(",\n", f);
 +    fprintf(f, "\"worldsize\":%d,\n", worldsize);
++
++    fputs("\"geometry\":{\n", f);
++    fprintf(f, "\"nodes\":%d,\"leaves\":%d,\"empty\":%d,\"solid\":%d,\"normal\":%d,\n",
++            gnodes, gleaves, gempty, gsolid, gnormal);
++    fprintf(f, "\"surfaces\":%d,\"verts\":%d,\n", gsurfaces, gverts);
++    fprintf(f, "\"checksum\":\"%016llx\",\n", ghash);
++    fputs("\"textureFaces\":[", f);
++    {
++        bool firsttex = true;
++        loopv(gtexcounts) if(gtexcounts[i])
++        {
++            if(!firsttex) fputc(',', f);
++            firsttex = false;
++            fprintf(f, "{\"texture\":%d,\"count\":%d}", i, gtexcounts[i]);
++        }
++    }
++    fputs("]\n},\n", f);
 +
 +    fputs("\"slots\":[\n", f);
 +    bool firstslot = true;

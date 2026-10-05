@@ -149,31 +149,27 @@ once for all maps we want to import.
 
 ## OGZ parser (C#)
 
-A standalone C# parser that reads the binary `.ogz` format:
+Implemented in [`World/Ogz/OgzReader.cs`](../World/Ogz/OgzReader.cs), a port of
+the load path in `worldio.cpp` (r6889, MAPVERSION 33). It parses the header,
+variables, gameident, extras, texture MRU, entities, vslots and the full octree
+(including the modern `surfaceinfo` vertex encoding). Lightmaps, PVS and the
+blend map are not parsed yet.
 
 ```csharp
-public class OgzParser
-{
-    public OgzMap Parse(string path)
-    {
-        using var stream = new GZipStream(File.OpenRead(path), CompressionMode.Decompress);
-        using var reader = new BinaryReader(stream);
-        
-        var header = ReadHeader(reader);
-        var octree = ReadOctree(reader, header.WorldSize);
-        var entities = ReadEntities(reader, header.NumEnts);
-        
-        return new OgzMap(header, octree, entities);
-    }
-}
+OgzMap map = OgzReader.Read("church51.ogz");
+// map.Header, map.Vars, map.Entities, map.VSlots, map.WorldRoot (OgzCube[8])
 ```
 
-Key structures to parse:
-- **Header**: magic, version, headersize, worldsize, numents, etc.
-- **Octree nodes**: recursive, 8 children per node, edge/face data.
-- **Entities**: position (ivec), type, attr1-5.
+Key structures:
+- **Header**: magic, version, headersize, worldsize, numents, numpvs, lightmaps, blendmap, numvars, numvslots.
+- **Octree nodes**: recursive; internal nodes (`OCTSAV_CHILDREN`/`LODCUBE`) hold 8 children, leaves hold 6 texture indices, edge deformation, material and (for v33) per-face `surfaceinfo` + vertices.
+- **Entities**: position (3 floats), attr1-5, type, reserved.
+- **VSlots**: the map's stored variants. Note the engine overlays unchanged fields from the base variant (populated by the map `.cfg`'s texture commands) at load time, so only fields whose `changed` bit is set are authoritative in the file; the resolved values come from the metadata catalogue.
 
-The format is complex but documented in `worldio.cpp`. We port the loading logic.
+Ground truth lives in [`metadata-catalogue/`](../metadata-catalogue/README.md)
+and is asserted by [`test/OgzReaderTest.cs`](../test/OgzReaderTest.cs): header and
+entity fields, stored vslot fields, and geometry counts, per-vslot face histogram
+and a canonical FNV-1a checksum.
 
 ---
 
