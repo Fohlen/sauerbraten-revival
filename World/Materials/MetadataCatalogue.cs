@@ -36,6 +36,9 @@ public sealed class MetadataCatalogue
 {
     public readonly Dictionary<int, CatalogueSlot> Slots = new();
     public readonly Dictionary<int, CatalogueVSlot> VSlots = new();
+    public readonly Dictionary<int, string> MapModels = new();
+
+    public string? MapModelPath(int index) => MapModels.GetValueOrDefault(index);
 
     public static MetadataCatalogue Load(string path)
     {
@@ -89,6 +92,12 @@ public sealed class MetadataCatalogue
                 AlphaBack = (float)alpha[1].GetDouble(),
             };
             catalogue.VSlots[vs.Index] = vs;
+        }
+
+        if (root.TryGetProperty("mapmodels", out var mapModels))
+        {
+            foreach (var m in mapModels.EnumerateArray())
+                catalogue.MapModels[m.GetProperty("index").GetInt32()] = m.GetProperty("path").GetString() ?? "";
         }
 
         return catalogue;

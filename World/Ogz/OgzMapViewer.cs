@@ -65,10 +65,15 @@ public partial class OgzMapViewer : Node3D
 
         var chunked = new OctaMesher(octa, materials).BuildChunked(ChunkSize);
 
+        // Converted mapmodels (assimp), if the model-import tool has been run.
+        string modelsDir = ProjectSettings.GlobalizePath("res://tools/model-import/out");
+        var modelCatalog = ModelCatalog.Load(Path.Combine(modelsDir, "models.json"), modelsDir);
+
         var world = new Node3D { Name = "World", RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
         AddChild(world);
         world.AddChild(LightBuilder.Build(map));
         world.AddChild(PlayerStartBuilder.Build(map));
+        world.AddChild(MapModelBuilder.Build(map, catalogue, modelCatalog, textures));
 
         // Fallback so geometry is still visible if there is no catalogue.
         StandardMaterial3D? fallback = materials == null
