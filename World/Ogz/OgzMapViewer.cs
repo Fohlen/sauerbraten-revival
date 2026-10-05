@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Godot;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 
@@ -66,6 +67,7 @@ public partial class OgzMapViewer : Node3D
 
         var world = new Node3D { Name = "World", RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
         AddChild(world);
+        world.AddChild(LightBuilder.Build(map));
 
         // Fallback so geometry is still visible if there is no catalogue.
         StandardMaterial3D? fallback = materials == null
