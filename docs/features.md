@@ -70,8 +70,12 @@ See [ogz-import.md](ogz-import.md) for full architecture.
 - [ ] **OGZ parser**: C# binary parser for `.ogz` octree + entities.
 - [ ] **Importer**: OGZ + metadata → native octree `Resource` + `Level.tscn`.
 - [ ] Render + load hand-picked classic maps.
-- [ ] First target: `packages/base/church51.ogz` (matches trace fixture
+- [x] First target: `packages/base/church51.ogz` (matches trace fixture
       `session1.csv`).
+- [x] **Entity lights** — `ET_LIGHT` → `OmniLight3D`, attached `ET_SPOTLIGHT` →
+      `SpotLight3D` (`LightBuilder`; attr1 radius, attr2/3/4 colour, spot attr1 = cone angle).
+- [x] **Playerstarts** — `ET_PLAYERSTART` → `SpawnPoint` (`Marker3D` with `Team`/`Yaw`; facing from `vecfromyawpitch`).
+- [ ] **Entities, one at a time** — mapmodels, sounds (verified individually).
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers, mapmodels) map by map.
 

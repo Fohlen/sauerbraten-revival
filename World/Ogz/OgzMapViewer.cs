@@ -68,6 +68,7 @@ public partial class OgzMapViewer : Node3D
         var world = new Node3D { Name = "World", RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
         AddChild(world);
         world.AddChild(LightBuilder.Build(map));
+        world.AddChild(PlayerStartBuilder.Build(map));
 
         // Fallback so geometry is still visible if there is no catalogue.
         StandardMaterial3D? fallback = materials == null
