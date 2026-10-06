@@ -107,8 +107,8 @@ hull needs (`OctaVisible.cs`: `genfacevecs`/`insideface`/`occludesface`/`visible
 
 | Trace | Steps | vel | falling | o | physstate |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `session2.csv` | 4162 | 99.9% | 100% | 99.9% | 100% |
-| `session3.csv` | 7868 | 99.7% | 99.7% | 99.7% | 99.8% |
+| `session2.csv` | 4162 | 100.0% | 100% | 99.9% | 100% |
+| `session3.csv` | 7868 | 99.8% | 99.9% | 99.8% | 99.9% |
 
 External events are resynced from `*.events` (teleports, jump pads) plus a
 death/respawn detector (a >40 u one-step position jump — the engine's
@@ -126,19 +126,29 @@ children) plus the generated planes. Diffing our port against it
 | `neighbourcube` (`nsize`, neighbour edges, children) | **0 mismatches** |
 | `genclipplanes` bbox | **0 mismatches** |
 | `genclipplanes` planes | 1465/1479 (`nplanes` differs on 14) |
-| `genfacevecs` / `insideface` / `collapsedface` | **exact** — verified against a standalone C++ reproduction of the reference macros (`/tmp/gfv.cpp`) |
-| collision visibility mask (`c.visible`) | 1383/1479 differ |
+| `genfacevecs` / `insideface` / `collapsedface` | **exact** — verified against a standalone C++ reproduction of the reference macros |
+| collision visibility mask (`c.visible`) | 12/1479 differ (was 1383) |
 
-The mask diff is **cosmetic for movement**: overriding our `CollisionVisibleMask`
-with the engine's recorded `c.visible` (289 cubes) left both replays byte-identical.
-So the remaining A3 gap is **not** the collision hull or the visibility mask — it is
-in the `move()`/`trystepup()`/`slideagainst()` **decision logic**.
+The mask diff was **mostly a `genfacevecs` winding bug, now fixed**. The reference
+`genfacevecs()` reuses the `GENFACEORIENT` macro from its solid branch (it is not
+`#undef`'d between the two branches), which emits the face verts in **reverse order**
+for the `dimcoord == 0` faces (LEFT/BACK/BOTTOM). That order feeds `insideface()`,
+whose winding-sensitive result decides `classifyface()`/`visibletris()` visibility
+bits. Our port iterated `0..3` uniformly, so those faces got an inverted polygon,
+flipping 1383/1479 mask bits and causing the first `session3` miss (step 262: ours
+`trystepup`ed while the engine slid off a deformed slope). Reversing the iteration
+for `dimcoord == 0` faces fixed it.
 
-**Remaining gap.** First miss is `session3` step 262: the player runs `+X` at
-118 u/s into `size=8` deformed cubes; the engine launches/slides to `PHYS_FALL`, ours
-`trystepup`s and keeps its speed. Next: instrument that step's `move()` branch
-decisions. The `MASK` diff can be closed separately by porting `setcubevisibility()`
-+ the `neighbourdepth`/`neighbourstack` context (the only caller difference).
+**Remaining gap.** After the `genfacevecs` fix, the first `session3` miss moved to
+step 266 (a deformed-cube slope landing while falling): ours lands on the slope
+(`PHYS_SLOPE`) one or two 5 ms sub-steps before the engine does. The residual is
+~0.1–0.2% of steps (≈12–25 steps over a ~39 s capture), confined to sliding/landing
+on deformed (non-axis-aligned) cube faces. The remaining 12 mask mismatches in the
+`session7.csv.clips` probe are size-2 cubes whose recorded `c.visible` is internally
+inconsistent with the reference `classifyface()` (verified by recompiling the r6889
+functions verbatim), so they are treated as capture artifacts rather than port bugs.
+The `MASK` diff and the slope-landing residue can be revisited by porting
+`setcubevisibility()` + the `neighbourdepth`/`neighbourstack` context exactly.
 
 ---
 
