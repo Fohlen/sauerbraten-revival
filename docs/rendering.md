@@ -226,10 +226,6 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   winding/normal convention. Positions are in Sauerbraten coordinates (Z-up); the
   scene node carries the Z-up → Y-up rotation. World faces are **back-face
   culled** (Godot's front faces are clockwise; `MeshWindingTest` guards this).
-  Only **solid terrain** is meshed: water/lava/glass cubes are excluded
-  (`MATF_VOLUME`) and drawn by `MaterialMesher` — meshing them too drew the water
-  body as an opaque textured box (the bt_falls "waterfall through the level"
-  artifact); `OctaMeshTest.SolidMeshExcludesMaterialCubes` guards this.
 - **Materials (C1)** — `World/Materials/`: `MetadataCatalogue` loads the
   engine-exported slot/vslot data, `MaterialBuilder` ports `calctexgen` and
   builds one Godot `StandardMaterial3D` per vslot (diffuse texture + tint), and
@@ -245,10 +241,7 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   vslot `glowcolor`.
 - **Material surfaces** — `MaterialMesher` emits the empty-space water/lava/glass
   boundary faces (a simplified `material.cpp genmatsurfs`, no face merging) as one
-  mesh per material, using the engine's `visibleface` rule (`octa.cpp`): a face is
-  hidden when its neighbour is solid, the same volume, or outside the world — so
-  the water stops at the first solid ground and never draws through it.
-  `MaterialTextures` supplies an unshaded `ShaderMaterial` with
+  mesh per material; `MaterialTextures` supplies an unshaded `ShaderMaterial` with
   the engine-default textures and a time-based UV scroll for the flowing animation
   (mirrors `water.cpp`/`material.cpp`; the catalogue doesn't export `matwater`/
   `matlava` yet).

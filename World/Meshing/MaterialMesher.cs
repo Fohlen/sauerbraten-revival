@@ -21,7 +21,7 @@ public static class MaterialMesher
 {
     private const float TexScale = 32.0f;
 
-    public static List<MaterialSurfaceMesh> Build(Octa octa, List<CubeFace>? emitted = null)
+    public static List<MaterialSurfaceMesh> Build(Octa octa)
     {
         var builders = new Dictionary<ushort, ArrayMeshBuilder>();
         OctaFaceWalker.Walk(octa,
@@ -29,11 +29,9 @@ public static class MaterialMesher
             hideSameMaterial: true,
             emit: face =>
             {
-                if (!Visible(octa, face)) return;
                 ushort volume = (ushort)(face.Cube.Material & Octa.MATF_VOLUME);
                 // Water/lava hide their bottom face in-game (edit-only surface).
                 if (face.Orient == 4 && volume != Octa.MAT_GLASS) return;
-                emitted?.Add(face);
                 Emit(volume, face, builders);
             });
 
@@ -42,33 +40,6 @@ public static class MaterialMesher
             if (pair.Value.TriangleCount > 0)
                 result.Add(new MaterialSurfaceMesh { Material = pair.Key, Mesh = pair.Value.Build() });
         return result;
-    }
-
-    /// <summary>
-    /// engine/octa.cpp:1013 <c>visibleface()</c>, reduced to what material surfaces
-    /// need: a water/lava/glass face is hidden when its neighbour is outside the
-    /// world, entirely solid, or the same volume — regardless of neighbour size.
-    /// The conservative <see cref="OctaFaceWalker.FaceVisible"/> only hides those at
-    /// equal-or-coarser size, so a large water cube keeps its vertical faces where it
-    /// meets finer terrain: bt_falls then renders its whole basin as a closed box,
-    /// and the waterfall sheet bleeds through the level.
-    /// </summary>
-    private static bool Visible(Octa octa, in CubeFace face)
-    {
-        int dim = face.Orient >> 1;
-        int dir = (face.Orient & 1) == 0 ? -1 : 1;
-        int ncoord = face.Co[dim] + dir * face.Size;
-        if (ncoord < 0 || ncoord >= octa.WorldSize) return false; // octa.cpp: neighbourcube -> same cube -> hidden
-
-        var centre = face.Co;
-        centre[dim] = ncoord + face.Size / 2;
-        centre[(dim + 1) % 3] = face.Co[(dim + 1) % 3] + face.Size / 2;
-        centre[(dim + 2) % 3] = face.Co[(dim + 2) % 3] + face.Size / 2;
-
-        var nb = octa.LeafCube(centre);
-        if (nb == null) return false;
-        if (nb.IsEntirelySolid()) return false;
-        return (nb.Material & Octa.MATF_VOLUME) != (face.Cube.Material & Octa.MATF_VOLUME);
     }
 
     private static void Emit(ushort material, in CubeFace face, Dictionary<ushort, ArrayMeshBuilder> builders)

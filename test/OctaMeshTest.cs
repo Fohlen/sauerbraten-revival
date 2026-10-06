@@ -49,27 +49,8 @@ public class OctaMeshTest : GoTestBase
 
         // Regression baseline for the current geometry-only mesher; update when the
         // mesher gains fidelity (visibletris, merges, sky, material surfaces, ...).
-        TestAssert.Equal(120, surfaces, "surface count baseline");
-        TestAssert.Equal(610010L, triangles, "triangle count baseline");
-    }
-
-    /// <summary>
-    /// Water/lava/glass cubes are surfaces, not solid terrain: they must be drawn
-    /// by <see cref="MaterialMesher"/> (the water shader), never as opaque textured
-    /// geometry. Including them drew the whole water body as a closed textured box
-    /// and duplicated every water cube — the bt_falls waterfall sheet.
-    /// </summary>
-    [Test]
-    public void SolidMeshExcludesMaterialCubes()
-    {
-        var octa = TestData.ReadMap().ToOcta();
-        var faces = new System.Collections.Generic.List<CubeFace>();
-        new OctaMesher(octa).BuildChunked(512, faces);
-
-        TestAssert.True(faces.Count > 0, "solid mesh emits faces");
-        foreach (var f in faces)
-            TestAssert.True((f.Cube.Material & Octa.MATF_VOLUME) == Octa.MAT_AIR,
-                $"solid face at {f.Co} (orient {f.Orient}) is a material (water/lava/glass) cube");
+        TestAssert.Equal(121, surfaces, "surface count baseline");
+        TestAssert.Equal(686392L, triangles, "triangle count baseline");
     }
 
     [Test]

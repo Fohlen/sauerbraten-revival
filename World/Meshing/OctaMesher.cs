@@ -42,22 +42,16 @@ public sealed class OctaMesher
         : new ArrayMesh();
 
     /// <summary>Mesh the world into chunks of <paramref name="chunkSize"/> world units (power of two).</summary>
-    public ChunkedWorldMesh BuildChunked(int chunkSize = 512, List<CubeFace>? emitted = null)
+    public ChunkedWorldMesh BuildChunked(int chunkSize = 512)
     {
         if (chunkSize <= 0) chunkSize = 512;
 
         var builders = new Dictionary<Vector3I, ArrayMeshBuilder>();
         OctaFaceWalker.Walk(_octa,
-            // Solid geometry only. Water/lava/glass and clip cubes are not solid
-            // terrain: their surfaces come from MaterialMesher (water.cpp) and
-            // clip is collision-only. Including them drew the water body as opaque
-            // textured geometry — and duplicated every water cube.
-            include: c => !c.IsEmpty()
-                          && (c.Material & Octa.MATF_VOLUME) == 0,
+            include: c => !c.IsEmpty(),
             hideSameMaterial: false,
             emit: face =>
             {
-                emitted?.Add(face);
                 var key = new Vector3I(face.Co.X / chunkSize, face.Co.Y / chunkSize, face.Co.Z / chunkSize);
                 if (!builders.TryGetValue(key, out var builder))
                 {
