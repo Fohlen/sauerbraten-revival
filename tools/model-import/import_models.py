@@ -66,36 +66,42 @@ def parse_cfg(path: str) -> dict:
 
 
 def find_model(models_root: str, name: str) -> tuple[str | None, dict]:
-    """Resolve a registered model name to a source geometry file + its params."""
-    base = os.path.join(models_root, name)
-    candidates: list[str] = []
+    """Resolve a registered model name to a source geometry file + its params.
 
-    if os.path.isdir(base):
-        # A *.cfg in the model dir describes how to load it.
+    Mirrors the engine: try the model dir, then fall back to the parent dir for
+    "vert sharing" (e.g. `armor/green` uses `armor/tris.md3` + `armor/md3.cfg`).
+    """
+    base = os.path.join(models_root, name)
+    dirs = [base]
+    if os.path.isdir(base) and os.path.dirname(base) != models_root:
+        dirs.append(os.path.dirname(base))
+
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
         for cfg_name in ("obj.cfg", "md3.cfg", "md5.cfg", "md2.cfg", "iqm.cfg"):
-            cfg = os.path.join(base, cfg_name)
+            cfg = os.path.join(d, cfg_name)
             if not os.path.isfile(cfg):
                 continue
             params = parse_cfg(cfg)
             if params["source"]:
-                load_dir = os.path.join(models_root, params["objdir"]) if params["objdir"] else base
-                candidates.append(os.path.normpath(os.path.join(load_dir, params["source"])))
-            # still fall through to conventions if the directive was absent
-            _merge_cfg_params(params, base)
-            for conv in ("tris.obj", "tris.md2", "tris.md3", "tris.md5mesh", "tris.iqm"):
-                candidates.append(os.path.join(base, conv))
-            for cand in candidates:
-                if os.path.isfile(cand):
-                    return cand, params
-        for conv in ("tris.obj", "tris.md2", "tris.md3", "tris.md5mesh", "tris.iqm", "tris.obj"):
-            cand = os.path.join(base, conv)
-            if os.path.isfile(cand):
-                return cand, parse_cfg(os.path.join(base, "obj.cfg"))
+                load_dir = os.path.join(models_root, params["objdir"]) if params["objdir"] else d
+                source = os.path.normpath(os.path.join(load_dir, params["source"]))
+                if os.path.isfile(source):
+                    _merge_cfg_params(params, d)
+                    return source, params
+        for conv, cfg_name in (("tris.obj", "obj.cfg"), ("tris.md2", "md2.cfg"), ("tris.md3", "md3.cfg"),
+                               ("tris.md5mesh", "md5.cfg"), ("tris.iqm", "iqm.cfg")):
+            source = os.path.join(d, conv)
+            if os.path.isfile(source):
+                params = parse_cfg(os.path.join(d, cfg_name))
+                _merge_cfg_params(params, d)
+                return source, params
 
     for ext in (".obj", ".md3", ".md5mesh", ".iqm", ".md2"):
-        cand = base + ext
-        if os.path.isfile(cand):
-            return cand, parse_cfg(os.path.join(base + ".cfg"))
+        source = base + ext
+        if os.path.isfile(source):
+            return source, parse_cfg(base + ".cfg")
 
     return None, {}
 
@@ -114,6 +120,21 @@ def default_skin(model_dir: str) -> str | None:
     """MD2/MD3 models often ship a skin.jpg/.png with no cfg directive."""
     for candidate in ("skin.png", "skin.jpg", "skin.jpeg", "skin.tga"):
         if os.path.isfile(os.path.join(model_dir, candidate)):
+            return candidate
+    return None
+
+
+def resolve_skin(cfg_skin: str | None, cfg_dir: str, name_dir: str) -> str | None:
+    """Prefer a cfg skin, but fall back to skin.* in the model-name dir (armour)."""
+    candidates = []
+    if cfg_skin:
+        candidates.append(cfg_skin if os.path.isabs(cfg_skin) else os.path.join(cfg_dir, cfg_skin))
+    for d in (name_dir, cfg_dir):
+        local = default_skin(d)
+        if local:
+            candidates.append(os.path.join(d, local))
+    for candidate in candidates:
+        if os.path.isfile(candidate):
             return candidate
     return None
 
@@ -202,7 +223,22 @@ def main() -> int:
     os.makedirs(args.out, exist_ok=True)
     manifest: dict = {"models": {}}
 
+    # Built-in entity models (items, teleporter) referenced by entmdlname, plus
+    # the map's own registered mapmodels. Dedupe by name.
+    builtins = [
+        "teleporter", "health", "boost", "quad",
+        "armor/green", "armor/yellow",
+        "ammo/shells", "ammo/bullets", "ammo/rockets", "ammo/rrounds", "ammo/grenades", "ammo/cartridges",
+        "carrot", "checkpoint",
+    ]
+    entries = [{"index": -1, "path": name} for name in builtins]
+    seen = {e["path"] for e in entries}
     for entry in catalogue.get("mapmodels", []):
+        if entry["path"] not in seen:
+            entries.append(entry)
+            seen.add(entry["path"])
+
+    for entry in entries:
         name = entry["path"]
         source, params = find_model(models_root, name)
         # animmodel::loaded() does `scale /= 4`: Cube2 model units are 4x world units.
@@ -219,8 +255,9 @@ def main() -> int:
         }
         if source and os.path.isfile(source):
             cfg_dir = os.path.dirname(source)
+            name_dir = os.path.join(models_root, name)
             record["source"] = os.path.relpath(source, packages).replace(os.sep, "/")
-            skin = params.get("skin") or default_skin(cfg_dir)
+            skin = resolve_skin(params.get("skin"), cfg_dir, name_dir)
             record["skin"] = rel_to_packages(skin, packages, cfg_dir)
             record["bump"] = rel_to_packages(params.get("bump"), packages, cfg_dir)
             glb = os.path.join(args.out, sanitize(name) + ".glb")
