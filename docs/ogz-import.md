@@ -230,16 +230,42 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 
 ## Entity type mapping
 
-| Sauer type | ID | Godot equivalent |
-| --- | --- | --- |
-| ET_LIGHT | 1 | OmniLight3D / SpotLight3D |
-| ET_MAPMODEL | 2 | MeshInstance3D |
-| ET_PLAYERSTART | 3 | SpawnPoint (custom) |
-| ET_ENVMAP | 4 | ReflectionProbe |
-| ET_PARTICLES | 5 | GPUParticles3D |
-| ET_SOUND | 6 | AudioStreamPlayer3D |
-| ET_SPOTLIGHT | 7 | SpotLight3D |
-| Game-specific | ≥8 | Custom nodes (flags, pickups, etc.) |
+| Sauer type | ID | Godot equivalent | Status |
+| --- | --- | --- | --- |
+| ET_LIGHT | 1 | OmniLight3D / SpotLight3D | ✅ `LightBuilder` |
+| ET_MAPMODEL | 2 | MeshInstance3D | ✅ `MapModel` (assimp → glTF Resources) |
+| ET_PLAYERSTART | 3 | SpawnPoint (custom) | ✅ `PlayerStartBuilder` |
+| ET_ENVMAP | 4 | ReflectionProbe | later |
+| ET_PARTICLES | 5 | GPUParticles3D | planned |
+| ET_SOUND | 6 | AudioStreamPlayer3D | planned (none on church51) |
+| ET_SPOTLIGHT | 7 | SpotLight3D | ✅ (attaches to a light) |
+| ET_TELEPORT | 19 | Teleport (trigger node) | planned |
+| ET_TELEDEST | 20 | TeleDest (trigger node) | planned |
+| ET_JUMPPAD | 23 | JumpPad (trigger node) | planned |
+| Game-specific items | 8–18, 22, 24–30 | Item / mode nodes | items planned, rest later |
+
+### Entity porting status
+
+Already ported: lights + spotlights, playerstarts, mapmodels. The remainder is being
+done **one slice at a time, each verified** (the `docs/features.md` roadmap mirrors this):
+
+1. **Triggers** — `ET_TELEPORT` (`attr1` = destination index, `attr2` = model: `>0` a
+   mapmodel, `0` the built-in teleporter, `<0` invisible; `attr3` = tag) plus
+   `ET_TELEDEST` (`attr2` = index, `attr1` = yaw), and `ET_JUMPPAD` (`attr3/attr2/attr1` =
+   x/y/z push, `attr4` = sound). On church51 these are all invisible/logic entities, so
+   they are verified by tests; the runtime teleport/jump behaviour needs collision + game
+   logic, which isn't ported yet.
+2. **Items** — the `ET_*` pickups. Visible, so they need the engine's **built-in** entity
+   models converted alongside the catalogue mapmodels: `health`/`boost`/`quad` (md3),
+   `ammo/*` (obj), and `armor/*` (geometry shared from the parent `armor/tris.md3`).
+3. **Particles** — `ET_PARTICLES` → `GPUParticles3D`, using the engine's particle
+   definitions (effect id in `attr1`).
+4. **Sounds** — `ET_SOUND` → `AudioStreamPlayer3D`. The metadata catalogue already exports
+   the resolved `sounds` list, but church51 registers none, so this slice needs a map whose
+   `.cfg` defines `mapsound` entries.
+
+Later: `ET_ENVMAP`, monsters, and the remaining mode entities (flag, box, barrel,
+platform, elevator, …).
 
 ---
 
