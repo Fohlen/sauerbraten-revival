@@ -1,15 +1,12 @@
-using System;
-using System.IO;
 using Godot;
-using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
-using SauerbratenRevival.World.Meshing;
 
 namespace SauerbratenRevival.World.Ogz;
 
 /// <summary>
-/// Dev-only inspection scene: reads a legacy <c>.ogz</c> from the reference dump,
-/// builds the runtime octree and displays the chunked geometry.
+/// Dev-only inspection scene: builds a legacy <c>.ogz</c> via <see cref="MapWorld"/>
+/// and views it with the coop-edit flycam (see <see cref="FreeFlyCamera"/>): WASD +
+/// mouse look.
 ///
 /// This deliberately reads OGZ at runtime for tooling convenience — it is NOT the
 /// shipping path. The shipped importer converts maps to the native format; see
@@ -17,12 +14,9 @@ namespace SauerbratenRevival.World.Ogz;
 ///
 /// It is a <c>[Tool]</c> script so the geometry also appears in the editor. It
 /// defaults to church51 from the reference dump (<c>SAUER_REF</c>) and can be
-/// overridden via <see cref="OgzPath"/>. Diffuse textures come from the map's
-/// metadata catalogue; the camera is the coop-edit flycam (see
-/// <see cref="FreeFlyCamera"/>): WASD + mouse look.
-///
-/// Tool scripts only rebuild when the scene is (re)opened, so after editing this
-/// script close and reopen <c>scenes/map_viewer.tscn</c> (or restart the editor).
+/// overridden via <see cref="OgzPath"/>. Tool scripts only rebuild when the scene
+/// is (re)opened, so after editing this script close and reopen
+/// <c>scenes/map_viewer.tscn</c> (or restart the editor).
 /// </summary>
 [Tool]
 [GlobalClass]
@@ -35,7 +29,9 @@ public partial class OgzMapViewer : Node3D
     /// <summary>In the editor, move the 3D viewport camera to frame the geometry on open.</summary>
     [Export] public bool FrameEditorCamera { get; set; } = true;
 
-    private static readonly Color MeshTint = new(0.8f, 0.8f, 0.85f);
+    /// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
+    public MapWorld? World { get; private set; }
+
     private bool _built;
 
     public override void _Ready()
@@ -43,105 +39,22 @@ public partial class OgzMapViewer : Node3D
         if (_built) return;
         _built = true;
 
-        string path = string.IsNullOrEmpty(OgzPath) ? DefaultPath() : ResolvePath(OgzPath);
-        if (!File.Exists(path))
-        {
-            GD.PushError($"[viewer] OGZ not found: '{path}'. Set OgzPath or SAUER_REF.");
-            return;
-        }
+        World = new MapWorld { Name = "MapWorld", OgzPath = OgzPath, ChunkSize = ChunkSize };
+        AddChild(World);
+        World.Build();
+        if (!World.Built) return; // missing map, error already pushed
 
-        GD.Print($"[viewer] building {path} (editor={Engine.IsEditorHint()})");
+        ApplySky(World.Map!, World.Textures!);
 
-        var map = OgzReader.Read(path);
-        var octa = map.ToOcta();
-
-        // Materials: committed catalogue for this map + textures loaded from the dump.
-        string mapName = Path.GetFileNameWithoutExtension(path);
-        // Prefer the project's imported textures (tools/texture-import), falling back
-        // to reading the reference dump at runtime.
-        ITextureSource textures = new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource(ReferenceRoot));
-        var catalogue = MetadataCatalogue.TryLoadForMap(mapName);
-        MaterialSet? materials = catalogue != null ? MaterialBuilder.Build(catalogue, textures) : null;
-        if (materials == null) GD.PushWarning($"[viewer] no metadata catalogue for '{mapName}'; showing untextured geometry.");
-        ApplySky(map, textures);
-
-        var chunked = new OctaMesher(octa, materials).BuildChunked(ChunkSize);
-
-        // Converted mapmodels (assimp), imported by Godot as Resources.
-        const string modelsResDir = "res://assets/models";
-        string modelsDir = ProjectSettings.GlobalizePath(modelsResDir);
-        var modelCatalog = ModelCatalog.Load(Path.Combine(modelsDir, "models.json"), modelsDir, modelsResDir);
-
-        var world = new Node3D { Name = "World", RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
-        AddChild(world);
-        world.AddChild(LightBuilder.Build(map));
-        world.AddChild(PlayerStartBuilder.Build(map, textures));
-        world.AddChild(TriggerBuilder.Build(map, catalogue, textures));
-        world.AddChild(ItemBuilder.Build(map, modelCatalog, textures));
-        world.AddChild(ParticleBuilder.Build(map, textures));
-        world.AddChild(SoundBuilder.Build(map, catalogue, ReferenceRoot));
-        var mapModels = MapModelBuilder.Build(map, catalogue, modelCatalog, textures);
-        world.AddChild(mapModels);
-        int loadedModels = 0, totalModels = 0;
-        foreach (var child in mapModels.GetChildren())
-        {
-            totalModels++;
-            if (child is MapModel { ModelLoaded: true }) loadedModels++;
-        }
-        GD.Print($"[viewer] mapmodels: {loadedModels}/{totalModels} loaded");
-
-        // Water/lava/glass material surfaces (empty-space materials).
-        var materialSurfaces = MaterialMesher.Build(octa);
-        GD.Print($"[viewer] material surfaces: {materialSurfaces.Count}");
-        foreach (var surface in materialSurfaces)
-        {
-            world.AddChild(new MeshInstance3D
-            {
-                Name = $"Material_{surface.Material}",
-                Mesh = surface.Mesh,
-                MaterialOverride = MaterialTextures.Create(surface.Material, textures),
-            });
-        }
-
-        // Fallback so geometry is still visible if there is no catalogue.
-        StandardMaterial3D? fallback = materials == null
-            ? new StandardMaterial3D { AlbedoColor = MeshTint, CullMode = BaseMaterial3D.CullModeEnum.Back }
-            : null;
-
-        Aabb bounds = default;
-        bool hasBounds = false;
-        foreach (var chunk in chunked.Chunks)
-        {
-            world.AddChild(new MeshInstance3D
-            {
-                Name = $"Chunk_{chunk.Origin.X}_{chunk.Origin.Y}_{chunk.Origin.Z}",
-                Mesh = chunk.Mesh,
-                Position = new Vector3(chunk.Origin.X, chunk.Origin.Y, chunk.Origin.Z),
-                MaterialOverride = fallback,
-            });
-
-            var aabb = chunk.Mesh.GetAabb();
-            aabb.Position += new Vector3(chunk.Origin.X, chunk.Origin.Y, chunk.Origin.Z);
-            bounds = hasBounds ? bounds.Merge(aabb) : aabb;
-            hasBounds = true;
-        }
-
-        // Sauerbraten bounds are Z-up; the World node rotates them to Godot Y-up.
-        Aabb sauerBounds = hasBounds ? bounds : new Aabb(Vector3.Zero, Vector3.One);
-        Vector3 sauerCenter = sauerBounds.GetCenter();
-        Vector3 centre = new(sauerCenter.X, sauerCenter.Z, -sauerCenter.Y);
-        float radius = Mathf.Max(sauerBounds.Size.Length() * 0.5f, 1.0f);
-
-        var camera = AddLightAndCamera(centre, radius);
+        var camera = AddLightAndCamera(World.Centre, World.Radius);
 #if TOOLS
         if (Engine.IsEditorHint() && FrameEditorCamera)
         {
             _frameCamera = camera;
-            _frameTarget = centre;
+            _frameTarget = World.Centre;
             CallDeferred(nameof(FrameEditorViewport));
         }
 #endif
-        GD.Print($"[viewer] {path}: chunks={chunked.Chunks.Count} triangles={chunked.TriangleCount}");
     }
 
     private void ApplySky(OgzMap map, ITextureSource textures)
@@ -195,13 +108,4 @@ public partial class OgzMapViewer : Node3D
         editorCamera.LookAt(_frameTarget, Vector3.Up);
     }
 #endif
-
-    private static string ReferenceRoot =>
-        System.Environment.GetEnvironmentVariable("SAUER_REF")
-        ?? "/Users/fohlen/Downloads/sauerbraten-code-r6889";
-
-    private static string DefaultPath() => Path.Combine(ReferenceRoot, "packages", "base", "church51.ogz");
-
-    private static string ResolvePath(string ogzPath) =>
-        Path.IsPathRooted(ogzPath) ? ogzPath : Path.Combine(ReferenceRoot, "packages", ogzPath);
 }
