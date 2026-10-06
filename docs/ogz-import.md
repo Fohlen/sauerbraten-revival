@@ -242,7 +242,8 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 | ET_TELEPORT | 19 | Teleport (trigger node) | ✅ `TriggerBuilder` (representation) |
 | ET_TELEDEST | 20 | TeleDest (trigger node) | ✅ `TriggerBuilder` (representation) |
 | ET_JUMPPAD | 23 | JumpPad (trigger node) | ✅ `TriggerBuilder` (representation) |
-| Game-specific items | 8–18, 22, 24–30 | Item / mode nodes | items planned, rest later |
+| Items | 8–18 | Item nodes | ✅ `ItemBuilder` (models converted) |
+| Game-specific rest | 19–30 | mode nodes | triggers ✅, rest later |
 
 ### Entity porting status
 
@@ -255,9 +256,10 @@ done **one slice at a time, each verified** (the `docs/features.md` roadmap mirr
    `attr3>0` = keep velocity) and `ET_JUMPPAD` (`(sbyte)attr3*10, (sbyte)attr2*10,
    attr1*12.5`; `attr4` = sound), and records the teleport → destination pairing. The
    runtime behaviour still needs collision + game logic, which isn't ported yet.
-2. **Items** — the `ET_*` pickups. Visible, so they need the engine's **built-in** entity
-   models converted alongside the catalogue mapmodels: `health`/`boost`/`quad` (md3),
-   `ammo/*` (obj), and `armor/*` (geometry shared from the parent `armor/tris.md3`).
+2. **Items** ✅ — `ItemBuilder` represents the `ET_*` pickups (shells…quad) with the
+   engine's built-in models. `tools/model-import/import_models.py` now also converts
+   those (`health`/`boost`/`quad` md3, `ammo/*` obj, and `armor/*` which shares the
+   parent `armor/tris.md3` with a per-colour skin), plus `teleporter`/`carrot`/`checkpoint`.
 3. **Particles** — `ET_PARTICLES` → `GPUParticles3D`, using the engine's particle
    definitions (effect id in `attr1`).
 4. **Sounds** — `ET_SOUND` → `AudioStreamPlayer3D`. The metadata catalogue already exports

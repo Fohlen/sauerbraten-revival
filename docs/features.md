@@ -80,9 +80,9 @@ See [ogz-import.md](ogz-import.md) for full architecture.
       - [x] **Triggers** — `ET_TELEPORT`/`ET_TELEDEST` (index pairing + resolved model path)
             and `ET_JUMPPAD` (push vector + sound) represented as nodes (`TriggerBuilder`).
             Behaviour not ported (needs collision + game logic).
-      - [ ] **Items** — `ET_*` pickups (health/ammo/armour/quad); needs the engine's
-            built-in entity models converted too (`health`/`boost`/`quad` md3, `ammo/*` obj,
-            `armor/*` parent geometry).
+      - [x] **Items** — `ET_*` pickups represented as `Item` nodes; the engine's built-in
+            models are converted too (`health`/`boost`/`quad` md3, `ammo/*` obj, `armor/*`
+            shared parent geometry + per-colour skin).
       - [ ] **Particles** — `ET_PARTICLES` represented from the engine's particle
             definitions (effect id in attr1). Mostly billboard/static; a handful are real
             `GPUParticles3D`, and the rest need custom shaders — see

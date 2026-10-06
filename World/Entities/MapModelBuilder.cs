@@ -37,7 +37,7 @@ public static class MapModelBuilder
                 GlbOsPath = info?.GlbOsPath,
                 ModelScale = info?.Scale ?? 1.0f,
                 ModelTranslation = info?.Translation ?? Vector3.Zero,
-                SkinMaterial = BuildSkin(info, textures, skinCache),
+                SkinMaterial = ModelSkin.Build(info, textures, skinCache),
             };
 
             Vector3 forward = PlayerStartBuilder.Forward(e.Attr1);
@@ -47,26 +47,5 @@ public static class MapModelBuilder
             root.AddChild(model);
         }
         return root;
-    }
-
-    private static Material? BuildSkin(ModelInfo? info, ITextureSource? textures, Dictionary<string, Material> cache)
-    {
-        if (info?.Skin == null || textures == null) return null;
-        if (cache.TryGetValue(info.Skin, out var cached)) return cached;
-
-        var material = new StandardMaterial3D
-        {
-            AlbedoTexture = textures.Get(info.Skin),
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-        };
-        if (info.Bump != null)
-        {
-            var bump = textures.Get(info.Bump);
-            if (bump != null) { material.NormalEnabled = true; material.NormalTexture = bump; }
-        }
-
-        cache[info.Skin] = material;
-        return material;
     }
 }

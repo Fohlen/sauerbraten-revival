@@ -75,6 +75,7 @@ public partial class OgzMapViewer : Node3D
         world.AddChild(LightBuilder.Build(map));
         world.AddChild(PlayerStartBuilder.Build(map, textures));
         world.AddChild(TriggerBuilder.Build(map, catalogue, textures));
+        world.AddChild(ItemBuilder.Build(map, modelCatalog, textures));
         var mapModels = MapModelBuilder.Build(map, catalogue, modelCatalog, textures);
         world.AddChild(mapModels);
         int loadedModels = 0, totalModels = 0;
