@@ -4,35 +4,43 @@ using SauerbratenRevival.World.Materials;
 namespace SauerbratenRevival.World.Ogz;
 
 /// <summary>
-/// Dev-only inspection scene: builds a legacy <c>.ogz</c> via <see cref="MapWorld"/>
-/// and views it with the coop-edit flycam (see <see cref="FreeFlyCamera"/>): WASD +
-/// mouse look.
+/// Scene root that builds a legacy <c>.ogz</c> via <see cref="MapWorld"/> and
+/// applies its sky, leaving the camera/controller to the scene. The editor scene
+/// attaches a <see cref="FreeFlyCamera"/>; the player scene attaches its own
+/// physics controller (see <c>scenes/editor_scene.tscn</c> /
+/// <c>scenes/player_scene.tscn</c>).
 ///
-/// This deliberately reads OGZ at runtime for tooling convenience — it is NOT the
+/// When <see cref="FrameCamera"/> is set, the direct-child node named
+/// <c>Camera3D</c> is placed at a full-map overview once the world is built. A
+/// controller whose camera is nested (e.g. under a player) is left alone.
+///
+/// It deliberately reads OGZ at runtime for tooling convenience — it is NOT the
 /// shipping path. The shipped importer converts maps to the native format; see
 /// docs/ogz-import.md.
 ///
-/// It is a <c>[Tool]</c> script so the geometry also appears in the editor. It
-/// defaults to church51 from the reference dump (<c>SAUER_REF</c>) and can be
-/// overridden via <see cref="OgzPath"/>. Tool scripts only rebuild when the scene
-/// is (re)opened, so after editing this script close and reopen
-/// <c>scenes/map_viewer.tscn</c> (or restart the editor).
+/// It is a <c>[Tool]</c> script so the geometry also appears in the editor. Tool
+/// scripts only rebuild when the scene is (re)opened, so after editing this script
+/// close and reopen the scene (or restart the editor).
 /// </summary>
 [Tool]
 [GlobalClass]
 public partial class OgzMapViewer : Node3D
 {
-    /// <summary>Override map to view. Absolute, or relative to the reference dump's <c>packages/</c> dir (e.g. <c>base/church51.ogz</c>); empty uses the default.</summary>
+    /// <summary>Override map to build. Absolute, or relative to the reference dump's <c>packages/</c> dir (e.g. <c>base/church51.ogz</c>); empty uses the default.</summary>
     [Export] public string OgzPath { get; set; } = "";
     [Export] public int ChunkSize { get; set; } = 512;
 
-    /// <summary>In the editor, move the 3D viewport camera to frame the geometry on open.</summary>
-    [Export] public bool FrameEditorCamera { get; set; } = true;
+    /// <summary>Place the direct-child <c>Camera3D</c> at a full-map overview once built.</summary>
+    [Export] public bool FrameCamera { get; set; } = true;
 
     /// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
     public MapWorld? World { get; private set; }
 
     private bool _built;
+#if TOOLS
+    private Camera3D? _frameCamera;
+    private Vector3 _frameTarget;
+#endif
 
     public override void _Ready()
     {
@@ -45,16 +53,8 @@ public partial class OgzMapViewer : Node3D
         if (!World.Built) return; // missing map, error already pushed
 
         ApplySky(World.Map!, World.Textures!);
-
-        var camera = AddLightAndCamera(World.Centre, World.Radius);
-#if TOOLS
-        if (Engine.IsEditorHint() && FrameEditorCamera)
-        {
-            _frameCamera = camera;
-            _frameTarget = World.Centre;
-            CallDeferred(nameof(FrameEditorViewport));
-        }
-#endif
+        AddSun();
+        if (FrameCamera) FrameSceneCamera(World.Centre, World.Radius);
     }
 
     private void ApplySky(OgzMap map, ITextureSource textures)
@@ -70,7 +70,7 @@ public partial class OgzMapViewer : Node3D
         worldEnvironment.Environment.BackgroundMode = Godot.Environment.BGMode.Sky;
     }
 
-    private Camera3D AddLightAndCamera(Vector3 centre, float radius)
+    private void AddSun()
     {
         AddChild(new DirectionalLight3D
         {
@@ -78,24 +78,28 @@ public partial class OgzMapViewer : Node3D
             RotationDegrees = new Vector3(-50, -30, 0),
             ShadowEnabled = true,
         });
+    }
 
-        var camera = new FreeFlyCamera
-        {
-            Name = "Camera3D",
-            Fov = 75,
-            Far = Mathf.Max(radius * 8.0f, 1000.0f),
-        };
+    private void FrameSceneCamera(Vector3 centre, float radius)
+    {
+        var camera = GetNodeOrNull<Camera3D>("Camera3D");
+        if (camera == null) return;
+
         camera.Position = centre + new Vector3(0, radius * 0.6f, radius * 1.3f);
-        AddChild(camera);
         camera.LookAt(centre, Vector3.Up);
         if (!Engine.IsEditorHint()) camera.Current = true;
-        return camera;
+
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            _frameCamera = camera;
+            _frameTarget = centre;
+            CallDeferred(nameof(FrameEditorViewport));
+        }
+#endif
     }
 
 #if TOOLS
-    private Camera3D? _frameCamera;
-    private Vector3 _frameTarget;
-
     private void FrameEditorViewport()
     {
         // Move the editor's 3D viewport camera onto the scene camera so the

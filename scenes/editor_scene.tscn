@@ -1,6 +1,7 @@
-[gd_scene format=3 uid="uid://74scerrk28q8"]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" uid="uid://bc0icyqafgcea" path="res://World/Ogz/OgzMapViewer.cs" id="1_viewer"]
+[ext_resource type="Script" uid="uid://cc4j8n8jb68oy" path="res://World/FreeFlyCamera.cs" id="2_flycam"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 
@@ -12,9 +13,12 @@ background_mode = 2
 sky = SubResource("Sky_sky")
 ambient_light_source = 3
 
-[node name="OgzMapViewer" type="Node3D" unique_id=1718582370]
+[node name="EditorScene" type="Node3D"]
 script = ExtResource("1_viewer")
-OgzPath = "base/bt_falls.ogz"
+OgzPath = "base/church51.ogz"
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1471960665]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_env")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+script = ExtResource("2_flycam")

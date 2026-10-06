@@ -80,7 +80,7 @@ See [ogz-import.md](ogz-import.md) for full architecture.
       `Cube` octree.
 - [ ] **Importer**: OGZ + metadata → native octree `Resource` + `Level.tscn`.
 - [x] Dev viewer renders hand-picked maps (`church51`, `bt_falls`) directly from OGZ
-      with materials + entities (`scenes/map_viewer.tscn`).
+      with materials + entities (`scenes/editor_scene.tscn`).
 - [x] Content importers: `tools/model-import/` (assimp → glTF + skins) and
       `tools/texture-import/` (original textures → Godot Resources).
 - [x] **Entity lights** — `ET_LIGHT` → `OmniLight3D`, attached `ET_SPOTLIGHT` →

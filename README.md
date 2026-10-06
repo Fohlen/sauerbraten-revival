@@ -49,7 +49,7 @@ Work proceeds in **stages**.
 | Path | Contents |
 | --- | --- |
 | `docs/` | Design, architecture, roadmap, physics reference |
-| `scenes/` | Godot scenes (entry `Main.tscn`; `map_viewer.tscn` dev viewer) |
+| `scenes/` | Godot scenes (entry `Main.tscn`; `editor_scene.tscn` dev viewer, `player_scene.tscn` play scene) |
 | `scripts/` | Game entry + movement prototype (`Main.cs`, `Player.cs`) |
 | `World/` | World core: octree (`Octa`, `CubeGeometry`), [`Ogz/`](World/Ogz) reader + viewer, [`Meshing/`](World/Meshing), [`Materials/`](World/Materials), [`Entities/`](World/Entities) |
 | `test/` | Unit tests, run by GoDotTest |
@@ -81,7 +81,7 @@ from `ExportRelease` builds.
 
 ## Inspecting a map
 
-`scenes/map_viewer.tscn` is a dev tool: it reads a legacy `.ogz` from the
+`scenes/editor_scene.tscn` is a dev tool: it reads a legacy `.ogz` from the
 reference dump, builds the runtime octree, chunks it and displays the geometry
 with **diffuse textures** resolved from the committed metadata catalogue
 (`metadata-catalogue/<map>.json`) and the map's **cubemap skybox**. It defaults to church51 (`OgzPath` overrides)

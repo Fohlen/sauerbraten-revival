@@ -342,7 +342,7 @@ Current (dev viewer; reads `.ogz` directly at runtime — **not** the shipping p
 World/Ogz/OgzReader.cs        # Binary parser + runtime octree build
 World/Ogz/OgzMap.cs           # ToOcta() + map vars/entities accessors
 World/Ogz/OgzGeometry.cs      # Ground-truth geometry checksum
-World/Ogz/OgzMapViewer.cs     # [Tool] dev viewer (scenes/map_viewer.tscn)
+World/Ogz/OgzMapViewer.cs     # [Tool] dev viewer (scenes/editor_scene.tscn)
 metadata-catalogue/<map>.json # Committed metadata (ground truth)
 tools/model-import/           # Model converter (Python)
 tools/texture-import/         # Texture importer (Python)
