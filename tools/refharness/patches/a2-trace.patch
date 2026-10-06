@@ -10,7 +10,7 @@
  
  const int MAXCLIPPLANES = 1024;
  static clipplanes clipcache[MAXCLIPPLANES];
-@@ -1678,8 +1681,54 @@
+@@ -1678,8 +1681,55 @@
  // moveres indicated the physics precision (which is lower for monsters and multiplayer prediction)
  // local is false for multiplayer prediction
  
@@ -35,13 +35,13 @@
 +    a2eventfile = fopen(epath, "w");
 +    if(a2eventfile) fprintf(a2eventfile, "step,time,event\n");
 +}
-+static void a2tracelog(physent *pl, int curtime)
++static void a2tracelog(physent *pl, int curtime, int jumping)
 +{
 +    if(!a2tracefile) return;
 +    a2tracetime += curtime;
 +    fprintf(a2tracefile,
 +        "%d,%d,%d,%d,%d,%.4f,%.4f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%d,%d,%.5f,%.5f,%.5f\n",
-+        a2tracestep++, a2tracetime, (int)pl->move, (int)pl->strafe, pl->jumping?1:0, pl->yaw, pl->pitch,
++        a2tracestep++, a2tracetime, (int)pl->move, (int)pl->strafe, jumping, pl->yaw, pl->pitch,
 +        pl->o.x, pl->o.y, pl->o.z, pl->vel.x, pl->vel.y, pl->vel.z,
 +        pl->falling.x, pl->falling.y, pl->falling.z,
 +        pl->physstate, (int)pl->timeinair, pl->floor.x, pl->floor.y, pl->floor.z);
@@ -62,6 +62,7 @@
  bool moveplayer(physent *pl, int moveres, bool local, int curtime)
  {
 +    a2traceinit();
++    int a2jumping = pl->jumping; // capture the jump input before modifyvelocity() consumes it
      int material = lookupmaterial(vec(pl->o.x, pl->o.y, pl->o.z + (3*pl->aboveeye - pl->eyeheight)/4));
      bool water = isliquid(material&MATF_VOLUME);
      bool floating = pl->type==ENT_PLAYER && (pl->state==CS_EDITING || pl->state==CS_SPECTATOR);
@@ -69,7 +70,7 @@
  
      if(pl->state==CS_ALIVE && (pl->o.z < 0 || material&MAT_DEATH)) game::suicide(pl);
  
-+    if(pl->type==ENT_PLAYER) a2tracelog(pl, curtime);
++    if(pl->type==ENT_PLAYER) a2tracelog(pl, curtime, a2jumping);
 +
      return true;
  }
