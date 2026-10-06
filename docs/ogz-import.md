@@ -184,7 +184,7 @@ and a canonical FNV-1a checksum.
 5. Convert entities to Godot nodes:
    - ET_LIGHT → OmniLight3D / SpotLight3D
    - ET_PLAYERSTART → SpawnPoint (custom node)
-   - ET_MAPMODEL → MeshInstance3D (load .obj/.md3)
+   - ET_MAPMODEL → MapModel (imported glTF Resource; .obj/.md3 converted offline)
    - ET_SOUND → AudioStreamPlayer3D
    - etc.
 6. Build material manifest (index → ShaderMaterial).
@@ -236,7 +236,7 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 | ET_MAPMODEL | 2 | MeshInstance3D | ✅ `MapModel` (assimp → glTF Resources) |
 | ET_PLAYERSTART | 3 | SpawnPoint (custom) | ✅ `PlayerStartBuilder` |
 | ET_ENVMAP | 4 | ReflectionProbe | later |
-| ET_PARTICLES | 5 | GPUParticles3D | planned |
+| ET_PARTICLES | 5 | GPUParticles3D | ✅ `ParticleBuilder`/`ParticleRenderer` (billboards; custom effects deferred) |
 | ET_SOUND | 6 | AudioStreamPlayer3D | ✅ `SoundBuilder` (bt_falls) |
 | ET_SPOTLIGHT | 7 | SpotLight3D | ✅ (attaches to a light) |
 | ET_TELEPORT | 19 | Teleport (trigger node) | ✅ `TriggerBuilder` (representation) |
@@ -247,8 +247,9 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 
 ### Entity porting status
 
-Already ported: lights + spotlights, playerstarts, mapmodels. The remainder is being
-done **one slice at a time, each verified** (the `docs/features.md` roadmap mirrors this):
+Ported: lights + spotlights, playerstarts, mapmodels, triggers, items, particles and
+sounds. The remainder is being done **one slice at a time, each verified** (the
+`docs/features.md` roadmap mirrors this):
 
 1. **Triggers** ✅ — `TriggerBuilder` represents `ET_TELEPORT` (`attr1` = destination tag,
    `attr2` = model: `>0` a mapmodel, `0` the built-in teleporter, `<0` invisible; `attr3` =
@@ -319,28 +320,44 @@ represent tape/text/icon/lightning/meter/flare.
 
 ---
 
+## Content import tools
+
+The pipeline is split into offline tools, all reading the read-only reference dump
+(`$SAUER_REF`) and writing **git-ignored** output under `assets/`:
+
+| Tool | Output | Purpose |
+| --- | --- |
+| `tools/model-import/import_models.py` | `assets/models/*.glb` + `models.json` | Converts mapmodels and built-in item/teleporter models to glTF with **assimp**, applies per-model skins/bumps, and writes the model manifest. Handles parent-folder geometry fallback (e.g. `armor/*` sharing `armor/tris.md3`) and the engine's `mdlscale/4`. |
+| `tools/texture-import/import_textures.py` | `assets/textures/**` | Copies every texture a map references (slot textures, model skins/bumps, and the engine defaults for water/lava/particles) into the project, preserving relative paths. |
+| `tools/refharness/build_instrumented.sh` | `metadata-catalogue/<map>.json` | Builds the patched reference client that exports the metadata (see above). |
+
+Godot imports `assets/models/` and `assets/textures/` as Resources; the viewer loads
+the imported Resources and falls back to the dump for anything not imported.
+
 ## File locations
 
+Current (dev viewer; reads `.ogz` directly at runtime — **not** the shipping path):
+
 ```
-tools/ogz-import/
-├── OgzParser.cs           # Binary parser
-├── MetadataLoader.cs      # JSON metadata loader
-├── OctreeConverter.cs     # OGZ octree → native format
-├── EntityConverter.cs     # Entities → Godot nodes
-├── MaterialBuilder.cs     # Build material manifest
-└── ImportPipeline.cs      # Orchestrates the import
+World/Ogz/OgzReader.cs        # Binary parser + runtime octree build
+World/Ogz/OgzMap.cs           # ToOcta() + map vars/entities accessors
+World/Ogz/OgzGeometry.cs      # Ground-truth geometry checksum
+World/Ogz/OgzMapViewer.cs     # [Tool] dev viewer (scenes/map_viewer.tscn)
+metadata-catalogue/<map>.json # Committed metadata (ground truth)
+tools/model-import/           # Model converter (Python)
+tools/texture-import/         # Texture importer (Python)
+assets/models/                # git-ignored, Godot-imported
+assets/textures/              # git-ignored, Godot-imported
+```
 
-data/metadata/
-├── church51.json          # Generated metadata per map
-├── dust2.json
-└── ...
+Planned (native format, roadmap #3):
 
-assets/maps/
-├── church51/
-│   ├── world.res          # Native octree
-│   ├── Level.tscn         # Scene with entities
-│   └── materials/         # Imported materials
-└── ...
+```
+World/Import/                 # OGZ + metadata → native octree Resource + Level.tscn
+assets/maps/<map>/
+├── world.res                 # Native octree Resource
+├── Level.tscn                # Scene with entities
+└── materials/                # Imported materials
 ```
 
 ---

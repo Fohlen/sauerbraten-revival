@@ -215,7 +215,7 @@ movement.
 
 ## 5. Port notes / deviations in the current MVP
 
-The first prototype (`scripts/player.gd`) reproduces the **velocity model**
+The first prototype (`scripts/Player.cs`) reproduces the **velocity model**
 exactly (constants, direction, friction lerp, forward/airborne multipliers,
 gravity, jump) but uses Godot's `CharacterBody3D.move_and_slide()` for collision.
 Known deviations to close later:

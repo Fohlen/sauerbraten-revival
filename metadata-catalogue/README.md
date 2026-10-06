@@ -8,9 +8,14 @@ Only the **JSON** is committed. The legacy `.ogz` files are large binary game
 assets and stay in the read-only reference dump; the OGZ reader tests read them
 from `$SAUER_REF/packages/base/<map>.ogz`.
 
-| File | Contents |
+Each file holds the resolved `slots`/`vslots`/`mapmodels`/`entities`/`sounds`, plus a
+`geometry` block (cube-tree counts, surface/vertex totals, per-vslot face histogram
+and a canonical FNV-1a checksum).
+
+| File | Notes |
 | --- | --- |
-| `<map>.json` | Resolved `slots`/`vslots`/`mapmodels`/`entities`/`sounds`, plus a `geometry` block (cube-tree counts, surface/vertex totals, per-vslot face histogram and a canonical FNV-1a checksum). |
+| `church51.json` | 334 entities; the A2 trace fixture (`session1.csv`) was captured here. |
+| `bt_falls.json` | 373 entities: 167 mapmodels, 5 `ET_SOUND`, water surfaces; skybox `meister/uzze`. |
 
 The exporter only emits what the map actually uses (geometry-referenced textures,
 entity-referenced mapmodels and sounds). See [`docs/ogz-import.md`](../docs/ogz-import.md).

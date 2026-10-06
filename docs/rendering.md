@@ -76,8 +76,9 @@ This spreads large edits across frames, avoiding hitches.
 
 > **Status:** implemented as fixed-size spatial chunks
 > (`OctaMesher.BuildChunked`, default 512 world units). Each chunk is one
-> `ArrayMesh` positioned at its origin (`MeshChunk`). Dirty-tracking and the
-> per-frame rebuild budget are still to come.
+> `ArrayMesh` positioned at its origin (`MeshChunk`), with one surface per vslot
+> and its material attached via `ArrayMesh.SurfaceSetMaterial`. Dirty-tracking and
+> the per-frame rebuild budget are still to come.
 
 ---
 
@@ -153,8 +154,10 @@ VSlot (variant):
 | Blending | Custom shader with blend mask |
 | Lightmap | `LightmapGI` or baked texture channel |
 
-The material manifest maps face indices → Godot materials. This is resolved at
-import time, not runtime.
+The material manifest maps face indices → Godot materials. In the dev viewer this
+is resolved at load time from the committed `metadata-catalogue/<map>.json`
+(`MetadataCatalogue` + `MaterialBuilder`); the shipped importer will bake an
+equivalent manifest into the native format at conversion time.
 
 ---
 
@@ -168,9 +171,10 @@ The ArrayMesh approach supports all three stages — only the materials/shaders 
 
 ---
 
-## RenderingServer usage
+## RenderingServer usage *(planned optimisation)*
 
-For maximum performance, meshes are streamed directly to RenderingServer:
+The current mesher keeps the `ArrayMesh` on a `MeshInstance3D`. For maximum
+performance, a later pass can stream meshes directly to RenderingServer:
 
 ```csharp
 // Create mesh RID (once per chunk)
@@ -223,8 +227,9 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   engine-exported slot/vslot data, `MaterialBuilder` ports `calctexgen` and
   builds one Godot `StandardMaterial3D` per vslot (diffuse texture + tint), and
   the mesher emits per-face world-space UVs. Textures come through an
-  `ITextureSource` seam (`DumpTextureSource` for the dev viewer; the importer
-  will supply Godot resources).
+  `ITextureSource` seam: `ResourceTextureSource` loads the Godot Resources
+  imported by `tools/texture-import/`, with `DumpTextureSource` as a runtime
+  fallback (`FallbackTextureSource`).
 - **Sky (C2)** — `SkyBuilder` reads the map's <c>skybox</c> mapvar, loads the
   six cubemap faces through the same `ITextureSource`, and builds a Godot
   `Cubemap` + `shader_type sky` material for the `WorldEnvironment`.
@@ -232,9 +237,11 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   `EmissionTexture`/`Emission` from the catalogue's `normal`/`glow` layers and the
   vslot `glowcolor`.
 - **Material surfaces** — `MaterialMesher` emits the empty-space water/lava/glass
-  boundary faces (a simplified `material.cpp genmatsurfs`, no face merging) as a
-  separate mesh; textures come from `MaterialTextures` (the engine defaults, since
-  the catalogue doesn't export `matwater`/`matlava` yet).
+  boundary faces (a simplified `material.cpp genmatsurfs`, no face merging) as one
+  mesh per material; `MaterialTextures` supplies an unshaded `ShaderMaterial` with
+  the engine-default textures and a time-based UV scroll for the flowing animation
+  (mirrors `water.cpp`/`material.cpp`; the catalogue doesn't export `matwater`/
+  `matlava` yet).
 - **TODO (deferred)** — **specular maps** (packed/non-PBR), **alpha/transparency**
   (`alphafront`/`alphaback`, `LAYER_*`), blended layers, exact `visibletris`
   culling, face merges, T-joints, grass, lightmaps, and incremental dirty-chunk

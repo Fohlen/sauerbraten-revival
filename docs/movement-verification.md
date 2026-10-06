@@ -86,9 +86,10 @@ Patch the original so movement inputs are read from a file instead of the
 keyboard/mouse. One input file then drives **both** the original and our port;
 diff the state traces.
 
-Requires the same geometry on both sides. Until our octree/format loads classic
-maps, run this on synthetic geometry authored identically in both (flat plane,
-ramp, staircase). Once old-content loading lands (roadmap #4), replay on real maps.
+Requires the same geometry on both sides. The runtime octree now loads classic maps
+in-engine (`World/Ogz/`), so A3 can replay against **real geometry**; synthetic
+geometry (flat plane, ramp, staircase) stays useful for isolating the collision
+primitives.
 
 A **deterministic bot policy** (e.g. hold W, turn yaw at a constant rate, jump
 every N ms) removes human variance and makes the whole comparison automated.
@@ -147,8 +148,7 @@ the harness gives the truth.
 
 Plan A validates **layer 1 (velocity model)** exactly and, once A3 runs on
 geometry, the **layer 2 collision** too. Layers 3–5 (timing, input, camera /
-feedback) need their own checks — see `architecture.md` and the drill table in
-`features.md`:
+feedback) need their own checks — see [architecture.md](architecture.md):
 
 - match FOV (100), sensitivity, mouse accel (0);
 - accumulate mouse motion per input poll and apply once per physics tick;

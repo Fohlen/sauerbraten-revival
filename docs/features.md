@@ -36,23 +36,29 @@ Living inventory. Order reflects intent, not schedule. MVP target:
 - [x] **A4** determinism gate.
 - [x] Velocity model validated against real gameplay: **100% flat-floor**,
       **97.3% free-air** exact matches (air misses = jump pads/collisions).
-- [ ] **A3** input-replay differential — blocked on map geometry (see #4).
+- [ ] **A3** input-replay differential — the octree now loads classic maps in-engine
+      (`World/Ogz/`), so this can run against real geometry (see #4).
 
 ## 2. World core (dynamic octree + rendering)
 
 See [rendering.md](rendering.md) for the ArrayMesh + RenderingServer approach.
 
-- [ ] Port the `octa.cpp` core to C# with a small compatibility shim.
+- [x] Port the `octa.cpp` core to C# (`World/Octa.cs`, `World/CubeGeometry.cs`).
 - [ ] Collision traversal (`move`/`collide` primitives) — octree-based, not Godot physics.
-- [ ] **Chunked ArrayMesh emitter**: octree → per-chunk ArrayMesh → RenderingServer.
-- [ ] Per-frame update budget (max N chunks/frame) to avoid hitches.
+- [x] **Chunked ArrayMesh emitter**: octree → per-chunk ArrayMesh (`OctaMesher.BuildChunked`,
+      `ChunkedWorldMesh`, `ArrayMeshBuilder`); one material per vslot surface.
+- [ ] Per-frame update budget (max N chunks/frame) to avoid hitches; incremental dirty chunks.
 - [ ] LOD integration via `ArrayMesh.add_lod()` for distance-based simplification.
 - [ ] Live collision against the mutable octree (rendering and collision decoupled).
 - [ ] `Resource`-based world save/load (compact binary format).
-- [x] Material manifest: diffuse + tint (`MaterialBuilder`, `calctexgen`).
+- [x] Material manifest: diffuse + tint (`MaterialBuilder`, `calctexgen`), per-face UVs.
 - [x] Normal maps.
 - [x] Glow (emission) maps.
-- [x] Material surfaces (water/lava/glass) — `MaterialMesher`, engine-default textures.
+- [x] Skybox: cubemap `skybox` mapvar → `SkyBuilder` + `shader_type sky`.
+- [x] Texture pipeline: `ITextureSource` seam; original textures imported to Godot
+      Resources (`tools/texture-import/`) with a runtime dump fallback.
+- [x] Material surfaces (water/lava/glass) — `MaterialMesher` + `MaterialTextures`
+      (engine-default textures, time-based flow shader).
 - [ ] **TODO (deferred): Specular maps** — Sauer's spec is packed (into normal/diffuse
       alpha) and uses a non-PBR model; approximate via roughness first, exact needs a
       ported shader. See [rendering.md](rendering.md).
@@ -64,20 +70,24 @@ See [rendering.md](rendering.md) for the ArrayMesh + RenderingServer approach.
 
 See [ogz-import.md](ogz-import.md) for full architecture.
 
-- [ ] **Metadata export patch**: CubeScript patch to original client that
-      exports texture slots, mapmodels, lights, etc. to JSON on map load.
-- [ ] **Generate metadata**: Run patched client on all target maps, commit
-      JSON to `data/metadata/`.
-- [ ] **OGZ parser**: C# binary parser for `.ogz` octree + entities.
+- [x] **Metadata export patch**: `SAUER_METADATA` JSON exporter added to the
+      original client (`tools/refharness/patches/ogz-metadata.patch`); emits only the
+      vslots/slots/mapmodels/sounds/entities the map actually uses.
+- [x] **Generate metadata**: exported for `church51` and `bt_falls`, committed to
+      `metadata-catalogue/`.
+- [x] **OGZ parser**: C# binary parser for `.ogz` octree + entities
+      (`World/Ogz/OgzReader.cs`, MAPVERSION 33) reading directly into the runtime
+      `Cube` octree.
 - [ ] **Importer**: OGZ + metadata → native octree `Resource` + `Level.tscn`.
-- [ ] Render + load hand-picked classic maps.
-- [x] First target: `packages/base/church51.ogz` (matches trace fixture
-      `session1.csv`).
+- [x] Dev viewer renders hand-picked maps (`church51`, `bt_falls`) directly from OGZ
+      with materials + entities (`scenes/map_viewer.tscn`).
+- [x] Content importers: `tools/model-import/` (assimp → glTF + skins) and
+      `tools/texture-import/` (original textures → Godot Resources).
 - [x] **Entity lights** — `ET_LIGHT` → `OmniLight3D`, attached `ET_SPOTLIGHT` →
       `SpotLight3D` (`LightBuilder`; attr1 radius, attr2/3/4 colour, spot attr1 = cone angle).
 - [x] **Playerstarts** — `ET_PLAYERSTART` → `SpawnPoint` (`Marker3D` with `Team`/`Yaw`; facing from `vecfromyawpitch`).
 - [x] **Mapmodels** — `ET_MAPMODEL` → `MapModel`; source OBJ/MD2/MD3/MD5/IQM converted to glTF with **assimp** (`tools/model-import/import_models.py` → git-ignored `assets/models/`, imported by Godot), with `mdlscale`/`mdltrans`/skin applied. Note `animmodel::loaded()` scales by `1/4`.
-- [ ] **Entity port — remaining slices** (one at a time, each verified):
+- **Entity port** (one at a time, each verified; remaining slices below):
       - [x] **Triggers** — `ET_TELEPORT`/`ET_TELEDEST` (index pairing + resolved model path)
             and `ET_JUMPPAD` (push vector + sound) represented as nodes (`TriggerBuilder`).
             Behaviour not ported (needs collision + game logic).
@@ -95,10 +105,12 @@ See [ogz-import.md](ogz-import.md) for full architecture.
             from the catalogue's `sounds` (relative to `packages/sounds/`), .ogg/.wav loaded
             from the dump, looping in the dev viewer. Verified on **bt_falls** (3 sounds,
             5 emitters).
+      - [x] **Edit-mode markers** — blue `PART_EDIT`-style billboards for playerstarts
+            and triggers (`EntityMarker`, `entity_markers` group).
       - [ ] **envmap / monsters / mode entities** (`ET_ENVMAP`, flag, box, platform,
             elevator, …) — later.
 - [ ] Lightmap import / rebake (post-MVP).
-- [ ] Expand feature coverage (blends, layers, mapmodels) map by map.
+- [ ] Expand feature coverage (blends, layers) map by map.
 
 **New maps use our compact binary format only** — no OGZ at runtime.
 

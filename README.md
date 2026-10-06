@@ -47,14 +47,15 @@ Work proceeds in **stages**.
 | Path | Contents |
 | --- | --- |
 | `docs/` | Design, architecture, roadmap, physics reference |
-| `scenes/` | Godot scenes (entry `Main.tscn`, `test_level.tscn`, `player.tscn`) |
-| `scripts/` | C# (movement, and later world/game logic) |
-| `World/` | Pure world core: octree primitives, OGZ reader (`World/Ogz/`) |
+| `scenes/` | Godot scenes (entry `Main.tscn`; `map_viewer.tscn` dev viewer) |
+| `scripts/` | Game entry + movement prototype (`Main.cs`, `Player.cs`) |
+| `World/` | World core: octree (`Octa`, `CubeGeometry`), [`Ogz/`](World/Ogz) reader + viewer, [`Meshing/`](World/Meshing), [`Materials/`](World/Materials), [`Entities/`](World/Entities) |
 | `test/` | Unit tests, run by GoDotTest |
 | `metadata-catalogue/` | Engine-exported ground truth for imported maps |
+| `tools/model-import/` | Converts original models to glTF + a manifest (git-ignored `assets/models/`) |
+| `tools/texture-import/` | Imports original textures to Godot Resources (git-ignored `assets/textures/`) |
+| `tools/refharness/` | A1 harness, A2 instrumented client, and [reference patches](tools/refharness/patches/README.md) |
 | `SauerbratenRevival.csproj` | C# project (Godot .NET) |
-| `tools/refharness/` | A1 reference harness running the original movement code |
-| `tools/refharness/patches/` | Patches to the reference source + [apply/rollback workflow](tools/refharness/patches/README.md) |
 
 ## Running the prototype
 
