@@ -101,7 +101,7 @@ public static class OctaClipping
     }
 
     /// <summary>octa.cpp:1204 <c>genclipplanes</c> (simplified; see file header).</summary>
-    public static ClipPlanes GetClipPlanes(Cube c, Vector3I co, int size, int visibleMask)
+    public static ClipPlanes GetClipPlanes(Octa octa, Cube c, Vector3I co, int size, int visibleMask)
     {
         if (Cache.TryGetValue(c, out var cached)) return cached;
 
@@ -119,9 +119,10 @@ public static class OctaClipping
             if ((visibleMask & (1 << i)) == 0) continue;
             if (c.FlatAxisFace(i)) { p.Visible |= 1 << i; continue; }
 
-            int vis = 3; // no visibletris(): use the whole face
+            int vis = OctaVisible.VisibleTris(octa, c, i, co, size, Phys.MatNoClip, Phys.MatFClip);
+            if (vis == 0) continue;
             int convex = c.FaceConvexity(i);
-            int order = convex < 0 ? 1 : 0;
+            int order = (vis & 4) != 0 || convex < 0 ? 1 : 0;
             Vector3 v0 = p.V[Fv[i][order]], v1 = p.V[Fv[i][(order + 1) & 3]],
                     v2 = p.V[Fv[i][(order + 2) & 3]], v3 = p.V[Fv[i][(order + 3) & 3]];
             if ((vis & 1) != 0) { p.Side[p.Size] = (byte)i; p.P[p.Size++].ToPlane(v0, v1, v2); }

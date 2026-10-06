@@ -308,6 +308,27 @@ public sealed class Octa
         return c;
     }
 
+    /// <summary>octa.cpp:263 <c>neighbourcube</c> — the leaf/node beside a face (node size ≤ the queried size).</summary>
+    public Cube NeighbourCube(Cube c, int orient, Vector3I co, int size, out Vector3I ro, out int rsize)
+    {
+        var n = co;
+        int dim = orient >> 1;
+        uint diff = (uint)n[dim];
+        if ((orient & 1) != 0) n[dim] += size; else n[dim] -= size;
+        diff ^= (uint)n[dim];
+        if (diff >= (uint)WorldSize) { ro = n; rsize = size; return c; }
+        int scale = WorldScale - 1;
+        Cube nc = WorldRoot[OctaStep(n.X, n.Y, n.Z, scale)];
+        while ((size >> scale) == 0 && nc.Children != null)
+        {
+            scale--;
+            nc = nc.Children[OctaStep(n.X, n.Y, n.Z, scale)];
+        }
+        rsize = 1 << scale;
+        ro = new Vector3I(n.X & ~(rsize - 1), n.Y & ~(rsize - 1), n.Z & ~(rsize - 1));
+        return nc;
+    }
+
     /// <summary>octa.cpp:246 <c>lookupmaterial(v)</c>.</summary>
     public int LookupMaterial(Vector3 v)
     {

@@ -11,7 +11,7 @@ public static class CubeGeometry
 {
     // genfaceverts (octa.cpp): the corner bits for each orientation. Values are
     // 0/1 (the 0/8 scaling is applied by the caller). Indexed [orient][vert][axis].
-    private static readonly int[][][] FaceCorner =
+    public static readonly int[][][] FaceCorner =
     {
         new[] { new[] { 0, 1, 1 }, new[] { 0, 1, 0 }, new[] { 0, 0, 0 }, new[] { 0, 0, 1 } }, // -X
         new[] { new[] { 1, 1, 1 }, new[] { 1, 0, 1 }, new[] { 1, 0, 0 }, new[] { 1, 1, 0 } }, // +X

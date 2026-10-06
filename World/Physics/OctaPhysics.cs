@@ -33,6 +33,7 @@ public static class Phys
     public const ushort MatNoClip = 1 << 5, MatClip = 2 << 5, MatGameClip = 3 << 5;
     public const ushort MatFIndex = 3, MatFVolume = 7 << 2, MatFClip = 3 << 5;
     public const ushort MatAlpha = 4 << 8;
+    public const ushort MatDeath = 1 << 8;
 
     public static bool IsLiquid(ushort m) => (m & MatFVolume) == MatWater || (m & MatFVolume) == MatLava;
     public static bool IsClipped(ushort m) => (m & MatFVolume) == MatGlass;
@@ -55,6 +56,7 @@ public sealed class PhysEnt
     public int Move, Strafe;
     public bool Blocked;
     public int TimeInAir;
+    public bool Dead; // hit MAT_DEATH / fell out of the world (game::suicide)
     public float Yaw;
     public bool Jumping;
     public float MaxSpeed = 100.0f;
@@ -128,7 +130,7 @@ public sealed class OctaPhysics
 
         CollideWall = Vector3.Zero;
         float bestdist = -1e10f;
-        int visible = c.IsEntirelySolid() ? CubeVisibleMask(c, co, size) : 0xFF;
+        int visible = c.IsEntirelySolid() ? OctaVisible.CollisionVisibleMask(_octa, c, co, size) : 0xFF;
 
         bool Side(int side, float dist, float dotval, float margin, Vector3 normal)
         {
@@ -159,7 +161,7 @@ public sealed class OctaPhysics
     /// <summary>physics.cpp:843 <c>fuzzycollideplanes</c> — COLLIDE_ELLIPSE vs a deformed cube.</summary>
     private bool FuzzyCollidePlanes(PhysEnt d, Vector3 dir, float cutoff, Cube c, Vector3I co, int size)
     {
-        var p = OctaClipping.GetClipPlanes(c, co, size, CubeVisibleMask(c, co, size));
+        var p = OctaClipping.GetClipPlanes(_octa, c, co, size, OctaVisible.CollisionVisibleMask(_octa, c, co, size));
         if (Mathf.Abs(d.O.X - p.O.X) > p.R.X + d.Radius || Mathf.Abs(d.O.Y - p.O.Y) > p.R.Y + d.Radius ||
             d.O.Z + d.AboveEye < p.O.Z - p.R.Z || d.O.Z - d.EyeHeight > p.O.Z + p.R.Z) return false;
 
@@ -535,8 +537,10 @@ public sealed class OctaPhysics
     // ---- moveplayer ------------------------------------------------------
 
     /// <summary>physics.cpp:1681 <c>moveplayer</c>.</summary>
-    public void MovePlayer(PhysEnt pl, int moveres, int curtime, bool water = false, bool floating = false)
+    public void MovePlayer(PhysEnt pl, int moveres, int curtime, bool floating = false)
     {
+        int material = _octa.LookupMaterial(new Vector3(pl.O.X, pl.O.Y, pl.O.Z + (3 * pl.AboveEye - pl.EyeHeight) / 4));
+        bool water = Phys.IsLiquid((ushort)(material & Phys.MatFVolume));
         float secs = curtime / 1000f;
         if (!floating) Movement.ModifyGravity(pl, water, curtime);
         Movement.ModifyVelocity(pl, water, floating, curtime);
@@ -560,6 +564,9 @@ public sealed class OctaPhysics
             for (int i = 0; i < moveres; i++)
                 if (!Move(pl, ref d) && ++collisions < 5) i--; // discrete steps + sliding
         }
+
+        // physics.cpp:1740 — suicide on death material / out of the world (game logic).
+        if (pl.O.Z < 0 || (material & Phys.MatDeath) != 0) pl.Dead = true;
     }
 
     // ---- vector helpers (engine vec::project / projectxy) ----------------
