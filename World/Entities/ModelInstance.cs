@@ -61,6 +61,7 @@ public partial class ModelInstance : Node3D
             Position = ModelTranslation,
         };
         if (CopyMeshes(scene, holder) == 0) return false;
+        scene.Free(); // meshes are shared resources; drop the temporary glTF scene
 
         AddChild(holder);
         if (SkinMaterial != null) ApplyMaterial(holder, SkinMaterial);

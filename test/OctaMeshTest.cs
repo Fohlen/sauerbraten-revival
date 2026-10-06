@@ -9,7 +9,7 @@ namespace SauerbratenRevival.Tests;
 /// Exercises the Godot-native mesher: build an <see cref="ArrayMesh"/> from the
 /// runtime octree and check its structure is sound.
 /// </summary>
-public class OctaMeshTest : TestClass
+public class OctaMeshTest : GoTestBase
 {
     public OctaMeshTest(Node testScene) : base(testScene) { }
 

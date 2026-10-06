@@ -10,7 +10,7 @@ namespace SauerbratenRevival.Tests;
 /// Verifies ET_PARTICLES representation. church51 has 119: 8 fire+smoke (0),
 /// 8 fireballs (3, custom), 103 tape/streak (4, custom).
 /// </summary>
-public class EntityParticleTest : TestClass
+public class EntityParticleTest : GoTestBase
 {
     public EntityParticleTest(Node testScene) : base(testScene) { }
 
@@ -47,6 +47,7 @@ public class EntityParticleTest : TestClass
         TestAssert.Equal(8, byEffect.GetValueOrDefault(3), "fireballs");
         TestAssert.Equal(103, byEffect.GetValueOrDefault(4), "tape");
         TestAssert.Equal(111, custom, "custom-renderer effects (fireball + tape)");
+        root.Free();
     }
 
     [Test]
@@ -63,7 +64,7 @@ public class EntityParticleTest : TestClass
 
             if (entity.Attr1 == 0) TestAssert.True(node != null, "fire+smoke renders as particles");
             if (entity.Attr1 is 3 or 4) TestAssert.True(node == null, $"effect {entity.Attr1} needs a custom renderer");
-            if (node != null) rendered++;
+            if (node != null) { rendered++; node.Free(); }
         }
         TestAssert.Equal(8, rendered, "only fire+smoke renders on church51");
     }

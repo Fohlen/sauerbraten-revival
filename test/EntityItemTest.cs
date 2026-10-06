@@ -9,7 +9,7 @@ namespace SauerbratenRevival.Tests;
 /// church51 has 24 items: 8 health, 3+3 shells/bullets, 2+2 rockets/riflerounds,
 /// 2 grenades, and one each healthboost/greenarmour/yellowarmour/quaddamage.
 /// </summary>
-public class EntityItemTest : TestClass
+public class EntityItemTest : GoTestBase
 {
     public EntityItemTest(Node testScene) : base(testScene) { }
 
@@ -38,6 +38,7 @@ public class EntityItemTest : TestClass
 
         TestAssert.Equal(24, expected, "item entities");
         TestAssert.Equal(expected, built, "items built");
+        root.Free();
     }
 
     [Test]

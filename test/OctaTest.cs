@@ -9,7 +9,7 @@ namespace SauerbratenRevival.Tests;
 /// Ported from tools/worldtests/Program.cs — covers the octree primitives in
 /// <see cref="Octa"/> against src/engine/octa.h + octa.cpp.
 /// </summary>
-public class OctaTest : TestClass
+public class OctaTest : GoTestBase
 {
     public OctaTest(Node testScene) : base(testScene) { }
 

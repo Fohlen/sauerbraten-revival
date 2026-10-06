@@ -8,7 +8,7 @@ namespace SauerbratenRevival.Tests;
 /// Verifies entity light -> Godot light conversion (ET_LIGHT / ET_SPOTLIGHT).
 /// church51 has 119 lights and 8 spotlights (all 8 attach).
 /// </summary>
-public class EntityLightsTest : TestClass
+public class EntityLightsTest : GoTestBase
 {
     public EntityLightsTest(Node testScene) : base(testScene) { }
 
@@ -27,6 +27,7 @@ public class EntityLightsTest : TestClass
         TestAssert.Equal(111, omni, "omni lights");
         TestAssert.Equal(8, spot, "spot lights");
         TestAssert.Equal(119, omni + spot, "total entity lights");
+        root.Free();
     }
 
     [Test]
@@ -69,5 +70,6 @@ public class EntityLightsTest : TestClass
 
         TestAssert.Equal(119, checkedLights, "checked every light");
         TestAssert.Equal(8, spotAngleChecked, "checked every spotlight angle");
+        root.Free();
     }
 }

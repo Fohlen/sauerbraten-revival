@@ -12,7 +12,7 @@ namespace SauerbratenRevival.Tests;
 /// the engine's exported ground truth. The catalogue is produced by
 /// tools/refharness/patches/ogz-metadata.patch.
 /// </summary>
-public class OgzReaderTest : TestClass
+public class OgzReaderTest : GoTestBase
 {
     private static JsonElement Catalogue()
     {

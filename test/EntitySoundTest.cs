@@ -9,7 +9,7 @@ namespace SauerbratenRevival.Tests;
 /// Verifies ET_SOUND representation against bt_falls, which registers 3 map sounds
 /// (outdoors.ogg, waterfall.ogg, hum7.wav) and places 5 sound entities.
 /// </summary>
-public class EntitySoundTest : TestClass
+public class EntitySoundTest : GoTestBase
 {
     public EntitySoundTest(Node testScene) : base(testScene) { }
 
@@ -40,5 +40,6 @@ public class EntitySoundTest : TestClass
             count++;
         }
         TestAssert.Equal(5, count, "sound entities");
+        root.Free();
     }
 }

@@ -9,7 +9,7 @@ namespace SauerbratenRevival.Tests;
 /// Verifies the assimp-converted mapmodels parse as glTF. Skips if the
 /// model-import tool hasn't been run (output dir is git-ignored).
 /// </summary>
-public class MapModelLoadTest : TestClass
+public class MapModelLoadTest : GoTestBase
 {
     public MapModelLoadTest(Node testScene) : base(testScene) { }
 
@@ -41,6 +41,7 @@ public class MapModelLoadTest : TestClass
             var scene = document.GenerateScene(state);
             TestAssert.True(scene != null, $"{info.Name} scene generated");
             TestAssert.True(HasMesh(scene!), $"{info.Name} scene has a mesh");
+            scene!.Free();
             checkedModels++;
         }
         TestAssert.True(checkedModels > 0, "at least one converted model");

@@ -6,7 +6,7 @@ using SauerbratenRevival.World.Materials;
 namespace SauerbratenRevival.Tests;
 
 /// <summary>Verifies ET_MAPMODEL placement (path resolution + position/yaw).</summary>
-public class EntityMapModelTest : TestClass
+public class EntityMapModelTest : GoTestBase
 {
     public EntityMapModelTest(Node testScene) : base(testScene) { }
 
@@ -34,5 +34,6 @@ public class EntityMapModelTest : TestClass
 
         TestAssert.Equal(11, expected, "mapmodel entities");
         TestAssert.Equal(expected, built, "mapmodels built");
+        root.Free();
     }
 }

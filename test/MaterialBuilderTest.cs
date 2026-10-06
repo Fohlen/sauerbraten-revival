@@ -10,7 +10,7 @@ namespace SauerbratenRevival.Tests;
 /// Covers the material/UV pipeline: <c>calctexgen</c> must match octarender.cpp,
 /// and the catalogue must resolve to Godot materials with diffuse textures.
 /// </summary>
-public class MaterialBuilderTest : TestClass
+public class MaterialBuilderTest : GoTestBase
 {
     public MaterialBuilderTest(Node testScene) : base(testScene) { }
 

@@ -5,7 +5,7 @@ using SauerbratenRevival.World.Entities;
 namespace SauerbratenRevival.Tests;
 
 /// <summary>Verifies ET_PLAYERSTART → <see cref="SpawnPoint"/> conversion.</summary>
-public class EntityPlayerStartTest : TestClass
+public class EntityPlayerStartTest : GoTestBase
 {
     public EntityPlayerStartTest(Node testScene) : base(testScene) { }
 
@@ -36,5 +36,6 @@ public class EntityPlayerStartTest : TestClass
 
         TestAssert.Equal(32, expected, "playerstart entities");
         TestAssert.Equal(expected, built, "spawn points built");
+        root.Free();
     }
 }

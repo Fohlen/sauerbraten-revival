@@ -4,7 +4,7 @@ using Godot;
 namespace SauerbratenRevival.Tests;
 
 /// <summary>Smoke test that the GoDotTest runner is wired up.</summary>
-public class SanityTest : TestClass
+public class SanityTest : GoTestBase
 {
     public SanityTest(Node testScene) : base(testScene) { }
 

@@ -9,7 +9,7 @@ namespace SauerbratenRevival.Tests;
 /// Verifies trigger entity representation (ET_TELEPORT / ET_TELEDEST / ET_JUMPPAD).
 /// church51 has 8 teleports, 8 destinations, 5 jumppads; all teleports pair.
 /// </summary>
-public class EntityTriggerTest : TestClass
+public class EntityTriggerTest : GoTestBase
 {
     public EntityTriggerTest(Node testScene) : base(testScene) { }
 
@@ -29,6 +29,7 @@ public class EntityTriggerTest : TestClass
         TestAssert.Equal(8, teleports, "teleports");
         TestAssert.Equal(8, destinations, "teledests");
         TestAssert.Equal(5, jumpPads, "jumppads");
+        root.Free();
     }
 
     [Test]
@@ -68,6 +69,7 @@ public class EntityTriggerTest : TestClass
         }
 
         TestAssert.Equal(21, checkedNodes, "checked every trigger entity");
+        root.Free();
     }
 
     [Test]
@@ -84,5 +86,6 @@ public class EntityTriggerTest : TestClass
             paired++;
         }
         TestAssert.Equal(8, paired, "all teleports paired");
+        root.Free();
     }
 }
