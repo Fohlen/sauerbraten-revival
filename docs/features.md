@@ -90,8 +90,10 @@ See [ogz-import.md](ogz-import.md) for full architecture.
             (rendered), 8 fireball + 103 tape (deferred).
       - [ ] **TODO (custom shaders)** — particle effects 3 (fireball), 4 (tape), 5/6
             (meter), 7 (lightning), 32–35 (lens flare): defer until wanted.
-      - [ ] **Sounds** — `ET_SOUND` → `AudioStreamPlayer3D`; the catalogue already exports
-            resolved sounds, but church51 defines none, so a map with `mapsound` is needed.
+      - [x] **Sounds** — `ET_SOUND` → `SoundEmitter` (`AudioStreamPlayer3D`); paths resolved
+            from the catalogue's `sounds` (relative to `packages/sounds/`), .ogg/.wav loaded
+            from the dump, looping in the dev viewer. Verified on **bt_falls** (3 sounds,
+            5 emitters).
       - [ ] **envmap / monsters / mode entities** (`ET_ENVMAP`, flag, box, platform,
             elevator, …) — later.
 - [ ] Lightmap import / rebake (post-MVP).

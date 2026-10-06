@@ -20,11 +20,21 @@ public static class TestData
     public static readonly string CataloguePath =
         ProjectSettings.GlobalizePath("res://metadata-catalogue/church51.json");
 
-    public static OgzMap ReadMap()
+    public static string OgzPathFor(string map) =>
+        Path.Combine(ReferenceRoot, "packages", "base", map + ".ogz");
+
+    public static string CataloguePathFor(string map) =>
+        ProjectSettings.GlobalizePath($"res://metadata-catalogue/{map}.json");
+
+    public static OgzMap ReadMap() => ReadMapAt(OgzPath);
+
+    public static OgzMap ReadMap(string map) => ReadMapAt(OgzPathFor(map));
+
+    private static OgzMap ReadMapAt(string path)
     {
-        if (!File.Exists(OgzPath))
+        if (!File.Exists(path))
             throw new FileNotFoundException(
-                $"OGZ test map not found at '{OgzPath}'. Set SAUER_REF to the reference dump root.", OgzPath);
-        return OgzReader.Read(OgzPath);
+                $"OGZ test map not found at '{path}'. Set SAUER_REF to the reference dump root.", path);
+        return OgzReader.Read(path);
     }
 }

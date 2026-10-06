@@ -37,8 +37,12 @@ public sealed class MetadataCatalogue
     public readonly Dictionary<int, CatalogueSlot> Slots = new();
     public readonly Dictionary<int, CatalogueVSlot> VSlots = new();
     public readonly Dictionary<int, string> MapModels = new();
+    public readonly Dictionary<int, string> Sounds = new();
 
     public string? MapModelPath(int index) => MapModels.GetValueOrDefault(index);
+
+    /// <summary>Resolved map sound path (relative to <c>packages/sounds/</c>).</summary>
+    public string? SoundPath(int index) => Sounds.GetValueOrDefault(index);
 
     public static MetadataCatalogue Load(string path)
     {
@@ -98,6 +102,12 @@ public sealed class MetadataCatalogue
         {
             foreach (var m in mapModels.EnumerateArray())
                 catalogue.MapModels[m.GetProperty("index").GetInt32()] = m.GetProperty("path").GetString() ?? "";
+        }
+
+        if (root.TryGetProperty("sounds", out var sounds))
+        {
+            foreach (var s in sounds.EnumerateArray())
+                catalogue.Sounds[s.GetProperty("index").GetInt32()] = s.GetProperty("path").GetString() ?? "";
         }
 
         return catalogue;

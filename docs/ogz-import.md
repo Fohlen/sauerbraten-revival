@@ -237,7 +237,7 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 | ET_PLAYERSTART | 3 | SpawnPoint (custom) | ✅ `PlayerStartBuilder` |
 | ET_ENVMAP | 4 | ReflectionProbe | later |
 | ET_PARTICLES | 5 | GPUParticles3D | planned |
-| ET_SOUND | 6 | AudioStreamPlayer3D | planned (none on church51) |
+| ET_SOUND | 6 | AudioStreamPlayer3D | ✅ `SoundBuilder` (bt_falls) |
 | ET_SPOTLIGHT | 7 | SpotLight3D | ✅ (attaches to a light) |
 | ET_TELEPORT | 19 | Teleport (trigger node) | ✅ `TriggerBuilder` (representation) |
 | ET_TELEDEST | 20 | TeleDest (trigger node) | ✅ `TriggerBuilder` (representation) |
@@ -262,9 +262,12 @@ done **one slice at a time, each verified** (the `docs/features.md` roadmap mirr
    parent `armor/tris.md3` with a per-colour skin), plus `teleporter`/`carrot`/`checkpoint`.
 3. **Particles** — `ET_PARTICLES` → `GPUParticles3D`, using the engine's particle
    definitions (effect id in `attr1`).
-4. **Sounds** — `ET_SOUND` → `AudioStreamPlayer3D`. The metadata catalogue already exports
-   the resolved `sounds` list, but church51 registers none, so this slice needs a map whose
-   `.cfg` defines `mapsound` entries.
+4. **Sounds** ✅ — `SoundBuilder` maps `ET_SOUND` to `SoundEmitter`
+   (`AudioStreamPlayer3D`): `attr1` indexes the catalogue's `sounds` (relative to
+   `packages/sounds/`), `attr2` is the audible radius, `attr3` the full-volume radius.
+   .ogg/.wav are loaded from the dump and loop in the dev viewer. Verified on
+   **bt_falls** (outdoors/waterfall/hum7, 5 sound entities). Runtime playback control
+   is future game logic.
 
 Later: `ET_ENVMAP`, monsters, and the remaining mode entities (flag, box, barrel,
 platform, elevator, …).

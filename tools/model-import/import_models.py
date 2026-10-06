@@ -272,10 +272,19 @@ def main() -> int:
             print(f"MISS  {name}: no source geometry")
         manifest["models"][name] = record
 
+    # Merge into any existing manifest so converting map B doesn't drop map A's models.
     manifest_path = os.path.join(args.out, "models.json")
+    if os.path.isfile(manifest_path):
+        try:
+            with open(manifest_path) as f:
+                existing = json.load(f).get("models", {})
+            existing.update(manifest["models"])
+            manifest["models"] = existing
+        except (OSError, ValueError):
+            pass
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2)
-    print(f"wrote {manifest_path}")
+    print(f"wrote {manifest_path} ({len(manifest['models'])} models)")
     return 0
 
 
