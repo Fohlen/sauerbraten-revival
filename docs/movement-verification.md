@@ -112,9 +112,33 @@ hull needs (`OctaVisible.cs`: `genfacevecs`/`insideface`/`occludesface`/`visible
 
 External events are resynced from `*.events` (teleports, jump pads) plus a
 death/respawn detector (a >40 u one-step position jump — the engine's
-`game::suicide` on `MAT_DEATH`/`o.z<0`). The remaining misses are subtle
-**deformed-cube slope/step-up** interactions (`visibletris`/`classifyface` are
-ported, but the hull still differs in some step cases) — the next thing to chase.
+`game::suicide` on `MAT_DEATH`/`o.z<0`).
+
+**Clipplane ground truth (A3.3–A3.4).** The instrumented client also dumps
+`SAUER_TRACE.clips`: for every deformed cube the player's collision touches, its
+edge bytes, `material`, the **stored `c.visible`**, and per face the
+`classifyface`/`collideface`/`neighbourcube` result (`nsize`, neighbour edges,
+children) plus the generated planes. Diffing our port against it
+(`tools/refharness/patches/a2-trace.patch`, `test/A3ClipsProbe.cs`, 1479 cubes):
+
+| Check | Result |
+| --- | --- |
+| `neighbourcube` (`nsize`, neighbour edges, children) | **0 mismatches** |
+| `genclipplanes` bbox | **0 mismatches** |
+| `genclipplanes` planes | 1465/1479 (`nplanes` differs on 14) |
+| `genfacevecs` / `insideface` / `collapsedface` | **exact** — verified against a standalone C++ reproduction of the reference macros (`/tmp/gfv.cpp`) |
+| collision visibility mask (`c.visible`) | 1383/1479 differ |
+
+The mask diff is **cosmetic for movement**: overriding our `CollisionVisibleMask`
+with the engine's recorded `c.visible` (289 cubes) left both replays byte-identical.
+So the remaining A3 gap is **not** the collision hull or the visibility mask — it is
+in the `move()`/`trystepup()`/`slideagainst()` **decision logic**.
+
+**Remaining gap.** First miss is `session3` step 262: the player runs `+X` at
+118 u/s into `size=8` deformed cubes; the engine launches/slides to `PHYS_FALL`, ours
+`trystepup`s and keeps its speed. Next: instrument that step's `move()` branch
+decisions. The `MASK` diff can be closed separately by porting `setcubevisibility()`
++ the `neighbourdepth`/`neighbourstack` context (the only caller difference).
 
 ---
 

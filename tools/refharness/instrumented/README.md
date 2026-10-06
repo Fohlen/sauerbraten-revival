@@ -84,18 +84,19 @@ classification, so the port's `genclipplanes`/`classifyface`/`visibletris` can b
 diffed against the engine's exact output:
 
 ```
-C <step> <time> <co.x> <co.y> <co.z> <size> <visible> <nplanes> <o.x> <o.y> <o.z> <r.x> <r.y> <r.z> <12 edge bytes hex> <material>
-F <orient> <classifyface> <collideface> <nsize> <isSelf> <ro.x> <ro.y> <ro.z> <12 neighbour edge bytes hex>
+C <step> <time> <co.x> <co.y> <co.z> <size> <visible> <nplanes> <o.x> <o.y> <o.z> <r.x> <r.y> <r.z> <12 edge bytes hex> <material> <c.visible>
+F <orient> <classifyface> <collideface> <nsize> <isSelf> <ro.x> <ro.y> <ro.z> <12 neighbour edge bytes hex> <neighbour has children>
 P <i> <nx> <ny> <nz> <offset> <side>
 ```
 
 - `C` = cube header: origin/size, `p.visible`, `p.size`, the tight bbox `p.o`/`p.r`,
-  the cube's 12 edge bytes, and its `material`.
+  the cube's 12 edge bytes, its `material`, and the **stored** `c.visible`.
 - `F` = one line per orientation: `classifyface(c, orient, co, size)`,
   `collideface(c, orient)`, the `neighbourcube` result (`nsize`, whether it
-  returned the same cube, the neighbour origin `ro`), and the neighbour's 12 edge
-  bytes.
-- `P` = one line per collision plane.
+  returned the same cube, the neighbour origin `ro`), the neighbour's 12 edge
+  bytes, and whether the neighbour node has children (which selects the
+  `classifyface` branch).
+- `P` = one line per collision plane (including its `side`, i.e. orientation).
 
 > Captured traces live in `traces/`. The whole `tools/` tree is excluded from
 > Godot's importer via `tools/.gdignore`, so these `.csv` files are not imported

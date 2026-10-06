@@ -10,8 +10,8 @@ using SauerbratenRevival.World.Physics;
 namespace SauerbratenRevival.Tests;
 
 /// <summary>
-/// Diffs our genclipplanes/classifyface/collideface/neighbourcube against the
-/// engine's SAUER_TRACE.clips dump. Temporary diagnostic.
+/// Diffs our collision visibility mask / classifyface / neighbourcube / genclipplanes
+/// against the engine's SAUER_TRACE.clips dump. Temporary diagnostic.
 /// </summary>
 public class A3ClipsProbe : TestClass
 {
@@ -20,12 +20,12 @@ public class A3ClipsProbe : TestClass
     [Test]
     public void DiffClipPlanes()
     {
-        string path = Path.Combine(ProjectSettings.GlobalizePath("res://"), "tools/refharness/traces/session6.csv.clips");
+        string path = Path.Combine(ProjectSettings.GlobalizePath("res://"), "tools/refharness/traces/session7.csv.clips");
         if (!File.Exists(path)) { GD.Print("[clips] missing; skipping"); return; }
 
         var octa = TestData.ReadMap("church51").ToOcta();
         var lines = File.ReadAllLines(path);
-        int cubes = 0, visMis = 0, faceMis = 0, nsEdgesMis = 0, nsizeMis = 0, nplanesMis = 0, bboxMis = 0;
+        int cubes = 0, maskMis = 0, childMis = 0, nsizeMis = 0, edgesMis = 0, nplanesMis = 0, bboxMis = 0;
         var examples = new List<string>();
 
         for (int i = 0; i < lines.Length;)
@@ -35,63 +35,51 @@ public class A3ClipsProbe : TestClass
             int step = int.Parse(c1[1]);
             var co = new Vector3I(int.Parse(c1[3]), int.Parse(c1[4]), int.Parse(c1[5]));
             int size = int.Parse(c1[6]);
-            int expVisible = int.Parse(c1[7]);
             int expNPlanes = int.Parse(c1[8]);
             var expO = new Vector3(F(c1[9]), F(c1[10]), F(c1[11]));
             var expR = new Vector3(F(c1[12]), F(c1[13]), F(c1[14]));
             var c = CubeFromHex(c1[15]);
             c.Material = (ushort)int.Parse(c1[16]);
+            int expCVisible = int.Parse(c1[17]);
             i++;
 
-            var expFaces = new int[6]; var expCollide = new int[6]; var expNsize = new int[6];
-            var expNbEdges = new string[6];
+            var expChildren = new int[6]; var expNsize = new int[6]; var expNbEdges = new string[6];
             for (int f = 0; f < 6; f++)
             {
-                // F <orient> <classifyface> <collideface> <nsize> <isSelf> <ro> <nb edges hex>
                 var f1 = lines[i++].Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
                 int o = int.Parse(f1[1]);
-                expFaces[o] = int.Parse(f1[2]);
-                expCollide[o] = int.Parse(f1[3]);
                 expNsize[o] = int.Parse(f1[4]);
                 expNbEdges[o] = f1[9];
+                expChildren[o] = int.Parse(f1[10]);
             }
-            // The collidemask genclipplanes() actually used = p.visible (flat faces) | plane sides.
-            int expMask = expVisible;
-            for (int s = 0; s < expNPlanes; s++)
-            {
-                var p1 = lines[i++].Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
-                expMask |= 1 << int.Parse(p1[6]);
-            }
+            i += expNPlanes;
 
             cubes++;
             int ourMask = OctaVisible.CollisionVisibleMask(octa, c, co, size);
             var cp = OctaClipping.GetClipPlanes(octa, c, co, size, ourMask);
-            if (ourMask != expMask) { visMis++; if (examples.Count < 12) examples.Add($"{step} co={co} size={size} mat={c.Material}: mask ours {ourMask} exp {expMask} | cEdges={c1[15]}"); }
+            if (ourMask != (expCVisible & 0x3F))
+            {
+                maskMis++;
+                if (examples.Count < 12) examples.Add($"{step} co={co} size={size} mat={c.Material}: mask ours {ourMask} exp {expCVisible & 0x3F} (c.visible {expCVisible}) cEdges={c1[15]}");
+            }
             for (int f = 0; f < 6; f++)
             {
                 var nb = octa.NeighbourCube(c, f, co, size, out _, out int nsize);
-                if (nsize != expNsize[f] || HexOf(nb) != expNbEdges[f])
+                int oc = nb.Children != null ? 1 : 0;
+                if (nsize != expNsize[f]) nsizeMis++;
+                if (HexOf(nb) != expNbEdges[f]) edgesMis++;
+                if (oc != expChildren[f])
                 {
-                    nsEdgesMis++;
-                    if (examples.Count < 12) examples.Add($"{step} co={co} f{f}: nsize ours {nsize} exp {expNsize[f]} nbEdges ours {HexOf(nb)} exp {expNbEdges[f]}");
+                    childMis++;
+                    if (examples.Count < 12) examples.Add($"{step} co={co} f{f}: children ours {oc} exp {expChildren[f]} nsize ours {nsize} exp {expNsize[f]}");
                 }
             }
             if (cp.Size != expNPlanes) nplanesMis++;
             if ((cp.O - expO).Length() > 1e-3f || (cp.R - expR).Length() > 1e-3f) bboxMis++;
         }
 
-        GD.Print($"[clips] cubes={cubes}  MASK={visMis}  nsize/nbEdges={nsEdgesMis}  nplanes={nplanesMis} bbox={bboxMis}");
+        GD.Print($"[clips] cubes={cubes}  MASK={maskMis}  children={childMis}  nsize={nsizeMis}  nbEdges={edgesMis}  nplanes={nplanesMis}  bbox={bboxMis}");
         foreach (var e in examples) GD.Print($"[clips] {e}");
-    }
-
-    private void UnusedOld()
-    {
-        var expFaces = new int[6]; var expCollide = new int[6]; var expNsize = new int[6];
-        var expNbEdges = new string[6];
-        for (int f = 0; f < 6; f++)
-        {
-            expFaces[f] = expCollide[f] = expNsize[f] = 0; expNbEdges[f] = "";
-        }
     }
 
     private static float F(string s) => float.Parse(s, C);
@@ -116,27 +104,4 @@ public class A3ClipsProbe : TestClass
     }
 
     private static readonly CultureInfo C = CultureInfo.InvariantCulture;
-
-    [Test]
-    public void DebugOne()
-    {
-        var octa = TestData.ReadMap("church51").ToOcta();
-        var c = CubeFromHex("808080808080808040404040");
-        c.Material = 0;
-        var co = new Vector3I(2888, 1392, 3064);
-        int size = 8;
-        int f = 3, opp = 2;
-        var vo = new Vector3I(co.X & 0xFFF, co.Y & 0xFFF, co.Z & 0xFFF);
-        var nb = octa.NeighbourCube(c, f, co, size, out var no, out int nsize);
-        var no2 = new Vector3I(no.X & 0xFFF, no.Y & 0xFFF, no.Z & 0xFFF);
-        GD.Print($"[dbg2] c.collapsed({f})={OctaVisible.CollapsedFace(c, f)} c.touch({f})={c.TouchingFace(f)} " +
-                 $"nsize={nsize} nb.children={nb.Children != null} nb.empty={nb.IsEmpty()} nb.solid={nb.IsEntirelySolid()} " +
-                 $"nb.touch({opp})={nb.TouchingFace(opp)} nb.faceEdges={OctaVisible.FaceEdges(nb, opp):X8} " +
-                 $"nb.notTouch={OctaVisible.NotTouchingFace(nb, opp)} classify={OctaVisible.ClassifyFace(octa, c, f, co, size)}");
-        var cf = new Vector2I[4]; var of = new Vector2I[4];
-        int numc = OctaVisible.GenFaceVecs(c, f, vo, size, false, cf);
-        int numo = OctaVisible.GenFaceVecs(nb, opp, no2, nsize, false, of);
-        GD.Print($"[dbg2] cf({numc})={string.Join(" ", cf.Take(numc))}");
-        GD.Print($"[dbg2] of({numo})={string.Join(" ", of.Take(numo))} inside={OctaVisible.InsideFace(cf, numc, of, numo)}");
-    }
 }
