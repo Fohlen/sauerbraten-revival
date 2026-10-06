@@ -12,7 +12,7 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 public static class TriggerBuilder
 {
-    public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue = null)
+    public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue = null, ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "Triggers" };
         var teleports = new List<Teleport>();
@@ -36,6 +36,7 @@ public static class TriggerBuilder
                     };
                     teleports.Add(teleport);
                     root.AddChild(teleport);
+                    EntityMarker.Add(teleport, textures);
                     break;
 
                 case EntityType.TeleDest:
@@ -52,16 +53,19 @@ public static class TriggerBuilder
                         dest.Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1));
                     destinations.Add(dest);
                     root.AddChild(dest);
+                    EntityMarker.Add(dest, textures, arrow: true);
                     break;
 
                 case EntityType.JumpPad:
-                    root.AddChild(new JumpPad
+                    var pad = new JumpPad
                     {
                         Name = $"JumpPad_{i}",
                         Position = e.Position,
                         Push = Push(e),
                         Sound = e.Attr4,
-                    });
+                    };
+                    root.AddChild(pad);
+                    EntityMarker.Add(pad, textures);
                     break;
             }
         }

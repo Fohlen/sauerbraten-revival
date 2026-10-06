@@ -83,8 +83,12 @@ See [ogz-import.md](ogz-import.md) for full architecture.
       - [ ] **Items** — `ET_*` pickups (health/ammo/armour/quad); needs the engine's
             built-in entity models converted too (`health`/`boost`/`quad` md3, `ammo/*` obj,
             `armor/*` parent geometry).
-      - [ ] **Particles** — `ET_PARTICLES` → `GPUParticles3D` from the engine's particle
-            definitions (effect id in attr1).
+      - [ ] **Particles** — `ET_PARTICLES` represented from the engine's particle
+            definitions (effect id in attr1). Mostly billboard/static; a handful are real
+            `GPUParticles3D`, and the rest need custom shaders — see
+            [ogz-import.md](ogz-import.md#particles-et_particles) for the per-effect mapping.
+      - [ ] **TODO (custom shaders)** — particle effects 3 (fireball), 4 (tape), 5/6
+            (meter), 7 (lightning), 32–35 (lens flare): defer until wanted.
       - [ ] **Sounds** — `ET_SOUND` → `AudioStreamPlayer3D`; the catalogue already exports
             resolved sounds, but church51 defines none, so a map with `mapsound` is needed.
       - [ ] **envmap / monsters / mode entities** (`ET_ENVMAP`, flag, box, platform,

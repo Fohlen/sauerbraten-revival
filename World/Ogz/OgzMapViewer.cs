@@ -73,8 +73,8 @@ public partial class OgzMapViewer : Node3D
         var world = new Node3D { Name = "World", RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
         AddChild(world);
         world.AddChild(LightBuilder.Build(map));
-        world.AddChild(PlayerStartBuilder.Build(map));
-        world.AddChild(TriggerBuilder.Build(map, catalogue));
+        world.AddChild(PlayerStartBuilder.Build(map, textures));
+        world.AddChild(TriggerBuilder.Build(map, catalogue, textures));
         var mapModels = MapModelBuilder.Build(map, catalogue, modelCatalog, textures);
         world.AddChild(mapModels);
         int loadedModels = 0, totalModels = 0;

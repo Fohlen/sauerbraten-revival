@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 
 namespace SauerbratenRevival.World.Entities;
@@ -10,7 +11,7 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 public static class PlayerStartBuilder
 {
-    public static Node3D Build(OgzMap map)
+    public static Node3D Build(OgzMap map, ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "PlayerStarts" };
         for (int i = 0; i < map.Entities.Count; i++)
@@ -31,6 +32,7 @@ public static class PlayerStartBuilder
                 spawn.Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1)); // Z is up in Sauer space
 
             root.AddChild(spawn);
+            EntityMarker.Add(spawn, textures, arrow: true);
         }
         return root;
     }

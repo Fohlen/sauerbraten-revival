@@ -267,6 +267,46 @@ done **one slice at a time, each verified** (the `docs/features.md` roadmap mirr
 Later: `ET_ENVMAP`, monsters, and the remaining mode entities (flag, box, barrel,
 platform, elevator, …).
 
+### Edit-mode entity markers
+
+In edit mode Cube2 spawns a blue `PART_EDIT` splash at every entity
+(`renderparticles.cpp`). We mirror it with a **static blue billboard**
+(`World/Entities/EntityMarker.cs`, texture `packages/particles/base.png`, colour
+`0x3232FF`), plus a small facing arrow for directional entities. Markers are added
+for **playerstarts** and **triggers** (`teleport`/`teledest`/`jumppad`), and will be
+added for **items**. They are **not** added to **mapmodels** (they render their real
+model) or **lights** (they have their own gizmos). The whole layer is in the
+`entity_markers` group so a future game/edit-mode split can hide it via
+`EntityMarker.SetVisible`.
+
+This is a gizmo, deliberately **separate from the particle system** below.
+
+### Particles (`ET_PARTICLES`)
+
+`makeparticles` (`renderparticles.cpp:1368`) switches on `attr1`. Most effects are
+predictable and map to billboard particles/static markers; a few are genuine
+emitters (`GPUParticles3D`), and a few need custom shaders — those are left as
+per-effect TODOs rather than ported now:
+
+| attr1 | effect | mapping |
+| --- | --- | --- |
+| 0 | fire + smoke | `GPUParticles3D` (flame + smoke) |
+| 1 | steam vent | `GPUParticles3D` |
+| 2 | water fountain | `GPUParticles3D` |
+| 3 | fire ball | custom (explosion) — **TODO** |
+| 4 | tape / streak | custom (`PT_TAPE`) — **TODO** |
+| 5, 6 | meter / metervs | custom — **TODO** |
+| 7 | lightning | custom renderer — **TODO** |
+| 9 | steam | `GPUParticles3D` |
+| 10 | water | `GPUParticles3D` |
+| 11 | flame | `GPUParticles3D` |
+| 12 | smoke plume | `GPUParticles3D` |
+| 13 | snow | `GPUParticles3D` |
+| 32–35 | lens flares | custom (`lensflare`) — **TODO** |
+
+None of this is implemented yet; the billboard `PT_PART` effects are the natural
+first step, and no billboard can represent tape/text/icon/lightning/meter/flare.
+
 ---
 
 ## File locations
