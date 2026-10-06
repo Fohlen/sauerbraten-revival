@@ -52,6 +52,7 @@ See [rendering.md](rendering.md) for the ArrayMesh + RenderingServer approach.
 - [x] Material manifest: diffuse + tint (`MaterialBuilder`, `calctexgen`).
 - [x] Normal maps.
 - [x] Glow (emission) maps.
+- [x] Material surfaces (water/lava/glass) — `MaterialMesher`, engine-default textures.
 - [ ] **TODO (deferred): Specular maps** — Sauer's spec is packed (into normal/diffuse
       alpha) and uses a non-PBR model; approximate via roughness first, exact needs a
       ported shader. See [rendering.md](rendering.md).

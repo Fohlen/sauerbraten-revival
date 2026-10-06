@@ -231,7 +231,11 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
 - **Normal + glow** — `MaterialBuilder` also sets `NormalTexture` and
   `EmissionTexture`/`Emission` from the catalogue's `normal`/`glow` layers and the
   vslot `glowcolor`.
+- **Material surfaces** — `MaterialMesher` emits the empty-space water/lava/glass
+  boundary faces (a simplified `material.cpp genmatsurfs`, no face merging) as a
+  separate mesh; textures come from `MaterialTextures` (the engine defaults, since
+  the catalogue doesn't export `matwater`/`matlava` yet).
 - **TODO (deferred)** — **specular maps** (packed/non-PBR), **alpha/transparency**
-  (`alphafront`/`alphaback`, `LAYER_*`), blended layers, material (water/lava)
-  surfaces, exact `visibletris` culling, face merges, T-joints, grass, lightmaps,
-  and incremental dirty-chunk rebuilds.
+  (`alphafront`/`alphaback`, `LAYER_*`), blended layers, exact `visibletris`
+  culling, face merges, T-joints, grass, lightmaps, and incremental dirty-chunk
+  rebuilds.

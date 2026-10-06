@@ -89,6 +89,7 @@ def find_model(models_root: str, name: str) -> tuple[str | None, dict]:
                 source = os.path.normpath(os.path.join(load_dir, params["source"]))
                 if os.path.isfile(source):
                     _merge_cfg_params(params, d)
+                    params["cfg_dir"] = d
                     return source, params
         for conv, cfg_name in (("tris.obj", "obj.cfg"), ("tris.md2", "md2.cfg"), ("tris.md3", "md3.cfg"),
                                ("tris.md5mesh", "md5.cfg"), ("tris.iqm", "iqm.cfg")):
@@ -96,12 +97,15 @@ def find_model(models_root: str, name: str) -> tuple[str | None, dict]:
             if os.path.isfile(source):
                 params = parse_cfg(os.path.join(d, cfg_name))
                 _merge_cfg_params(params, d)
+                params["cfg_dir"] = d
                 return source, params
 
     for ext in (".obj", ".md3", ".md5mesh", ".iqm", ".md2"):
         source = base + ext
         if os.path.isfile(source):
-            return source, parse_cfg(base + ".cfg")
+            params = parse_cfg(base + ".cfg")
+            params["cfg_dir"] = os.path.dirname(source)
+            return source, params
 
     return None, {}
 
@@ -254,7 +258,7 @@ def main() -> int:
             "bump": None,
         }
         if source and os.path.isfile(source):
-            cfg_dir = os.path.dirname(source)
+            cfg_dir = params.get("cfg_dir") or os.path.dirname(source)
             name_dir = os.path.join(models_root, name)
             record["source"] = os.path.relpath(source, packages).replace(os.sep, "/")
             skin = resolve_skin(params.get("skin"), cfg_dir, name_dir)

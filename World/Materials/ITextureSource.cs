@@ -16,6 +16,50 @@ public interface ITextureSource
     Image? GetImage(string path);
 }
 
+/// <summary>Loads textures from Godot-imported Resources under <c>res://assets/textures/</c> (see tools/texture-import).</summary>
+public sealed class ResourceTextureSource : ITextureSource
+{
+    private readonly string _root;
+    private readonly Dictionary<string, Texture2D?> _textures = new();
+
+    public ResourceTextureSource(string root = "res://assets/textures") => _root = root.TrimEnd('/');
+
+    public Texture2D? Get(string path)
+    {
+        if (_textures.TryGetValue(path, out var texture)) return texture;
+        string res = $"{_root}/{path}";
+        texture = ResourceLoader.Exists(res) ? ResourceLoader.Load<Texture2D>(res) : null;
+        _textures[path] = texture;
+        return texture;
+    }
+
+    public Vector2I Size(string path) => Get(path) is { } texture ? (Vector2I)texture.GetSize() : Vector2I.Zero;
+
+    public Image? GetImage(string path) => Get(path)?.GetImage();
+}
+
+/// <summary>Reads from the project's imported textures first, falling back to the dump.</summary>
+public sealed class FallbackTextureSource : ITextureSource
+{
+    private readonly ITextureSource _primary, _fallback;
+
+    public FallbackTextureSource(ITextureSource primary, ITextureSource fallback)
+    {
+        _primary = primary;
+        _fallback = fallback;
+    }
+
+    public Texture2D? Get(string path) => _primary.Get(path) ?? _fallback.Get(path);
+
+    public Vector2I Size(string path)
+    {
+        Vector2I size = _primary.Size(path);
+        return size != Vector2I.Zero ? size : _fallback.Size(path);
+    }
+
+    public Image? GetImage(string path) => _primary.GetImage(path) ?? _fallback.GetImage(path);
+}
+
 /// <summary>Loads textures on demand from the reference dump's <c>packages/</c> directory.</summary>
 public sealed class DumpTextureSource : ITextureSource
 {

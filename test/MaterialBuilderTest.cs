@@ -44,6 +44,22 @@ public class MaterialBuilderTest : GoTestBase
     }
 
     [Test]
+    public void LoadsImportedTextures()
+    {
+        if (!ResourceLoader.Exists("res://assets/textures/textures/waterfall.jpg"))
+        {
+            GD.Print("[textures] not imported (run tools/texture-import); skipping");
+            return;
+        }
+
+        var source = new ResourceTextureSource();
+        var texture = source.Get("textures/waterfall.jpg");
+        TestAssert.True(texture != null, "imported waterfall texture loads");
+        TestAssert.True(source.Size("textures/waterfall.jpg").X > 0, "imported texture has a size");
+        TestAssert.True(source.GetImage("textures/waterfall.jpg") != null, "imported texture exposes an image");
+    }
+
+    [Test]
     public void BuildsMaterialsFromCatalogue()
     {
         var catalogue = MetadataCatalogue.Load(TestData.CataloguePath);

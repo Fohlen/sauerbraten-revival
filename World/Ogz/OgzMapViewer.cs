@@ -57,7 +57,9 @@ public partial class OgzMapViewer : Node3D
 
         // Materials: committed catalogue for this map + textures loaded from the dump.
         string mapName = Path.GetFileNameWithoutExtension(path);
-        var textures = new DumpTextureSource(ReferenceRoot);
+        // Prefer the project's imported textures (tools/texture-import), falling back
+        // to reading the reference dump at runtime.
+        ITextureSource textures = new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource(ReferenceRoot));
         var catalogue = MetadataCatalogue.TryLoadForMap(mapName);
         MaterialSet? materials = catalogue != null ? MaterialBuilder.Build(catalogue, textures) : null;
         if (materials == null) GD.PushWarning($"[viewer] no metadata catalogue for '{mapName}'; showing untextured geometry.");
@@ -87,6 +89,19 @@ public partial class OgzMapViewer : Node3D
             if (child is MapModel { ModelLoaded: true }) loadedModels++;
         }
         GD.Print($"[viewer] mapmodels: {loadedModels}/{totalModels} loaded");
+
+        // Water/lava/glass material surfaces (empty-space materials).
+        var materialSurfaces = MaterialMesher.Build(octa);
+        GD.Print($"[viewer] material surfaces: {materialSurfaces.Count}");
+        foreach (var surface in materialSurfaces)
+        {
+            world.AddChild(new MeshInstance3D
+            {
+                Name = $"Material_{surface.Material}",
+                Mesh = surface.Mesh,
+                MaterialOverride = MaterialTextures.Create(surface.Material, textures),
+            });
+        }
 
         // Fallback so geometry is still visible if there is no catalogue.
         StandardMaterial3D? fallback = materials == null

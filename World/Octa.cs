@@ -208,6 +208,10 @@ public sealed class Octa
     public const ushort MAT_DEATH    = 1 << 8;
     public const ushort MAT_ALPHA    = 4 << 8;
 
+    // iengine.h material masks.
+    public const ushort MATF_INDEX  = 3;
+    public const ushort MATF_VOLUME = 7 << 2;
+
     public const int MAXFACEVERTS = 15;
     public const int LAYER_TOP = 1 << 5;
     public const int LAYER_BOTTOM = 1 << 6;

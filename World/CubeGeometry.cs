@@ -48,6 +48,16 @@ public static class CubeGeometry
     /// <summary>octa.h: <c>edgeget(edge, coord)</c>.</summary>
     public static int EdgeGet(byte edge, int coord) => coord != 0 ? (edge >> 4) & 0xF : edge & 0xF;
 
+    /// <summary>The four corners (0/8 units) of an axis-aligned face (for material surfaces).</summary>
+    public static void SolidFaceVerts(int orient, Span<Vector3I> v)
+    {
+        for (int n = 0; n < 4; n++)
+        {
+            int x = FaceCorner[orient][n][0], y = FaceCorner[orient][n][1], z = FaceCorner[orient][n][2];
+            v[n] = new Vector3I(x * 8, y * 8, z * 8);
+        }
+    }
+
     /// <summary>octa.cpp:764 <c>faceconvexity(v)</c>: 1 convex, -1 concave, 0 flat.</summary>
     public static int FaceConvexity(ReadOnlySpan<Vector3I> v)
     {
