@@ -42,6 +42,7 @@ Work proceeds in **stages**.
 | [movement-physics.md](docs/movement-physics.md) | Reverse-engineered original movement/physics (SVN r6889), with source citations. |
 | [movement-verification.md](docs/movement-verification.md) | Plan A: how we prove movement fidelity against the original (A1–A4). |
 | [dependencies.md](docs/dependencies.md) | Required toolchain (Godot .NET, .NET SDK, Python, assimp, uv, SDL2, …) and why. |
+| [known-bugs.md](docs/known-bugs.md) | Known divergences from the original (waterfall double-draw, waterfall shader) and engine rules to preserve. |
 
 ## Repository layout
 

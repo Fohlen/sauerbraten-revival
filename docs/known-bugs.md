@@ -1,0 +1,90 @@
+# Known bugs & fidelity gaps
+
+A running list of behaviours we **know** diverge from Sauerbraten (SVN r6889),
+with the engine reference and the intended fix. Names mirror engine tokens so
+entries stay greppable against the C++ source. Add an entry whenever we find a
+divergence we are not fixing right now.
+
+---
+
+## Water & waterfalls
+
+### 1. Waterfall drawn twice, offset by one cube (the "−1 X" artifact)
+
+**Symptom.** In `bt_falls` the waterfalls render, but ~1 cube shifted in −X; the
+top waterfall pokes into the room although the original keeps it outside.
+
+**Cause.** `bt_falls`' water cubes are two different things, and both our meshers
+handle both:
+
+- **Solid cubes flagged with a material** — the waterfalls. In the map they read
+  `faces = 80808080,80808080,80808080`, `material = MAT_WATER` (i.e.
+  `IsEntirelySolid() == true`). The engine's `visibleface()`
+  (`engine/octa.cpp:1013`) **hides** these from the material path
+  (`faceedges(c,orient)==F_SOLID && touchingface(c,orient)`); they are solid
+  geometry (`classifyface`, `octa.cpp:1059`) drawn with the waterfall texture.
+- **Purely-liquid cubes** — the lake surface, a material volume that is *not*
+  fully solid. The engine's `classifyface()` drops their geometry via
+  `collapsedface()` (`octa.cpp:972`), and `genmatsurfs()`
+  (`engine/material.cpp:214`) draws them through the material path.
+
+Our meshers ignore the distinction:
+
+- `OctaMesher` meshes every `!IsEmpty()` cube, so it draws the purely-liquid cubes
+  whose engine geometry is collapsed.
+- `MaterialMesher` meshes every `(material & MATF_VOLUME) != MAT_AIR` cube, so it
+  draws the fully-solid waterfall cubes too.
+
+Every water cube is therefore drawn **twice** — once as a flat full face
+(`CubeGeometry.SolidFaceVerts`) and once edge-shaped (`Cube.GenFaceVerts`) — and
+the two surfaces disagree by up to a cube. That overlap is the −1 cube offset.
+
+**Intended fix** (developed, then reverted in `8b306cc`; re-apply when we return
+to water):
+
+- `MaterialMesher`: skip a face when its own cube is fully solid —
+  `if (face.Cube.IsEntirelySolid()) return false;` (the `visibleface()` early-out).
+- `OctaMesher` include:
+  `!c.IsEmpty() && ((c.Material & MATF_VOLUME) == 0 || c.IsEntirelySolid())` —
+  drop purely-liquid cubes, which `MaterialMesher` draws instead.
+
+Evidence from the experiment: bt_falls' material mesh went 996 → 335 faces (all
+horizontal — only the lake), church51's solid mesh 686392 → 622570 triangles.
+
+### 2. Waterfalls use a static texture instead of the waterfall shader
+
+The engine renders waterfalls with dedicated animated geometry and shaders
+(`engine/material.cpp:87 renderwaterfall`, the `MAT_WATER` case at
+`material.cpp:685`, `engine/water.cpp` `renderwater`), including:
+
+- the `ends` top/bottom "wave" extension (`WATER_OFFSET`,
+  `WATER_AMPLITUDE`, computed in `material.cpp:367-410`),
+- the scrolling `waterfalltexgen` UVs (`material.cpp:771`), and
+- `waterfallenv` / `waterfallrefract` variants.
+
+We draw the solid waterfall cubes with their **static** vslot texture (chunk
+mesher) and the liquid surfaces with the generic scrolling water shader
+(`MaterialTextures`). A faithful waterfall needs per-surface `ends` detection,
+the animated shader + wave extension, and (optionally) the `vertwater`
+vertex displacement.
+
+---
+
+## Correctness notes (engine rules worth preserving)
+
+Ported faithfully already — keep these in mind when touching the meshers; several
+were the source of the waterfall confusion:
+
+- **`visibleface()`** (`octa.cpp:1013`): a material face is hidden when its own
+  cube is fully solid, when its neighbour is solid or the same volume, or when the
+  neighbour is outside the world — `neighbourcube()` (`octa.cpp:263`) returns the
+  same cube for out-of-world, so the engine never draws world-boundary faces.
+- **`classifyface()` / `collapsedface()`** (`octa.cpp:1059`, `octa.cpp:972`): a
+  cube with no solid geometry contributes no chunk geometry.
+- **`genfacevecs(solid = true)`** (`octa.cpp:827`): material surfaces are
+  axis-aligned **full** cube faces; the liquid level affects only the solid
+  geometry path (`genfaceverts`, edge-aware).
+- **`OctaStep`** (`octa.h:269`): bit0 = X, bit1 = Y, bit2 = Z. The OGZ geometry
+  checksum (`World/Ogz/OgzGeometry.cs`) walks cubes in index order and does **not**
+  hash coordinates, so an axis/child-order mistake would pass the checksum — worth
+  a coordinate-aware assertion if geometry ever looks shifted.

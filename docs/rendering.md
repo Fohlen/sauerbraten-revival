@@ -248,4 +248,4 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
 - **TODO (deferred)** — **specular maps** (packed/non-PBR), **alpha/transparency**
   (`alphafront`/`alphaback`, `LAYER_*`), blended layers, exact `visibletris`
   culling, face merges, T-joints, grass, lightmaps, and incremental dirty-chunk
-  rebuilds.
+  rebuilds. Tracked divergences live in [known-bugs.md](known-bugs.md).
