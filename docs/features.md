@@ -77,8 +77,9 @@ See [ogz-import.md](ogz-import.md) for full architecture.
 - [x] **Playerstarts** — `ET_PLAYERSTART` → `SpawnPoint` (`Marker3D` with `Team`/`Yaw`; facing from `vecfromyawpitch`).
 - [x] **Mapmodels** — `ET_MAPMODEL` → `MapModel`; source OBJ/MD2/MD3/MD5/IQM converted to glTF with **assimp** (`tools/model-import/import_models.py` → git-ignored `assets/models/`, imported by Godot), with `mdlscale`/`mdltrans`/skin applied. Note `animmodel::loaded()` scales by `1/4`.
 - [ ] **Entity port — remaining slices** (one at a time, each verified):
-      - [ ] **Triggers** — `ET_TELEPORT`/`ET_TELEDEST` (index pairing + model) and
-            `ET_JUMPPAD` (push vector + sound). Invisible/logic on church51, so tests.
+      - [x] **Triggers** — `ET_TELEPORT`/`ET_TELEDEST` (index pairing + resolved model path)
+            and `ET_JUMPPAD` (push vector + sound) represented as nodes (`TriggerBuilder`).
+            Behaviour not ported (needs collision + game logic).
       - [ ] **Items** — `ET_*` pickups (health/ammo/armour/quad); needs the engine's
             built-in entity models converted too (`health`/`boost`/`quad` md3, `ammo/*` obj,
             `armor/*` parent geometry).

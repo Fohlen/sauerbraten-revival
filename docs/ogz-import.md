@@ -239,9 +239,9 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 | ET_PARTICLES | 5 | GPUParticles3D | planned |
 | ET_SOUND | 6 | AudioStreamPlayer3D | planned (none on church51) |
 | ET_SPOTLIGHT | 7 | SpotLight3D | ✅ (attaches to a light) |
-| ET_TELEPORT | 19 | Teleport (trigger node) | planned |
-| ET_TELEDEST | 20 | TeleDest (trigger node) | planned |
-| ET_JUMPPAD | 23 | JumpPad (trigger node) | planned |
+| ET_TELEPORT | 19 | Teleport (trigger node) | ✅ `TriggerBuilder` (representation) |
+| ET_TELEDEST | 20 | TeleDest (trigger node) | ✅ `TriggerBuilder` (representation) |
+| ET_JUMPPAD | 23 | JumpPad (trigger node) | ✅ `TriggerBuilder` (representation) |
 | Game-specific items | 8–18, 22, 24–30 | Item / mode nodes | items planned, rest later |
 
 ### Entity porting status
@@ -249,12 +249,12 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 Already ported: lights + spotlights, playerstarts, mapmodels. The remainder is being
 done **one slice at a time, each verified** (the `docs/features.md` roadmap mirrors this):
 
-1. **Triggers** — `ET_TELEPORT` (`attr1` = destination index, `attr2` = model: `>0` a
-   mapmodel, `0` the built-in teleporter, `<0` invisible; `attr3` = tag) plus
-   `ET_TELEDEST` (`attr2` = index, `attr1` = yaw), and `ET_JUMPPAD` (`attr3/attr2/attr1` =
-   x/y/z push, `attr4` = sound). On church51 these are all invisible/logic entities, so
-   they are verified by tests; the runtime teleport/jump behaviour needs collision + game
-   logic, which isn't ported yet.
+1. **Triggers** ✅ — `TriggerBuilder` represents `ET_TELEPORT` (`attr1` = destination tag,
+   `attr2` = model: `>0` a mapmodel, `0` the built-in teleporter, `<0` invisible; `attr3` =
+   can_teleport hook, `attr4` = sound), `ET_TELEDEST` (`attr2` = tag, `attr1` = yaw,
+   `attr3>0` = keep velocity) and `ET_JUMPPAD` (`(sbyte)attr3*10, (sbyte)attr2*10,
+   attr1*12.5`; `attr4` = sound), and records the teleport → destination pairing. The
+   runtime behaviour still needs collision + game logic, which isn't ported yet.
 2. **Items** — the `ET_*` pickups. Visible, so they need the engine's **built-in** entity
    models converted alongside the catalogue mapmodels: `health`/`boost`/`quad` (md3),
    `ammo/*` (obj), and `armor/*` (geometry shared from the parent `armor/tris.md3`).
