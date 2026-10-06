@@ -47,7 +47,19 @@ public sealed class OctaMesher
         if (chunkSize <= 0) chunkSize = 512;
 
         var builders = new Dictionary<Vector3I, ArrayMeshBuilder>();
-        Walk(_octa.WorldRoot, Vector3I.Zero, _octa.WorldSize >> 1, chunkSize, builders);
+        OctaFaceWalker.Walk(_octa,
+            include: c => !c.IsEmpty(),
+            hideSameMaterial: false,
+            emit: face =>
+            {
+                var key = new Vector3I(face.Co.X / chunkSize, face.Co.Y / chunkSize, face.Co.Z / chunkSize);
+                if (!builders.TryGetValue(key, out var builder))
+                {
+                    builder = new ArrayMeshBuilder();
+                    builders[key] = builder;
+                }
+                EmitFace(face, key * chunkSize, builder);
+            });
 
         var result = new ChunkedWorldMesh { ChunkSize = chunkSize };
         var keys = new List<Vector3I>(builders.Keys);
@@ -72,98 +84,28 @@ public sealed class OctaMesher
         return c != 0 ? c : a.X.CompareTo(b.X);
     }
 
-    private void Walk(Cube[] cubes, Vector3I co, int size, int chunkSize, Dictionary<Vector3I, ArrayMeshBuilder> chunks)
-    {
-        for (int i = 0; i < 8; i++)
-        {
-            var childCo = new Vector3I(
-                co.X + ((i & 1) >> 0) * size,
-                co.Y + ((i & 2) >> 1) * size,
-                co.Z + ((i & 4) >> 2) * size);
-            var c = cubes[i];
-
-            if (c.Children != null)
-            {
-                Walk(c.Children, childCo, size >> 1, chunkSize, chunks);
-                continue;
-            }
-
-            if (c.IsEmpty()) continue; // TODO: sky faces and material (water/lava) surfaces
-
-            for (int orient = 0; orient < 6; orient++)
-            {
-                if (!FaceVisible(c, orient, childCo, size)) continue;
-
-                var key = new Vector3I(childCo.X / chunkSize, childCo.Y / chunkSize, childCo.Z / chunkSize);
-                if (!chunks.TryGetValue(key, out var builder))
-                {
-                    builder = new ArrayMeshBuilder();
-                    chunks[key] = builder;
-                }
-                EmitFace(c, orient, childCo, key * chunkSize, size, builder);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Conservative face cull: hide a face only when the neighbour leaf is a solid
-    /// cube at least as large as this face (so it covers it entirely). Anything
-    /// finer or empty is drawn, which can overdraw but never leaves a hole.
-    /// </summary>
-    private bool FaceVisible(Cube c, int orient, Vector3I co, int size)
-    {
-        int dim = orient >> 1;
-        int dir = (orient & 1) == 0 ? -1 : 1;
-        int ncoord = co[dim] + dir * size;
-        if (ncoord < 0 || ncoord >= _octa.WorldSize) return true; // world boundary
-
-        var centre = co;
-        centre[dim] = ncoord + size / 2;
-        centre[(dim + 1) % 3] = co[(dim + 1) % 3] + size / 2;
-        centre[(dim + 2) % 3] = co[(dim + 2) % 3] + size / 2;
-
-        var nb = _octa.LeafCube(centre, out int nsize);
-        return nb == null || !(nb.IsEntirelySolid() && nsize >= size);
-    }
-
-    private void EmitFace(Cube c, int orient, Vector3I absCo, Vector3I origin, int size, ArrayMeshBuilder builder)
+    private void EmitFace(in CubeFace face, Vector3I origin, ArrayMeshBuilder builder)
     {
         System.Span<Vector3I> v = stackalloc Vector3I[4];
-        c.GenFaceVerts(orient, v);
+        face.Cube.GenFaceVerts(face.Orient, v);
 
-        int order = c.FaceConvexity(orient) < 0 ? 1 : 0;
-        Vector3 a0 = ToWorld(v[(order + 0) & 3], absCo, size);
-        Vector3 a1 = ToWorld(v[(order + 1) & 3], absCo, size);
-        Vector3 a2 = ToWorld(v[(order + 2) & 3], absCo, size);
-        Vector3 a3 = ToWorld(v[(order + 3) & 3], absCo, size);
-        var localOrigin = new Vector3(origin.X, origin.Y, origin.Z);
-        Vector3 p0 = a0 - localOrigin, p1 = a1 - localOrigin, p2 = a2 - localOrigin, p3 = a3 - localOrigin;
+        int order = face.Cube.FaceConvexity(face.Orient) < 0 ? 1 : 0;
+        // Absolute positions drive the UVs (the texture mapping tiles in world
+        // space); the emitted vertices are chunk-local.
+        Vector3 a0 = MeshFace.ToWorld(v[(order + 0) & 3], face.Co, face.Size);
+        Vector3 a1 = MeshFace.ToWorld(v[(order + 1) & 3], face.Co, face.Size);
+        Vector3 a2 = MeshFace.ToWorld(v[(order + 2) & 3], face.Co, face.Size);
+        Vector3 a3 = MeshFace.ToWorld(v[(order + 3) & 3], face.Co, face.Size);
+        var local = new Vector3(origin.X, origin.Y, origin.Z);
 
-        Vector3 normal = (p1 - p0).Cross(p2 - p0);
-        normal = normal.LengthSquared() < 1e-9f ? AxisNormal(orient) : normal.Normalized();
-
-        int vslot = c.Texture[orient];
-        int dim = orient >> 1;
+        int vslot = face.Cube.Texture[face.Orient];
+        int dim = face.Orient >> 1;
         Vector2 uv0 = _materials?.Uv(vslot, dim, a0) ?? Vector2.Zero;
         Vector2 uv1 = _materials?.Uv(vslot, dim, a1) ?? Vector2.Zero;
         Vector2 uv2 = _materials?.Uv(vslot, dim, a2) ?? Vector2.Zero;
         Vector2 uv3 = _materials?.Uv(vslot, dim, a3) ?? Vector2.Zero;
 
-        builder.AddQuad(vslot, p0, p1, p2, p3, uv0, uv1, uv2, uv3, normal);
+        MeshFace.Quad(builder, vslot, face.Orient,
+            a0 - local, a1 - local, a2 - local, a3 - local, uv0, uv1, uv2, uv3);
     }
-
-    private static Vector3 ToWorld(Vector3I v, Vector3I co, int size) => new(
-        co.X + v.X * (size / 8.0f),
-        co.Y + v.Y * (size / 8.0f),
-        co.Z + v.Z * (size / 8.0f));
-
-    private static Vector3 AxisNormal(int orient) => orient switch
-    {
-        0 => new Vector3(-1, 0, 0),
-        1 => new Vector3(1, 0, 0),
-        2 => new Vector3(0, -1, 0),
-        3 => new Vector3(0, 1, 0),
-        4 => new Vector3(0, 0, -1),
-        _ => new Vector3(0, 0, 1),
-    };
 }

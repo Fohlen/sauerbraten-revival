@@ -62,10 +62,16 @@ public static class CubeGeometry
     public static int FaceConvexity(ReadOnlySpan<Vector3I> v)
     {
         Vector3I a = v[1] - v[0], b = v[2] - v[0], d = v[0] - v[3];
-        Vector3I n = new(
-            a.Y * b.Z - a.Z * b.Y,
-            a.Z * b.X - a.X * b.Z,
-            a.X * b.Y - a.Y * b.X);
+        Vector3I n = Cross(a, b);
         return d.X * n.X + d.Y * n.Y + d.Z * n.Z;
     }
+
+    /// <summary>Integer cross product (also used by the OGZ reader's surface-vertex math).</summary>
+    public static Vector3I Cross(Vector3I a, Vector3I b) => new(
+        a.Y * b.Z - a.Z * b.Y,
+        a.Z * b.X - a.X * b.Z,
+        a.X * b.Y - a.Y * b.X);
+
+    /// <summary>Integer dot product.</summary>
+    public static int Dot(Vector3I a, Vector3I b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
 }

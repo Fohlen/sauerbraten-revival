@@ -18,11 +18,9 @@ public static class ItemBuilder
         var root = new Node3D { Name = "Items" };
         var skinCache = new Dictionary<string, Material>();
 
-        for (int i = 0; i < map.Entities.Count; i++)
+        foreach (var (i, e) in map.Where(e => ModelName(e.Type) != null))
         {
-            var e = map.Entities[i];
-            string? modelName = ModelName(e.Type);
-            if (modelName == null) continue;
+            string modelName = ModelName(e.Type)!;
 
             var info = models?.Get(modelName);
             var item = new Item

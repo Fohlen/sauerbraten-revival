@@ -40,7 +40,7 @@ public static class MaterialBuilder
                 AlbedoTexture = albedo,
                 AlbedoColor = new Color(vs.Color.X, vs.Color.Y, vs.Color.Z),
                 TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
-                CullMode = BaseMaterial3D.CullModeEnum.Disabled, // winding not verified yet
+                CullMode = BaseMaterial3D.CullModeEnum.Back,
             };
 
             if (normal != null)

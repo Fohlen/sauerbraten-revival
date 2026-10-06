@@ -48,9 +48,7 @@ public static class TriggerBuilder
                         Yaw = e.Attr1,
                         Pushed = e.Attr3 > 0,
                     };
-                    var forward = PlayerStartBuilder.Forward(e.Attr1);
-                    if (forward.LengthSquared() > 1e-6f)
-                        dest.Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1));
+                    EntityFacing.ApplyYaw(dest, e.Attr1);
                     destinations.Add(dest);
                     root.AddChild(dest);
                     EntityMarker.Add(dest, textures, arrow: true);

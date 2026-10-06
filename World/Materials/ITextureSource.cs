@@ -6,8 +6,8 @@ namespace SauerbratenRevival.World.Materials;
 
 /// <summary>
 /// Supplies texture images and their dimensions to the material builder. The dev
-/// viewer uses <see cref="DumpTextureSource"/>; the shipped importer will swap in
-/// a Godot-resource-backed source (textures imported into the project).
+/// viewer uses a <see cref="FallbackTextureSource"/> (project Resources, with the
+/// reference dump as a fallback); the shipped importer bakes Resources directly.
 /// </summary>
 public interface ITextureSource
 {

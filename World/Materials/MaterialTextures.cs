@@ -44,7 +44,8 @@ void fragment() {
     {
         ushort volume = (ushort)(material & Octa.MATF_VOLUME);
         var shaderMaterial = new ShaderMaterial { Shader = new Shader { Code = ScrollShader } };
-        shaderMaterial.SetShaderParameter("albedo_tex", textures.Get(DiffusePath(material)));
+        var albedo = textures.Get(DiffusePath(material));
+        if (albedo != null) shaderMaterial.SetShaderParameter("albedo_tex", albedo);
         shaderMaterial.SetShaderParameter("tint", Tint(volume));
         shaderMaterial.SetShaderParameter("alpha", IsTranslucent(material) ? 0.65f : 1.0f);
         shaderMaterial.SetShaderParameter("scroll", Scroll(volume));

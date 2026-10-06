@@ -15,11 +15,8 @@ public static class ParticleBuilder
     public static Node3D Build(OgzMap map, ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "Particles" };
-        for (int i = 0; i < map.Entities.Count; i++)
+        foreach (var (i, e) in map.OfType(EntityType.Particles))
         {
-            var e = map.Entities[i];
-            if (e.Type != EntityType.Particles) continue;
-
             var emitter = new ParticleEmitter
             {
                 Name = $"Particle_{i}",

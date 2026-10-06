@@ -28,7 +28,7 @@ public class EntityPlayerStartTest : GoTestBase
             TestAssert.Equal((int)entity.Attr2, spawn.Team, $"{spawn.Name} team");
             TestAssert.True(Mathf.Abs(spawn.Yaw - entity.Attr1) < 0.01f, $"{spawn.Name} yaw");
 
-            var forward = PlayerStartBuilder.Forward(entity.Attr1).Normalized();
+            var forward = EntityFacing.Forward(entity.Attr1).Normalized();
             var facing = -spawn.Basis.Z;
             TestAssert.True(facing.DistanceTo(forward) < 0.001f, $"{spawn.Name} facing");
             built++;

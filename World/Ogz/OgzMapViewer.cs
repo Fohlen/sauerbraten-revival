@@ -105,7 +105,7 @@ public partial class OgzMapViewer : Node3D
 
         // Fallback so geometry is still visible if there is no catalogue.
         StandardMaterial3D? fallback = materials == null
-            ? new StandardMaterial3D { AlbedoColor = MeshTint, CullMode = BaseMaterial3D.CullModeEnum.Disabled }
+            ? new StandardMaterial3D { AlbedoColor = MeshTint, CullMode = BaseMaterial3D.CullModeEnum.Back }
             : null;
 
         Aabb bounds = default;

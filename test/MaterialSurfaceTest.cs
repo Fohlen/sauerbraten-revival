@@ -25,18 +25,10 @@ public class MaterialSurfaceTest : TestClass
         int water = surfaces.Count(s => (s.Material & Octa.MATF_VOLUME) == Octa.MAT_WATER);
         TestAssert.True(water > 0, "which include water");
 
-        long triangles = surfaces.Sum(s => CountTriangles(s.Mesh));
+        long triangles = surfaces.Sum(s => MeshAssert.Triangles(s.Mesh));
         GD.Print($"[material] bt_falls: {surfaces.Count} material meshes, {water} water, {triangles} triangles");
         TestAssert.True(triangles > 0, "material surfaces have geometry");
 
         foreach (var surface in surfaces) surface.Mesh.Free();
-    }
-
-    private static long CountTriangles(ArrayMesh mesh)
-    {
-        long triangles = 0;
-        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
-            triangles += mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.Index].AsInt32Array().Length / 3;
-        return triangles;
     }
 }

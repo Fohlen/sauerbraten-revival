@@ -22,9 +22,14 @@ public sealed class ArrayMeshBuilder
     /// <summary>Number of distinct textures (Godot surfaces).</summary>
     public int TextureCount => _positions.Count;
 
-    /// <summary>Emit a quad (p0,p1,p2,p3) as two triangles with flat normal and per-vertex UVs.</summary>
+    /// <summary>
+    /// Emit a quad from four shared vertices with a flat normal and per-vertex
+    /// UVs. The two triangles (0,1,2) and (0,2,3) can be reversed independently,
+    /// so a non-planar or concave face still faces the same way on both halves.
+    /// </summary>
     public void AddQuad(int texture, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3,
-                        Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector3 normal)
+                        Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector3 normal,
+                        bool reverseFirst = false, bool reverseSecond = false)
     {
         if (!_positions.TryGetValue(texture, out var positions))
         {
@@ -48,8 +53,12 @@ public sealed class ArrayMeshBuilder
         uvs.Add(uv2);
         uvs.Add(uv3);
         for (int i = 0; i < 4; i++) normals.Add(normal);
-        indices.Add(b); indices.Add(b + 1); indices.Add(b + 2);
-        indices.Add(b); indices.Add(b + 2); indices.Add(b + 3);
+        indices.Add(b);
+        indices.Add(reverseFirst ? b + 2 : b + 1);
+        indices.Add(reverseFirst ? b + 1 : b + 2);
+        indices.Add(b);
+        indices.Add(reverseSecond ? b + 3 : b + 2);
+        indices.Add(reverseSecond ? b + 2 : b + 3);
         TriangleCount += 2;
     }
 

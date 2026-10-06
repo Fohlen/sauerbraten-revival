@@ -14,11 +14,8 @@ public static class PlayerStartBuilder
     public static Node3D Build(OgzMap map, ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "PlayerStarts" };
-        for (int i = 0; i < map.Entities.Count; i++)
+        foreach (var (i, e) in map.OfType(EntityType.PlayerStart))
         {
-            var e = map.Entities[i];
-            if (e.Type != EntityType.PlayerStart) continue;
-
             var spawn = new SpawnPoint
             {
                 Name = $"PlayerStart_{i}",
@@ -26,21 +23,10 @@ public static class PlayerStartBuilder
                 Team = e.Attr2,
                 Yaw = e.Attr1,
             };
-
-            Vector3 forward = Forward(e.Attr1);
-            if (forward.LengthSquared() > 1e-6f)
-                spawn.Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1)); // Z is up in Sauer space
-
+            EntityFacing.ApplyYaw(spawn, e.Attr1);
             root.AddChild(spawn);
             EntityMarker.Add(spawn, textures, arrow: true);
         }
         return root;
-    }
-
-    /// <summary>physics.cpp vecfromyawpitch(yaw, 0, 1, 0): horizontal facing.</summary>
-    public static Vector3 Forward(float yawDegrees)
-    {
-        float yaw = Mathf.DegToRad(yawDegrees);
-        return new Vector3(-Mathf.Sin(yaw), Mathf.Cos(yaw), 0.0f);
     }
 }

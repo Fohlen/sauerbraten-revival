@@ -19,11 +19,8 @@ public static class MapModelBuilder
         var root = new Node3D { Name = "MapModels" };
         var skinCache = new Dictionary<string, Material>();
 
-        for (int i = 0; i < map.Entities.Count; i++)
+        foreach (var (i, e) in map.OfType(EntityType.MapModel))
         {
-            var e = map.Entities[i];
-            if (e.Type != EntityType.MapModel) continue;
-
             string name = catalogue?.MapModelPath(e.Attr2) ?? $"mapmodel#{e.Attr2}";
             var info = models?.Get(name);
 
@@ -40,9 +37,7 @@ public static class MapModelBuilder
                 SkinMaterial = ModelSkin.Build(info, textures, skinCache),
             };
 
-            Vector3 forward = PlayerStartBuilder.Forward(e.Attr1);
-            if (forward.LengthSquared() > 1e-6f)
-                model.Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1));
+            EntityFacing.ApplyYaw(model, e.Attr1);
 
             root.AddChild(model);
         }

@@ -25,14 +25,10 @@ public static class LightBuilder
     public static Node3D Build(OgzMap map)
     {
         var root = new Node3D { Name = "Lights" };
-        var entities = map.Entities;
-        var spotlightForLight = AttachSpotlights(entities);
+        var spotlightForLight = AttachSpotlights(map.Entities);
 
-        for (int i = 0; i < entities.Count; i++)
+        foreach (var (i, e) in map.OfType(EntityType.Light))
         {
-            var e = entities[i];
-            if (e.Type != EntityType.Light) continue;
-
             Vector3 position = e.Position;
             Color color = LightColor(e);
             float range = e.Attr1 > 0 ? e.Attr1 : InfiniteRange;

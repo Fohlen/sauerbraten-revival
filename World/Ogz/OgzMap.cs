@@ -84,6 +84,16 @@ public sealed class OgzMap
         return null;
     }
 
+    /// <summary>Iterate the entities of one type, yielding (index, entity) so nodes can be named by map order.</summary>
+    public IEnumerable<(int Index, OgzEntity Entity)> OfType(byte type) => Where(e => e.Type == type);
+
+    /// <summary>Iterate the entities matching a predicate, yielding (index, entity).</summary>
+    public IEnumerable<(int Index, OgzEntity Entity)> Where(System.Func<OgzEntity, bool> predicate)
+    {
+        for (int i = 0; i < Entities.Count; i++)
+            if (predicate(Entities[i])) yield return (i, Entities[i]);
+    }
+
     /// <summary>Wrap the parsed octree in the runtime <see cref="Octa"/>.</summary>
     public Octa ToOcta()
     {

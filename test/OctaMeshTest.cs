@@ -60,7 +60,7 @@ public class OctaMeshTest : GoTestBase
         var octa = map.ToOcta();
         var mesher = new OctaMesher(octa);
 
-        long wholeTriangles = CountTriangles(mesher.Build());
+        long wholeTriangles = MeshAssert.Triangles(mesher.Build());
         var chunked = mesher.BuildChunked(512);
 
         TestAssert.Equal(wholeTriangles, (long)chunked.TriangleCount, "chunked triangles == whole triangles");
@@ -88,16 +88,5 @@ public class OctaMeshTest : GoTestBase
         TestAssert.Equal(chunked.Chunks.Count, mesher.BuildChunked(512).Chunks.Count, "deterministic chunking");
         TestAssert.Equal(8, chunked.Chunks.Count, "chunk count baseline");
         GD.Print($"[mesh] chunks={chunked.Chunks.Count} chunkSurfaces={chunked.SurfaceCount} chunkTriangles={chunked.TriangleCount}");
-    }
-
-    private static long CountTriangles(ArrayMesh mesh)
-    {
-        long triangles = 0;
-        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
-        {
-            var indices = mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.Index].AsInt32Array();
-            triangles += indices.Length / 3;
-        }
-        return triangles;
     }
 }

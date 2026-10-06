@@ -16,11 +16,8 @@ public static class SoundBuilder
     public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue, string referenceRoot)
     {
         var root = new Node3D { Name = "Sounds" };
-        for (int i = 0; i < map.Entities.Count; i++)
+        foreach (var (i, e) in map.OfType(EntityType.Sound))
         {
-            var e = map.Entities[i];
-            if (e.Type != EntityType.Sound) continue;
-
             string? path = catalogue?.SoundPath(e.Attr1);
             var emitter = new SoundEmitter
             {

@@ -138,7 +138,6 @@ public sealed class OgzReader
     private void ReadEntities(OgzMap map)
     {
         bool sameGame = map.GameIdent == "fps"; // game::gameident()
-        int infoSize = 0;                        // fpsgame::extraentinfosize() == 0
         int count = Math.Min(map.Header.NumEnts, MaxEnts);
 
         for (int i = 0; i < count; i++)
@@ -154,18 +153,15 @@ public sealed class OgzReader
                 Type = _r.ReadByte(),
                 Reserved = _r.ReadByte(),
             };
-            if (sameGame)
-            {
-                if (infoSize > 0) ReadExact(_r, infoSize);
-            }
-            else if (map.ExtraEntInfoSize > 0) ReadExact(_r, map.ExtraEntInfoSize);
+            // fpsgame::extraentinfosize() == 0, so `sameGame` entities carry no extras.
+            if (!sameGame && map.ExtraEntInfoSize > 0) ReadExact(_r, map.ExtraEntInfoSize);
             map.Entities.Add(e);
         }
 
         if (map.Header.NumEnts > count)
         {
             int remaining = map.Header.NumEnts - count;
-            int perEnt = sameGame ? 24 + infoSize : map.ExtraEntInfoSize;
+            int perEnt = sameGame ? 24 : map.ExtraEntInfoSize;
             _r.BaseStream.Seek((long)remaining * perEnt, SeekOrigin.Current);
         }
     }
@@ -299,9 +295,10 @@ public sealed class OgzReader
         int layerverts = numvertsByte & Octa.MAXFACEVERTS;
         int dim = orient >> 1;
         int vc = Octa.C[dim], vr = Octa.R[dim];
-        int[] vo = { (co[0] & 0xFFF) << 3, (co[1] & 0xFFF) << 3, (co[2] & 0xFFF) << 3 };
-        int[][] v = GenFaceVerts(cube, orient);
-        int[] n = { 0, 0, 0 };
+        var vo = new Vector3I((co[0] & 0xFFF) << 3, (co[1] & 0xFFF) << 3, (co[2] & 0xFFF) << 3);
+        System.Span<Vector3I> v = stackalloc Vector3I[4];
+        CubeGeometry.GenFaceVerts(cube, orient, v);
+        Vector3I n = Vector3I.Zero;
         int bias = 0;
 
         bool hasxyz = (vertmask & 0x04) != 0;
@@ -310,9 +307,9 @@ public sealed class OgzReader
 
         if (hasxyz)
         {
-            n = Cross(Sub(v[1], v[0]), Sub(v[2], v[0]));
-            if (IsZero(n)) n = Cross(Sub(v[2], v[0]), Sub(v[3], v[0]));
-            bias = -Dot(n, new[] { v[0][0] * size + vo[0], v[0][1] * size + vo[1], v[0][2] * size + vo[2] });
+            n = CubeGeometry.Cross(v[1] - v[0], v[2] - v[0]);
+            if (n == Vector3I.Zero) n = CubeGeometry.Cross(v[2] - v[0], v[3] - v[0]);
+            bias = -CubeGeometry.Dot(n, v[0] * size + vo);
         }
         else
         {
@@ -408,43 +405,30 @@ public sealed class OgzReader
                 ((uint)edges[d * 4 + 3] << 24);
     }
 
-    // genfaceverts lives in CubeGeometry; the reader keeps an int[][] adapter so
-    // the surface-vertex math below stays in plain integer arrays.
-    private static int[][] GenFaceVerts(Cube c, int orient)
+    // ---- surface-vertex helpers (worldio.cpp loadsurface, mapversion >= 32) ----
+
+    private static void SetXyz(VertInfo[] verts, int k, Vector3I v, int size, Vector3I vo)
     {
-        System.Span<Vector3I> v = stackalloc Vector3I[4];
-        CubeGeometry.GenFaceVerts(c, orient, v);
-        var res = new int[4][];
-        for (int n = 0; n < 4; n++) res[n] = new[] { v[n].X, v[n].Y, v[n].Z };
-        return res;
+        verts[k].X = (ushort)(v.X * size + vo.X);
+        verts[k].Y = (ushort)(v.Y * size + vo.Y);
+        verts[k].Z = (ushort)(v.Z * size + vo.Z);
     }
 
-    private static void SetXyz(VertInfo[] verts, int k, int[] v, int size, int[] vo)
+    private static void SetXyzPlane(VertInfo[] verts, int k, int c, int r, int vc, int vr, int dim, Vector3I n, int bias, Vector3I vo)
     {
-        verts[k].X = (ushort)(v[0] * size + vo[0]);
-        verts[k].Y = (ushort)(v[1] * size + vo[1]);
-        verts[k].Z = (ushort)(v[2] * size + vo[2]);
-    }
-
-    private static void SetXyzPlane(VertInfo[] verts, int k, int c, int r, int vc, int vr, int dim, int[] n, int bias, int[] vo)
-    {
-        int[] xyz = new int[3];
+        System.Span<int> xyz = stackalloc int[3];
         xyz[vc] = c;
         xyz[vr] = r;
-        xyz[dim] = n[dim] != 0 ? -(bias + n[vc] * xyz[vc] + n[vr] * xyz[vr]) / n[dim] : vo[dim];
+        int nd = Component(n, dim);
+        xyz[dim] = nd != 0
+            ? -(bias + Component(n, vc) * xyz[vc] + Component(n, vr) * xyz[vr]) / nd
+            : Component(vo, dim);
         verts[k].X = (ushort)xyz[0];
         verts[k].Y = (ushort)xyz[1];
         verts[k].Z = (ushort)xyz[2];
     }
 
-    private static int[] Cross(int[] a, int[] b) =>
-        new[] { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
-
-    private static int Dot(int[] a, int[] b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-
-    private static int[] Sub(int[] a, int[] b) => new[] { a[0] - b[0], a[1] - b[1], a[2] - b[2] };
-
-    private static bool IsZero(int[] a) => a[0] == 0 && a[1] == 0 && a[2] == 0;
+    private static int Component(Vector3I v, int axis) => axis switch { 0 => v.X, 1 => v.Y, _ => v.Z };
 
     private static ushort ConvertOldMaterial(int mat) =>
         (ushort)(((mat & 7) << MatfVolumeShift) | (((mat >> 3) & 3) << MatfClipShift) | (((mat >> 5) & 7) << MatfFlagShift));
