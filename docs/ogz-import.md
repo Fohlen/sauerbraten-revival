@@ -292,22 +292,27 @@ per-effect TODOs rather than ported now:
 
 | attr1 | effect | mapping |
 | --- | --- | --- |
-| 0 | fire + smoke | `GPUParticles3D` (flame + smoke) |
-| 1 | steam vent | `GPUParticles3D` |
-| 2 | water fountain | `GPUParticles3D` |
+| 0 | fire + smoke | ✅ `GPUParticles3D` (flame + smoke) |
+| 1 | steam vent | ✅ `GPUParticles3D` |
+| 2 | water fountain | ✅ `GPUParticles3D` |
 | 3 | fire ball | custom (explosion) — **TODO** |
 | 4 | tape / streak | custom (`PT_TAPE`) — **TODO** |
 | 5, 6 | meter / metervs | custom — **TODO** |
 | 7 | lightning | custom renderer — **TODO** |
-| 9 | steam | `GPUParticles3D` |
-| 10 | water | `GPUParticles3D` |
-| 11 | flame | `GPUParticles3D` |
-| 12 | smoke plume | `GPUParticles3D` |
-| 13 | snow | `GPUParticles3D` |
+| 9 | steam | ✅ `GPUParticles3D` |
+| 10 | water | ✅ `GPUParticles3D` |
+| 11 | flame | ✅ `GPUParticles3D` |
+| 12 | smoke plume | ✅ `GPUParticles3D` |
+| 13 | snow | ✅ `GPUParticles3D` |
 | 32–35 | lens flares | custom (`lensflare`) — **TODO** |
 
-None of this is implemented yet; the billboard `PT_PART` effects are the natural
-first step, and no billboard can represent tape/text/icon/lightning/meter/flare.
+**Represented** as `ParticleEmitter` nodes (`ParticleBuilder`). The billboard
+effects (0/1/2/9/10/11/12/13) are rendered as `GPUParticles3D` by
+`ParticleRenderer` (using the engine textures/colours and the `regularflame`/
+`regularsplash` parameters). The custom-renderer effects stay as TODOs. On
+church51 the effects are 8 × fire+smoke (`0`, **rendered**), 8 × fireball (`3`)
+and 103 × tape (`4`) — the two custom kinds are deferred; no plain billboard can
+represent tape/text/icon/lightning/meter/flare.
 
 ---
 

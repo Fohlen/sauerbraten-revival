@@ -83,10 +83,11 @@ See [ogz-import.md](ogz-import.md) for full architecture.
       - [x] **Items** — `ET_*` pickups represented as `Item` nodes; the engine's built-in
             models are converted too (`health`/`boost`/`quad` md3, `ammo/*` obj, `armor/*`
             shared parent geometry + per-colour skin).
-      - [ ] **Particles** — `ET_PARTICLES` represented from the engine's particle
-            definitions (effect id in attr1). Mostly billboard/static; a handful are real
-            `GPUParticles3D`, and the rest need custom shaders — see
-            [ogz-import.md](ogz-import.md#particles-et_particles) for the per-effect mapping.
+      - [x] **Particles** — `ET_PARTICLES` represented as `ParticleEmitter` nodes
+            (`ParticleBuilder`); the billboard effects (0/1/2/9/10/11/12/13) render as
+            `GPUParticles3D` (`ParticleRenderer`). The custom-renderer effects are TODOs —
+            see [ogz-import.md](ogz-import.md#particles-et_particles). church51: 8 fire+smoke
+            (rendered), 8 fireball + 103 tape (deferred).
       - [ ] **TODO (custom shaders)** — particle effects 3 (fireball), 4 (tape), 5/6
             (meter), 7 (lightning), 32–35 (lens flare): defer until wanted.
       - [ ] **Sounds** — `ET_SOUND` → `AudioStreamPlayer3D`; the catalogue already exports
