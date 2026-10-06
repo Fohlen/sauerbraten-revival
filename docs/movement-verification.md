@@ -96,6 +96,25 @@ every N ms) removes human variance and makes the whole comparison automated.
 
 **Deliverable:** `tools/refharness/replay` + an input-file format shared by both.
 
+**Implemented (stage A3.1).** `World/Physics/` ports the velocity model
+(`Velocity.cs`) and the collision + `move()` state machine (`OctaPhysics.cs`):
+`collide`/`octacollide`/`fuzzycollidesolid`, `move`, `trystepup`, `trystepdown`,
+`findfloor`, `landing`, `falling`, `slideagainst`, `switchfloor`. `test/A3ReplayTest.cs`
+replays `session2.csv` (church51, 5 ms steps) through the port and diffs the state:
+
+| Quantity | Match | Max err |
+| --- | --- | --- |
+| vel | 3952/4162 (95.0%) | 153.8 |
+| falling | 3999/4162 (96.1%) | 131.0 |
+| o | 3895/4162 (93.6%) | 0.83 |
+| physstate | 4038/4162 (97.0%) | |
+
+The 11 jump-pad impulses are **not** in `session2.csv.events` (and the `jumping`
+column is logged post-consumption, so always 0 — see [known-bugs.md](known-bugs.md));
+the harness resyncs at them. The remaining misses are **deformed (`Normal`) cubes**:
+`fuzzycollideplanes`/`genclipplanes` are not ported yet, so a slope is approximated
+by its full AABB, which fabricates walls. **A3.2** ports them to close the gap.
+
 ---
 
 ## A4 — Determinism check

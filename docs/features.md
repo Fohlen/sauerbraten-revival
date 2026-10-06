@@ -116,6 +116,12 @@ See [ogz-import.md](ogz-import.md) for full architecture.
 
 ## 4. Movement refinement (collision)
 
+- [x] **Port `move`/`collide`** against the octree (velocity model + solid-cube
+      collision + `trystepup`/`trystepdown`) — see
+      [movement-verification.md](movement-verification.md) (A3.1).
+- [ ] **Deformed-cube collision** (`fuzzycollideplanes`/`genclipplanes`) — A3.2;
+      needed for exact slopes/ramps.
+
 - [ ] **Port `move`/`collide` exactly** against the octree.
 - [ ] **Port `trystepup`/`trystepdown` exactly** (`STAIRHEIGHT = 4.1`, the
       `cansmooth` slope branch, the `1/scale` vertical component). Required for
