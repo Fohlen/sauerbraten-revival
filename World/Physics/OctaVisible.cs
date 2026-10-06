@@ -98,8 +98,13 @@ public static class OctaVisible
         int i = 0;
         var prev = new Vector2I(int.MaxValue, int.MaxValue);
         int coord = DimCoord(orient) ? 8 : 0;
-        for (int n = 0; n < 4; n++)
+        // The engine's genfacevecs() iterates the face verts via the GENFACEORIENT
+        // macro inherited from the solid path, which emits them in REVERSE order for
+        // the dimcoord==0 faces (LEFT/BACK/BOTTOM). That order feeds insideface(),
+        // whose winding-sensitive result decides classifyface's visibility bits.
+        for (int k = 0; k < 4; k++)
         {
+            int n = DimCoord(orient) ? k : (3 - k);
             var e = buf[n];
             if (Comp(e, dim) != coord) continue;
             var f = new Vector2I(Comp(e, cd) * size + Comp(pos, cd) * 8, Comp(e, rd) * size + Comp(pos, rd) * 8);
