@@ -9,6 +9,9 @@ obj/
 .vs/
 *.user
 
+# Ignore Python output
+__pycache__
+
 # native reference harness artifacts
 tools/refharness/refharness
 tools/refharness/out/
