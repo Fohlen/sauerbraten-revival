@@ -84,15 +84,17 @@ classification, so the port's `genclipplanes`/`classifyface`/`visibletris` can b
 diffed against the engine's exact output:
 
 ```
-C <step> <time> <co.x> <co.y> <co.z> <size> <visible> <nplanes> <o.x> <o.y> <o.z> <r.x> <r.y> <r.z> <12 edge bytes hex>
-F <orient> <classifyface> <collideface>
+C <step> <time> <co.x> <co.y> <co.z> <size> <visible> <nplanes> <o.x> <o.y> <o.z> <r.x> <r.y> <r.z> <12 edge bytes hex> <material>
+F <orient> <classifyface> <collideface> <nsize> <isSelf> <ro.x> <ro.y> <ro.z> <12 neighbour edge bytes hex>
 P <i> <nx> <ny> <nz> <offset> <side>
 ```
 
 - `C` = cube header: origin/size, `p.visible`, `p.size`, the tight bbox `p.o`/`p.r`,
-  and the cube's 12 edge bytes.
-- `F` = one line per orientation: `classifyface(c, orient, co, size)` and
-  `collideface(c, orient)`.
+  the cube's 12 edge bytes, and its `material`.
+- `F` = one line per orientation: `classifyface(c, orient, co, size)`,
+  `collideface(c, orient)`, the `neighbourcube` result (`nsize`, whether it
+  returned the same cube, the neighbour origin `ro`), and the neighbour's 12 edge
+  bytes.
 - `P` = one line per collision plane.
 
 > Captured traces live in `traces/`. The whole `tools/` tree is excluded from
