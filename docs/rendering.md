@@ -219,10 +219,13 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
 - **Runtime octree** — `World/Ogz/OgzReader.cs` builds the runtime `Cube`/
   `CubeExt` octree directly while parsing (edges, textures, material, children,
   surface verts); `OgzMap.ToOcta()` wraps it as an `Octa`.
-- **Mesher (stage B)** — `World/Meshing/OctaMesher.cs` walks the `Octa` and emits
-  a geometry-only `ArrayMesh` (positions, flat normals, indices; one surface per
-  texture via `ArrayMeshBuilder`). Positions are in Sauerbraten coordinates
-  (Z-up); the scene node carries the Z-up → Y-up rotation.
+- **Mesher (stage B)** — `World/Meshing/OctaMesher.cs` emits a geometry-only
+  `ArrayMesh` (positions, flat normals, indices; one surface per texture via
+  `ArrayMeshBuilder`). The octree traversal and the conservative face cull are
+  shared with the material mesher in `OctaFaceWalker`; `MeshFace` owns the
+  winding/normal convention. Positions are in Sauerbraten coordinates (Z-up); the
+  scene node carries the Z-up → Y-up rotation. World faces are **back-face
+  culled** (Godot's front faces are clockwise; `MeshWindingTest` guards this).
 - **Materials (C1)** — `World/Materials/`: `MetadataCatalogue` loads the
   engine-exported slot/vslot data, `MaterialBuilder` ports `calctexgen` and
   builds one Godot `StandardMaterial3D` per vslot (diffuse texture + tint), and

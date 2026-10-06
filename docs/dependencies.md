@@ -1,0 +1,62 @@
+# Dependencies & toolchain
+
+What the project needs, and why. Keep this current whenever a tool is added —
+especially the dev-only ones we reach for ad hoc (an image diff, a one-off script),
+so they don't become mystery requirements later.
+
+## Building & running the game
+
+| Dependency | Version used | Why | Where |
+| --- | --- | --- | --- |
+| **Godot .NET (mono)** | `4.7.2.stable.mono` | Engine + C# host. The standard (non-mono) build **cannot load C#**. | `/Applications/Godot_mono.app`; override the test runner with `GODOT=/path/to/Godot` |
+| **.NET SDK** | targets `net8.0` (built with 10.0.401) | Compiles `SauerbratenRevival.csproj`. | https://dotnet.microsoft.com/download |
+| **Chickensoft.GoDotTest** | `2.0.47` (NuGet) | Test runner; restored automatically by `dotnet build`. | `SauerbratenRevival.csproj` |
+
+Run tests with `./run-tests.sh` (builds, then Godot `--headless --run-tests`).
+
+## Content conversion (offline, dev-only)
+
+| Dependency | Why | Notes |
+| --- | --- | --- |
+| **Python 3** | `tools/model-import/`, `tools/texture-import/`, `tools/refharness/validate_trace.py` | **Stdlib only** — no pip packages required. |
+| **assimp** (CLI) | Converts OBJ/MD2/MD3/MD5/IQM mapmodels to glTF. | `brew install assimp` |
+| **uv** *(optional)* | Throwaway Python environments for analysis scripts (e.g. Pillow/NumPy image diffing). Not needed for the pipeline. | `brew install uv` |
+
+## Reference engine (optional — only to regenerate traces/metadata)
+
+Only needed to run the A1/A2 harness or the `SAUER_METADATA` exporter; the game
+and its tests otherwise read the committed `metadata-catalogue/` and the
+read-only dump.
+
+| Dependency | Why |
+| --- | --- |
+| **C++ toolchain** (`clang`, `make`) | Builds the patched reference client. |
+| **SDL2**, **SDL2_image**, **SDL2_mixer** | Reference client libraries (Homebrew: `sdl2-compat`, `sdl2_image`, `sdl2_mixer`). |
+| **patch** | Applies `tools/refharness/patches/*.patch` to a copy of the source. |
+| **unzip** | Restores the pristine reference source from the zip. |
+
+```sh
+brew install assimp uv sdl2 sdl2_image sdl2_mixer
+# then: tools/refharness/build_instrumented.sh
+```
+
+## Environment variables
+
+| Variable | Used by | Default |
+| --- | --- | --- |
+| `SAUER_REF` | Tests, viewer, import tools, refharness | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
+| `GODOT` | `run-tests.sh` | `/Applications/Godot_mono.app/Contents/MacOS/Godot` |
+| `SAUER_TRACE` / `SAUER_METADATA` | Instrumented reference client | unset (features inert) |
+
+## Recreating an ad-hoc analysis environment
+
+When a task needs a throwaway Python environment, prefer `uv` over polluting the
+system Python:
+
+```sh
+uv venv /tmp/analysis
+uv pip install --python /tmp/analysis/bin/python pillow numpy
+/tmp/analysis/bin/python - <<'PY'
+...
+PY
+```
