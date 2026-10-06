@@ -75,6 +75,26 @@ step,time,event
 
 `step`/`time` use the same clock as the step trace, so events line up exactly.
 
+## Clipplane dump (`SAUER_TRACE.clips`)
+
+For A3 collision debugging (`docs/movement-verification.md`). Every deformed
+(`Normal`) cube the player's collision touches is dumped **once** (the engine
+caches `genclipplanes` per cube), together with its edge bytes and per-face
+classification, so the port's `genclipplanes`/`classifyface`/`visibletris` can be
+diffed against the engine's exact output:
+
+```
+C <step> <time> <co.x> <co.y> <co.z> <size> <visible> <nplanes> <o.x> <o.y> <o.z> <r.x> <r.y> <r.z> <12 edge bytes hex>
+F <orient> <classifyface> <collideface>
+P <i> <nx> <ny> <nz> <offset> <side>
+```
+
+- `C` = cube header: origin/size, `p.visible`, `p.size`, the tight bbox `p.o`/`p.r`,
+  and the cube's 12 edge bytes.
+- `F` = one line per orientation: `classifyface(c, orient, co, size)` and
+  `collideface(c, orient)`.
+- `P` = one line per collision plane.
+
 > Captured traces live in `traces/`. The whole `tools/` tree is excluded from
 > Godot's importer via `tools/.gdignore`, so these `.csv` files are not imported
 > as translations.

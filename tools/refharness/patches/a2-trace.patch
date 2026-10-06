@@ -1,6 +1,7 @@
---- a/engine/physics.cpp
-+++ b/engine/physics.cpp
-@@ -5,6 +5,9 @@
+diff -ruN pa/engine/physics.cpp pb/engine/physics.cpp
+--- a/engine/physics.cpp	2026-10-06 20:37:33
++++ b/engine/physics.cpp	2026-10-06 20:37:33
+@@ -5,11 +5,16 @@
  
  #include "engine.h"
  #include "mpr.h"
@@ -10,7 +11,22 @@
  
  const int MAXCLIPPLANES = 1024;
  static clipplanes clipcache[MAXCLIPPLANES];
-@@ -1678,8 +1681,55 @@
+ static int clipcacheversion = -2;
+ 
++static void a2traceclip(const cube &c, const ivec &o, int size, const clipplanes &p);
++
+ static inline clipplanes &getclipplanes(const cube &c, const ivec &o, int size, bool collide = true, int offset = 0)
+ {
+     clipplanes &p = clipcache[int(&c - worldroot)&(MAXCLIPPLANES-1)];
+@@ -18,6 +23,7 @@
+         p.owner = &c;
+         p.version = clipcacheversion+offset;
+         genclipplanes(c, o, size, p, collide);
++        if(collide) a2traceclip(c, o, size, p);
+     }
+     return p;
+ }
+@@ -1678,8 +1684,85 @@
  // moveres indicated the physics precision (which is lower for monsters and multiplayer prediction)
  // local is false for multiplayer prediction
  
@@ -46,6 +62,36 @@
 +        pl->falling.x, pl->falling.y, pl->falling.z,
 +        pl->physstate, (int)pl->timeinair, pl->floor.x, pl->floor.y, pl->floor.z);
 +}
++// --- A3 clipplane dump: every deformed cube the player's collision touches ----
++// Format:  C <step> <time> <co> <size> <visible> <nplanes> <o> <r> <edges hex>
++//          F <orient> <classifyface> <collideface>
++//          P <i> <nx> <ny> <nz> <offset> <side>
++static FILE *a2clipfile = NULL;
++static bool a2clipchecked = false;
++static void a2traceclip(const cube &c, const ivec &o, int size, const clipplanes &p)
++{
++    if(!a2clipchecked)
++    {
++        a2clipchecked = true;
++        const char *path = getenv("SAUER_TRACE");
++        if(path && *path)
++        {
++            char cp[1024];
++            snprintf(cp, sizeof(cp), "%s.clips", path);
++            a2clipfile = fopen(cp, "w");
++        }
++    }
++    if(!a2clipfile) return;
++    fprintf(a2clipfile, "C %d %d %d %d %d %d %d %d %.4f %.4f %.4f %.4f %.4f %.4f ",
++        a2tracestep, a2tracetime, o.x, o.y, o.z, size, (int)p.visible, (int)p.size,
++        p.o.x, p.o.y, p.o.z, p.r.x, p.r.y, p.r.z);
++    loopi(12) fprintf(a2clipfile, "%02x", c.edges[i]);
++    fprintf(a2clipfile, "\n");
++    loopi(6) fprintf(a2clipfile, "F %d %d %d\n", i, classifyface(c, i, o, size), collideface(c, i) ? 1 : 0);
++    loopi(p.size) fprintf(a2clipfile, "P %d %.6f %.6f %.6f %.6f %d\n", i, p.p[i].x, p.p[i].y, p.p[i].z, p.p[i].offset, (int)p.side[i]);
++    fflush(a2clipfile);
++}
++
 +void a2traceevent(const char *fmt, ...)
 +{
 +    a2traceinit();
@@ -66,29 +112,18 @@
      int material = lookupmaterial(vec(pl->o.x, pl->o.y, pl->o.z + (3*pl->aboveeye - pl->eyeheight)/4));
      bool water = isliquid(material&MATF_VOLUME);
      bool floating = pl->type==ENT_PLAYER && (pl->state==CS_EDITING || pl->state==CS_SPECTATOR);
-@@ -1741,6 +1790,8 @@
+@@ -1740,6 +1823,8 @@
+     pl->inwater = water ? material&MATF_VOLUME : MAT_AIR;
  
      if(pl->state==CS_ALIVE && (pl->o.z < 0 || material&MAT_DEATH)) game::suicide(pl);
- 
-+    if(pl->type==ENT_PLAYER) a2tracelog(pl, curtime, a2jumping);
 +
++    if(pl->type==ENT_PLAYER) a2tracelog(pl, curtime, a2jumping);
+ 
      return true;
  }
- 
---- a/fpsgame/game.h
-+++ b/fpsgame/game.h
-@@ -3,6 +3,9 @@
- 
- #include "cube.h"
- 
-+// A2 movement-trace hook (defined in engine/physics.cpp; client builds only)
-+extern void a2traceevent(const char *fmt, ...);
-+
- // console message types
- 
- enum
---- a/fpsgame/entities.cpp
-+++ b/fpsgame/entities.cpp
+diff -ruN pa/fpsgame/entities.cpp pb/fpsgame/entities.cpp
+--- a/fpsgame/entities.cpp	2026-10-06 20:37:33
++++ b/fpsgame/entities.cpp	2026-10-06 20:37:33
 @@ -274,6 +274,9 @@
                  else d->vel = vec(0, 0, 0);
                  entinmap(d);
@@ -109,8 +144,9 @@
                  break;
              }
          }
---- a/fpsgame/fps.cpp
-+++ b/fpsgame/fps.cpp
+diff -ruN pa/fpsgame/fps.cpp pb/fpsgame/fps.cpp
+--- a/fpsgame/fps.cpp	2026-10-06 20:37:33
++++ b/fpsgame/fps.cpp	2026-10-06 20:37:33
 @@ -673,6 +673,9 @@
          else findplayerspawn(player1, -1);
          entities::resetspawns();
@@ -121,3 +157,16 @@
  
          sendmapinfo();
      }
+diff -ruN pa/fpsgame/game.h pb/fpsgame/game.h
+--- a/fpsgame/game.h	2026-10-06 20:37:33
++++ b/fpsgame/game.h	2026-10-06 20:37:33
+@@ -3,6 +3,9 @@
+ 
+ #include "cube.h"
+ 
++// A2 movement-trace hook (defined in engine/physics.cpp; client builds only)
++extern void a2traceevent(const char *fmt, ...);
++
+ // console message types
+ 
+ enum
