@@ -211,6 +211,16 @@ public sealed class Octa
     // iengine.h material masks.
     public const ushort MATF_INDEX  = 3;
     public const ushort MATF_VOLUME = 7 << 2;
+    public const ushort MATF_CLIP   = 7 << 5;
+    public const ushort MATF_FLAGS  = 0xFF << 8;
+
+    // iengine.h material predicates (MATF_VOLUME-shifted values).
+    public static bool IsLiquid(ushort mat) => mat == MAT_WATER || mat == MAT_LAVA;
+    public static bool IsClipped(ushort mat) => mat == MAT_GLASS;
+    public static bool IsDeadly(ushort mat) => mat == MAT_LAVA;
+
+    /// <summary>octa.h: <c>opposite(orient)</c>.</summary>
+    public static int Opposite(int orient) => orient ^ 1;
 
     public const int MAXFACEVERTS = 15;
     public const int LAYER_TOP = 1 << 5;

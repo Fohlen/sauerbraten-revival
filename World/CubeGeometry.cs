@@ -98,8 +98,16 @@ public static class CubeGeometry
     /// <summary>octa.cpp:141 <c>setcubevector(c, i, p)</c> — write vertex i (0..7) of the cube.</summary>
     public static void SetCubeVector(Cube c, int i, Vector3I p)
     {
-        c.SetCubeEdge(0, (i >> Octa.R[0]) & 1, (i >> Octa.C[0]) & 1, (byte)p.X);
-        c.SetCubeEdge(1, (i >> Octa.R[1]) & 1, (i >> Octa.C[1]) & 1, (byte)p.Y);
-        c.SetCubeEdge(2, (i >> Octa.R[2]) & 1, (i >> Octa.C[2]) & 1, (byte)p.Z);
+        SetEdgeNibble(c, 0, (i >> Octa.R[0]) & 1, (i >> Octa.C[0]) & 1, (i >> Octa.D[0]) & 1, p.X);
+        SetEdgeNibble(c, 1, (i >> Octa.R[1]) & 1, (i >> Octa.C[1]) & 1, (i >> Octa.D[1]) & 1, p.Y);
+        SetEdgeNibble(c, 2, (i >> Octa.R[2]) & 1, (i >> Octa.C[2]) & 1, (i >> Octa.D[2]) & 1, p.Z);
+    }
+
+    /// <summary>octa.h: <c>edgeset(edge, coord, val)</c> applied to face word d (one nibble).</summary>
+    private static void SetEdgeNibble(Cube c, int d, int x, int y, int coord, int val)
+    {
+        int shift = (((y << 1) + x) * 8) + (coord != 0 ? 4 : 0);
+        uint f = c.Faces[d] & ~(0xFu << shift);
+        c.Faces[d] = f | ((uint)(val & 0xF) << shift);
     }
 }

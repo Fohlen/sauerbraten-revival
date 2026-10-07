@@ -19,6 +19,10 @@ original source, used offline to generate golden values.
   representative block cells.
 - Op outcomes: `mpdelcube` (delete empties the cube, keeping its texture) and the
   `mpeditface` mode-1 fill/carve branch (including the selection-origin advance).
+- Face/texture/material ops (`edittexcube`, `replacetexcube`, `setmat`) and
+  `flipcube`/`rotatecube`, `forcemip`. These live in `ops.cpp`, which copies the
+  original `octaedit.cpp` functions **verbatim** (they are file-local `static` in
+  the engine and not exported by any header).
 
 ## Build & run
 
@@ -44,6 +48,13 @@ GT child 7: 80 80 80 80 80 80 80 80 80 80 80 80
 BLOCK orient0 cell(0,0,0) -> s=(8,8,8)
 BLOCK orient0 cell(1,2,1) -> s=(16,16,24)
 BLOCK orient1 cell(0,0,0) -> s=(16,8,8)
+OP edittex all tex0=42 tex5=42
+OP edittex orient0 tex0=7 tex1=1
+OP replace old5new9 tex2=9 tex0=1
+OP setmat water material=4
+OP flip d0 tex0=2 tex1=1 tex2=3
+OP rotate d1 tex0=5 tex1=6 tex2=3 tex3=4
+OP forcemip parent faces=84848446 84848484 84848484
 OP delcube child0 empty=1 tex0=3
 OP fill child0 solid=1 tex0=9 mat=0
 ```

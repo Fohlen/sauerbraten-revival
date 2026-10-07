@@ -78,6 +78,56 @@ int main()
           printf("BLOCK orient1 cell(0,0,0) -> s=(%d,%d,%d)\n",s.x,s.y,s.z); }
     }
 
+    // ---- face/texture/material/flip/rotate (ops.cpp: verbatim engine copies) ----
+    extern void probe_edittex_all(cube &c, int tex);
+    extern void probe_edittex_orient(cube &c, int tex, int o);
+    extern void probe_replace(cube &c, int o, int n);
+    extern void probe_setmat(cube &c, ushort mat);
+    extern void probe_flip(cube &c, int d);
+    extern void probe_rotate(cube &c, int d);
+    {
+        cube c; c.children=NULL; c.ext=NULL; solidfaces(c); loopl(6) c.texture[l]=1;
+        probe_edittex_all(c, 42);
+        printf("OP edittex all tex0=%d tex5=%d\n", c.texture[0], c.texture[5]);
+
+        loopl(6) c.texture[l]=1;
+        probe_edittex_orient(c, 7, 0);
+        printf("OP edittex orient0 tex0=%d tex1=%d\n", c.texture[0], c.texture[1]);
+    }
+    {
+        cube c; c.children=NULL; loopl(6) c.texture[l]= (l==2?5:1);
+        probe_replace(c, 5, 9);
+        printf("OP replace old5new9 tex2=%d tex0=%d\n", c.texture[2], c.texture[0]);
+    }
+    {
+        cube c; c.children=NULL; solidfaces(c); c.material=MAT_AIR;
+        probe_setmat(c, MAT_WATER);
+        printf("OP setmat water material=%d\n", c.material);
+    }
+    {
+        cube c; c.children=NULL; loopl(6) c.texture[l]=l+1;
+        probe_flip(c, 0);
+        printf("OP flip d0 tex0=%d tex1=%d tex2=%d\n", c.texture[0], c.texture[1], c.texture[2]);
+
+        cube r; r.children=NULL; loopl(6) r.texture[l]=l+1;
+        probe_rotate(r, 1);
+        printf("OP rotate d1 tex0=%d tex1=%d tex2=%d tex3=%d\n", r.texture[0], r.texture[1], r.texture[2], r.texture[3]);
+    }
+
+    // ---- forcemip ----
+    {
+        extern void probe_forcemip(cube &c, bool fixtex);
+        // A subdividing parent whose child 7 is solid with a known deformation.
+        cube p; p.children=NULL; p.ext=NULL; emptyfaces(p);
+        loopl(6) p.texture[l]=l;
+        // Build simple children: all empty except child 7, which is solid.
+        p.children = newcubes(F_EMPTY);
+        solidfaces(p.children[7]);
+        p.children[7].edges[0]=4; // deform child 7 vertex 0 x
+        probe_forcemip(p, false);
+        printf("OP forcemip parent faces=%08x %08x %08x\n", p.faces[0], p.faces[1], p.faces[2]);
+    }
+
     // ---- op handlers on a small world ----
     // "delete cube": discardchildren + emptyfaces on a child.
     {

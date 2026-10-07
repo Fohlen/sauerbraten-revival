@@ -16,7 +16,7 @@ if [ ! -f "$INCL/engine/octa.cpp" ]; then
     exit 1
 fi
 
-c++ -std=c++17 -O2 -w -o octaprobe probe.cpp stubs.cpp "$INCL/engine/octa.cpp" \
+c++ -std=c++17 -O2 -w -o octaprobe probe.cpp ops.cpp stubs.cpp "$INCL/engine/octa.cpp" \
     -I"$INCL/engine" -I"$INCL/shared" -I"$INCL/include" -I"$INCL" -I"$INCL/enet/include" \
     -L"$INCL/enet" -lenet
 

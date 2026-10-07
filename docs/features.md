@@ -107,7 +107,14 @@ that underpins this entire section.
       - [x] **M1c op handlers**: `BlockCopy` (capture), `PasteBlock` (transparent
             paste), `DeleteCube`, `Fill`, `GetMaterial`, `ForEachSelCube`
             (`World/OctaEdit.cs`); asserted by `test/OctaOpsTest.cs` with engine
-            ground truth. **Next:** face/texture/remip ops, then M3 command log.
+            ground truth.
+      - [x] **M1 texture/material/flip/rotate**: `SetFaceTexture`,
+            `ReplaceTexture`, `SetMaterial`/`EditMaterial`, `FlipCube`,
+            `RotateCube`, `ForceMip` (`World/OctaEdit.cs`); asserted against the
+            engine by `test/OctaFaceTest.cs`. Fixed a latent whole-byte vertex-write
+            bug in `CubeGeometry.SetCubeVector` (now nibble-correct).
+      - [ ] **M1d `remip`** — deferred: needs a dedicated pass (`visibleface`,
+            merges) and the inverse-strategy decision (editor doc §11.5).
 - [ ] Texturing, blending, entity placement.
 - [ ] Selection, copy/paste, fill, remip.
 - [ ] Save/load in our format.

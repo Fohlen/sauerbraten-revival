@@ -452,4 +452,263 @@ public static class OctaEdit
         if (mode == 1 && dir > 0)
             sel.O = SetAxis(sel.O, d, sel.O[d] + sel.Grid * seldir);
     }
+
+    // ---- face / texture / material ops (octaedit.cpp) ----
+
+    /// <summary>
+    /// octaedit.cpp:2177 <c>edittexcube(c, tex, orient, findrep)</c> — set a cube's
+    /// face texture, recursing into children. <paramref name="orient"/> &lt; 0 sets
+    /// all six faces; otherwise only the (visible) face for that orientation.
+    /// </summary>
+    public static void SetFaceTexture(Cube c, int tex, int orient)
+    {
+        if (orient < 0)
+        {
+            for (int i = 0; i < 6; i++) c.Texture[i] = (ushort)tex;
+        }
+        else
+        {
+            int i = VisibleOrient(c, orient);
+            c.Texture[i] = (ushort)tex;
+        }
+        if (c.Children != null)
+            for (int i = 0; i < 8; i++) SetFaceTexture(c.Children[i], tex, orient);
+    }
+
+    /// <summary>octaedit.cpp:2555 <c>replacetexcube(c, oldtex, newtex)</c> — swap one texture index for another, recursing children.</summary>
+    public static void ReplaceTexture(Cube c, int oldtex, int newtex)
+    {
+        for (int i = 0; i < 6; i++)
+            if (c.Texture[i] == oldtex) c.Texture[i] = (ushort)newtex;
+        if (c.Children != null)
+            for (int i = 0; i < 8; i++) ReplaceTexture(c.Children[i], oldtex, newtex);
+    }
+
+    /// <summary>
+    /// octaedit.cpp:2565 <c>mpreplacetex</c> — replace a texture across a selection
+    /// (or the whole world when <paramref name="insel"/> is false).
+    /// </summary>
+    public static void ReplaceTexture(Octa octa, Commands.Block3? sel, int oldtex, int newtex, bool insel)
+    {
+        if (insel && sel.HasValue)
+        {
+            ForEachSelCube(octa, sel.Value, sel.Value.Grid, (x, y, z, c) => ReplaceTexture(c, oldtex, newtex));
+        }
+        else
+        {
+            for (int i = 0; i < 8; i++) ReplaceTexture(octa.WorldRoot[i], oldtex, newtex);
+        }
+    }
+
+    /// <summary>
+    /// octaedit.cpp:2713 <c>setmat</c> — apply a material to a cube (recursing
+    /// children), subject to an optional filter and geometry test.
+    /// <paramref name="matmask"/> clears the bits the new material overwrites.
+    /// </summary>
+    public static void SetMaterial(Cube c, ushort mat, ushort matmask,
+        ushort filtermat, ushort filtermask, int filtergeom)
+    {
+        if (c.Children != null)
+        {
+            for (int i = 0; i < 8; i++) SetMaterial(c.Children[i], mat, matmask, filtermat, filtermask, filtergeom);
+            return;
+        }
+
+        if ((c.Material & filtermask) != filtermat) return;
+
+        switch (filtergeom)
+        {
+            case EditMatFilter.Empty: if (c.IsEmpty()) break; return;
+            case EditMatFilter.NotEmpty: if (!c.IsEmpty()) break; return;
+            case EditMatFilter.Solid: if (c.IsEntirelySolid()) break; return;
+            case EditMatFilter.NotSolid: if (!c.IsEntirelySolid()) break; return;
+        }
+
+        if (mat != Octa.MAT_AIR)
+        {
+            c.Material = (ushort)((c.Material & matmask) | mat);
+        }
+        else c.Material = Octa.MAT_AIR;
+    }
+
+    /// <summary>octaedit.cpp geometry filters for <see cref="SetMaterial"/> (EDITMATF_*).</summary>
+    public static class EditMatFilter
+    {
+        public const int Empty = 1;
+        public const int NotEmpty = 2;
+        public const int Solid = 3;
+        public const int NotSolid = 4;
+    }
+
+    /// <summary>
+    /// octaedit.cpp:2735 <c>mpeditmat</c> — apply a material across a selection with
+    /// the same mask/filter derivation the original uses. <paramref name="matid"/> &lt; 0
+    /// removes the filtered material.
+    /// </summary>
+    public static void EditMaterial(Octa octa, Commands.Block3 sel, int matid, int filter)
+    {
+        ushort filtermat = 0, filtermask = 0, matmask;
+        int filtergeom = 0;
+        if (filter >= 0)
+        {
+            filtermat = (ushort)(filter & 0xFFFF);
+            filtermask = (filtermat & (Octa.MATF_VOLUME | Octa.MATF_INDEX)) != 0
+                ? (ushort)(Octa.MATF_VOLUME | Octa.MATF_INDEX)
+                : (filtermat & Octa.MATF_CLIP) != 0 ? Octa.MATF_CLIP : filtermat;
+            filtergeom = filter & ~0xFFFF;
+        }
+        if (matid < 0)
+        {
+            matid = 0;
+            matmask = filtermask;
+            if (Octa.IsClipped((ushort)(filtermat & Octa.MATF_VOLUME))) matmask &= unchecked((ushort)~Octa.MATF_CLIP);
+            if (Octa.IsDeadly((ushort)(filtermat & Octa.MATF_VOLUME))) matmask &= unchecked((ushort)~Octa.MAT_DEATH);
+        }
+        else
+        {
+            matmask = (matid & (Octa.MATF_VOLUME | Octa.MATF_INDEX)) != 0
+                ? (ushort)0
+                : (matid & Octa.MATF_CLIP) != 0 ? unchecked((ushort)~Octa.MATF_CLIP) : unchecked((ushort)~(ushort)matid);
+            if (Octa.IsClipped((ushort)(matid & Octa.MATF_VOLUME))) matid |= Octa.MAT_CLIP;
+            if (Octa.IsDeadly((ushort)(matid & Octa.MATF_VOLUME))) matid |= Octa.MAT_DEATH;
+        }
+        ushort m = (ushort)matid;
+        ForEachSelCube(octa, sel, sel.Grid, (x, y, z, c) => SetMaterial(c, m, matmask, filtermat, filtermask, filtergeom));
+    }
+
+    // ---- flip / rotate (octaedit.cpp) ----
+
+    /// <summary>octaedit.cpp:2643 <c>dflip(face)</c>.</summary>
+    public static uint DFlip(uint face) => face == Octa.F_EMPTY ? face : 0x88888888u - (((face & 0xF0F0F0F0u) >> 4) | ((face & 0x0F0F0F0Fu) << 4));
+
+    /// <summary>octaedit.cpp:2644 <c>cflip(face)</c>.</summary>
+    public static uint CFlip(uint face) => ((face & 0xFF00FF00u) >> 8) | ((face & 0x00FF00FFu) << 8);
+
+    /// <summary>octaedit.cpp:2645 <c>rflip(face)</c>.</summary>
+    public static uint RFlip(uint face) => ((face & 0xFFFF0000u) >> 16) | ((face & 0x0000FFFFu) << 16);
+
+    /// <summary>octaedit.cpp:2646 <c>mflip(face)</c>.</summary>
+    public static uint MFlip(uint face) => (face & 0xFF0000FFu) | ((face & 0x00FF0000u) >> 8) | ((face & 0x0000FF00u) << 8);
+
+    /// <summary>octaedit.cpp:2648 <c>flipcube(c, d)</c> — mirror a cube across axis d, recursing children.</summary>
+    public static void FlipCube(Cube c, int d)
+    {
+        (c.Texture[d * 2], c.Texture[d * 2 + 1]) = (c.Texture[d * 2 + 1], c.Texture[d * 2]);
+        c.Faces[Octa.D[d]] = DFlip(c.Faces[Octa.D[d]]);
+        c.Faces[Octa.C[d]] = CFlip(c.Faces[Octa.C[d]]);
+        c.Faces[Octa.R[d]] = RFlip(c.Faces[Octa.R[d]]);
+        if (c.Children != null)
+        {
+            int dim = 1 << d;
+            for (int i = 0; i < 8; i++)
+                if ((i & dim) != 0) (c.Children[i], c.Children[i - dim]) = (c.Children[i - dim], c.Children[i]);
+            for (int i = 0; i < 8; i++) FlipCube(c.Children[i], d);
+        }
+    }
+
+    /// <summary>octaedit.cpp:2663 <c>rotatecube(c, d)</c> — rotate a cube clockwise about axis d, recursing children.</summary>
+    public static void RotateCube(Cube c, int d)
+    {
+        c.Faces[Octa.D[d]] = CFlip(MFlip(c.Faces[Octa.D[d]]));
+        c.Faces[Octa.C[d]] = DFlip(MFlip(c.Faces[Octa.C[d]]));
+        c.Faces[Octa.R[d]] = RFlip(MFlip(c.Faces[Octa.R[d]]));
+        (c.Faces[Octa.R[d]], c.Faces[Octa.C[d]]) = (c.Faces[Octa.C[d]], c.Faces[Octa.R[d]]);
+
+        (c.Texture[2 * Octa.R[d]], c.Texture[2 * Octa.C[d] + 1]) = (c.Texture[2 * Octa.C[d] + 1], c.Texture[2 * Octa.R[d]]);
+        (c.Texture[2 * Octa.C[d]], c.Texture[2 * Octa.R[d] + 1]) = (c.Texture[2 * Octa.R[d] + 1], c.Texture[2 * Octa.C[d]]);
+        (c.Texture[2 * Octa.C[d]], c.Texture[2 * Octa.C[d] + 1]) = (c.Texture[2 * Octa.C[d] + 1], c.Texture[2 * Octa.C[d]]);
+
+        if (c.Children != null)
+        {
+            int row = 1 << Octa.R[d];
+            int col = 1 << Octa.C[d];
+            int ddim = 1 << d;
+            for (int i = 0; i <= ddim; i += ddim)
+            {
+                // rotatequad(children[i+row], children[i], children[i+col], children[i+col+row])
+                Cube t = c.Children[i + row];
+                c.Children[i + row] = c.Children[i];
+                c.Children[i] = c.Children[i + col];
+                c.Children[i + col] = c.Children[i + col + row];
+                c.Children[i + col + row] = t;
+            }
+            for (int i = 0; i < 8; i++) RotateCube(c.Children[i], d);
+        }
+    }
+
+    /// <summary>octaedit.cpp:1015-ish <c>visibleorient(c, orient)</c> — the actual face a texture edit lands on.</summary>
+    private static int VisibleOrient(Cube c, int orient)
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            int a = FaceEdgesIdx[orient][i * 2 + 0];
+            int b = FaceEdgesIdx[orient][i * 2 + 1];
+            for (int j = 0; j < 2; j++)
+            {
+                if (CrushedEdge(EdgeByte(c, a), j) && CrushedEdge(EdgeByte(c, b), j) && c.TouchingFace(orient))
+                    return ((a >> 2) << 1) + j;
+            }
+        }
+        return orient;
+    }
+
+    /// <summary>Read edge byte <paramref name="k"/> (0..11); <c>cubeedge</c> inversion of <c>edges[k]</c>.</summary>
+    private static byte EdgeByte(Cube c, int k) => c.CubeEdge(k >> 2, k & 1, (k >> 1) & 1);
+
+    private static bool CrushedEdge(byte e, int dc) => dc != 0 ? e == 0 : e == 0x88;
+
+    /// <summary>octa.cpp:723 <c>faceedgesidx[6][4]</c> — ordered edges surrounding each orient.</summary>
+    private static readonly int[][] FaceEdgesIdx =
+    {
+        new[] { 4, 5, 8, 10 },
+        new[] { 6, 7, 9, 11 },
+        new[] { 8, 9, 0, 2 },
+        new[] { 10, 11, 1, 3 },
+        new[] { 0, 1, 4, 6 },
+        new[] { 2, 3, 5, 7 },
+    };
+
+    // ---- (re)mip (octa.cpp) ----
+
+    /// <summary>
+    /// octa.cpp:316 <c>forcemip(c, fixtex)</c> — collapse a cube's edges to those
+    /// of its nearest non-empty children. Optionally re-mips the parent textures.
+    /// <paramref name="c"/> must have children.
+    /// </summary>
+    public static void ForceMip(Octa octa, Cube c, bool fixtex)
+    {
+        Cube[] ch = c.Children!;
+        c.EmptyFaces();
+
+        for (int i = 0; i < 8; i++)
+        {
+            for (int j = 0; j < 8; j++)
+            {
+                // The child near vertex j: n = i ^ (j==3 ? 4 : (j==4 ? 3 : j)).
+                int n = i ^ (j == 3 ? 4 : j == 4 ? 3 : j);
+                if (!ch[n].IsEmpty())
+                {
+                    Vector3I v = CubeGeometry.GetCubeVector(ch[n], i);
+                    // setcubevector(c, i, ivec(n, v, 8).shr(1)) — child vertex i,
+                    // octant n offset by one node size (8), halved to parent grid.
+                    CubeGeometry.SetCubeVector(c, i, ParentVertex(n, v));
+                    break;
+                }
+            }
+        }
+
+        if (fixtex)
+        {
+            for (int j = 0; j < 6; j++) c.Texture[j] = Octa.GetMippedTexture(c, j);
+        }
+    }
+
+    /// <summary>octa.cpp:316 — <c>ivec(n, v, 8).shr(1)</c>: vertex v offset into octant n, halved to parent scale.</summary>
+    private static Vector3I ParentVertex(int n, Vector3I v)
+    {
+        int x = (v.X + ((n & 1) >> 0) * 8) >> 1;
+        int y = (v.Y + ((n & 2) >> 1) * 8) >> 1;
+        int z = (v.Z + ((n & 4) >> 2) * 8) >> 1;
+        return new Vector3I(x, y, z);
+    }
 }
