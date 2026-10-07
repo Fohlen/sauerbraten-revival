@@ -131,7 +131,8 @@ public sealed class WorldCommand
 
 Cube2's `makeundo`/`addundo` captures a `block3` (the selection's cubes) *before*
 editing, and `packundo` compresses it with zlib. That is already "capture the
-old block" — good. The failure modes were:
+old block" — good. (We adopt the capture, not the compression — see §11.6.) The
+failure modes were:
 
 - The captured block was **not the unit of replication**; replication used
   `editinfo` + `sendserveredit` and was limited in size, so a large paste was
@@ -454,7 +455,9 @@ needed it swaps in behind `WorldCommandCodec` without touching the sink. Decisio
 - `SetFaceMaterial`: material bits + face mask.
 - `Fill`: selection + fill material/texture.
 - `Remip`: selection only (the algorithm derives the result) — but see inverse.
-- `AddEntity`: `EntityType`, position (3×f32), attr1..5 (i16), reserved.
+- `AddEntity`: `EntityType`, position (3×`i32`, fixed-point `DMF=16`), attr1..5
+  (`i16`), reserved. **No floats** — see §11.7. Entity positions are integers at
+  1/16 world unit, exactly as Cube2 sends them (`(int)(o.x * DMF)`).
 - `Snapshot`: reference by index into the snapshot ring, not inline.
 
 Payloads use **selection-relative** coordinates (`Selection` = origin + S/grid +
@@ -492,10 +495,11 @@ and the editor-facing op (`Fill`, `Paste`, …) is sugar that produces
 > `packblock`, but the block wasn't the replication unit. Making `ReplaceBlock`
 > the universal carrier removes the "big patches can't be synced" limitation.
 
-**Compression.** Blocks compress well (Cube2 used zlib in `packundo`). We zlib
-(`System.IO.Compression` / Godot's `FileAccess` compression) the block when it
-exceeds a threshold; the codec declares compression in `flags`. Same bytes in
-save, network, and demo.
+**Compression: none, for now.** Cube2 zlib'd `packundo`, but our commands are
+small and an edit is one command per gesture — a large paste is rare. The codec
+has a `flags` field, so per-payload compression (zlib/zstd) can be added later
+without a format break if a measured payload warrants it. Do not add it
+speculatively.
 
 ### 5.4 Remip and determinism
 
@@ -869,25 +873,27 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
 2. ~~**Entity authority detail**~~ — **decided (§7.2):** entities are runtime
    projections (`Owner == null`), never serialized into `Level.tscn`. Hand-editing
    entities is editor/command-path only.
-3. **Text vs binary history log**: text is diffable/reviewable but larger and
-   slower. Suggest: binary `.res` for load, generate a text sidecar for VCS
-   optionally (like Godot's `.tres` for `.res`).
-4. **Prediction policy by source, not op**: editor submissions can be optimistic
-   (local stamp, reconcile); game-mode/script geometry is server-authored and
-   applied on broadcast. This is naturally a property of `CommandSource`, so we
-   likely do not need a per-`WorldOp` flag.
+3. ~~**Text vs binary history log**~~ — **decided: binary.** The command
+  history is a binary blob (`.res`/custom). A text sidecar may be *generated*
+  for VCS review, but is not the on-disk format. Matches §7.3.
+4. ~~**Prediction policy by source**~~ — **decided:** it is a property of
+  `CommandSource`. Editor submissions are optimistic (local stamp, reconcile);
+  `GameMode`/`Script` geometry is server-authored and applied on broadcast. No
+  per-`WorldOp` flag needed. (See authority-and-latency.md §7 for the scope rule.)
 5. ~~**Undo across remip**~~ — **decided (§5.4, §5.5):** `Remip` is a
    pass-through replicated op (payload `{selection, mipvis}`, deterministic
    integer re-execution). Undo is a normal `ApplyInverse` command, capturing the
    inverse at undo time; it is never transmitted and needs no special case.
-6. **Block compression**: zlib level and threshold; must be identical across
-   platforms for the parity hash (zlib is, but pin the library/level). Note this
-   is *inner* block compression inside the codec, separate from the *outer* map
-   archive (§7.4), whose hash is the parity unit.
-7. **Float determinism**: positions are f32 on the wire; confirm no accumulation
-   of arithmetic in apply paths (only integer octree math + exact f32 copies).
-   Pass-through `Remip` (§5.4) makes this load-bearing: a float in any apply path
-   would diverge peers. `visibleface` and its subtree are verified integer-only.
+6. ~~**Block compression**~~ — **decided: none for now.** Edit commands are small
+   and infrequent (that is the design), so zlib would be premature. The codec
+   already carries a `flags` field, so compression can be added later behind the
+   seam with no format break. Revisit only if a measured payload says so.
+7. ~~**Float determinism**~~ — **closed by not having floats.** The wire carries
+   **no floats**: positions are fixed-point integers (Cube2's own scheme,
+   `DMF = 16` → 1/16 world unit, i.e. `(int)(pos * 16)`), attributes are `i16`,
+   and cubes/selection are already integers. Determinism is therefore trivial on
+   the apply paths, and pass-through `Remip` (§5.4) is hardened. Verify: the
+   codec has no `float`/`Single` today (`World/Commands/WorldCommandCodec.cs`).
 8. **Permission/authority model**: who may edit (all coop clients? server
    config?), and how it interacts with the edit lock and game modes.
 9. **Prediction scope (M6/M7)**: movement must predict only against the world at
