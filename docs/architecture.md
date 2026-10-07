@@ -187,6 +187,35 @@ between stages.
 
 No CubeScript, no interpreter, no cross-map ambiguity.
 
+### 6.1 Keybinds: defaults, remapping, and what is (not yet) bound
+
+Editor/game actions are `InputMap` actions, **not** hardcoded keys, so they can be
+rebound. The state today and the intended shape:
+
+- **Defaults** live in `project.godot`'s `[input]` section (editor actions are
+  `editor_*`, e.g. `editor_flip`, `editor_mod_face`). This is the Godot-native,
+  inspector-visible location.
+- **Player remaps are not implemented yet.** The intended pattern, to land with
+  the settings UI (M4e / options work):
+  1. On startup, load a `ConfigFile` from `user://input.cfg`.
+  2. For each saved action, `InputMap.ActionEraseEvents` then
+     `InputMap.ActionAddEvent` with the stored `InputEvent`s.
+  3. On rebind, write the action's events back to the `ConfigFile`.
+  Until then, the `project.godot` defaults are authoritative and remapping is
+  only possible at runtime (see `test/EditorInputMapTest.cs`, which rebinds an
+  action to prove the mechanism works).
+
+**What is deliberately *not* an `InputMap` action:** mouse-button gestures in the
+editor (`MOUSE1/2/3` drag, wheel, `MOUSE6/7`). They need press *and* release with
+cursor position, and trackpad scroll is analog (`InputEventPanGesture.factor` /
+`.delta`), none of which an `InputMap` action can carry. Cube2 made these
+`editbind`s too; if we want them remappable, the shape is a small action→`InputEvent`
+table consulted in `_UnhandledInput`, not a pure action lookup. Deferred.
+
+**Trackpad note (macOS):** trackpad / Magic-Mouse scrolling arrives as
+`InputEventPanGesture`, never `MouseButton.WheelUp/Down`; both paths are handled
+(`EditorController`). `PanNotch` tunes sensitivity.
+
 ---
 
 ## 7. Modding & Workshop

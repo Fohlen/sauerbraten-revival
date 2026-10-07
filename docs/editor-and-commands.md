@@ -813,16 +813,21 @@ hash differently (§9).
   `EmptyMap`/`scenes/empty_map.tscn`. `test/OctaRayTest.cs`, `test/EditorInputTest.cs`,
   `test/DragSelectTest.cs`.
 
-  **Input binds wired** (Cube2 `editbind`): `MOUSE1` box-select (editdrag),
-  `MOUSE2` extend (editextend), `MOUSE3` corner-exact select (selcorners),
-  scroll = fill/empty, and the `delta_use` **modifier namespace** — hold `G` grid,
-  `F` face push/pull, `Q` corner push/pull, `R` rotate; `X` flip, `SPACE` cancel,
-  `DELETE` delcube, `KP4-9` nudge selection, `C`/`V` copy/paste (clipboard is
-  client-local), `B` or `MOUSE6/7` cut, `U`/`I` undo/redo.
+  **Input binds wired** (Cube2 `editbind`). Keyboard binds are **`InputMap`
+  actions** (`editor_*` in `project.godot`), not hardcoded keys, so they are
+  remappable: hold `G` grid, `F` face push/pull, `Q` corner push/pull,
+  `R` rotate (scroll with those held = the `delta_use` namespace); `X` flip,
+  `SPACE` cancel, `DELETE` delcube, `KP4-9` nudge selection, `C`/`V` copy/paste
+  (clipboard is client-local), `B` cut, `U`/`I` undo/redo. Mouse gestures
+  (`MOUSE1` box-select, `MOUSE2` extend, `MOUSE3` selcorners, `MOUSE6/7` cut,
+  wheel/trackpad scroll) stay raw events — they need press+release and analog
+  scroll, which `InputMap` actions cannot carry (architecture.md §6.1).
   **macOS note:** trackpad/Magic-Mouse scrolling arrives as `InputEventPanGesture`,
   not `WheelUp/Down` — both are handled.
 
-  **Not wired yet:** `Y`+scroll texture change (needs the M4e texture picker).
+  **Not wired yet:** `Y`+scroll texture change (needs the M4e texture picker);
+  persistent user remaps via `user://input.cfg` (architecture.md §6.1, with the
+  settings UI); remappable mouse gestures.
 
   **Todo (engine work):** replace `OctaRay.RayCube` with a port of
   `physics.cpp:raycube` (hierarchical descent + deformed-cube clipping planes).

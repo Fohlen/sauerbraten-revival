@@ -108,7 +108,7 @@ public partial class EditorController : Node3D
     {
         if (Octa == null) return;
 
-        // Mouse buttons: drag gestures (Cube2 editbind MOUSE1/MOUSE2).
+        // Mouse buttons: drag gestures (Cube2 editbind MOUSE1/MOUSE2/MOUSE3).
         if (@event is InputEventMouseButton button)
         {
             switch (button.ButtonIndex)
@@ -162,36 +162,44 @@ public partial class EditorController : Node3D
             return;
         }
 
-        // Keys: one-shot edit actions (Cube2 editbinds).
-        if (@event is InputEventKey key && key.Pressed && !key.Echo)
-        {
-            switch (key.PhysicalKeycode)
-            {
-                case Key.Space: Cursor.CancelSelection(); break;
-                case Key.X: EditTransform(flip: true); break;
-                case Key.Delete: EditDelete(); break;
-                case Key.C: EditCopy(); break;
-                case Key.V: EditPaste(); break;
-                case Key.U: EditUndo(); break;
-                case Key.I: EditRedo(); break;
-                case Key.B: EditCut(); break; // Cube2: B = editcut
-                // Numpad selection nudge (KP4-9 = movesel).
-                case Key.Kp4: Cursor.MoveSelection(-1, 0); break;
-                case Key.Kp6: Cursor.MoveSelection(+1, 0); break;
-                case Key.Kp8: Cursor.MoveSelection(+1, 1); break;
-                case Key.Kp5: Cursor.MoveSelection(-1, 1); break;
-                case Key.Kp9: Cursor.MoveSelection(+1, 2); break;
-                case Key.Kp7: Cursor.MoveSelection(-1, 2); break;
-            }
-        }
+        // One-shot editor actions (InputMap, remappable).
+        DispatchActions(@event);
     }
 
     /// <summary>
-    /// The <c>delta_use</c> namespace: what a scroll notch does depends on which
-    /// editor key is held (Cube2 <c>editbind F/G/Q/R/Y</c>). Falls back to fill/empty.
+    /// Map remappable <c>InputMap</c> actions to editor calls. Each is checked with
+    /// <c>IsActionPressed</c> on the event so bindings can be changed in Project
+    /// Settings (or at runtime) without touching this code.
     /// </summary>
-    private static bool Shift => Input.IsKeyPressed(Key.Shift);
-    private static bool Held(Key k) => Input.IsKeyPressed(k);
+    private void DispatchActions(InputEvent e)
+    {
+        if (Pressed(e, "editor_cancel")) Cursor.CancelSelection();
+        if (Pressed(e, "editor_flip")) EditTransform(flip: true);
+        if (Pressed(e, "editor_delete")) EditDelete();
+        if (Pressed(e, "editor_copy")) EditCopy();
+        if (Pressed(e, "editor_paste")) EditPaste();
+        if (Pressed(e, "editor_cut")) EditCut();
+        if (Pressed(e, "editor_undo")) EditUndo();
+        if (Pressed(e, "editor_redo")) EditRedo();
+
+        // Numpad selection nudge (KP4-9 = movesel).
+        if (Pressed(e, "editor_sel_left")) Cursor.MoveSelection(-1, 0);
+        if (Pressed(e, "editor_sel_right")) Cursor.MoveSelection(+1, 0);
+        if (Pressed(e, "editor_sel_fwd")) Cursor.MoveSelection(+1, 1);
+        if (Pressed(e, "editor_sel_back")) Cursor.MoveSelection(-1, 1);
+        if (Pressed(e, "editor_sel_up")) Cursor.MoveSelection(+1, 2);
+        if (Pressed(e, "editor_sel_down")) Cursor.MoveSelection(-1, 2);
+    }
+
+    /// <summary>True if the event just triggered a remappable action (ignoring key echo).</summary>
+    private static bool Pressed(InputEvent e, string action)
+    {
+        if (e is InputEventKey k && (k.Echo || !k.Pressed)) return false;
+        return e.IsActionPressed(action);
+    }
+
+    /// <summary>Is a held modifier action pressed (the <c>delta_use</c> namespace)?</summary>
+    private static bool Held(string action) => Input.IsActionPressed(action);
 
     /// <summary>
     /// One scroll notch: plain = fill/empty (mpeditface mode 1, the white-box
@@ -199,11 +207,12 @@ public partial class EditorController : Node3D
     /// </summary>
     public void Scroll(int notch)
     {
-        // Cube2 delta_use namespace: the held key selects the action.
-        if (Held(Key.G) || Shift) { SetGrid(Cursor.GridPower + notch); return; }
-        if (Held(Key.F)) { EditFace(notch, 0); return; }   // push/pull cube face
-        if (Held(Key.Q)) { EditFace(notch, 2); return; }   // push/pull cube corner
-        if (Held(Key.R)) { EditRotate(notch); return; }
+        // Cube2 delta_use namespace: the held modifier action selects the operation.
+        // (Shift is also accepted for grid, matching the original's muscle memory.)
+        if (Held("editor_mod_grid") || Input.IsActionPressed("editor_grid_shift")) { SetGrid(Cursor.GridPower + notch); return; }
+        if (Held("editor_mod_face")) { EditFace(notch, 0); return; }    // push/pull cube face
+        if (Held("editor_mod_corner")) { EditFace(notch, 2); return; }  // push/pull cube corner
+        if (Held("editor_mod_rotate")) { EditRotate(notch); return; }    // rotate
         // Default: fill/empty (mpeditface mode 1), the white-box push/pull.
         EditFace(notch, 1);
     }
