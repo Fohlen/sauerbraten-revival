@@ -208,24 +208,37 @@ running `physsteps` catch-up frames inside each rendered frame. Player movement
 uses `moveres = 10` sub-steps of `move()` per physics frame, i.e. ~0.5 ms
 effective resolution. `interppos` smooths rendering between physics frames.
 
-To reproduce feel in Godot, run physics at **200 Hz** and avoid variable-delta
-movement.
+Measured on a real run (see
+[movement-verification.md](movement-verification.md)): the main-loop `curtime` is
+**variable** (5–28 ms at a 200 fps cap) but `physframetime` is **always 5 ms** and
+the jitter is absorbed by `physsteps = ceil(diff/5)`. So the rule is not just “run
+at 200 Hz” — a faithful port must advance in **fixed 5 ms steps and catch up by
+step count**, never scale the step by a variable `delta`.
 
 ---
 
 ## 5. Port notes / deviations in the current MVP
 
-The first prototype (`scripts/Player.cs`) reproduces the **velocity model**
-exactly (constants, direction, friction lerp, forward/airborne multipliers,
-gravity, jump) but uses Godot's `CharacterBody3D.move_and_slide()` for collision.
-Known deviations to close later:
+The live player is `World/Ogz/MapPlayer.cs`. It uses the **ported octree physics**
+(`World/Physics/OctaPhysics.cs` — `collide`/`move`/`trystepup`/`trystepdown`/…), so
+it climbs ramp lips and stairs like the original, and shares one implementation
+with the A3 replay differential. It is parented under the Z-up world node and
+simulates in Sauerbraten coordinates.
 
-- Collision volume is a capsule, not the original capsule/cylinder+plane model.
-- **`trystepup`/`trystepdown` are not yet ported — and they are required, not
-  optional.** Godot's `move_and_slide()` has no up-step, so the prototype cannot
-  climb a ramp lip or stairs. The port must reproduce `STAIRHEIGHT = 4.1`, the
-  `cansmooth` slope branch (vertical `1/scale` component), and the step-down
-  state. This is the single biggest movement deviation to close.
-- No octree/cube world; the prototype collides with ordinary Godot colliders.
-- `moveres` sub-stepping is approximated by running the whole controller at 200 Hz.
-- Water, crouch, spectator-float, and the exact slope-slide gravity are not ported yet.
+Input/timing match the captured original behaviour
+(`tools/refharness/traces/session-motion.input.csv`): fixed **5 ms** `MovePlayer`
+steps caught up by **count**, and the whole frame's mouse delta applied **once per
+rendered frame** (never per tick).
+
+Still to do / known deviations:
+
+- Collision volume/`moveres` are shared with A3; velocity + collision are verified
+  to ~99.8% of steps (deformed-cube slope landings are the residual — see
+  [movement-verification.md](movement-verification.md)).
+- The old prototype `scripts/Player.cs` (+ `scenes/player.tscn`,
+  `scenes/test_level.tscn`) is superseded and gets removed once the new player
+  covers death/respawn and item/trigger feedback.
+- Water, crouch, spectator-float, gun sway and jump/land/water sounds are not
+  ported yet.
+- `MapPlayer.Setup` spawns at the first `ET_PLAYERSTART`; multi-spawn/team modes
+  and `game::suicide` respawn are not wired.

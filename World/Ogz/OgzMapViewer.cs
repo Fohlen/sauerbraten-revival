@@ -33,6 +33,9 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Place the direct-child <c>Camera3D</c> at a full-map overview once built.</summary>
     [Export] public bool FrameCamera { get; set; } = true;
 
+    /// <summary>Attach the direct-child <see cref="MapPlayer"/> to the world's octree and place it at a spawn point.</summary>
+    [Export] public bool SpawnPlayer { get; set; } = false;
+
     /// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
     public MapWorld? World { get; private set; }
 
@@ -54,7 +57,38 @@ public partial class OgzMapViewer : Node3D
 
         ApplySky(World.Map!, World.Textures!);
         AddSun();
+        if (SpawnPlayer) AttachPlayer();
         if (FrameCamera) FrameSceneCamera(World.Centre, World.Radius);
+    }
+
+    /// <summary>
+    /// Move a scene-authored <see cref="MapPlayer"/> under the Z-up world node and
+    /// initialise it against the octree at the map's first <c>ET_PLAYERSTART</c>
+    /// (falling back to the map centre). Physics then owns its position/orientation.
+    /// </summary>
+    private void AttachPlayer()
+    {
+        MapPlayer? player = null;
+        foreach (var child in GetChildren())
+            if (child is MapPlayer p) { player = p; break; }
+        if (player == null)
+        {
+            GD.PushWarning($"[viewer] SpawnPlayer is set but no direct-child {nameof(MapPlayer)} node exists.");
+            return;
+        }
+
+        player.Reparent(World!); // into the rotated Z-up world
+
+        (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
+        player.Setup(World.Octa!, feet, yaw);
+        GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw}");
+    }
+
+    private (Vector3 Feet, float Yaw) FindSpawn(OgzMap map)
+    {
+        foreach (var (_, e) in map.OfType(Entities.EntityType.PlayerStart))
+            return (e.Position, e.Attr1);
+        return (World!.Bounds.GetCenter(), 0f);
     }
 
     private void ApplySky(OgzMap map, ITextureSource textures)

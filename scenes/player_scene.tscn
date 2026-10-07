@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" uid="uid://bc0icyqafgcea" path="res://World/Ogz/OgzMapViewer.cs" id="1_viewer"]
+[ext_resource type="Script" path="res://World/Ogz/MapPlayer.cs" id="2_player"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 
@@ -12,11 +13,25 @@ background_mode = 2
 sky = SubResource("Sky_sky")
 ambient_light_source = 3
 
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_body"]
+radius = 4.1
+height = 15.0
+
 [node name="PlayerScene" type="Node3D"]
 script = ExtResource("1_viewer")
 OgzPath = "base/church51.ogz"
+FrameCamera = false
+SpawnPlayer = true
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_env")
 
-[node name="Camera3D" type="Camera3D" parent="."]
+[node name="Player" type="Node3D" parent="."]
+script = ExtResource("2_player")
+
+[node name="Body" type="MeshInstance3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+mesh = SubResource("CapsuleMesh_body")
+
+[node name="Camera3D" type="Camera3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
