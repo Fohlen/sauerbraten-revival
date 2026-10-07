@@ -7,7 +7,7 @@ This is an offline tool, not a runtime feature.
 
 1. Import hand-picked classic maps from the original game.
 2. Extract all geometry, entities, textures, and lighting.
-3. Produce our native format: octree `Resource` + `Level.tscn`.
+3. Produce our native format: octree `Resource` + history + `Level.tscn` (refs).
 4. **Never load `.ogz` at runtime** — the importer is a build-time tool.
 
 ---
@@ -31,8 +31,9 @@ This is an offline tool, not a runtime feature.
 │                                                  ▼             │
 │                                      ┌───────────────────────┐ │
 │                                      │  Native format        │ │
+│                                      │  - Level.tscn (refs)  │ │
 │                                      │  - world.res (octree) │ │
-│                                      │  - Level.tscn         │ │
+│                                      │  - history.res        │ │
 │                                      │  - materials/         │ │
 │                                      └───────────────────────┘ │
 │                                                                 │
@@ -181,16 +182,19 @@ and a canonical FNV-1a checksum.
 2. Parse .ogz file → in-memory octree + raw entities.
 3. Resolve texture indices → material paths via metadata.
 4. Convert octree to our native format (compact binary Resource).
-5. Convert entities to Godot nodes:
+5. Resolve entities to their runtime representation (projections, not scene data):
    - ET_LIGHT → OmniLight3D / SpotLight3D
    - ET_PLAYERSTART → SpawnPoint (custom node)
    - ET_MAPMODEL → MapModel (imported glTF Resource; .obj/.md3 converted offline)
    - ET_SOUND → AudioStreamPlayer3D
    - etc.
+   These materialize at load via `IWorld.Apply` from the entity command list —
+   they are **not** serialized into `Level.tscn` (see the native format below).
 6. Build material manifest (index → ShaderMaterial).
 7. Save:
    - world.res (octree Resource)
-   - Level.tscn (scene with entities + world reference)
+   - history.res (entity + geometry commands; empty for a fresh import)
+   - Level.tscn (scene referencing world.res + materials)
    - materials/ (imported materials)
 ```
 
@@ -204,14 +208,17 @@ New maps created in the editor use a **compact binary octree format** — not OG
 | --- | --- | --- |
 | Compression | gzip | Godot binary Resource (optionally compressed) |
 | Texture refs | indices → CubeScript | indices → material manifest |
-| Entities | inline, attr1-5 | Godot nodes in scene tree |
+| Entities | inline, attr1-5 | command log → runtime projections |
 | Lightmaps | embedded | separate or baked via LightmapGI |
-| Versioning | implicit | explicit version field |
+| Versioning | implicit | explicit version field (world blob + command ops) |
 
 The native format is:
 - **Simpler**: no CubeScript dependency.
-- **Godot-native**: loads via `ResourceLoader`.
+- **Godot-native**: loads via `ResourceLoader`; the map is a directory of
+  external resources (`Level.tscn` references `world.res`).
 - **Editable**: round-trips through the editor without loss.
+- **Versioned**: the command history *is* the version — see
+  [editor-and-commands.md §7](editor-and-commands.md#7-map-format-versioned-command-history).
 
 ---
 
@@ -230,7 +237,7 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 
 ## Entity type mapping
 
-| Sauer type | ID | Godot equivalent | Status |
+| Sauer type | ID | Godot projection | Status |
 | --- | --- | --- | --- |
 | ET_LIGHT | 1 | OmniLight3D / SpotLight3D | ✅ `LightBuilder` |
 | ET_MAPMODEL | 2 | MeshInstance3D | ✅ `MapModel` (assimp → glTF Resources) |
@@ -355,10 +362,15 @@ Planned (native format, roadmap #2):
 ```
 World/Import/                 # OGZ + metadata → native octree Resource + Level.tscn
 assets/maps/<map>/
+├── Level.tscn                # Scene: refs world.res + materials; mode config
 ├── world.res                 # Native octree Resource
-├── Level.tscn                # Scene with entities
+├── history.res               # Command log (empty on import)
 └── materials/                # Imported materials
 ```
+
+The map is a directory of external resources; its **archive** (`.zip`/`.tar`) is
+the unit of distribution, hashing, and parity. See
+[editor-and-commands.md §7](editor-and-commands.md#7-map-format-versioned-command-history).
 
 ---
 

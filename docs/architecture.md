@@ -12,7 +12,7 @@ for how we prove movement fidelity.
 | Original octree code | Reuse `octa.cpp`/`octa.h` **core**; port editor *algorithms*; do **not** copy `octaedit.cpp` plumbing |
 | Rendering | Per-chunk `ArrayMesh` (one surface per vslot, Godot materials); Forward+; RenderingServer streaming is a later optimisation; see [rendering.md](rendering.md) |
 | Collision & movement | Our own ported octree traversal (`move`/`collide`/steps), validated against the original |
-| Level format | `Level.tscn` (entities/config) + **Godot binary `Resource`** world blob. **No `.ogz`, no CubeScript** |
+| Level format | `Level.tscn` (refs + config) + external binary `Resource` world blob. **No `.ogz`, no CubeScript** |
 | Editor | Runtime, in-game, Godot UI + **command system** |
 | World mutations | All are **serializable commands** (editor, game modes, network) |
 | Config | Godot-native: `ProjectSettings`, `ConfigFile`, `Resource`, `InputMap` |
@@ -105,16 +105,37 @@ reference harness stays C++ as an offline dev tool; see
 
 ## 4. Level format
 
-- `Level.tscn`: entities (typed Godot nodes — spawns, flags, pickups, mapmodels),
-  game-mode settings, a reference to the world `Resource` and material manifest.
+The map is a **directory of external resources**, addressed by a scene that holds
+only scene-level concerns. See [editor-and-commands.md §7](editor-and-commands.md#7-map-format-versioned-command-history)
+for the full rationale; the storage tiers (`res://` vs `user://`) and archive
+packaging live there too.
+
+```
+map/
+├── Level.tscn            # refs + config: environment, game-mode settings
+├── world.res             # base octree snapshot (Godot binary Resource)
+├── history.res           # appended edit commands since world.res (optional)
+└── materials/            # material manifest
+```
+
+- `Level.tscn`: references the world `Resource` and material manifest as
+  **external resources** (by path); holds game-mode settings and environment.
+  Editing geometry/entities never rewrites this scene.
 - **World blob**: a Godot binary `Resource` (`worldroot` octree + per-face
   material indices + surface data + version field).
+- **History**: the command log (see §2), versioned with the world blob.
+- **Entities**: materialized at load as **runtime projections** (`Node.Owner ==
+  null`), not serialized into the scene. Their authority is the command log —
+  they are a view of it, like render chunks are a view of the octree. Hand-editing
+  entities is editor/command-path only.
 - **Material manifest**: face/material index → `ShaderMaterial`. No texture-name
   resolution from scripts.
-- Saved/loaded by the world layer (C#), versioned for forward migration.
 
-This format is what the editor writes, what the converter produces, and what
-mods ship.
+Saved/loaded by the world layer (C#), versioned for forward migration.
+
+This format is what the editor writes, what the converter produces, and what mods
+ship. The **unit of distribution, hashing, and multiplayer parity is the archive**
+(`.zip`/`.tar`) containing the whole directory.
 
 ---
 

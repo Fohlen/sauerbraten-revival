@@ -61,7 +61,7 @@ Done (lives in the dev viewer; not yet a standalone offline tool):
 
 Remaining:
 
-- [ ] Standalone converter: OGZ + metadata → native octree `Resource` + `Level.tscn` (blocks on §1 save format).
+- [ ] Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn` (blocks on §1 save format).
 - [ ] envmap / monsters / mode entities (flag, box, platform, elevator, …).
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
@@ -86,6 +86,9 @@ Remaining:
 - [ ] Water, crouch, spectator-float physics states.
 
 ## 4. Editor MVP *(defining feature)*
+
+See [editor-and-commands.md](editor-and-commands.md) for the command-system design
+that underpins this entire section.
 
 - [ ] Runtime in-game editing.
 - [ ] **Command system**: every mutation is a serializable command with an inverse.
