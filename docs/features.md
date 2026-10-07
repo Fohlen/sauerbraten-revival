@@ -91,6 +91,8 @@ See [editor-and-commands.md](editor-and-commands.md) for the command-system desi
 that underpins this entire section.
 
 - [ ] Runtime in-game editing.
+- [x] **Selection model** (M0): `Selection`/`Block3` port of `selinfo`
+      (`World/Commands/`, asserted by `test/SelectionTest.cs`).
 - [ ] **Command system**: every mutation is a serializable command with an inverse.
 - [ ] Undo/redo via the command stack.
 - [ ] Port editor algorithms (add/remove/fill/texture/remip/select).
