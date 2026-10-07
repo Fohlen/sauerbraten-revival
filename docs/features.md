@@ -103,7 +103,7 @@ that underpins this entire section.
       a `CommandSource` tag distinguishes them.
 - [x] Undo/redo via the command stack (see editor doc §5.5: undo is a
       server-sequenced `ApplyInverse`, own-`Editor`-changes-only; redo re-applies).
-- [ ] Port editor algorithms (add/remove/fill/texture/remip/select).
+- [x] Port editor algorithms (add/remove/fill/texture/remip/select).
       - [x] **M1a structural primitives**: `CopyCube`/`PasteCube`
             (`World/OctaEdit.cs`), `DiscardChildren`/`GetMippedTexture`/`FreeOcta`/
             `FamilySize`/`OppositeOcta` (`World/Octa.cs`); asserted by
