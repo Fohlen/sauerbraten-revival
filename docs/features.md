@@ -96,9 +96,11 @@ that underpins this entire section.
 - [ ] Runtime in-game editing.
 - [x] **Selection model** (M0): `Selection`/`Block3` port of `selinfo`
       (`World/Commands/`, asserted by `test/SelectionTest.cs`).
-- [ ] **Command system**: every mutation is a serializable command with an inverse.
-- [ ] Undo/redo via the command stack (see editor doc §5.5: undo is a
-      server-sequenced `ApplyInverse` command, own-changes-only).
+- [x] **Command system** (M3): `EditOp`/`EditCommand`/payloads, `EditCodec`
+      (`var_to_bytes` over positional arrays), `IWorld`/`OctaWorld` apply seam
+      (`World/Commands/`, asserted by `test/CommandSystemTest.cs`).
+- [x] Undo/redo via the command stack (see editor doc §5.5: undo is a
+      server-sequenced `ApplyInverse`, own-changes-only; redo re-applies).
 - [ ] Port editor algorithms (add/remove/fill/texture/remip/select).
       - [x] **M1a structural primitives**: `CopyCube`/`PasteCube`
             (`World/OctaEdit.cs`), `DiscardChildren`/`GetMippedTexture`/`FreeOcta`/

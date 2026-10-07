@@ -309,14 +309,30 @@ The **save file is exactly this**: base snapshot blocks + command log (§7).
 One `byte[]` per command, produced by `EditCodec`:
 
 ```
-[u16 op][u32 flags][u64 sequence][u64 payloadLen][payload...]
+[u8 formatVersion][u64 sequence][i32 author][Variant-encoded positional Array]
 ```
 
-`payloadLen` is redundant with the frame but lets a command be self-contained for
-save files and demos. Godot's `byte[]` RPC variant packs this efficiently; if we
-need more, a `PackedByteArray` or a `StreamPeerBuffer` over a `PackedByteArray`
-avoids per-message allocation. Prefer **fixed little-endian** encoding, not
-Godot `var2bytes`, so the save/demo/network bytes are identical and portable.
+The payload is a **positional `Godot.Collections.Array`** encoded with
+`GD.VarToBytes` (and read with the object-free `GD.BytesToVar`, so untrusted
+network input cannot smuggle an `Object`). Rationale (revised from the original
+plan):
+
+- **Positional arrays are canonical.** `var_to_bytes` output is byte-identical for
+  the same array; only *dictionaries* are non-canonical (insertion order leaks
+  into the bytes). Using arrays gives stable bytes — what parity hashing and
+  byte-stable demos need — while deleting a large hand-rolled codec.
+- **The leading version byte** lets the layout change without breaking old files.
+
+**Parity hashing caveat:** even with `var_to_bytes`, treat the *semantic* content
+(fields walked in a fixed order) as the hash input, not raw bytes. That is robust
+under any future encoding change.
+
+**FlatBuffers — considered, not adopted.** Zero-parse reads and a shared
+C#/C++/Python schema are attractive, but FlatBuffers is *not canonical by default*
+(breaks parity hashing) and adds a `flatc` toolchain. At our command sizes
+(remip ≈ 20 bytes; a large block ≈ hundreds of KB) parse cost is not the
+bottleneck — meshing is (~1.4 ms/chunk). If a shared tool/runtime format is ever
+needed it swaps in behind `EditCodec` without touching the sink. Decision 5.1b.
 
 ### 5.2 Op payloads (examples)
 
@@ -650,8 +666,14 @@ round-trip/inverse checksums. This is the editor's engine, no UI/network yet.
 rebuild + dirty set + per-frame budget. Bakes in the rendering side early so
 edits are visible while we build the rest. *Prereq for any live editing.*
 
-**M3 — Command log + undo/redo.** `EditCommand`, `EditCodec`, `WorldCommandLog`,
-undo/redo via inverse. Editor operations now go through the sink. Still offline.
+**M3 — Command log + undo/redo (done).** `EditOp`/`EditCommand`/payloads,
+`EditCodec` (`var_to_bytes` over positional arrays, §5.1), `IWorld`/`OctaWorld`
+apply seam, `WorldCommandLog` (sequence + own-commands-only undo stack),
+`WorldCommandSink` (submit/receive/undo/redo, §5.5 rules). Offline; asserted by
+`test/CommandSystemTest.cs`. **Note:** undo/redo tests compare a
+subdivision-invariant *content* snapshot, not the `OgzGeometry` structural
+checksum — `LookupCube` subdivides as a side effect, so equivalent octrees can
+hash differently (§9).
 
 **M4 — Editor UI (Godot).** Grid/plane cursor (port `editmoveplane` +
 `rendereditcursor`), selection extend/rotate/flip, texture picker, material
