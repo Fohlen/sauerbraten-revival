@@ -110,4 +110,35 @@ public class EditorClipboardTest : GoTestBase
         TestAssert.True(!ec.Cursor.SelectCorners, "release clears corner mode");
         map.QueueFree();
     }
+
+    [Test]
+    public void ScrollEditIsUndoable()
+    {
+        // The whole point of routing edits through the sink: a scroll edit must be
+        // sequenced, recorded, and therefore undoable (and replicable).
+        var ec = Setup(out var map);
+        var cell = new Vector3I(512, 512, 128);
+        TestAssert.True(!Empty(map, cell), "precondition: solid");
+
+        ec.Scroll(+1); // carve, via WorldOp.EditFace
+        TestAssert.True(Empty(map, cell), "scroll carved");
+        TestAssert.True(ec.Sink!.Log.PeekUndo() != null, "the scroll edit is an undo candidate");
+
+        ec.EditUndo();
+        TestAssert.True(!Empty(map, cell), "undo restored the cell");
+        map.QueueFree();
+    }
+
+    [Test]
+    public void RotateFlipAreRecordedAsCommands()
+    {
+        var ec = Setup(out var map);
+        ec.EditRotate(+1);
+        ec.EditTransform(flip: true);
+        var entry = ec.Sink!.Log.PeekUndo();
+        TestAssert.True(entry != null, "transform edits are undo candidates");
+        TestAssert.Equal(SauerbratenRevival.World.Commands.WorldOp.FlipCube, entry!.Command.Op,
+            "last recorded op is the flip");
+        map.QueueFree();
+    }
 }

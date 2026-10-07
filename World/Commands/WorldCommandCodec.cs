@@ -131,7 +131,7 @@ public static class WorldCommandCodec
             {
                 var p = (TransformCubePayload)cmd.Payload;
                 WriteSelection(a, p.Selection);
-                a.Add(p.Axis); a.Add(p.Direction);
+                a.Add(p.Direction);
                 break;
             }
             case WorldOp.Remip:
@@ -179,7 +179,7 @@ public static class WorldCommandCodec
                 return new SetFaceMaterialPayload(ReadSelection(a, b), (int)a[b + 8], (int)a[b + 9]);
             case WorldOp.FlipCube:
             case WorldOp.RotateCube:
-                return new TransformCubePayload(ReadSelection(a, b), (int)a[b + 8], (int)a[b + 9]);
+                return new TransformCubePayload(ReadSelection(a, b), (int)a[b + 8]);
             case WorldOp.Remip:
                 return new RemipPayload((bool)a[b]);
             case WorldOp.Snapshot:

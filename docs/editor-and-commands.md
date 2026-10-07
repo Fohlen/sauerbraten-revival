@@ -68,16 +68,18 @@ public enum WorldOp : ushort
     // --- face edits ---
     SetFaceTexture,            // vslot + per-face UV carry
     SetFaceMaterial,           // empty-space material (air/water/lava/glass/clip/...)
-    FlipFace, RotateFace, ReplaceFace,  // EDIT_FLIP / EDIT_ROTATE / EDIT_REPLACE
     // --- volume ops ---
-    Fill,                      // sel/fill: solid fill in the selection
+    EditFace,                  // mpeditface: mode 0 face push/pull, 1 fill/empty, 2 corner
     Remip,                     // merge/split runs (EDIT_REMIP), recomputes cube sizes
-    // --- clipboard (implemented on top of record/replay, §6) ---
-    Copy, Paste, RotateSelection, FlipSelection,
+    // --- selection transforms (mprotate/mpflip) ---
+    RotateCube, FlipCube,      // rotate/mirror the selection's cubes; axis from sel.orient
+    // --- clipboard (copy is client-local; paste is ReplaceBlock, §6) ---
+    ReplaceBlock,
     // --- entities (the same stream!) ---
     AddEntity, RemoveEntity, MoveEntity, SetEntityAttribute,
     // --- lifecycle ---
     Snapshot,                  // no-op marker; carries a full/delta world snapshot index
+    NewMap,                    // world.cpp emptymap: fresh world (floor + air)
 }
 
 /// Who issued a command. Semantic (part of the wire/save format): it decides what
@@ -105,7 +107,10 @@ public sealed class WorldCommand
   all go through the same sink and the same log. A single sequence is required
   because they mutate the *same* octree and races must resolve identically on
   every peer (§5.5).
-- **Atomic at the *selection* granularity, not the cube**: `Fill` over a 64³
+- **Copy is client-local, paste is a command.** A copy only reads the octree into a
+  local buffer, so it is not a `WorldCommand`; a paste is `ReplaceBlock`. This is why
+  the op list has no `Copy`/`Paste`.
+- **Atomic at the *selection* granularity, not the cube**: a fill over a 64³
   selection is *one* command (one payload, one undo entry, one network message),
   not 262144. This is the key divergence from Cube2's per-cube `pastecube` loop
   and the reason large patches sync fine.

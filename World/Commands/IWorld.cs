@@ -47,7 +47,7 @@ public sealed class OctaWorld : IWorld
             {
                 var p = (EditFacePayload)cmd.Payload;
                 var sel = p.Selection.ToSelection();
-                OctaEdit.Fill(Octa, sel, p.Dir, p.Mode);
+                OctaEdit.EditFace(Octa, sel, p.Dir, p.Mode);
                 break;
             }
             case WorldOp.ReplaceBlock:
@@ -81,15 +81,13 @@ public sealed class OctaWorld : IWorld
             case WorldOp.FlipCube:
             {
                 var p = (TransformCubePayload)cmd.Payload;
-                OctaEdit.ForEachSelCube(Octa, p.Selection.ToBlock(), p.Selection.Grid,
-                    (x, y, z, c) => OctaEdit.FlipCube(c, p.Axis));
+                OctaEdit.FlipSelection(Octa, p.Selection.ToSelection());
                 break;
             }
             case WorldOp.RotateCube:
             {
                 var p = (TransformCubePayload)cmd.Payload;
-                OctaEdit.ForEachSelCube(Octa, p.Selection.ToBlock(), p.Selection.Grid,
-                    (x, y, z, c) => OctaEdit.RotateCube(c, p.Axis));
+                OctaEdit.RotateSelection(Octa, p.Selection.ToSelection(), p.Direction);
                 break;
             }
             case WorldOp.Remip:

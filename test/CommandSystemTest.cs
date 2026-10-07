@@ -69,8 +69,8 @@ public class CommandSystemTest : GoTestBase
     [Test]
     public void CodecRoundTripsFill()
     {
-        var cmd = new WorldCommand(WorldOp.Fill, new FillPayload(Cell(new Vector3I(0, 0, 8), 4), dir: -1, mode: 1));
-        var back = (FillPayload)WorldCommandCodec.Decode(WorldCommandCodec.Encode(cmd)).Payload;
+        var cmd = new WorldCommand(WorldOp.EditFace, new EditFacePayload(Cell(new Vector3I(0, 0, 8), 4), dir: -1, mode: 1));
+        var back = (EditFacePayload)WorldCommandCodec.Decode(WorldCommandCodec.Encode(cmd)).Payload;
         TestAssert.Equal(-1, back.Dir, "dir");
         TestAssert.Equal(1, back.Mode, "mode");
         TestAssert.Equal(new Vector3I(0, 0, 8), back.Selection.Origin, "origin");

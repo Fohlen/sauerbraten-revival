@@ -149,16 +149,19 @@ public sealed class SetFaceMaterialPayload : ICommandPayload
 }
 
 /// <summary><see cref="WorldOp.FlipCube"/> / <see cref="WorldOp.RotateCube"/>: a selection plus an axis (and direction for rotate).</summary>
+/// <summary>
+/// <see cref="WorldOp.FlipCube"/> / <see cref="WorldOp.RotateCube"/>: a selection to
+/// mirror or rotate. The axis comes from the selection's <c>Orient</c>; only the
+/// rotation direction is a payload field.
+/// </summary>
 public sealed class TransformCubePayload : ICommandPayload
 {
     public SelectionPayload Selection;
-    public int Axis;        // dimension 0..2
     public int Direction;   // rotate: +1/-1 clockwise; unused for flip
 
-    public TransformCubePayload(SelectionPayload sel, int axis, int direction = 0)
+    public TransformCubePayload(SelectionPayload sel, int direction = 0)
     {
         Selection = sel;
-        Axis = axis;
         Direction = direction;
     }
 }

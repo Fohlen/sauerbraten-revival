@@ -218,37 +218,47 @@ public partial class EditorController : Node3D
     /// <summary>Run a fill/empty edit (mpeditface mode 1) at the cursor selection.</summary>
     public void EditFill(int dir) => EditFace(dir, 1);
 
-    /// <summary>Run an <c>mpeditface</c> edit (mode 0 face, 1 fill, 2 corner) at the cursor selection.</summary>
+    /// <summary>
+    /// Run an <c>mpeditface</c> edit (mode 0 face, 1 fill, 2 corner) at the cursor
+    /// selection. Submitted through the sink so it is sequenced, undoable and
+    /// replayable / replicable like every other world mutation.
+    /// </summary>
     public void EditFace(int dir, int mode)
     {
-        if (Octa == null) return;
+        if (Sink == null) return;
         var sel = CurrentSelection();
-        OctaEdit.EditFace(Octa, sel, dir, mode);
+        Sink.Submit(new WorldCommand(WorldOp.EditFace,
+            new EditFacePayload(new SelectionPayload(sel), dir, mode),
+            source: CommandSource.Editor));
         InvalidateRegion(sel);
     }
 
     /// <summary>Rotate the selection's cubes (mprotate) about the oriented axis.</summary>
     public void EditRotate(int cw)
     {
-        if (Octa == null) return;
+        if (Sink == null) return;
         var sel = CurrentSelection();
-        OctaEdit.RotateSelection(Octa, sel, cw);
+        Sink.Submit(new WorldCommand(WorldOp.RotateCube,
+            new TransformCubePayload(new SelectionPayload(sel), cw),
+            source: CommandSource.Editor));
         InvalidateRegion(sel);
     }
 
     /// <summary>Flip the selection (mpflip) along the oriented axis.</summary>
     public void EditTransform(bool flip)
     {
-        if (Octa == null) return;
+        if (Sink == null || !flip) return;
         var sel = CurrentSelection();
-        if (flip) OctaEdit.FlipSelection(Octa, sel);
+        Sink.Submit(new WorldCommand(WorldOp.FlipCube,
+            new TransformCubePayload(new SelectionPayload(sel)),
+            source: CommandSource.Editor));
         InvalidateRegion(sel);
     }
 
     /// <summary>Delete the selected cubes (editdel / delcube).</summary>
     public void EditDelete()
     {
-        if (Sink == null || Octa == null) return;
+        if (Sink == null) return;
         var sel = CurrentSelection();
         Sink.Submit(new WorldCommand(WorldOp.DeleteCube, new DeleteCubePayload(new SelectionPayload(sel)),
             source: CommandSource.Editor));
@@ -285,7 +295,7 @@ public partial class EditorController : Node3D
     /// <summary>editpaste — write the clipboard into the world at the cursor selection.</summary>
     public void EditPaste()
     {
-        if (Sink == null || Octa == null || Clipboard == null) return;
+        if (Sink == null || Clipboard == null) return;
         var sel = CurrentSelection();
         Sink.Submit(new WorldCommand(WorldOp.ReplaceBlock,
             new ReplaceBlockPayload(new SelectionPayload(sel), Clipboard),
