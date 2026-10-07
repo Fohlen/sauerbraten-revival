@@ -104,6 +104,10 @@ that underpins this entire section.
             + `validatec`), `LookupCube`, `BlockCube` (`World/OctaEdit.cs`);
             asserted against the original engine's exact edge bytes via
             `tools/octaprobe/` and `test/OctaLookupTest.cs`.
+      - [x] **M1c op handlers**: `BlockCopy` (capture), `PasteBlock` (transparent
+            paste), `DeleteCube`, `Fill`, `GetMaterial`, `ForEachSelCube`
+            (`World/OctaEdit.cs`); asserted by `test/OctaOpsTest.cs` with engine
+            ground truth. **Next:** face/texture/remip ops, then M3 command log.
 - [ ] Texturing, blending, entity placement.
 - [ ] Selection, copy/paste, fill, remip.
 - [ ] Save/load in our format.

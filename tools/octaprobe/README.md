@@ -17,6 +17,8 @@ original source, used offline to generate golden values.
   edge bytes, including the `validatec` pass that empties degenerate children.
 - `blockcube` coordinate mapping (the `octaedit.cpp` orientation math) for
   representative block cells.
+- Op outcomes: `mpdelcube` (delete empties the cube, keeping its texture) and the
+  `mpeditface` mode-1 fill/carve branch (including the selection-origin advance).
 
 ## Build & run
 
@@ -42,6 +44,8 @@ GT child 7: 80 80 80 80 80 80 80 80 80 80 80 80
 BLOCK orient0 cell(0,0,0) -> s=(8,8,8)
 BLOCK orient0 cell(1,2,1) -> s=(16,16,24)
 BLOCK orient1 cell(0,0,0) -> s=(16,8,8)
+OP delcube child0 empty=1 tex0=3
+OP fill child0 solid=1 tex0=9 mat=0
 ```
 
 These values are asserted by [`test/OctaLookupTest.cs`](../../test/OctaLookupTest.cs).

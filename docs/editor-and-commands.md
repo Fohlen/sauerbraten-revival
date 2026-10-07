@@ -577,6 +577,11 @@ unit-tested. *No dependencies.*
 face texture/material, add/remove, remip against `Octa.cs`. Test via
 round-trip/inverse checksums. This is the editor's engine, no UI/network yet.
 
+> **Progress:** M1a (structural primitives), M1b (lookups/mapping/subdivision),
+> and M1c (block capture, transparent paste, delete, fill) are **done** and
+> asserted against the original engine via `tools/octaprobe`. Remaining in M1:
+> face/texture/material ops and `remip`.
+
 **M2 — Incremental meshing.** Refactor `OctaMesher.BuildChunked` into per-chunk
 rebuild + dirty set + per-frame budget. Bakes in the rendering side early so
 edits are visible while we build the rest. *Prereq for any live editing.*

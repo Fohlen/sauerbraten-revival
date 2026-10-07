@@ -292,4 +292,164 @@ public static class OctaEdit
         1 => new Vector3I(v.X, value, v.Z),
         _ => new Vector3I(v.X, v.Y, value),
     };
+
+    // ---- selection iteration (octaedit.cpp) ----
+
+    /// <summary>
+    /// octaedit.cpp:290 <c>loopselxyz</c> — iterate every cube in a selection,
+    /// yielding (x,y,z) grid coordinates plus the resolved cube and its origin/size.
+    /// The iteration order matches the original's
+    /// <c>loop(z, s[D[dim]]) loop(y, s[C[dim]]) loop(x, s[R[dim]])</c>.
+    /// </summary>
+    public static void ForEachSelCube(Octa octa, Commands.Block3 sel, int rgrid,
+        System.Action<int, int, int, Cube> body)
+    {
+        int dim = sel.Orient >> 1;
+        for (int z = 0; z < sel.S[Octa.D[dim]]; z++)
+            for (int y = 0; y < sel.S[Octa.C[dim]]; y++)
+                for (int x = 0; x < sel.S[Octa.R[dim]]; x++)
+                {
+                    Cube c = BlockCube(octa, x, y, z, sel, rgrid);
+                    body(x, y, z, c);
+                }
+    }
+
+    /// <summary>
+    /// octaedit.cpp:1970 <c>getmaterial(c)</c> — the common material of a cube's
+    /// children (recursively), or <see cref="Octa.MAT_AIR"/> if they differ.
+    /// </summary>
+    public static ushort GetMaterial(Cube c)
+    {
+        if (c.Children == null) return c.Material;
+        ushort mat = GetMaterial(c.Children[7]);
+        for (int i = 0; i < 7; i++)
+            if (mat != GetMaterial(c.Children[i])) return Octa.MAT_AIR;
+        return mat;
+    }
+
+    // ---- block capture (octaedit.cpp) ----
+
+    /// <summary>
+    /// A captured block of cube data — the portable payload behind paste, undo and
+    /// prefabs (the <c>ReplaceBlock</c> carrier, docs/editor-and-commands.md §5.3).
+    /// Maps the original's <c>block3 + cube[]</c> buffer into managed cubes in the
+    /// block's canonical (x,y,z) order, so it is world- and location-independent.
+    /// </summary>
+    public sealed class CapturedBlock
+    {
+        public Commands.Block3 Descriptor;
+        public Cube[] Cubes = System.Array.Empty<Cube>();
+    }
+
+    /// <summary>
+    /// octaedit.cpp:663 <c>blockcopy(s, rgrid)</c> — capture every cube in a
+    /// selection into a portable block. The block's own <see cref="Commands.Block3"/>
+    /// keeps the origin/size/grid/orient so it can be re-oriented on paste.
+    /// </summary>
+    public static CapturedBlock BlockCopy(Octa octa, Commands.Block3 s, int rgrid)
+    {
+        var cap = new CapturedBlock { Descriptor = s };
+        int dim = s.Orient >> 1;
+        int count = s.S[Octa.D[dim]] * s.S[Octa.C[dim]] * s.S[Octa.R[dim]];
+        cap.Cubes = new Cube[count];
+        int n = 0;
+        for (int z = 0; z < s.S[Octa.D[dim]]; z++)
+            for (int y = 0; y < s.S[Octa.C[dim]]; y++)
+                for (int x = 0; x < s.S[Octa.R[dim]]; x++)
+                {
+                    var dst = new Cube();
+                    CopyCube(octa, BlockCube(octa, x, y, z, s, rgrid), dst);
+                    cap.Cubes[n++] = dst;
+                }
+        return cap;
+    }
+
+    /// <summary>
+    /// octaedit.cpp:1276 <c>pasteblock(b, sel)</c> — transparent paste: for each
+    /// cell in the block, paste it only if the source cell is non-empty, has
+    /// children, or carries a non-air material. Empty source cells leave the
+    /// destination untouched.
+    /// </summary>
+    public static void PasteBlock(Octa octa, CapturedBlock block, Commands.Block3 target, int rgrid)
+    {
+        int dim = block.Descriptor.Orient >> 1;
+        int n = 0;
+        for (int z = 0; z < block.Descriptor.S[Octa.D[dim]]; z++)
+            for (int y = 0; y < block.Descriptor.S[Octa.C[dim]]; y++)
+                for (int x = 0; x < block.Descriptor.S[Octa.R[dim]]; x++)
+                {
+                    Cube src = block.Cubes[n++];
+                    if (!src.IsEmpty() || src.Children != null || src.Material != Octa.MAT_AIR)
+                    {
+                        Cube dst = BlockCube(octa, x, y, z, target, rgrid);
+                        PasteCube(octa, src, dst);
+                    }
+                }
+    }
+
+    // ---- op handlers (octaedit.cpp) ----
+
+    /// <summary>
+    /// octaedit.cpp:2098 <c>mpdelcube</c> — delete the selected cubes: discard any
+    /// children and empty the faces. This is the editor's "remove".
+    /// </summary>
+    public static void DeleteCube(Octa octa, Commands.Block3 sel)
+    {
+        ForEachSelCube(octa, sel, sel.Grid, (x, y, z, c) =>
+        {
+            octa.DiscardChildren(c, fixtex: true);
+            c.EmptyFaces();
+        });
+    }
+
+    /// <summary>
+    /// octaedit.cpp:1983 <c>mpeditface</c> fill branch (mode 1) — fill or clear one
+    /// grid-slice of the selection. <paramref name="dir"/> &gt; 0 pushes the slice
+    /// to the positive side (empty faces, i.e. carve); &lt; 0 pulls it back (solid
+    /// faces, i.e. fill), copying the backing cell's textures. Returns the origin the
+    /// caller should advance to (the original mutates <c>sel.o[d]</c>).
+    /// </summary>
+    public static void Fill(Octa octa, Commands.Selection sel, int dir, int mode)
+    {
+        // octaedit.cpp:1986 — corner/edge state only permits mode 1 when centred.
+        if (mode == 1 && (sel.Cx != 0 || sel.Cy != 0 || (sel.Cxs & 1) != 0 || (sel.Cys & 1) != 0))
+            mode = 0;
+
+        int d = Commands.Selection.Dimension(sel.Orient);
+        int dc = Commands.Selection.DimCoord(sel.Orient);
+        int seldir = dc != 0 ? -dir : dir;
+
+        if (mode == 1)
+        {
+            int h = sel.O[d] + dc * sel.Grid;
+            if (((dir > 0) == (dc != 0) && h <= 0) || ((dir < 0) == (dc != 0) && h >= octa.WorldSize)) return;
+            if (dir < 0) sel.Move(seldir, d);
+        }
+
+        if (dc != 0) sel.O = SetAxis(sel.O, d, sel.O[d] + sel.Us(d) - sel.Grid);
+        sel.S = SetAxis(sel.S, d, 1);
+
+        var slab = new Commands.Block3(sel.O, sel.S, sel.Grid, sel.Orient);
+        ForEachSelCube(octa, slab, sel.Grid, (x, y, z, c) =>
+        {
+            if (c.Children != null) c.SolidFaces();
+            ushort mat = GetMaterial(c);
+            octa.DiscardChildren(c, fixtex: true);
+            c.Material = mat;
+            if (mode == 1)
+            {
+                if (dir < 0)
+                {
+                    c.SolidFaces();
+                    Cube o = BlockCube(octa, x, y, 1, slab, -sel.Grid);
+                    for (int i = 0; i < 6; i++)
+                        c.Texture[i] = o.Children != null ? Octa.DEFAULT_GEOM : o.Texture[i];
+                }
+                else c.EmptyFaces();
+            }
+        });
+
+        if (mode == 1 && dir > 0)
+            sel.O = SetAxis(sel.O, d, sel.O[d] + sel.Grid * seldir);
+    }
 }

@@ -77,5 +77,37 @@ int main()
           if(dc)s[dim]-=0; else s[dim]+=0;
           printf("BLOCK orient1 cell(0,0,0) -> s=(%d,%d,%d)\n",s.x,s.y,s.z); }
     }
+
+    // ---- op handlers on a small world ----
+    // "delete cube": discardchildren + emptyfaces on a child.
+    {
+        worldroot = newcubes(F_SOLID);
+        cube &root = worldroot[0];
+        subdividecube(root, false, false);
+        for (int l = 0; l < 6; l++) root.children[0].texture[l] = 3;
+        discardchildren(root.children[0], true);
+        emptyfaces(root.children[0]);
+        printf("OP delcube child0 empty=%d tex0=%d\n",
+               isempty(root.children[0]), root.children[0].texture[0]);
+    }
+    // "fill" (mode 1, dir<0): pull a slice solid, copying the backing cell
+    // textures. Backing cell here is child index 4 (+Z).
+    {
+        worldroot = newcubes(F_SOLID);
+        cube &root = worldroot[0];
+        subdividecube(root, false, false);
+        emptyfaces(root.children[4]);
+        for (int l = 0; l < 6; l++) root.children[4].texture[l] = 9;
+        cube &c = root.children[0];
+        // getmaterial(c): common child material (MAT_AIR if none). c is a leaf here.
+        ushort mat = c.material;
+        discardchildren(c, true);
+        c.material = mat;
+        solidfaces(c);
+        cube &o = root.children[4];
+        loopi(6) c.texture[i] = o.children ? DEFAULT_GEOM : o.texture[i];
+        printf("OP fill child0 solid=%d tex0=%d mat=%d\n",
+               isentirelysolid(c), c.texture[0], c.material);
+    }
     return 0;
 }
