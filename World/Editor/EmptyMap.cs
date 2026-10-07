@@ -61,6 +61,7 @@ public partial class EmptyMap : Node3D
             {
                 ec.Octa = octa;
                 ec.Sink = Sink;
+                ec.Renderer = Renderer;
             }
 
         GD.Print($"[emptymap] worldsize={size} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount}");

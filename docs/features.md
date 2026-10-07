@@ -94,6 +94,13 @@ See [editor-and-commands.md](editor-and-commands.md) for the command-system desi
 that underpins this entire section.
 
 - [ ] Runtime in-game editing.
+      - [x] **M4 prototype**: `World/Editor/` — `EditCursor` (cursor cast + grid/
+            orient/selection), `CursorGeometry`, `OctaRay` (prototype ray cast),
+            `EditorController` (wire-up + selection box), `EmptyMap` +
+            `scenes/empty_map.tscn` (synthetic editable world). Asserted by
+            `test/EditCursorTest.cs`, `test/OctaRayTest.cs`.
+      - [ ] Replace `OctaRay` with the real `raycube` port; full `delta_do`
+            modifier dispatch; remaining edit binds.
 - [x] **Selection model** (M0): `Selection`/`Block3` port of `selinfo`
       (`World/Commands/`, asserted by `test/SelectionTest.cs`).
 - [x] **World-command system** (M3): `WorldOp`/`WorldCommand`/payloads,

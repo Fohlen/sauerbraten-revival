@@ -803,7 +803,16 @@ hash differently (§9).
   `LinkedPush`, asserted against the engine by `test/OctaFaceTest.cs`. Mode 1
   (fill) was already `OctaEdit.Fill`.
 - **M4d — the selection box**: render the white rectangle + grid + cursor box
-  (Godot line/immediate mesh).
+  (Godot line/immediate mesh). **Prototype done** — `OctaRay` (grid DDA ray cast,
+  the seam the engine caster will replace), `EditorController` (wires the camera
+  ray → `EditCursor.Update`, draws the box, wheel → fill/grid), and an
+  `EmptyMap`/`scenes/empty_map.tscn` synthetic world to investigate.
+  `test/OctaRayTest.cs` locks the cast + cursor placement.
+
+  **Todo (engine work):** replace `OctaRay.RayCube` with a port of
+  `physics.cpp:raycube` (hierarchical descent + deformed-cube clipping planes);
+  then wire the real `delta_do`-style modifier dispatch and the remaining edit
+  binds.
 - **M4e — GUI**: texture/material pickers, entity placement, keybinds via
   `InputMap`. Features.md #5 checklist.
 

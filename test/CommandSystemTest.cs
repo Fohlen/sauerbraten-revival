@@ -110,6 +110,71 @@ public class CommandSystemTest : GoTestBase
     }
 
     [Test]
+    public void CodecRoundTripsNewMap()
+    {
+        var cmd = new WorldCommand(WorldOp.NewMap, new NewMapPayload(12));
+        var back = WorldCommandCodec.Decode(WorldCommandCodec.Encode(cmd));
+        TestAssert.Equal(WorldOp.NewMap, back.Op, "op");
+        TestAssert.Equal(12, ((NewMapPayload)back.Payload).Scale, "scale");
+    }
+
+    [Test]
+    public void NewMapCommandBuildsFloorAndAir()
+    {
+        // world.cpp emptymap: bottom four octants solid (floor), top four empty.
+        var (sink, octa) = SmallWorld();
+        sink.Submit(new WorldCommand(WorldOp.NewMap, new NewMapPayload(10)));
+
+        TestAssert.Equal(1024, octa.WorldSize, "worldsize = 1<<scale");
+        for (int i = 0; i < 4; i++)
+            TestAssert.True(octa.WorldRoot[i].IsEntirelySolid(), $"octant {i} solid (floor)");
+        for (int i = 4; i < 8; i++)
+            TestAssert.True(octa.WorldRoot[i].IsEmpty(), $"octant {i} empty (air)");
+    }
+
+    [Test]
+    public void NewMapClampsScale()
+    {
+        var (sink, octa) = SmallWorld();
+        sink.Submit(new WorldCommand(WorldOp.NewMap, new NewMapPayload(2))); // below 10
+        TestAssert.Equal(1024, octa.WorldSize, "scale clamped up to 10");
+    }
+
+    [Test]
+    public void EmptyMapPreSubdividesLargeWorlds()
+    {
+        // octaprobe (world.cpp splitocta): a world larger than 0x1000 is pre-subdivided
+        // so no leaf exceeds 0x1000.
+        var w = new Octa(14);
+        w.EmptyMap(14);
+        int nodes = 0, maxLeaf = 0;
+        foreach (var r in w.WorldRoot) { nodes += Size(r); maxLeaf = System.Math.Max(maxLeaf, MaxLeaf(r, w.WorldSize >> 1)); }
+        TestAssert.Equal(72, nodes, "nodes match engine (8 roots + 64 split children)");
+        TestAssert.Equal(4096, maxLeaf, "no leaf exceeds 0x1000");
+    }
+
+    [Test]
+    public void EmptyMapLeavesSmallWorldsFlat()
+    {
+        // octaprobe: scale 12 (worldsize 4096) is not split.
+        var w = new Octa(12);
+        w.EmptyMap(12);
+        int nodes = 0, maxLeaf = 0;
+        foreach (var r in w.WorldRoot) { nodes += Size(r); maxLeaf = System.Math.Max(maxLeaf, MaxLeaf(r, w.WorldSize >> 1)); }
+        TestAssert.Equal(8, nodes, "no subdivision at 4096");
+        TestAssert.Equal(2048, maxLeaf, "leaves are worldsize/2");
+    }
+
+    private static int Size(Cube c) { int n = 1; if (c.Children != null) foreach (var x in c.Children) n += Size(x); return n; }
+    private static int MaxLeaf(Cube c, int size)
+    {
+        if (c.Children == null) return size;
+        int m = 0;
+        foreach (var x in c.Children) m = System.Math.Max(m, MaxLeaf(x, size >> 1));
+        return m;
+    }
+
+    [Test]
     public void CodecRoundTripsRemipAndPreservesSequence()
     {
         var cmd = new WorldCommand(WorldOp.Remip, new RemipPayload(true)) { Sequence = 42, AuthorPeerId = 3 };

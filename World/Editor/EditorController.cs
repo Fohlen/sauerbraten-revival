@@ -1,6 +1,7 @@
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Meshing;
 
 namespace SauerbratenRevival.World.Editor;
 
@@ -36,6 +37,9 @@ public partial class EditorController : Node3D
 
     /// <summary>The sink commands are submitted through (prototype: single-player, peer 0).</summary>
     public WorldCommandSink? Sink { get; set; }
+
+    /// <summary>The chunk renderer to invalidate after an edit (may be null in headless tests).</summary>
+    public WorldChunkRenderer? Renderer { get; set; }
 
     private MeshInstance3D? _box;
     private ImmediateMesh? _mesh;
@@ -122,6 +126,15 @@ public partial class EditorController : Node3D
         Sink.Submit(new WorldCommand(
             WorldOp.Fill, payload,
             source: CommandSource.Editor));
+
+        // The command changed the octree; re-mesh the affected region. Fill mutates a
+        // single grid slice, so invalidate the selection AABB expanded by one cell.
+        if (Renderer != null)
+        {
+            var o = new Vector3(sel.O.X, sel.O.Y, sel.O.Z);
+            var size = new Vector3(sel.S.X * sel.Grid, sel.S.Y * sel.Grid, sel.S.Z * sel.Grid);
+            Renderer.MarkDirty(new Aabb(o, size), margin: sel.Grid);
+        }
     }
 
     // ---- selection box rendering ----
