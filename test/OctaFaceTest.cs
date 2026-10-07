@@ -233,4 +233,87 @@ public class OctaFaceTest : GoTestBase
         TestAssert.Equal((uint)0x84848484, p.Faces[1], "faces[1] matches engine");
         TestAssert.Equal((uint)0x84848484, p.Faces[2], "faces[2] matches engine");
     }
+
+    // ---- M4c: pushedge / linkedpush (mpeditface modes 0 and 2) ----
+
+    private static string EdgeBytes(Cube c)
+    {
+        var sb = new System.Text.StringBuilder();
+        for (int d = 0; d < 3; d++)
+            for (int i = 0; i < 4; i++)
+                sb.Append($" {((byte)((c.Faces[d] >> (i * 8)) & 0xFF)):x2}");
+        return sb.ToString().TrimStart();
+    }
+
+    [Test]
+    public void PushEdgeMatchesEngine()
+    {
+        // octaprobe: PUSH edge0 dir1 dc0 edges=81 80... (nudge one nibble).
+        var c = new Cube();
+        c.SolidFaces();
+        OctaEdit.PushEdge(c, d: 0, x: 0, y: 0, dir: 1, dc: 0);
+        TestAssert.Equal("81 80 80 80 80 80 80 80 80 80 80 80", EdgeBytes(c), "edge nibble nudged");
+    }
+
+    [Test]
+    public void PushEdgeClampsAtBounds()
+    {
+        // Can't push past 8 (solid) outward, or below 0 inward.
+        var c = new Cube();
+        c.SolidFaces();
+        OctaEdit.PushEdge(c, 0, 0, 0, dir: 1, dc: 0);   // low nibble 0 -> 1
+        OctaEdit.PushEdge(c, 0, 0, 0, dir: 1, dc: 1);   // high nibble stays 8
+        byte b = c.CubeEdge(0, 0, 0);
+        TestAssert.Equal(1, Cube.EdgeGet(b, 0), "low nibble advanced");
+        TestAssert.Equal(8, Cube.EdgeGet(b, 1), "high nibble clamped at 8");
+    }
+
+    [Test]
+    public void LinkedPushMatchesEngine()
+    {
+        // octaprobe: LINK d0 x0y0 dir-1: 43 80 80... (0x44 pulled to 0x43).
+        var c = new Cube();
+        c.SolidFaces();
+        c.SetCubeEdge(0, 0, 0, 0x44);
+        OctaEdit.LinkedPush(c, d: 0, x: 0, y: 0, dc: 0, dir: -1);
+        TestAssert.Equal("43 80 80 80 80 80 80 80 80 80 80 80", EdgeBytes(c), "linked push moved the shared vertex");
+    }
+
+    [Test]
+    public void LinkedPushDoesNotAffectOtherVertex()
+    {
+        // octaprobe: LINK d0 x1y1 dir-1 leaves the deformed corner alone -> 44 80...
+        var c = new Cube();
+        c.SolidFaces();
+        c.SetCubeEdge(0, 0, 0, 0x44);
+        OctaEdit.LinkedPush(c, d: 0, x: 1, y: 1, dc: 0, dir: -1);
+        TestAssert.Equal("44 80 80 80 80 80 80 80 80 80 80 80", EdgeBytes(c), "unrelated corner untouched");
+    }
+
+    [Test]
+    public void BoundedClamps()
+    {
+        TestAssert.Equal(0, OctaEdit.Bounded(-5), "clamps low");
+        TestAssert.Equal(8, OctaEdit.Bounded(99), "clamps high");
+        TestAssert.Equal(3, OctaEdit.Bounded(3), "passes through");
+    }
+
+    [Test]
+    public void EditFaceModeOneMatchesFill()
+    {
+        // EditFace(mode 1) is the old Fill path; confirm the wrapper changes the world.
+        var w = new Octa(3);
+        OctaEdit.SubdivideCube(w, w.WorldRoot[0]);
+        var lower = w.WorldRoot[0].Children![0];
+        lower.EmptyFaces();
+        var upper = w.WorldRoot[0].Children![4];
+        for (int l = 0; l < 6; l++) upper.Texture[l] = 9;
+        upper.EmptyFaces();
+
+        var sel = new SauerbratenRevival.World.Commands.Selection(
+            new Vector3I(0, 0, 2), new Vector3I(1, 1, 1), 2, (int)Orient.Bottom);
+        OctaEdit.EditFace(w, sel, dir: -1, mode: 1);
+        TestAssert.True(lower.IsEntirelySolid(), "mode 1 fill pulls the slice solid");
+        TestAssert.Equal(9, lower.Texture[0], "textures copied from backing cell");
+    }
 }

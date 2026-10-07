@@ -410,7 +410,12 @@ public static class OctaEdit
     /// faces, i.e. fill), copying the backing cell's textures. Returns the origin the
     /// caller should advance to (the original mutates <c>sel.o[d]</c>).
     /// </summary>
-    public static void Fill(Octa octa, Commands.Selection sel, int dir, int mode)
+    /// <summary>
+    /// octaedit.cpp:1948 <c>mpeditface</c> — the three face/corner edit modes:
+    /// 0 = push/pull faces (whole cube), 1 = fill/empty slice, 2 = push/pull a single
+    /// corner. <paramref name="sel"/> is mutated (origin/slice) as in the original.
+    /// </summary>
+    public static void EditFace(Octa octa, Commands.Selection sel, int dir, int mode)
     {
         // octaedit.cpp:1986 — corner/edge state only permits mode 1 when centred.
         if (mode == 1 && (sel.Cx != 0 || sel.Cy != 0 || (sel.Cxs & 1) != 0 || (sel.Cys & 1) != 0))
@@ -437,6 +442,7 @@ public static class OctaEdit
             ushort mat = GetMaterial(c);
             octa.DiscardChildren(c, fixtex: true);
             c.Material = mat;
+
             if (mode == 1)
             {
                 if (dir < 0)
@@ -447,12 +453,86 @@ public static class OctaEdit
                         c.Texture[i] = o.Children != null ? Octa.DEFAULT_GEOM : o.Texture[i];
                 }
                 else c.EmptyFaces();
+                return;
             }
+
+            // Modes 0 and 2 operate on the cube's deformation edges.
+            uint bak = c.Faces[d];
+            var p = new byte[4];
+            for (int k = 0; k < 4; k++) p[k] = (byte)((bak >> (k * 8)) & 0xFF);
+
+            if (mode == 2)
+            {
+                LinkedPush(c, d, sel.Corner & 1, sel.Corner >> 1, dc, seldir); // corner command
+            }
+            else
+            {
+                for (int mx = 0; mx < 2; mx++)
+                    for (int my = 0; my < 2; my++)
+                    {
+                        if (x == 0 && mx == 0 && sel.Cx != 0) continue;
+                        if (y == 0 && my == 0 && sel.Cy != 0) continue;
+                        if (x == sel.S[Octa.R[d]] - 1 && mx == 1 && ((sel.Cx + sel.Cxs) & 1) != 0) continue;
+                        if (y == sel.S[Octa.C[d]] - 1 && my == 1 && ((sel.Cy + sel.Cys) & 1) != 0) continue;
+                        int idx = mx + my * 2;
+                        if (p[idx] != (byte)((bak >> (idx * 8)) & 0xFF)) continue;
+                        LinkedPush(c, d, mx, my, dc, seldir);
+                    }
+            }
+
+            // optiface: if both nibbles of every edge byte are equal, the face is flat -> empty.
+            OptiFace(c);
         });
 
         if (mode == 1 && dir > 0)
             sel.O = SetAxis(sel.O, d, sel.O[d] + sel.Grid * seldir);
     }
+
+    /// <summary>octaedit.cpp:1949 <c>bounded(n)</c> — clamp an edge nibble to [0,8].</summary>
+    public static int Bounded(int n) => n < 0 ? 0 : n > 8 ? 8 : n;
+
+    /// <summary>
+    /// octaedit.cpp:1951 <c>pushedge(edge, dir, dc)</c> — nudge one nibble of an edge
+    /// byte, keeping the two nibbles ordered (the second follows when it would invert).
+    /// </summary>
+    public static void PushEdge(Cube c, int d, int x, int y, int dir, int dc)
+    {
+        byte edge = c.CubeEdge(d, x, y);
+        int ne = Bounded(Cube.EdgeGet(edge, dc) + dir);
+        Cube.EdgeSet(ref edge, dc, ne);
+        int oe = Cube.EdgeGet(edge, 1 - dc);
+        if ((dir < 0 && dc != 0 && oe > ne) || (dir > 0 && dc == 0 && oe < ne))
+            Cube.EdgeSet(ref edge, 1 - dc, ne);
+        c.SetCubeEdge(d, x, y, edge);
+    }
+
+    /// <summary>
+    /// octaedit.cpp:1957 <c>linkedpush(c, d, x, y, dc, dir)</c> — push the edge at
+    /// (x,y) of face d, and every other edge that shares the same vertex value.
+    /// </summary>
+    public static void LinkedPush(Cube c, int d, int x, int y, int dc, int dir)
+    {
+        Vector3I v = CubeGeometry.GetCubeVector(c, d, x, y, dc);
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+            {
+                Vector3I p = CubeGeometry.GetCubeVector(c, d, i, j, dc);
+                if (v == p) PushEdge(c, d, i, j, dir, dc);
+            }
+    }
+
+    /// <summary>octa.cpp:157 <c>optiface</c> — if an edge byte's nibbles are equal on every edge, the face is flat, so empty it.</summary>
+    public static void OptiFace(Cube c)
+    {
+        for (int d = 0; d < 3; d++)
+        {
+            uint f = c.Faces[d];
+            if (((f >> 4) & 0x0F0F0F0Fu) == (f & 0x0F0F0F0Fu)) { c.Faces[d] = Octa.F_EMPTY; }
+        }
+    }
+
+    /// <summary>Backwards-compatible wrapper: <c>Fill</c> is <see cref="EditFace"/> with the fill mode.</summary>
+    public static void Fill(Octa octa, Commands.Selection sel, int dir, int mode) => EditFace(octa, sel, dir, mode);
 
     // ---- face / texture / material ops (octaedit.cpp) ----
 

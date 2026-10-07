@@ -54,6 +54,16 @@ public sealed class EditCursor
     private Vector3I _lastCur;
     private Vector3I _lastCor;
 
+    /// <summary>Test seam: place the cursor without a ray cast (the ray needs M4d).</summary>
+    internal void SetCursorForTest(Vector3I cur, int orient, int gridSize)
+    {
+        Cur = cur;
+        _lastCur = cur;
+        Orient = orient;
+        GridSize = gridSize;
+        GridPower = System.Math.ILogB((uint)gridSize);
+    }
+
     /// <summary>octaedit.cpp:141 <c>gridpower</c> — set the grid; clamped to the world; cancels the selection.</summary>
     public void SetGridPower(int power, int worldSize)
     {
@@ -97,12 +107,65 @@ public sealed class EditCursor
         return (lu, gridSize);
     }
 
-    /// <summary>octaedit.cpp:144 <c>cubecancel</c> — clear the selection (keeps the cursor).</summary>
+    /// <summary>octaedit.cpp:144 <c>cubecancel</c> — clear the selection and reset drag state.</summary>
     public void CancelSelection()
     {
         HasSelection = false;
         Selection.S = Vector3I.Zero;
+        Dragging = false;
     }
+
+    // ---- M4b: grid / orient / selection commands (all client-local, no world mutation) ----
+
+    /// <summary>
+    /// octaedit.cpp:204 <c>reorient</c> — set the selection's oriented axis to the
+    /// face the cursor points at (<paramref name="orient"/> defaults to the current
+    /// <see cref="Orient"/>). Delegates to <see cref="Selection.Reorient"/>.
+    /// </summary>
+    public void Reorient(int? orient = null) => Selection.Reorient(orient ?? Orient);
+
+    /// <summary>
+    /// octaedit.cpp:210 <c>selextend</c> — grow the selection to include the cursor
+    /// cell <see cref="Cur"/>. Delegates to <see cref="Selection.Extend"/>.
+    /// </summary>
+    public void ExtendSelection()
+    {
+        Selection.Extend(Cur);
+        HasSelection = true;
+    }
+
+    /// <summary>octaedit.cpp:272 <c>movesel</c> — step the selection origin by one grid cell along an axis.</summary>
+    public void MoveSelection(int dir, int axis)
+    {
+        Selection.Move(dir, axis);
+        HasSelection = true;
+    }
+
+    /// <summary>
+    /// octaedit.cpp:267 <c>pushsel</c> — move the selection one grid cell along the
+    /// oriented axis, in the direction of the pointed face.
+    /// </summary>
+    public void MoveSelectionOriented(int dir)
+    {
+        int d = Selection.Dimension(Orient);
+        int s = Selection.DimCoord(Orient) != 0 ? -dir : dir;
+        Selection.O = SetAxis(Selection.O, d, Selection.O[d] + s * Selection.Grid);
+        HasSelection = true;
+    }
+
+    /// <summary>octaedit.cpp:264 <c>setselpos</c> — move the selection origin, grid-masked. Size unchanged.</summary>
+    public void SetSelectionPos(Vector3I pos)
+    {
+        Selection.SetPos(pos, GridSize);
+        HasSelection = true;
+    }
+
+    private static Vector3I SetAxis(Vector3I v, int d, int value) => d switch
+    {
+        0 => new Vector3I(value, v.Y, v.Z),
+        1 => new Vector3I(v.X, value, v.Z),
+        _ => new Vector3I(v.X, v.Y, value),
+    };
 
     /// <summary>
     /// The cursor-cast half of <c>rendereditcursor</c>: given the eye and a

@@ -215,6 +215,37 @@ int main()
         printf("CUR normalize g8b lu=(%d,%d,%d) lusize=%d\n", lu.x, lu.y, lu.z, lusize);
     }
 
+    // ---- linkedpush / pushedge (mpeditface modes 0/2) ----
+    {
+        extern void probe_linkedpush(cube &c, int d, int x, int y, int dc, int dir);
+        extern void probe_pushedge(cube &c, int d, int x, int y, int dir, int dc);
+
+        // Start from a fully solid cube (edges 0x80) and push one edge along +X (d=0, dc=0).
+        cube c; c.children = NULL; c.ext = NULL; solidfaces(c);
+        probe_pushedge(c, 0, 0, 0, 1, 0);
+        printf("PUSH edge0 dir1 dc0 edges=%02x %02x %02x %02x\n",
+               c.edges[0], c.edges[1], c.edges[2], c.edges[3]);
+
+        // Deform several edges of a solid cube, then linkedpush a corner.
+        // A face corner vertex is shared by edges; pushing it should move all
+        // edges incident to that vertex that are on the same face (depth dc).
+        cube d2; d2.children = NULL; d2.ext = NULL; solidfaces(d2);
+        // Pull vertex 0 (x0,y0,z0) inward: its nibbles on edges 0 (x), 4 (y), 8 (z).
+        d2.edges[0] = 0x44;  // x-edge at (x0,y0): low nibble (share = vertex 0)
+        probe_linkedpush(d2, 0, 0, 0, 0, -1);
+        printf("LINK d0 x0y0 dir-1:");
+        for(int k=0;k<12;k++) printf(" %02x", d2.edges[k]);
+        printf("\n");
+
+        // Solid cube, push edge (x1,y1) on face d=0 outward by +1.
+        cube d4; d4.children = NULL; d4.ext = NULL; solidfaces(d4);
+        d4.edges[0] = 0x44; // make it non-flat; vertex 0 pulled in
+        probe_linkedpush(d4, 0, 1, 1, 0, -1);
+        printf("LINK d0 x1y1 dir-1:");
+        for(int k=0;k<12;k++) printf(" %02x", d4.edges[k]);
+        printf("\n");
+    }
+
     // ---- op handlers on a small world ----
     // "delete cube": discardchildren + emptyfaces on a child.
     {

@@ -202,3 +202,12 @@ void probe_normalize(ivec &lu, int &lusize, const ivec &o, int gridsize)
     }
     lusize = gridsize;
 }
+
+// mpeditface modes 0/2 entry points.
+void probe_linkedpush(cube &c, int d, int x, int y, int dc, int dir) { linkedpush(c, d, x, y, dc, dir); }
+void probe_pushedge(cube &c, int d, int x, int y, int dir, int dc)
+{
+    uchar e = cubeedge(c, d, x, y);
+    pushedge(e, dir, dc);
+    c.edges[d*4 + y*2 + x] = e;
+}

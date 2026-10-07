@@ -796,9 +796,12 @@ hash differently (§9).
   `test/EditCursorTest.cs`. (The world ray cast that supplies `rayDist` is still
   to be wired from the octree.)
 - **M4b — grid/orient/selection**: `gridpower`, `reorient`, drag-select,
-  `selextend`, `cancelsel`; client-local state (see §1.1), never in the log.
+  `selextend`, `cancelsel`, selection moves; client-local state (see §1.1), never
+  in the log. **Done** — `EditCursor` commands, asserted by `test/EditCursorTest.cs`.
 - **M4c — wheel dispatch + `editface` modes 0/2**: `linkedpush`/`pushedge`,
-  cube-face and cube-corner push/pull. Mode 1 (fill) is already `OctaEdit.Fill`.
+  cube-face and cube-corner push/pull. **Done** — `OctaEdit.EditFace`/`PushEdge`/
+  `LinkedPush`, asserted against the engine by `test/OctaFaceTest.cs`. Mode 1
+  (fill) was already `OctaEdit.Fill`.
 - **M4d — the selection box**: render the white rectangle + grid + cursor box
   (Godot line/immediate mesh).
 - **M4e — GUI**: texture/material pickers, entity placement, keybinds via

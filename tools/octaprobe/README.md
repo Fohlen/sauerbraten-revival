@@ -28,6 +28,8 @@ original source, used offline to generate golden values.
   together). Asserted by [`test/RemipTest.cs`](../../test/RemipTest.cs).
 - Cursor geometry (`rayboxintersect`, `normalizelookupcube`) for the editor cursor.
   Asserted by [`test/EditCursorTest.cs`](../../test/EditCursorTest.cs).
+- Face/corner push (`pushedge`, `linkedpush`) for `mpeditface` modes 0/2. Asserted
+  by [`test/OctaFaceTest.cs`](../../test/OctaFaceTest.cs).
 
 ## Build & run
 
@@ -60,6 +62,9 @@ OP setmat water material=4
 OP flip d0 tex0=2 tex1=1 tex2=3
 OP rotate d1 tex0=5 tex1=6 tex2=3 tex3=4
 OP forcemip parent faces=84848446 84848484 84848484
+PUSH edge0 dir1 dc0 edges=81 80 80 80
+LINK d0 x0y0 dir-1: 43 80 80 80 80 80 80 80 80 80 80 80
+LINK d0 x1y1 dir-1: 44 80 80 80 80 80 80 80 80 80 80 80
 OP remip collapse before=9 after=1 children=0
 OP remip keep before=9 after=1 children=0
 OP remip deformed before=9 after=9 children=1
