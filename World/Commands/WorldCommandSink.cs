@@ -22,7 +22,7 @@ public sealed class WorldCommandSink
     private static readonly HashSet<WorldOp> Destructive = new()
     {
         WorldOp.DeleteCube,
-        WorldOp.Fill,
+        WorldOp.EditFace,
         WorldOp.SetFaceTexture,
         WorldOp.ReplaceTexture,
         WorldOp.SetFaceMaterial,
@@ -145,12 +145,12 @@ public sealed class WorldCommandSink
                 entry.UndoBlock = _world.Capture(region, region.Grid);
                 break;
             }
-            case WorldOp.Fill:
+            case WorldOp.EditFace:
             {
                 // Fill collapses the selection to one grid slice and may move it by
                 // one cell along the oriented axis, so capture one cell either side to
                 // cover whichever slice is actually mutated.
-                var p = (FillPayload)cmd.Payload;
+                var p = (EditFacePayload)cmd.Payload;
                 var sel = p.Selection;
                 int d = Selection.Dimension(sel.Orient);
                 var origin = sel.Origin;
@@ -178,7 +178,7 @@ public sealed class WorldCommandSink
     private static Block3 SelectionRegion(WorldCommand cmd) => cmd.Payload switch
     {
         DeleteCubePayload p => p.Selection.ToBlock(),
-        FillPayload p => p.Selection.ToBlock(),
+        EditFacePayload p => p.Selection.ToBlock(),
         SetFaceTexturePayload p => p.Selection.ToBlock(),
         ReplaceTexturePayload p => p.Selection?.ToBlock() ?? default,
         SetFaceMaterialPayload p => p.Selection.ToBlock(),

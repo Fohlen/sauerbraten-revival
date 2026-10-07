@@ -70,8 +70,7 @@ public partial class WorldChunkRenderer : Node3D
     public void Setup(Octa octa, MaterialSet? materials)
     {
         _octa = octa;
-        _materials = materials;
-        _nodes.Clear();
+        _materials = materials;        _nodes.Clear();
         _chunkTriangles.Clear();
         _dirty.Clear();
         _dirtySet.Clear();
@@ -187,6 +186,13 @@ public partial class WorldChunkRenderer : Node3D
             RebuildChunk(origin);
             RebuildCount++;
         }
+    }
+
+    /// <summary>Rebuild every chunk with the same world and materials (after a full-world change).</summary>
+    public void ReSetup()
+    {
+        if (_octa == null) return;
+        Setup(_octa, _materials);
     }
 
     private void CreateNode(Vector3I origin, ArrayMesh mesh)

@@ -86,14 +86,14 @@ public sealed class DeleteCubePayload : ICommandPayload
     public DeleteCubePayload(SelectionPayload sel) => Selection = sel;
 }
 
-/// <summary><see cref="WorldOp.Fill"/>: mpeditface mode 1 over a selection.</summary>
-public sealed class FillPayload : ICommandPayload
+/// <summary><see cref="WorldOp.EditFace"/>: mpeditface mode 1 over a selection.</summary>
+public sealed class EditFacePayload : ICommandPayload
 {
     public SelectionPayload Selection;
     public int Dir;    // +1 push (carve), -1 pull (fill)
     public int Mode;   // 0/1/2 as in mpeditface; mode 1 is the fill branch
 
-    public FillPayload(SelectionPayload sel, int dir, int mode)
+    public EditFacePayload(SelectionPayload sel, int dir, int mode)
     {
         Selection = sel;
         Dir = dir;

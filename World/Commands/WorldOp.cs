@@ -28,7 +28,7 @@ public enum WorldOp : ushort
 {
     // --- structural ---
     DeleteCube = 0,       // empty the selected cubes (mpdelcube)
-    Fill = 1,             // mpeditface mode 1: fill/carve one grid slice
+    EditFace = 1,        // mpeditface: 0 face push/pull, 1 fill/empty, 2 corner
     ReplaceBlock = 2,     // the universal carrier: paste/capture a region
     // --- face / texture / material ---
     SetFaceTexture = 10,  // edittexcube

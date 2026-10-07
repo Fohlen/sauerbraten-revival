@@ -43,9 +43,9 @@ public sealed class OctaWorld : IWorld
                 OctaEdit.DeleteCube(Octa, p.Selection.ToBlock());
                 break;
             }
-            case WorldOp.Fill:
+            case WorldOp.EditFace:
             {
-                var p = (FillPayload)cmd.Payload;
+                var p = (EditFacePayload)cmd.Payload;
                 var sel = p.Selection.ToSelection();
                 OctaEdit.Fill(Octa, sel, p.Dir, p.Mode);
                 break;

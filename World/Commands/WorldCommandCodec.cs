@@ -89,9 +89,9 @@ public static class WorldCommandCodec
             case WorldOp.DeleteCube:
                 WriteSelection(a, ((DeleteCubePayload)cmd.Payload).Selection);
                 break;
-            case WorldOp.Fill:
+            case WorldOp.EditFace:
             {
-                var p = (FillPayload)cmd.Payload;
+                var p = (EditFacePayload)cmd.Payload;
                 WriteSelection(a, p.Selection);
                 a.Add(p.Dir); a.Add(p.Mode);
                 break;
@@ -155,10 +155,10 @@ public static class WorldCommandCodec
         {
             case WorldOp.DeleteCube:
                 return new DeleteCubePayload(ReadSelection(a, b));
-            case WorldOp.Fill:
+            case WorldOp.EditFace:
             {
                 var sel = ReadSelection(a, b);
-                return new FillPayload(sel, (int)a[b + 8], (int)a[b + 9]);
+                return new EditFacePayload(sel, (int)a[b + 8], (int)a[b + 9]);
             }
             case WorldOp.ReplaceBlock:
             {

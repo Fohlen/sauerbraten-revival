@@ -41,6 +41,12 @@ public partial class EditorController : Node3D
     /// <summary>The chunk renderer to invalidate after an edit (may be null in headless tests).</summary>
     public WorldChunkRenderer? Renderer { get; set; }
 
+    /// <summary>
+    /// The local copy buffer (editcopy). Client-local: a copy is not a world
+    /// mutation, so it never enters the command log; only a paste does.
+    /// </summary>
+    public OctaEdit.CapturedBlock? Clipboard { get; private set; }
+
     private MeshInstance3D? _box;
     private ImmediateMesh? _mesh;
     private string _lastBoxKey = "";
@@ -117,8 +123,26 @@ public partial class EditorController : Node3D
                     if (button.Pressed) { _drag = DragMode.Extend; }
                     else if (_drag == DragMode.Extend) { _drag = DragMode.None; }
                     return;
+                case MouseButton.Middle:
+                    // selcorners (corners): corner-exact rubber-band selection.
+                    if (button.Pressed)
+                    {
+                        Cursor.CancelSelection();
+                        Cursor.SelectCorners = true;
+                        Cursor.BeginDrag();
+                        _drag = DragMode.BoxSelect;
+                    }
+                    else
+                    {
+                        Cursor.SelectCorners = false;
+                        if (_drag == DragMode.BoxSelect) { Cursor.Dragging = false; _drag = DragMode.None; }
+                    }
+                    return;
                 case MouseButton.WheelUp when button.Pressed: Scroll(+1); return;
                 case MouseButton.WheelDown when button.Pressed: Scroll(-1); return;
+                // MOUSE6/7 (back/forward) = editcut.
+                case MouseButton.Xbutton1 when button.Pressed: EditCut(); return;
+                case MouseButton.Xbutton2 when button.Pressed: EditCut(); return;
             }
             return;
         }
@@ -146,6 +170,11 @@ public partial class EditorController : Node3D
                 case Key.Space: Cursor.CancelSelection(); break;
                 case Key.X: EditTransform(flip: true); break;
                 case Key.Delete: EditDelete(); break;
+                case Key.C: EditCopy(); break;
+                case Key.V: EditPaste(); break;
+                case Key.U: EditUndo(); break;
+                case Key.I: EditRedo(); break;
+                case Key.B: EditCut(); break; // Cube2: B = editcut
                 // Numpad selection nudge (KP4-9 = movesel).
                 case Key.Kp4: Cursor.MoveSelection(-1, 0); break;
                 case Key.Kp6: Cursor.MoveSelection(+1, 0); break;
@@ -235,6 +264,51 @@ public partial class EditorController : Node3D
         if (sel.IsZero) { sel.O = Cursor.Cur; sel.S = new Vector3I(1, 1, 1); }
         return sel;
     }
+
+    // ---- clipboard (editcopy / editcut / editpaste) ----
+
+    /// <summary>editcopy — capture the selection into the local clipboard. Not a command.</summary>
+    public void EditCopy()
+    {
+        if (Octa == null) return;
+        var sel = CurrentSelection();
+        Clipboard = OctaEdit.BlockCopy(Octa, new Block3(sel), sel.Grid);
+    }
+
+    /// <summary>editcut — capture the selection, then delete it.</summary>
+    public void EditCut()
+    {
+        EditCopy();
+        EditDelete();
+    }
+
+    /// <summary>editpaste — write the clipboard into the world at the cursor selection.</summary>
+    public void EditPaste()
+    {
+        if (Sink == null || Octa == null || Clipboard == null) return;
+        var sel = CurrentSelection();
+        Sink.Submit(new WorldCommand(WorldOp.ReplaceBlock,
+            new ReplaceBlockPayload(new SelectionPayload(sel), Clipboard),
+            source: CommandSource.Editor));
+        InvalidateRegion(sel);
+    }
+
+    /// <summary>
+    /// Rebuild the whole world mesh. Used after undo/redo/remip, which can touch any
+    /// chunk — and undo of a <c>NewMap</c> can even change the world size, so a full
+    /// <see cref="WorldChunkRenderer.Setup"/> (not just dirtying) is the safe path.
+    /// </summary>
+    private void InvalidateAll()
+    {
+        if (Octa == null || Renderer == null) return;
+        Renderer.ReSetup();
+    }
+
+    /// <summary>editundo — revert this peer's last editor command.</summary>
+    public void EditUndo() { Sink?.Undo(); InvalidateAll(); }
+
+    /// <summary>redo — re-apply the last undone command.</summary>
+    public void EditRedo() { Sink?.Redo(); InvalidateAll(); }
 
     /// <summary>Re-mesh the region an edit touched (expanded by one grid cell).</summary>
     private void InvalidateRegion(Selection sel)

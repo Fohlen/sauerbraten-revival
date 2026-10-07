@@ -809,11 +809,15 @@ hash differently (§9).
   `test/DragSelectTest.cs`.
 
   **Input binds wired** (Cube2 `editbind`): `MOUSE1` box-select (editdrag),
-  `MOUSE2` extend (editextend), wheel/trackpad scroll = fill/empty, and the
-  `delta_use` **modifier namespace** — hold `G` grid, `F` face push/pull,
-  `Q` corner push/pull, `R` rotate; `X` flip, `SPACE` cancel, `DELETE` delcube,
-  `KP4-9` nudge selection. **macOS note:** trackpad/Magic-Mouse scrolling arrives
-  as `InputEventPanGesture`, not `WheelUp/Down` — both are handled.
+  `MOUSE2` extend (editextend), `MOUSE3` corner-exact select (selcorners),
+  scroll = fill/empty, and the `delta_use` **modifier namespace** — hold `G` grid,
+  `F` face push/pull, `Q` corner push/pull, `R` rotate; `X` flip, `SPACE` cancel,
+  `DELETE` delcube, `KP4-9` nudge selection, `C`/`V` copy/paste (clipboard is
+  client-local), `B` or `MOUSE6/7` cut, `U`/`I` undo/redo.
+  **macOS note:** trackpad/Magic-Mouse scrolling arrives as `InputEventPanGesture`,
+  not `WheelUp/Down` — both are handled.
+
+  **Not wired yet:** `Y`+scroll texture change (needs the M4e texture picker).
 
   **Todo (engine work):** replace `OctaRay.RayCube` with a port of
   `physics.cpp:raycube` (hierarchical descent + deformed-cube clipping planes).
