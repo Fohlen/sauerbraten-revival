@@ -16,7 +16,7 @@ for how we prove movement fidelity.
 | Editor | Runtime, in-game, Godot UI + **command system** |
 | World mutations | All are **serializable commands** (editor, game modes, network) |
 | Config | Godot-native: `ProjectSettings`, `ConfigFile`, `Resource`, `InputMap` |
-| Networking | Steamworks; replicate movement + commands; server-authoritative world |
+| Networking | Steamworks; replicate movement + commands; **server-authoritative** (see [authority-and-latency.md](authority-and-latency.md)) |
 | Modding | Data-first Resources + versioned API; Workshop packs via `load_resource_pack` |
 
 > **Status:** [features.md](features.md) is the live inventory; 
@@ -88,7 +88,11 @@ CommandSource = Editor | GameMode | Script
   (e.g. `Remip`) are pass-through** — peers re-execute the deterministic
   algorithm, so optimisation patches are tiny. See
   [editor-and-commands.md §3.2](editor-and-commands.md#32-channels--reliability).
-  A server-authoritative world plus client prediction for the local player.
+- **Authority:** the server is authoritative for edits, movement and combat;
+  clients predict for responsiveness. This diverges from Cube 2's
+  client-authoritative model deliberately — see
+  [authority-and-latency.md](authority-and-latency.md) for why (Steam +
+  leaderboard), the latency trade-offs, and the prediction-scope rule it forces.
 
 This one mechanism covers live editing, dynamic geometry, undo, and coop-edit
 sync. It is also the foundation for multiplayer and Workshop content.

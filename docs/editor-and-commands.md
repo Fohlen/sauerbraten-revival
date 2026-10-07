@@ -837,7 +837,13 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
    would diverge peers. `visibleface` and its subtree are verified integer-only.
 8. **Permission/authority model**: who may edit (all coop clients? server
    config?), and how it interacts with the edit lock and game modes.
-9. ~~**Deformed-cube subdivision fidelity**~~ — **closed in M1b**: `SubdivideCube`
+9. **Prediction scope (M6/M7)**: movement must predict only against the world at
+   the last **acknowledged** `WorldCommand` sequence, or an in-flight mutation
+   (notably a pass-through `Remip`) makes client and server collide against
+   different state. The rule is stated in
+   [authority-and-latency.md §7](authority-and-latency.md#7-the-rule-this-forces-prediction-scope-open);
+   the reconciliation policy (snap / smooth / flag-for-review) is undecided.
+10. ~~**Deformed-cube subdivision fidelity**~~ — **closed in M1b**: `SubdivideCube`
    now resamples deformed edges (`getcubevector`/`midedge`/`crosscenter`) and runs
    the `validatec` pass, matching the original's exact child edge bytes. Verified
    by `tools/octaprobe` (a C++ driver linked against the original `octa.cpp`) and
