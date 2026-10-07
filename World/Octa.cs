@@ -259,6 +259,9 @@ public sealed class Octa
     public static int OctaIndex(int d, int x, int y, int z) =>
         ((z << D[d]) + (y << C[d]) + (x << R[d]));
 
+    /// <summary>octa.h: <c>oppositeocta(d, i)</c> — the child index mirrored across axis d.</summary>
+    public static int OppositeOcta(int d, int i) => i ^ (1 << D[d]);
+
     /// <summary>octa.cpp:49 <c>newcubes(face, mat)</c>.</summary>
     public Cube[] NewCubes(uint face, ushort mat = MAT_AIR)
     {
@@ -272,6 +275,91 @@ public sealed class Octa
         }
         AllocNodes++;
         return cubes;
+    }
+
+    /// <summary>octa.cpp:68 <c>familysize(c)</c> — total nodes in a subtree (root counts as 1).</summary>
+    public static int FamilySize(Cube c)
+    {
+        int size = 1;
+        if (c.Children != null)
+            for (int i = 0; i < 8; i++) size += FamilySize(c.Children[i]);
+        return size;
+    }
+
+    /// <summary>
+    /// octa.cpp:77 <c>freeocta(c)</c> — release a node block. In the managed port
+    /// there is nothing to free; this only unwires the children so the GC can
+    /// collect them, and adjusts <see cref="AllocNodes"/> to match the original's
+    /// bookkeeping.
+    /// </summary>
+    public void FreeOcta(Cube[] c)
+    {
+        if (c == null) return;
+        for (int i = 0; i < 8; i++) DiscardChildren(c[i]);
+        AllocNodes--;
+    }
+
+    /// <summary>
+    /// octa.cpp:94 <c>discardchildren(c, fixtex, depth)</c> — collapse a node back
+    /// to a leaf. Optionally re-mips the parent texture from its children
+    /// (<paramref name="fixtex"/>), matching the original's default depth-0 call.
+    /// Returns the mask of child faces that were non-empty (the caller-facing part
+    /// of the original's <c>filled</c> accumulator).
+    /// </summary>
+    public uint DiscardChildren(Cube c, bool fixtex = false, int depth = 0)
+    {
+        c.Material = MAT_AIR;
+        c.Visible = 0;
+        c.Merged = 0;
+        // Managed port: Ext is dropped with the cube. The original also frees the
+        // vertex array / entities / t-joints here; those live outside the octree.
+        c.Ext = null;
+
+        uint filled = 0;
+        if (c.Children != null)
+        {
+            filled = F_EMPTY;
+            for (int i = 0; i < 8; i++)
+            {
+                DiscardChildren(c.Children[i], fixtex, depth + 1);
+                filled |= c.Children[i].Faces[0];
+            }
+            if (fixtex)
+            {
+                for (int i = 0; i < 6; i++) c.Texture[i] = GetMippedTexture(c, i);
+                if (depth > 0 && filled != F_EMPTY) c.Faces[0] = F_SOLID;
+            }
+            c.Children = null;
+            AllocNodes--;
+        }
+        return filled;
+    }
+
+    /// <summary>octa.cpp:294 <c>getmippedtexture(p, orient)</c> — pick the parent texture for a face from the children.</summary>
+    public static ushort GetMippedTexture(Cube p, int orient)
+    {
+        Cube[] c = p.Children!;
+        int d = orient >> 1, dc = orient & 1;
+        var texs = new ushort[4];
+        int numtexs = 0;
+        for (int x = 0; x < 2; x++)
+            for (int y = 0; y < 2; y++)
+            {
+                int n = OctaIndex(d, x, y, dc);
+                if (c[n].IsEmpty())
+                {
+                    n = OppositeOcta(d, n);
+                    if (c[n].IsEmpty()) continue;
+                }
+                ushort tex = c[n].Texture[orient];
+                if (tex > DEFAULT_SKY)
+                    for (int i = 0; i < numtexs; i++)
+                        if (texs[i] == tex) return tex;
+                texs[numtexs++] = tex;
+            }
+        for (int i = numtexs - 1; i >= 0; i--)
+            if (i == 0 || texs[i] > DEFAULT_SKY) return texs[i];
+        return DEFAULT_GEOM;
     }
 
     /// <summary>iengine.h: <c>insideworld(o)</c>.</summary>

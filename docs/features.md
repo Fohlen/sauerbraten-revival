@@ -96,6 +96,11 @@ that underpins this entire section.
 - [ ] **Command system**: every mutation is a serializable command with an inverse.
 - [ ] Undo/redo via the command stack.
 - [ ] Port editor algorithms (add/remove/fill/texture/remip/select).
+      - [x] **M1a structural primitives**: `CopyCube`/`PasteCube`/`SubdivideCube`
+            (`World/OctaEdit.cs`), `DiscardChildren`/`GetMippedTexture`/`FreeOcta`/
+            `FamilySize`/`OppositeOcta` (`World/Octa.cs`); asserted by
+            `test/OctaEditTest.cs`. **Gap:** `SubdivideCube` does not yet resample
+            deformed-leaf edges (`copyedges`/`forcemip`) — see editor doc §11.
 - [ ] Texturing, blending, entity placement.
 - [ ] Selection, copy/paste, fill, remip.
 - [ ] Save/load in our format.

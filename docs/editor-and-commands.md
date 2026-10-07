@@ -616,6 +616,12 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
 4. **Per-op prediction policy**: which ops are optimistic (editor stamps) vs
    server-only (scripted geometry)? Make it a property of `EditOp`.
 5. **Undo across remip**: capture-the-block (proposed) vs snapshot barrier.
+9. **Deformed-cube subdivision fidelity**: `SubdivideCube` currently inherits
+   solid/empty state, material and textures but does **not** resample edge
+   deformation (the original's `copyedges`/`forcemip` path). Subdividing a
+   deformed leaf is a fidelity gap to close in M1b with a direct comparison
+   against the original. Flat/solid/empty cubes — the common editor cases — are
+   exact.
 6. **Block compression**: zlib level and threshold; must be identical across
    platforms for the parity hash (zlib is, but pin the library/level). Note this
    is *inner* block compression inside the codec, separate from the *outer* map
@@ -634,7 +640,7 @@ World/Commands/
 ├── EditOp.cs              # append-only op enum
 ├── EditCommand.cs         # command + codec
 ├── EditCodec.cs           # canonical wire/save/demo encoding
-├── Selection.cs           # selinfo / block3 port
+├── Selection.cs           # selinfo / block3 port (done, M0)
 ├── WorldCommandSink.cs    # submit/receive/apply, sequence assignment
 ├── WorldCommandLog.cs     # append-only log + snapshot ring
 ├── IWorld.cs              # Apply + CaptureBlock seam
@@ -645,6 +651,8 @@ World/Commands/
     ├── Remip.cs
     ├── EntityOps.cs
     └── ReplaceBlock.cs    # the universal carrier (paste/prefab/undo/fill)
+World/OctaEdit.cs          # structural primitives + ported edit algorithms (M1)
+```
 World/Net/
 ├── WorldNetwork.cs        # RPC nodes, channels, authority
 └── WorldSnapshot.cs       # canonical snapshot encode/decode + hash
