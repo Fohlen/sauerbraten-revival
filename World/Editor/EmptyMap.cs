@@ -66,4 +66,5 @@ public partial class EmptyMap : Node3D
 
         GD.Print($"[emptymap] worldsize={size} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount}");
     }
+
 }

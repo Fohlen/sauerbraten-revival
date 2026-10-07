@@ -82,23 +82,50 @@ public partial class EditorController : Node3D
 
     // ---- input (prototype wheel dispatch) ----
 
+    private float _panAccum;
+    /// <summary>Trackpad pan units per scroll notch (tuned; a wheel sends one notch per event).</summary>
+    private const float PanNotch = 10f;
+
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (Octa == null || @event is not InputEventMouseButton mb || !mb.Pressed) return;
+        if (Octa == null) return;
 
-        bool shift = Input.IsKeyPressed(Key.Shift);
-        switch (mb.ButtonIndex)
+        // Classic wheel mouse: one notch per event.
+        if (@event is InputEventMouseButton mb && mb.Pressed)
         {
-            // Plain wheel: fill/empty (mpeditface mode 1). Shift+wheel: grid size.
-            case MouseButton.WheelUp:
-                if (shift) SetGrid(Cursor.GridPower + 1);
-                else EditFill(+1);
-                break;
-            case MouseButton.WheelDown:
-                if (shift) SetGrid(Cursor.GridPower - 1);
-                else EditFill(-1);
-                break;
+            switch (mb.ButtonIndex)
+            {
+                case MouseButton.WheelUp: Scroll(+1, Shift); break;
+                case MouseButton.WheelDown: Scroll(-1, Shift); break;
+            }
+            return;
         }
+
+        // macOS trackpad / Magic Mouse: scrolling arrives as a fractional pan
+        // gesture, never as WheelUp/WheelDown. Accumulate into notches so one
+        // notch is one edit, matching a wheel.
+        if (@event is InputEventPanGesture pan)
+        {
+            _panAccum += pan.Delta.Y;
+            while (Mathf.Abs(_panAccum) >= PanNotch)
+            {
+                // Godot: positive delta.Y scrolls content down (like WheelDown).
+                Scroll(_panAccum > 0 ? -1 : +1, Shift);
+                _panAccum -= Mathf.Sign(_panAccum) * PanNotch;
+            }
+        }
+    }
+
+    private static bool Shift => Input.IsKeyPressed(Key.Shift);
+
+    /// <summary>
+    /// One scroll notch: plain = fill/empty (mpeditface mode 1, the white-box
+    /// push/pull); Shift = change grid size. Mirrors Cube2's <c>delta_do</c> dispatch.
+    /// </summary>
+    public void Scroll(int notch, bool shift = false)
+    {
+        if (shift) SetGrid(Cursor.GridPower + notch);
+        else EditFill(notch);
     }
 
     /// <summary>Adjust the grid power and rebuild the cursor grid.</summary>
