@@ -350,7 +350,7 @@ assets/models/                # git-ignored, Godot-imported
 assets/textures/              # git-ignored, Godot-imported
 ```
 
-Planned (native format, roadmap #3):
+Planned (native format, roadmap #2):
 
 ```
 World/Import/                 # OGZ + metadata → native octree Resource + Level.tscn
