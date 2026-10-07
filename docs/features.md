@@ -44,7 +44,10 @@ Done:
 Remaining:
 
 - [ ] `Resource`-based world save/load (compact binary format) — blocks the editor and the standalone importer.
-- [ ] Per-frame chunk update budget + incremental dirty-chunk rebuilds.
+- [x] Per-frame chunk update budget + incremental dirty-chunk rebuilds
+      (`WorldChunkRenderer`, `OctaMesher.BuildChunk`, `OctaFaceWalker.WalkRegion`;
+      `test/IncrementalMeshTest.cs`). Default chunk 128, budget 4/frame — see
+      [rendering.md](rendering.md#chunking-strategy) for the measured tradeoff.
 - [ ] LOD via `ArrayMesh.add_lod()`.
 - [ ] Deferred: specular maps, alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), blend shader.
 

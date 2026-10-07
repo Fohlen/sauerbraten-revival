@@ -74,11 +74,25 @@ When an octree mutation occurs:
 
 This spreads large edits across frames, avoiding hitches.
 
-> **Status:** implemented as fixed-size spatial chunks
-> (`OctaMesher.BuildChunked`, default 512 world units). Each chunk is one
-> `ArrayMesh` positioned at its origin (`MeshChunk`), with one surface per vslot
-> and its material attached via `ArrayMesh.SurfaceSetMaterial`. Dirty-tracking and
-> the per-frame rebuild budget are still to come.
+> **Status:** implemented. `OctaMesher.BuildChunked` does the initial full build;
+> `WorldChunkRenderer` owns the chunk `MeshInstance3D` nodes and rebuilds only the
+> chunks overlapping a change, at most `BudgetPerFrame` per frame
+> (`MarkDirty(Aabb, margin)` + `_Process`). `OctaFaceWalker.WalkRegion` bounds each
+> rebuild to the chunk instead of the whole octree.
+>
+> **Chunk size is load-bearing.** Measured on church51 (~686k triangles): a full
+> rebuild is ~660 ms regardless of chunk size, but *per-chunk* rebuild cost falls
+> sharply as chunks shrink — ~108 ms at 512, ~46 ms at 256, **~1.4 ms at 128**.
+> The default is therefore **128** (91 chunks on church51), and the budget of 4
+> keeps worst-case meshing under ~6 ms/frame. Large chunks make even a single
+> rebuild too slow to fit a frame — do not raise `ChunkSize` without lowering the
+> effective work per edit.
+>
+> **On "why not just rebuild the world per edit":** that is ~660 ms, i.e. ~1.5 fps
+> at editor drag rates. Incremental is not an optimisation here; it is the only
+> viable path. The invalidation is deliberately conservative (a change marks the
+> chunks its AABB overlaps, expanded by the cube margin) — over-marking is safe,
+> under-marking leaves stale geometry.
 
 ---
 

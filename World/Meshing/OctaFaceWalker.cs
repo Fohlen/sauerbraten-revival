@@ -34,6 +34,46 @@ public static class OctaFaceWalker
     public static void Walk(Octa octa, Func<Cube, bool> include, bool hideSameMaterial, Action<CubeFace> emit)
         => Walk(octa.WorldRoot, Vector3I.Zero, octa.WorldSize >> 1, octa, include, hideSameMaterial, emit);
 
+    /// <summary>
+    /// Walk only the part of the world overlapping <paramref name="region"/> (a
+    /// world-space AABB in Sauerbraten coordinates). Used for incremental chunk
+    /// rebuilds so a single chunk does not traverse the whole octree. A face is
+    /// emitted when its leaf origin lies inside the region; the region should be the
+    /// chunk expanded to catch faces of leaves straddling the boundary.
+    /// </summary>
+    public static void WalkRegion(Octa octa, Vector3I min, Vector3I max,
+                                  Func<Cube, bool> include, bool hideSameMaterial, Action<CubeFace> emit)
+        => WalkRegion(octa.WorldRoot, Vector3I.Zero, octa.WorldSize >> 1, octa, min, max, include, hideSameMaterial, emit);
+
+    private static void WalkRegion(Cube[] cubes, Vector3I co, int size, Octa octa,
+                                   Vector3I min, Vector3I max,
+                                   Func<Cube, bool> include, bool hideSameMaterial, Action<CubeFace> emit)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            var childCo = new Vector3I(
+                co.X + ((i & 1) >> 0) * size,
+                co.Y + ((i & 2) >> 1) * size,
+                co.Z + ((i & 4) >> 2) * size);
+            // Skip this octant if it does not overlap [min, max).
+            if (childCo.X + size <= min.X || childCo.X >= max.X ||
+                childCo.Y + size <= min.Y || childCo.Y >= max.Y ||
+                childCo.Z + size <= min.Z || childCo.Z >= max.Z) continue;
+
+            var c = cubes[i];
+            if (c.Children != null)
+            {
+                WalkRegion(c.Children, childCo, size >> 1, octa, min, max, include, hideSameMaterial, emit);
+                continue;
+            }
+
+            if (!include(c)) continue;
+            for (int orient = 0; orient < 6; orient++)
+                if (FaceVisible(octa, c, orient, childCo, size, hideSameMaterial))
+                    emit(new CubeFace(c, orient, childCo, size));
+        }
+    }
+
     private static void Walk(Cube[] cubes, Vector3I co, int size, Octa octa,
                              Func<Cube, bool> include, bool hideSameMaterial, Action<CubeFace> emit)
     {

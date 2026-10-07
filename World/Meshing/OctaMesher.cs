@@ -41,6 +41,27 @@ public sealed class OctaMesher
         ? chunks[0].Mesh
         : new ArrayMesh();
 
+    /// <summary>The chunk key (origin / chunkSize) that owns a leaf at <paramref name="co"/>.</summary>
+    public static Vector3I ChunkKey(Vector3I co, int chunkSize) =>
+        new(co.X / chunkSize, co.Y / chunkSize, co.Z / chunkSize);
+
+    /// <summary>Mesh one chunk region into a single <see cref="ArrayMesh"/>. Used by incremental rebuilds.</summary>
+    public ArrayMesh BuildChunk(Vector3I chunkOrigin, int chunkSize)
+    {
+        var builder = new ArrayMeshBuilder();
+        var min = chunkOrigin;
+        var max = chunkOrigin + new Vector3I(chunkSize, chunkSize, chunkSize);
+        OctaFaceWalker.WalkRegion(_octa, min, max,
+            include: c => !c.IsEmpty(),
+            hideSameMaterial: false,
+            emit: face =>
+            {
+                if (ChunkKey(face.Co, chunkSize) * chunkSize != chunkOrigin) return;
+                EmitFace(face, chunkOrigin, builder);
+            });
+        return builder.Build(_materials);
+    }
+
     /// <summary>Mesh the world into chunks of <paramref name="chunkSize"/> world units (power of two).</summary>
     public ChunkedWorldMesh BuildChunked(int chunkSize = 512)
     {
