@@ -23,6 +23,9 @@ original source, used offline to generate golden values.
   `flipcube`/`rotatecube`, `forcemip`. These live in `ops.cpp`, which copies the
   original `octaedit.cpp` functions **verbatim** (they are file-local `static` in
   the engine and not exported by any header).
+- `remip` collapse decisions (consistent solid children collapse even with differing
+  but invisible textures; a deformed child prevents collapse; nested levels collapse
+  together). Asserted by [`test/RemipTest.cs`](../../test/RemipTest.cs).
 
 ## Build & run
 
@@ -55,6 +58,10 @@ OP setmat water material=4
 OP flip d0 tex0=2 tex1=1 tex2=3
 OP rotate d1 tex0=5 tex1=6 tex2=3 tex3=4
 OP forcemip parent faces=84848446 84848484 84848484
+OP remip collapse before=9 after=1 children=0
+OP remip keep before=9 after=1 children=0
+OP remip deformed before=9 after=9 children=1
+OP remip nested before=17 after=1 children=0
 OP delcube child0 empty=1 tex0=3
 OP fill child0 solid=1 tex0=9 mat=0
 ```

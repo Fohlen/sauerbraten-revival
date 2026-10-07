@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Physics;
 
 namespace SauerbratenRevival.World;
 
@@ -710,5 +711,190 @@ public static class OctaEdit
         int y = (v.Y + ((n & 2) >> 1) * 8) >> 1;
         int z = (v.Z + ((n & 4) >> 2) * 8) >> 1;
         return new Vector3I(x, y, z);
+    }
+
+    // ---- remip (octa.cpp) ----
+
+    /// <summary>
+    /// octa.cpp:1013 <c>visibleface(c, orient, co, size, mat, nmat, matmask)</c> —
+    /// is this face visible (not occluded by its neighbour)? Integer-only; the
+    /// merge decision of <see cref="Remip"/> depends on it.
+    /// </summary>
+    public static bool VisibleFace(Octa octa, Cube c, int orient, Vector3I co, int size,
+        ushort mat, ushort nmat, ushort matmask)
+    {
+        if (mat != Octa.MAT_AIR)
+        {
+            if (OctaVisible.FaceEdges(c, orient) == Octa.F_SOLID && c.TouchingFace(orient)) return false;
+        }
+        else
+        {
+            if (OctaVisible.CollapsedFace(c, orient)) return false;
+            if (!c.TouchingFace(orient)) return true;
+        }
+
+        Cube o = octa.NeighbourCube(c, orient, co, size, out Vector3I no, out int nsize);
+        if (ReferenceEquals(o, c)) return false;
+
+        int opp = Octa.Opposite(orient);
+        if (nsize > size || (nsize == size && o.Children == null))
+        {
+            if (nmat != Octa.MAT_AIR && (o.Material & matmask) == nmat) return true;
+            if (o.IsEntirelySolid()) return false;
+            if (mat != Octa.MAT_AIR && ((o.Material & matmask) == mat ||
+                (Octa.IsLiquid(mat) && (o.Material & Octa.MATF_VOLUME) == Octa.MAT_GLASS))) return false;
+            if (o.IsEmpty() || OctaVisible.NotTouchingFace(o, opp)) return true;
+            if (o.TouchingFace(opp) && OctaVisible.FaceEdges(o, opp) == Octa.F_SOLID) return false;
+
+            var vo = new Vector3I(co.X & 0xFFF, co.Y & 0xFFF, co.Z & 0xFFF);
+            no = new Vector3I(no.X & 0xFFF, no.Y & 0xFFF, no.Z & 0xFFF);
+            var cf = new Vector2I[4];
+            var of = new Vector2I[4];
+            int numc = OctaVisible.GenFaceVecs(c, orient, vo, size, mat != Octa.MAT_AIR, cf);
+            int numo = OctaVisible.GenFaceVecs(o, opp, no, nsize, false, of);
+            return numo < 3 || !OctaVisible.InsideFace(cf, numc, of, numo);
+        }
+
+        {
+            var vo = new Vector3I(co.X & 0xFFF, co.Y & 0xFFF, co.Z & 0xFFF);
+            no = new Vector3I(no.X & 0xFFF, no.Y & 0xFFF, no.Z & 0xFFF);
+            var cf = new Vector2I[4];
+            int numc = OctaVisible.GenFaceVecs(c, orient, vo, size, mat != Octa.MAT_AIR, cf);
+            return !OctaVisible.OccludesFace(o, opp, no, nsize, vo, size, mat, nmat, matmask, cf, numc);
+        }
+    }
+
+    /// <summary>
+    /// octa.cpp:463 <c>remip(c, co, size)</c> — merge a node's children back into
+    /// the node where they are provably redundant (faces match a fresh subdivision,
+    /// textures agree, and — with <paramref name="mipvis"/> — faces are consistent
+    /// across their quadrants). Returns whether the node is "perfect" (fully
+    /// merged); the top-level caller ignores the result.
+    ///
+    /// Pure integer arithmetic: deterministic given the octree and
+    /// <paramref name="mipvis"/>. This is why `Remip` can replicate pass-through
+    /// (docs/editor-and-commands.md §5.4).
+    /// </summary>
+    public static bool Remip(Octa octa, Cube c, Vector3I co, int size, bool mipvis)
+    {
+        Cube[] ch = c.Children!;
+        if (ch == null)
+        {
+            if (size << 1 <= 0x1000) return true;
+            SubdivideCube(octa, c);
+            ch = c.Children!;
+        }
+
+        bool perfect = true;
+        for (int i = 0; i < 8; i++)
+        {
+            var o = new Vector3I(co.X + ((i & 1) >> 0) * size, co.Y + ((i & 2) >> 1) * size, co.Z + ((i & 4) >> 2) * size);
+            if (!Remip(octa, ch[i], o, size >> 1, mipvis)) perfect = false;
+        }
+
+        c.SolidFaces(); // so texmip is more consistent
+        for (int j = 0; j < 6; j++) c.Texture[j] = Octa.GetMippedTexture(c, j); // parents get child texs regardless
+
+        if (!perfect) return false;
+        if (size << 1 > 0x1000) return false;
+
+        ushort mat = Octa.MAT_AIR;
+        for (int i = 0; i < 8; i++)
+        {
+            mat = ch[i].Material;
+            if ((mat & Octa.MATF_CLIP) == Octa.MAT_NOCLIP || (mat & Octa.MAT_ALPHA) != 0)
+            {
+                if (i > 0) return false;
+                while (++i < 8) if (ch[i].Material != mat) return false;
+                break;
+            }
+            else if (!ch[i].IsEntirelySolid())
+            {
+                while (++i < 8)
+                {
+                    int omat = ch[i].Material;
+                    if (ch[i].IsEntirelySolid()
+                        ? (omat & Octa.MATF_CLIP) == Octa.MAT_NOCLIP || (omat & Octa.MAT_ALPHA) != 0
+                        : mat != omat) return false;
+                }
+                break;
+            }
+        }
+
+        // n = a fresh subdivision of c's re-mipped shape; children must match.
+        var n = new Cube
+        {
+            Faces = c.Faces,
+            Texture = c.Texture,
+            Material = c.Material,
+            Merged = c.Merged,
+            Visible = c.Visible,
+        };
+        n.Children = c.Children; // forcemip needs the children to read vertices
+        ForceMip(octa, n, fixtex: true);
+        n.Children = null;
+        SubdivideCube(octa, n);
+
+        Cube[] nh = n.Children!;
+        var vis = new int[6];
+        for (int i = 0; i < 8; i++)
+        {
+            if (ch[i].Faces[0] != nh[i].Faces[0] ||
+                ch[i].Faces[1] != nh[i].Faces[1] ||
+                ch[i].Faces[2] != nh[i].Faces[2])
+            {
+                octa.FreeOcta(nh);
+                return false;
+            }
+
+            if (ch[i].IsEmpty() && nh[i].IsEmpty()) continue;
+
+            var o = new Vector3I(co.X + ((i & 1) >> 0) * size, co.Y + ((i & 2) >> 1) * size, co.Z + ((i & 4) >> 2) * size);
+            for (int orient = 0; orient < 6; orient++)
+            {
+                if (VisibleFace(octa, ch[i], orient, o, size, Octa.MAT_AIR,
+                        (ushort)((mat & Octa.MAT_ALPHA) ^ Octa.MAT_ALPHA), Octa.MAT_ALPHA))
+                {
+                    if (ch[i].Texture[orient] != n.Texture[orient]) { octa.FreeOcta(nh); return false; }
+                    vis[orient] |= 1 << i;
+                }
+            }
+        }
+
+        if (mipvis)
+        {
+            for (int orient = 0; orient < 6; orient++)
+            {
+                int mask = 0;
+                for (int x = 0; x < 2; x++)
+                    for (int y = 0; y < 2; y++)
+                        mask |= 1 << Octa.OctaIndex(orient >> 1, x, y, orient & 1);
+                if ((vis[orient] & mask) != 0 && (vis[orient] & mask) != mask) { octa.FreeOcta(nh); return false; }
+            }
+        }
+
+        octa.FreeOcta(nh);
+        octa.DiscardChildren(c);
+        for (int i = 0; i < 3; i++) c.Faces[i] = n.Faces[i];
+        c.Material = mat;
+        for (int i = 0; i < 6; i++) if (vis[i] != 0) c.Visible |= (byte)(1 << i);
+        if (c.Visible != 0) c.Visible |= 0x40;
+        // brightencube(c) is a lightmap concern; the octree state above is complete.
+        return true;
+    }
+
+    /// <summary>
+    /// octa.cpp:565 <c>mpremip</c> — remip the whole world. Runs bottom-up from each
+    /// root octant. <paramref name="mipvis"/> is the user toggle that affects the
+    /// collapse decision (must be replicated; see docs/editor-and-commands.md §5.4).
+    /// </summary>
+    public static void RemipAll(Octa octa, bool mipvis)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            var o = new Vector3I(((i & 1) >> 0) * (octa.WorldSize >> 1), ((i & 2) >> 1) * (octa.WorldSize >> 1), ((i & 4) >> 2) * (octa.WorldSize >> 1));
+            Remip(octa, octa.WorldRoot[i], o, octa.WorldSize >> 2, mipvis);
+        }
+        // calcmerges() rebuilds derived render caches; not octree state.
     }
 }

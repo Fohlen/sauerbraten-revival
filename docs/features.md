@@ -114,10 +114,9 @@ that underpins this entire section.
             `RotateCube`, `ForceMip` (`World/OctaEdit.cs`); asserted against the
             engine by `test/OctaFaceTest.cs`. Fixed a latent whole-byte vertex-write
             bug in `CubeGeometry.SetCubeVector` (now nibble-correct).
-      - [ ] **M1d `remip`** — design **decided** (editor doc §5.4/§5.5:
-            pass-through replicated, deterministic integer re-execution; inverse
-            captured at undo time). Implementation deferred; needs `visibleface`
-            and merges.
+      - [x] **M1d `remip`**: `VisibleFace` + `Remip`/`RemipAll`
+            (`World/OctaEdit.cs`); asserted against the engine by
+            `test/RemipTest.cs`. M1 complete.
 - [ ] Texturing, blending, entity placement.
 - [ ] Selection, copy/paste, fill, remip.
 - [ ] Save/load in our format.

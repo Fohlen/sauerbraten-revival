@@ -128,6 +128,64 @@ int main()
         printf("OP forcemip parent faces=%08x %08x %08x\n", p.faces[0], p.faces[1], p.faces[2]);
     }
 
+    // ---- remip ----
+    extern bool remip(cube &c, const ivec &co, int size);
+    {
+        // Build a world with a subdividable region: a size-8 node whose eight
+        // children are all solid, with a mix of textures that a subdivision of the
+        // parent would reproduce. remip should collapse it back.
+        worldroot = newcubes(F_SOLID);
+        cube &root = worldroot[0];
+        subdividecube(root, false, false);
+        // Make children consistent with the parent: all solid, same texture.
+        for(int i=0;i<8;i++){ solidfaces(root.children[i]); loopl(6) root.children[i].texture[l]=1; }
+        for(int i=0;i<8;i++) root.children[i].children=NULL;
+
+        int before = familysize(worldroot[0]);
+        // mpremip: loopi(8) remip(worldroot[i], ivec(i,0,0,worldsize>>1), worldsize>>2)
+        for(int i=0;i<8;i++) { ivec o(i, ivec(0,0,0), worldsize>>1); remip(worldroot[i], o, worldsize>>2); }
+        int after = familysize(worldroot[0]);
+        printf("OP remip collapse before=%d after=%d children=%d\n",
+               before, after, root.children ? 1 : 0);
+    }
+    {
+        // A node whose children have differing textures must NOT collapse.
+        worldroot = newcubes(F_SOLID);
+        cube &root = worldroot[0];
+        subdividecube(root, false, false);
+        for(int i=0;i<8;i++){ solidfaces(root.children[i]); loopl(6) root.children[i].texture[l]= (i==0?7:1); }
+        // give child 0 a visible-exposed texture difference so remip rejects
+        int before = familysize(worldroot[0]);
+        for(int i=0;i<8;i++) { ivec o(i, ivec(0,0,0), worldsize>>1); remip(worldroot[i], o, worldsize>>2); }
+        int after = familysize(worldroot[0]);
+        printf("OP remip keep before=%d after=%d children=%d\n", before, after, root.children ? 1 : 0);
+    }
+    {
+        // A solid parent with one deformed child must NOT collapse (faces differ).
+        worldroot = newcubes(F_SOLID);
+        cube &root = worldroot[0];
+        subdividecube(root, false, false);
+        for(int i=0;i<8;i++){ solidfaces(root.children[i]); loopl(6) root.children[i].texture[l]=1; }
+        root.children[3].edges[0]=4; // deform one child
+        int before = familysize(worldroot[0]);
+        for(int i=0;i<8;i++) { ivec o(i, ivec(0,0,0), worldsize>>1); remip(worldroot[i], o, worldsize>>2); }
+        int after = familysize(worldroot[0]);
+        printf("OP remip deformed before=%d after=%d children=%d\n", before, after, root.children ? 1 : 0);
+    }
+    {
+        // Nested: size-8 node subdivided, child 0 subdivided again, all consistent.
+        worldroot = newcubes(F_SOLID);
+        cube &root = worldroot[0];
+        subdividecube(root, false, false);
+        for(int i=0;i<8;i++){ solidfaces(root.children[i]); loopl(6) root.children[i].texture[l]=1; }
+        subdividecube(root.children[0], false, false);
+        for(int i=0;i<8;i++){ solidfaces(root.children[0].children[i]); loopl(6) root.children[0].children[i].texture[l]=1; }
+        int before = familysize(worldroot[0]);
+        for(int i=0;i<8;i++) { ivec o(i, ivec(0,0,0), worldsize>>1); remip(worldroot[i], o, worldsize>>2); }
+        int after = familysize(worldroot[0]);
+        printf("OP remip nested before=%d after=%d children=%d\n", before, after, root.children ? 1 : 0);
+    }
+
     // ---- op handlers on a small world ----
     // "delete cube": discardchildren + emptyfaces on a child.
     {

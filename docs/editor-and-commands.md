@@ -639,10 +639,12 @@ unit-tested. *No dependencies.*
 face texture/material, add/remove, remip against `Octa.cs`. Test via
 round-trip/inverse checksums. This is the editor's engine, no UI/network yet.
 
-> **Progress:** M1a (structural primitives), M1b (lookups/mapping/subdivision),
-> and M1c (block capture, transparent paste, delete, fill) are **done** and
-> asserted against the original engine via `tools/octaprobe`. Remaining in M1:
-> face/texture/material ops and `remip`.
+> **Progress: M1 complete.** M1a (structural primitives), M1b
+> (lookups/mapping/subdivision), M1c (block capture, transparent paste, delete,
+> fill), and M1d (face/texture/material/flip/rotate, `forcemip`, `remip`) are
+> **done**, each asserted against the original engine via `tools/octaprobe`
+> (`test/OctaEditTest.cs`, `OctaLookupTest.cs`, `OctaOpsTest.cs`, `OctaFaceTest.cs`,
+> `RemipTest.cs`). Next: **M2** (incremental meshing), then **M3** (command log).
 
 **M2 — Incremental meshing.** Refactor `OctaMesher.BuildChunked` into per-chunk
 rebuild + dirty set + per-frame budget. Bakes in the rendering side early so
