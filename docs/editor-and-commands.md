@@ -413,34 +413,103 @@ The native format (architecture.md §4) becomes:
 
 ```
 map/
-├── Level.tscn            # scene: mode settings, entity nodes, refs
+├── Level.tscn            # scene: mode config, environment; REFS the data below
 ├── world.res             # base octree snapshot (canonical, versioned)
-├── history.log           # appended EditCommands since world.res (optional)
+├── history.res           # appended EditCommands since world.res (optional)
 └── materials/            # material manifest
 ```
 
-Rules:
+The map is a **directory, not a single file**. That is deliberate — it matches
+Godot's external-resource idiom, it is diffable, and it packages cleanly into the
+`.zip`/`.tar` archives Workshop expects (§7.4).
+
+### 7.1 Data lives outside the scene (Godot external-resource idiom)
+
+`Level.tscn` holds **references** to the data, not the data itself:
+
+```
+Level.tscn
+  ├─ World : MapWorld
+  │    world   = ExtResource("res://maps/church51/world.res")
+  │    history = ExtResource("res://maps/church51/history.res")
+  ├─ Environment : WorldEnvironment
+  └─ GameMode : Node                 # mode config, rules
+```
+
+Godot scenes store external resources by path and only inline them if the path is
+cleared. So editing the octree rewrites `world.res`; **`Level.tscn` never
+changes** as a result of a geometry or entity edit. The scene stays small and
+stable, and the #3 importer can write `world.res` + `Level.tscn` independently —
+exactly the split [ogz-import.md](ogz-import.md) already plans.
+
+### 7.2 Entities are runtime projections, not scene data
+
+Entity nodes are **not** serialized into `Level.tscn`. `IWorld.Apply` materializes
+them at load via the existing builders, with `Node.Owner == null`, so a
+`PackedScene` never saves them. This mirrors the render chunks: `MapWorld` builds
+`MeshInstance3D` chunks as children from the octree, not as hand-authored scene
+data. Entities follow the same relationship to the command log that chunks follow
+to the octree — they are a **view**, rebuilt deterministically.
+
+Consequence: **hand-editing entities happens through the editor/command path,
+never the Godot inspector.** `Level.tscn` holds only scene-level concerns
+(environment, mode config, editor camera). This is the price of unified
+replication, and it is worth it — the same command stream that places an entity
+is what replicates, undoes, and saves it.
+
+### 7.3 Rules
 
 - **Snapshots are periodic.** On save, we may emit the current world as a fresh
-  `world.res` and truncate the log (compaction), exactly like the snapshot ring
-  in §3.4.
+  `world.res` and truncate the history (compaction), exactly like the snapshot
+  ring in §3.4.
 - **Versioned maps.** `world.res` carries a format `version`; each command
   carries `EditOp` (append-only enum). A newer file opened by an older build can
-  either (a) refuse unknown ops, or (b) — if `history.log` is present — open the
+  either (a) refuse unknown ops, or (b) — if `history.res` is present — open the
   older snapshot and skip the unknown tail. **Maps are versioned because they are
   a command history.**
-- **Diffable/reviewable.** A text `.tres` sidecar (or a text encoding of the
-  log) lets a map change be reviewed like a code change. This is a real product
-  feature for a community that iterates on maps.
+- **Diffable/reviewable.** A text encoding of the history (or a `.tres` sidecar)
+  lets a map change be reviewed like a code change. This is a real product feature
+  for a community that iterates on maps. (Binary `.res` for load speed; optional
+  text for VCS — the same split Godot itself uses for `.res` vs `.tres`.)
 - **Demo/replay = same bytes.** A demo is `base snapshot ref + command log +
   movement stream`. Because edit bytes are already canonical, demos and saves
   share the codec (features.md #9). Visual A/B against the original becomes
   "play the recorded stream".
 
-> **Compatibility note.** This differs from "entities are nodes in `Level.tscn`".
-> Entities still *materialize* as nodes, but their authority is the command log,
-> so `Level.tscn` is a build artifact/projection, not hand-edited. That is the
-> price of unified replication; it is worth it.
+### 7.4 Where map data is stored (Godot storage tiers)
+
+Godot has three storage tiers, and the editor uses two of them:
+
+| Tier | Path | Writable at runtime? | Used for |
+| --- | --- | --- | --- |
+| Project assets | `res://` | **No** (read-only once exported) | shipped maps, materials, models |
+| User data | `user://` | **Yes** (guaranteed writable) | maps being *created/edited*, session saves, downloaded UGC |
+| Editor data | OS editor dir | editor only | — (not used) |
+
+- **Creating/editing a map** writes to `user://maps/<id>/` — `res://` is
+  read-only at runtime, so live edits cannot round-trip there.
+- **Shipping/subbing a map** is a `res://` (packed) resource, or a mounted
+  `.pck`/`.zip` via `ProjectSettings.load_resource_pack` ([architecture.md §7](architecture.md#7-modding--workshop)).
+- **Writing** uses `ResourceSaver.Save(res, "user://.../world.res",
+  ResourceSaver.SaverFlags.Compress)`; **reading** uses `ResourceLoader.Load`.
+- For a shipping game set `application/config/use_custom_user_dir = true` so
+  saves live under the game's own name rather than Godot's shared data dir.
+
+**Hashing & distributing:** the hash is computed over the map **archive**, not
+over individual files. Workshop (and our parity checks in architecture.md §7)
+expects `.zip`/`.tar`, so the content hash is the archive hash — one value that
+covers `Level.tscn` + `world.res` + `history.res` + `materials/` together. This
+is why the directory layout above is safe: the unit of distribution, hashing, and
+parity **is** the archive.
+
+```
+map archive (map.zip / map.tar)
+├── Level.tscn
+├── world.res
+├── history.res
+└── materials/
+    └── ...
+```
 
 ---
 
@@ -512,8 +581,8 @@ undo/redo via inverse. Editor operations now go through the sink. Still offline.
 picker, entity placement, keybinds via `InputMap`. Features.md #5 checklist.
 
 **M5 — Save/load in native format.** `WorldSnapshot` encoder/decoder; `world.res`
-+ `history.log`; version field; compaction. Round-trip tests. *Unblocks #3
-importer too.*
++ `history.res`; version field; compaction; archive packaging + content hash
+(§7.4). Round-trip tests. *Unblocks #3 importer too.*
 
 **M6 — Networking.** `WorldNetwork` RPC nodes, channels, authority, sequence,
 snapshot transfer, late join. Headless multi-client tests. *Unblocks coop edit.*
@@ -538,9 +607,9 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
 1. **Snapshot cadence for rollback**: every N commands, every T ms, or every
    frame? Trade memory vs rollback latency. Suggest: ring of 32 snapshots,
    promote-to-full when a block edit exceeds a size threshold.
-2. **Entity authority detail**: `Level.tscn`-as-projection means a hand-edited
-   scene can be overwritten. Confirm that hand-editing entities moves to the
-   editor/command path only.
+2. ~~**Entity authority detail**~~ — **decided (§7.2):** entities are runtime
+   projections (`Owner == null`), never serialized into `Level.tscn`. Hand-editing
+   entities is editor/command-path only.
 3. **Text vs binary history log**: text is diffable/reviewable but larger and
    slower. Suggest: binary `.res` for load, generate a text sidecar for VCS
    optionally (like Godot's `.tres` for `.res`).
@@ -548,7 +617,9 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
    server-only (scripted geometry)? Make it a property of `EditOp`.
 5. **Undo across remip**: capture-the-block (proposed) vs snapshot barrier.
 6. **Block compression**: zlib level and threshold; must be identical across
-   platforms for the parity hash (zlib is, but pin the library/level).
+   platforms for the parity hash (zlib is, but pin the library/level). Note this
+   is *inner* block compression inside the codec, separate from the *outer* map
+   archive (§7.4), whose hash is the parity unit.
 7. **Float determinism**: positions are f32 on the wire; confirm no accumulation
    of arithmetic in apply paths (only integer octree math + exact f32 copies).
 8. **Permission/authority model**: who may edit (all coop clients? server
@@ -596,6 +667,10 @@ World/Meshing/
   channel; snapshots handle late join and rollback.
 - **Versioned maps are command histories** — diffable, replayable, and the same
   bytes as demos.
+- **The map is a directory of external resources**, referenced by `Level.tscn`;
+  entities are runtime projections, not scene data. The unit of distribution,
+  hashing, and multiplayer parity is the **archive** (`.zip`/`.tar`) — which is
+  exactly what Workshop wants.
 - **Prefabs/recipes are just commands**, so the editor's best feature is the
   cheapest to build on this foundation.
 - **All of M0–M3 is testable headless** with the existing octree checksum
