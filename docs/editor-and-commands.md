@@ -130,6 +130,66 @@ We fix both by making *captured old block* the payload of a `ReplaceBlock`-style
 command. Then paste, prefab placement, undo, and a large fill are literally the
 same message shape. See §5.3 and §6.
 
+### 1.3 How this compares to Cube2's `N_EDIT*` protocol
+
+Sauerbraten *does* have a command system — it is just not called that. Two
+separate things carry the name "command" in the original:
+
+- `engine/command.cpp` — the **CubeScript interpreter** (console commands, vars,
+aliases). We dropped this entirely (no CubeScript).
+- The network edit protocol: the `EDIT_*` op enum, the `N_EDIT*` messages, and
+`edittrigger`. **This is the direct ancestor of `WorldCommand`.**
+
+**The op enum** (`shared/iengine.h:60`):
+
+```c
+enum { EDIT_FACE=0, EDIT_TEX, EDIT_MAT, EDIT_FLIP, EDIT_COPY, EDIT_PASTE,
+       EDIT_ROTATE, EDIT_REPLACE, EDIT_DELCUBE, EDIT_REMIP, EDIT_VSLOT,
+       EDIT_UNDO, EDIT_REDO };
+```
+
+**The messages** (`fpsgame/game.h`) are a contiguous run:
+
+```c
+N_EDITMODE, N_EDITENT, N_EDITF, N_EDITT, N_EDITM, N_FLIP, N_COPY, N_PASTE,
+N_ROTATE, N_REPLACE, N_DELCUBE, N_REMIP, N_EDITVSLOT, N_UNDO, N_REDO,
+N_NEWMAP, N_GETMAP, N_SENDMAP, N_CLIPBOARD, N_EDITVAR
+```
+
+`edittrigger` (client.cpp) joins them with message-id arithmetic —
+`addmsg(N_EDITF + op, ...)` — and **every edit message begins with the same 9
+ints**: `sel.o.x/y/z`, `sel.s.x/y/z`, `sel.grid`, `sel.orient`, then the cursor
+state `cx, cxs, cy, cys, corner`. That is exactly `selinfo` (our `Selection`,
+M0) and `SelectionPayload`.
+
+| Sauerbraten | Ours |
+| --- | --- |
+| `EDIT_*` enum | `WorldOp` |
+| `edittrigger(sel, op, a1, a2, a3, vs)` | `WorldCommandSink.Submit(WorldCommand)` |
+| `addmsg(N_EDITF + op, fmt, ...)` | `WorldCommandCodec.Encode` |
+| selection prefix on every message | `SelectionPayload` (identical fields) |
+| `EDIT_REMIP` carries **no arguments** (`"r"`) | `RemipPayload` (pass-through, §5.4) |
+| `EDIT_UNDO`/`EDIT_REDO` are ops carrying a `packundo` blob | `ApplyInverse` wrapper; inverse captured **locally**, never sent (§5.5) |
+| per-op `"ri9i6"` format strings + packed `VSlot` | one framing + `var_to_bytes` (§5.1) |
+| server `msgfilter` privacy classes | server-authoritative `WorldCommandSink` |
+
+Three deliberate divergences:
+
+1. **Undo is not an op and its inverse is not transmitted.** Cube2 sent
+   `EDIT_UNDO`/`EDIT_REDO` with a zlib `packundo` block over the wire. We capture
+   the inverse locally at undo time (§5.5 Rule 4) and replicate an `ApplyInverse`
+   command instead. This is what makes shared-world undo sound (your own editor
+   commands only; conflicts rejected).
+2. **No `N_EDITF + op` arithmetic.** The original relies on the `EDIT_*` values
+   being contiguous and ordered identically to the `N_*` ids; reordering either
+   silently corrupts the mapping. `WorldOp` is carried explicitly.
+3. **`ReplaceBlock` unifies paste/prefab/undo/fill** (§1.2), where Cube2 split those
+   across `EDIT_PASTE`, `.obr` prefabs and `packundo`.
+
+What we **kept**, because the original got it right: a single ordered reliable
+edit stream for all world mutations (coop edit), the selection prefix, and
+`remip` as a zero-argument pass-through command.
+
 ---
 
 ## 2. The WorldCommandSink — one seam, many drivers **and sources**
