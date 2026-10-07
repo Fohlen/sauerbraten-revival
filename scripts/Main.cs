@@ -28,8 +28,11 @@ public partial class Main : Node
             return;
         }
 #endif
-        GetTree().ChangeSceneToFile("res://scenes/test_level.tscn");
+        // Deferred: the tree is busy adding children during _Ready.
+        CallDeferred(nameof(StartGame));
     }
+
+    private void StartGame() => GetTree().ChangeSceneToFile("res://scenes/player_scene.tscn");
 
 #if DEBUG
     private void RunTests() => _ = GoTest.RunTests(Assembly.GetExecutingAssembly(), this, _environment!);

@@ -39,21 +39,47 @@ public class MapPlayerTest : TestClass
     }
 
     [Test]
-    public void ForwardInputMovesAlongYaw()
+    public void ForwardMovesAlongLookDirection()
     {
         var octa = TestData.ReadMap().ToOcta();
         var player = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
-        Step(player, 20); // settle
+        Step(player, 400); // settle
 
         var before = player.Entity.O;
-        player.Entity.Move = 1; // forward: yaw 0 -> +Y
+        player.Entity.Move = 1; // the value the "move_forward" action must produce
         Step(player, 40);
         var after = player.Entity.O;
 
         GD.Print($"[player] forward: {before} -> {after}");
-        TestAssert.True(after.Y > before.Y + 1f, "moved toward +Y at yaw 0");
+        TestAssert.True(after.Y > before.Y + 1f, "moved toward the look direction (+Y at yaw 0)");
         TestAssert.True(Mathf.Abs(after.X - before.X) < 1f, "no sideways drift");
         player.Free();
+    }
+
+    [Test]
+    public void StrafeRightMovesScreenRight()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        Step(player, 400); // settle
+
+        var cam = new Camera3D();
+        player.AddChild(cam);
+        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
+        world.AddChild(player);
+        TestScene.AddChild(world);
+
+        Vector3 screenRight = cam.GlobalTransform.Basis.X; // +X at yaw 0
+
+        var before = player.Entity.O;
+        player.Entity.Strafe = 1; // the value the "strafe_right" action must produce
+        Step(player, 40);
+        Vector3 delta = (player.Entity.O - before).Normalized();
+
+        GD.Print($"[player] strafe-right delta={delta} screenRight={screenRight}");
+        TestAssert.True(delta.Dot(screenRight) > 0.9f, "strafe-right moved along screen-right");
+
+        world.QueueFree();
     }
 
     [Test]

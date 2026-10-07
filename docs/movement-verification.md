@@ -5,6 +5,29 @@ not with vibes. This document defines the full Plan A: A1–A4.
 
 The reference source is assumed at `/Users/fohlen/Downloads/sauerbraten-code-r6889`.
 
+## Status
+
+| Stage | State | Where |
+| --- | --- | --- |
+| A1 — standalone reference harness | ✅ | `tools/refharness/` (velocity model, golden CSVs, determinism) |
+| A2 — instrumented original client | ✅ | `tools/refharness/patches/a2-trace.patch` (+ `a2b-input-trace.patch`) |
+| A3 — input-replay differential | ✅ / residual | `test/A3ReplayTest.cs`, `test/A3ClipsProbe.cs`; ~99.8% (deformed-cube slope landings) |
+| A4 — determinism | ✅ | `tools/refharness/main.cpp` (PASS) |
+| Live player on the ported physics | ✅ | `World/Ogz/MapPlayer.cs` (`scenes/player_scene.tscn`) |
+| Layers 3–5 (timing, input, camera/feedback) | ◑ | timing + input captured & ported; FOV/sensitivity/accel tuning, sway, sounds remain |
+
+### What was fixed to reach ~99.8%
+
+The dominant A3 residual was a **`genfacevecs` winding bug**: the reference reuses
+its solid-branch `GENFACEORIENT` macro in the non-solid branch, emitting face verts
+in **reverse order for `dimcoord==0` faces** (LEFT/BACK/BOTTOM). Our port iterated
+`0..3` uniformly, inverting those polygons and flipping the winding-sensitive
+`insideface()` result, which corrupted `classifyface()`/`visibletris()` visibility
+bits (1383/1479 `c.visible` mismatches, first divergence at `session3` step 262).
+Fixed in `World/Physics/OctaVisible.cs`; residual now 12/1479 (capture artifacts).
+
+---
+
 ## Ground rules
 
 - **Fixed step.** Both engines must run the movement model at `PHYSFRAMETIME = 5 ms`
@@ -227,5 +250,16 @@ records the original's input + scheduling so the port can match it exactly:
   `-1/0/+1` from key state; `jump` sets `jumping` on press (via `canjump()`), and
   `modifyvelocity` consumes it on the ground.
 
-Still to check: match FOV (100), sensitivity, mouse accel (0); match `moveres`
-sub-stepping; reproduce gun sway and jump/land/water sounds.
+**Ported into the live player.** `World/Ogz/MapPlayer.cs` implements all of the
+above: fixed 5 ms steps caught up by count, per-frame mouse application, and the
+`move`/`strafe`/`jumping` key mapping. Two sign fixes were needed because Godot's
+captured-mouse/screen X handedness on macOS runs opposite to SDL's:
+
+- **mouse yaw**: `yaw -= dx*cursens` (original: `+=`) so cursor-right looks right;
+- **strafe**: `strafe_right` ⇒ `Strafe=+1` (original `dir()`: `-1`) so A/D aren't
+  swapped.
+
+Both are guarded by tests (`test/MapPlayerLookTest.cs`, `test/MapPlayerTest.cs`).
+
+Still to check: match FOV (100), fine-tune sensitivity, confirm mouse accel (0);
+reproduce gun sway and jump/land/water sounds; crouch, water, spectator-float.

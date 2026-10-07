@@ -50,8 +50,8 @@ Work proceeds in **stages**.
 | --- | --- |
 | `docs/` | Design, architecture, roadmap, physics reference |
 | `scenes/` | Godot scenes (entry `Main.tscn`; `editor_scene.tscn` dev viewer, `player_scene.tscn` play scene) |
-| `scripts/` | Game entry + movement prototype (`Main.cs`, `Player.cs`) |
-| `World/` | World core: octree (`Octa`, `CubeGeometry`), [`Ogz/`](World/Ogz) reader + viewer, [`Meshing/`](World/Meshing), [`Materials/`](World/Materials), [`Entities/`](World/Entities) |
+| `scripts/` | Game entry (`Main.cs`) |
+| `World/` | World core: octree (`Octa`, `CubeGeometry`), [`Ogz/`](World/Ogz) reader + world/player, [`Physics/`](World/Physics) movement + collision, [`Meshing/`](World/Meshing), [`Materials/`](World/Materials), [`Entities/`](World/Entities) |
 | `test/` | Unit tests, run by GoDotTest |
 | `metadata-catalogue/` | Engine-exported ground truth for imported maps |
 | `tools/model-import/` | Converts original models to glTF + a manifest (git-ignored `assets/models/`) |
@@ -59,12 +59,18 @@ Work proceeds in **stages**.
 | `tools/refharness/` | A1 harness, A2 instrumented client, and [reference patches](tools/refharness/patches/README.md) |
 | `SauerbratenRevival.csproj` | C# project (Godot .NET) |
 
-## Running the prototype
+## Running the game
 
 Requires the **Godot .NET editor** (`Godot_mono` 4.7) — the standard build can't
-load C#. Open the project and run; `dotnet build` also builds the assembly. Input
-is WASD + Space; mouse look is captured (Esc releases). Physics runs at 200 Hz to
-match the original.
+load C#. Open the project and run; `dotnet build` also builds the assembly.
+`Main.tscn` loads `scenes/player_scene.tscn`, which builds a map and spawns the
+player at the map's `ET_PLAYERSTART`.
+
+The player uses the **ported original physics** (`World/Physics/OctaPhysics.cs`),
+not Godot collision: WASD + Space, mouse look is captured (Esc releases, click
+recaptures). Simulation runs in **fixed 5 ms steps**, caught up by count, and the
+frame's mouse delta is applied once per rendered frame — matching the original
+(see [movement-verification.md](docs/movement-verification.md)).
 
 ## Running tests
 

@@ -103,8 +103,11 @@ public partial class MapPlayer : Node3D
         ApplyMouse();
 
         // Movement keys (physics.cpp dir()): forward/back -> move, left/right -> strafe.
+        // NOTE: strafe is negated relative to dir() because the same Godot/macOS
+        // screen-X handedness that flips mouse yaw (see ApplyMouse) also flips the
+        // engine's strafe sign, so A/D would otherwise be swapped.
         Entity.Move = (Input.IsActionPressed("move_forward") ? 1 : 0) - (Input.IsActionPressed("move_back") ? 1 : 0);
-        Entity.Strafe = (Input.IsActionPressed("strafe_left") ? 1 : 0) - (Input.IsActionPressed("strafe_right") ? 1 : 0);
+        Entity.Strafe = (Input.IsActionPressed("strafe_right") ? 1 : 0) - (Input.IsActionPressed("strafe_left") ? 1 : 0);
         Entity.Jumping = Input.IsActionPressed("jump");
 
         Advance(delta);

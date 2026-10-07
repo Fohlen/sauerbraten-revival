@@ -235,10 +235,9 @@ Still to do / known deviations:
 - Collision volume/`moveres` are shared with A3; velocity + collision are verified
   to ~99.8% of steps (deformed-cube slope landings are the residual — see
   [movement-verification.md](movement-verification.md)).
-- The old prototype `scripts/Player.cs` (+ `scenes/player.tscn`,
-  `scenes/test_level.tscn`) is superseded and gets removed once the new player
-  covers death/respawn and item/trigger feedback.
 - Water, crouch, spectator-float, gun sway and jump/land/water sounds are not
   ported yet.
 - `MapPlayer.Setup` spawns at the first `ET_PLAYERSTART`; multi-spawn/team modes
   and `game::suicide` respawn are not wired.
+- `scripts/Player.cs`, `scenes/player.tscn` and `scenes/test_level.tscn` (the old
+  `move_and_slide()` prototype and its CSG level) have been removed.
