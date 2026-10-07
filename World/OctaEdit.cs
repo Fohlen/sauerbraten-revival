@@ -534,6 +534,87 @@ public static class OctaEdit
     /// <summary>Backwards-compatible wrapper: <c>Fill</c> is <see cref="EditFace"/> with the fill mode.</summary>
     public static void Fill(Octa octa, Commands.Selection sel, int dir, int mode) => EditFace(octa, sel, dir, mode);
 
+    // ---- selection flip / rotate (octaedit.cpp mpflip / mprotate) ----
+
+    /// <summary>octaedit.cpp:2643 <c>rotatequad(a,b,c,d)</c> — cyclic content rotation a<-b<-c<-d<-a.</summary>
+    private static void RotateQuad(Cube a, Cube b, Cube c, Cube d)
+        => SwapContents(a, b, c, d);
+
+    /// <summary>SwapContents(a,b) then rotate: implemented as three content swaps for a 4-cycle.</summary>
+    private static void SwapContents(Cube a, Cube b)
+    {
+        // Content-level swap (the Cube objects are references to octree slots).
+        (a.Children, b.Children) = (b.Children, a.Children);
+        (a.Faces.F0, b.Faces.F0) = (b.Faces.F0, a.Faces.F0);
+        (a.Faces.F1, b.Faces.F1) = (b.Faces.F1, a.Faces.F1);
+        (a.Faces.F2, b.Faces.F2) = (b.Faces.F2, a.Faces.F2);
+        (a.Texture, b.Texture) = (b.Texture, a.Texture);
+        (a.Material, b.Material) = (b.Material, a.Material);
+        (a.Merged, b.Merged) = (b.Merged, a.Merged);
+        (a.Visible, b.Visible) = (b.Visible, a.Visible);
+    }
+
+    /// <summary>Rotate four cubes a<-b<-c<-d<-a without a temporary allocation.</summary>
+    private static void SwapContents(Cube a, Cube b, Cube c, Cube d)
+    {
+        SwapContents(a, b);
+        SwapContents(b, c);
+        SwapContents(c, d);
+    }
+
+    /// <summary>
+    /// octaedit.cpp:2673 <c>mpflip</c> — mirror the whole selection along the oriented
+    /// axis: flip each cube and swap the two halves.
+    /// </summary>
+    public static void FlipSelection(Octa octa, Commands.Selection sel)
+    {
+        int d = Commands.Selection.Dimension(sel.Orient);
+        int r = Octa.R[d], cc = Octa.C[d], zz = Octa.D[d];
+        int zs = sel.S[zz];
+        var b = new Commands.Block3(sel);
+        for (int y = 0; y < sel.S[cc]; y++)
+            for (int x = 0; x < sel.S[r]; x++)
+            {
+                for (int z = 0; z < zs; z++) FlipCube(BlockCube(octa, x, y, z, b, sel.Grid), d);
+                for (int z = 0; z < zs / 2; z++)
+                    SwapContents(
+                        BlockCube(octa, x, y, z, b, sel.Grid),
+                        BlockCube(octa, x, y, zs - z - 1, b, sel.Grid));
+            }
+    }
+
+    /// <summary>
+    /// octaedit.cpp:2673 <c>mprotate</c> — rotate the selection's cubes by 90° about
+    /// the oriented axis, permuting positions (<c>rotatequad</c>) and rotating each
+    /// cube's faces (<c>rotatecube</c>). <paramref name="cw"/> &gt; 0 = clockwise.
+    /// </summary>
+    public static void RotateSelection(Octa octa, Commands.Selection sel, int cw)
+    {
+        int d = Commands.Selection.Dimension(sel.Orient);
+        if (Commands.Selection.DimCoord(sel.Orient) == 0) cw = -cw;
+        int r = Octa.R[d], cc = Octa.C[d], zz = Octa.D[d];
+        int m = sel.S[cc] < sel.S[r] ? cc : r;
+        int ss = System.Math.Max(sel.S[r], sel.S[cc]);
+        sel.S = SetAxis(sel.S, m, ss);
+
+        var b = new Commands.Block3(sel);
+        for (int z = 0; z < sel.S[zz]; z++)
+            for (int pass = 0; pass < (cw > 0 ? 1 : 3); pass++)
+            {
+                for (int y = 0; y < sel.S[cc]; y++)
+                    for (int x = 0; x < sel.S[r]; x++)
+                        RotateCube(BlockCube(octa, x, y, z, b, sel.Grid), d);
+
+                for (int y = 0; y < ss / 2; y++)
+                    for (int x = 0; x < ss - 1 - y * 2; x++)
+                        RotateQuad(
+                            BlockCube(octa, ss - 1 - y, x + y, z, b, sel.Grid),
+                            BlockCube(octa, x + y, y, z, b, sel.Grid),
+                            BlockCube(octa, y, ss - 1 - x - y, z, b, sel.Grid),
+                            BlockCube(octa, ss - 1 - x - y, ss - 1 - y, z, b, sel.Grid));
+            }
+    }
+
     // ---- face / texture / material ops (octaedit.cpp) ----
 
     /// <summary>

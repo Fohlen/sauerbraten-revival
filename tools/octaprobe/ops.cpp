@@ -243,3 +243,8 @@ void probe_emptymap_summary(int scale, int &nodes, int &maxLeaf)
     nodes = 0; loopi(8) nodes += probe_familysize(root[i]);
     maxLeaf = 0; loopi(8) maxLeaf = max(maxLeaf, probe_maxleaf(root[i], worldsize>>1));
 }
+
+// mprotate / mpflip need sel/lookupcube/changed/makeundo. Reimplement the cube-level
+// effect faithfully against a hand-built block, without the engine's globals:
+// selcube(x,y,z) maps a block grid cell to a cube in an array we own.
+// We test the *cube permutation + face rotation* on a 2x2x1 selection.

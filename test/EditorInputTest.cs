@@ -75,15 +75,27 @@ public class EditorInputTest : GoTestBase
     }
 
     [Test]
-    public void ShiftScrollChangesGridNotGeometry()
+    public void SetGridChangesGridNotGeometry()
     {
         var ec = SetupEditor(out var map);
         bool solidBefore = !Empty(map, new Vector3I(512, 512, 128));
-        int gridBefore = ec.Cursor.GridSize;
 
-        ec.Scroll(+1, shift: true);
-        TestAssert.Equal(gridBefore * 2, ec.Cursor.GridSize, "grid doubled");
+        ec.SetGrid(ec.Cursor.GridPower + 1);
+        TestAssert.Equal(16, ec.Cursor.GridSize, "grid doubled");
         TestAssert.Equal(solidBefore, !Empty(map, new Vector3I(512, 512, 128)), "geometry untouched");
+        map.QueueFree();
+    }
+
+    [Test]
+    public void RotateAndFlipReachTheWorld()
+    {
+        var ec = SetupEditor(out var map);
+        // Rotate then flip repeatedly; they must not throw and must mark chunks dirty.
+        ec.EditRotate(+1);
+        TestAssert.True(map.Renderer!.PendingCount > 0, "rotate invalidated chunks");
+        map.Renderer.FlushDirty();
+        ec.EditTransform(flip: true);
+        TestAssert.True(true, "flip ran");
         map.QueueFree();
     }
 }

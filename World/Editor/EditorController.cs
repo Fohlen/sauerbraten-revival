@@ -117,9 +117,10 @@ public partial class EditorController : Node3D
                     if (button.Pressed) { _drag = DragMode.Extend; }
                     else if (_drag == DragMode.Extend) { _drag = DragMode.None; }
                     return;
-                case MouseButton.WheelUp when button.Pressed: Scroll(+1, Shift); return;
-                case MouseButton.WheelDown when button.Pressed: Scroll(-1, Shift); return;
+                case MouseButton.WheelUp when button.Pressed: Scroll(+1); return;
+                case MouseButton.WheelDown when button.Pressed: Scroll(-1); return;
             }
+            return;
         }
 
         // macOS trackpad / Magic Mouse: scrolling arrives as a fractional pan
@@ -131,22 +132,51 @@ public partial class EditorController : Node3D
             while (Mathf.Abs(_panAccum) >= PanNotch)
             {
                 // Godot: positive delta.Y scrolls content down (like WheelDown).
-                Scroll(_panAccum > 0 ? -1 : +1, Shift);
+                Scroll(_panAccum > 0 ? -1 : +1);
                 _panAccum -= Mathf.Sign(_panAccum) * PanNotch;
+            }
+            return;
+        }
+
+        // Keys: one-shot edit actions (Cube2 editbinds).
+        if (@event is InputEventKey key && key.Pressed && !key.Echo)
+        {
+            switch (key.PhysicalKeycode)
+            {
+                case Key.Space: Cursor.CancelSelection(); break;
+                case Key.X: EditTransform(flip: true); break;
+                case Key.Delete: EditDelete(); break;
+                // Numpad selection nudge (KP4-9 = movesel).
+                case Key.Kp4: Cursor.MoveSelection(-1, 0); break;
+                case Key.Kp6: Cursor.MoveSelection(+1, 0); break;
+                case Key.Kp8: Cursor.MoveSelection(+1, 1); break;
+                case Key.Kp5: Cursor.MoveSelection(-1, 1); break;
+                case Key.Kp9: Cursor.MoveSelection(+1, 2); break;
+                case Key.Kp7: Cursor.MoveSelection(-1, 2); break;
             }
         }
     }
 
+    /// <summary>
+    /// The <c>delta_use</c> namespace: what a scroll notch does depends on which
+    /// editor key is held (Cube2 <c>editbind F/G/Q/R/Y</c>). Falls back to fill/empty.
+    /// </summary>
     private static bool Shift => Input.IsKeyPressed(Key.Shift);
+    private static bool Held(Key k) => Input.IsKeyPressed(k);
 
     /// <summary>
     /// One scroll notch: plain = fill/empty (mpeditface mode 1, the white-box
     /// push/pull); Shift = change grid size. Mirrors Cube2's <c>delta_do</c> dispatch.
     /// </summary>
-    public void Scroll(int notch, bool shift = false)
+    public void Scroll(int notch)
     {
-        if (shift) SetGrid(Cursor.GridPower + notch);
-        else EditFill(notch);
+        // Cube2 delta_use namespace: the held key selects the action.
+        if (Held(Key.G) || Shift) { SetGrid(Cursor.GridPower + notch); return; }
+        if (Held(Key.F)) { EditFace(notch, 0); return; }   // push/pull cube face
+        if (Held(Key.Q)) { EditFace(notch, 2); return; }   // push/pull cube corner
+        if (Held(Key.R)) { EditRotate(notch); return; }
+        // Default: fill/empty (mpeditface mode 1), the white-box push/pull.
+        EditFace(notch, 1);
     }
 
     /// <summary>Adjust the grid power and rebuild the cursor grid.</summary>
@@ -157,32 +187,62 @@ public partial class EditorController : Node3D
     }
 
     /// <summary>Run a fill/empty edit (mpeditface mode 1) at the cursor selection.</summary>
-    public void EditFill(int dir)
+    public void EditFill(int dir) => EditFace(dir, 1);
+
+    /// <summary>Run an <c>mpeditface</c> edit (mode 0 face, 1 fill, 2 corner) at the cursor selection.</summary>
+    public void EditFace(int dir, int mode)
+    {
+        if (Octa == null) return;
+        var sel = CurrentSelection();
+        OctaEdit.EditFace(Octa, sel, dir, mode);
+        InvalidateRegion(sel);
+    }
+
+    /// <summary>Rotate the selection's cubes (mprotate) about the oriented axis.</summary>
+    public void EditRotate(int cw)
+    {
+        if (Octa == null) return;
+        var sel = CurrentSelection();
+        OctaEdit.RotateSelection(Octa, sel, cw);
+        InvalidateRegion(sel);
+    }
+
+    /// <summary>Flip the selection (mpflip) along the oriented axis.</summary>
+    public void EditTransform(bool flip)
+    {
+        if (Octa == null) return;
+        var sel = CurrentSelection();
+        if (flip) OctaEdit.FlipSelection(Octa, sel);
+        InvalidateRegion(sel);
+    }
+
+    /// <summary>Delete the selected cubes (editdel / delcube).</summary>
+    public void EditDelete()
     {
         if (Sink == null || Octa == null) return;
+        var sel = CurrentSelection();
+        Sink.Submit(new WorldCommand(WorldOp.DeleteCube, new DeleteCubePayload(new SelectionPayload(sel)),
+            source: CommandSource.Editor));
+        InvalidateRegion(sel);
+    }
+
+    /// <summary>The selection as the editor currently sees it (cursor cell if none).</summary>
+    private Selection CurrentSelection()
+    {
         var sel = Cursor.Selection;
         sel.Grid = Cursor.GridSize;
         sel.Orient = Cursor.Orient;
-        if (sel.IsZero)
-        {
-            // No selection yet: edit the single cursor cell.
-            sel.O = Cursor.Cur;
-            sel.S = new Vector3I(1, 1, 1);
-        }
-        var payload = new FillPayload(
-            new SelectionPayload(sel), dir, 1);
-        Sink.Submit(new WorldCommand(
-            WorldOp.Fill, payload,
-            source: CommandSource.Editor));
+        if (sel.IsZero) { sel.O = Cursor.Cur; sel.S = new Vector3I(1, 1, 1); }
+        return sel;
+    }
 
-        // The command changed the octree; re-mesh the affected region. Fill mutates a
-        // single grid slice, so invalidate the selection AABB expanded by one cell.
-        if (Renderer != null)
-        {
-            var o = new Vector3(sel.O.X, sel.O.Y, sel.O.Z);
-            var size = new Vector3(sel.S.X * sel.Grid, sel.S.Y * sel.Grid, sel.S.Z * sel.Grid);
-            Renderer.MarkDirty(new Aabb(o, size), margin: sel.Grid);
-        }
+    /// <summary>Re-mesh the region an edit touched (expanded by one grid cell).</summary>
+    private void InvalidateRegion(Selection sel)
+    {
+        if (Renderer == null) return;
+        var o = new Vector3(sel.O.X, sel.O.Y, sel.O.Z);
+        var size = new Vector3(sel.S.X * sel.Grid, sel.S.Y * sel.Grid, sel.S.Z * sel.Grid);
+        Renderer.MarkDirty(new Aabb(o, size), margin: sel.Grid);
     }
 
     // ---- selection box rendering ----
@@ -206,7 +266,11 @@ public partial class EditorController : Node3D
         var s = new Vector3(sel.S.X * sel.Grid, sel.S.Y * sel.Grid, sel.S.Z * sel.Grid);
 
         _mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
+        // White selection box, grey grid lines, red origin marker (Cube2 boxs/boxsgrid/boxs3D).
         EmitBox(o, s, new Color(1f, 1f, 1f, 1f));
+        EmitGrid(o, s, sel.Grid, sel.Orient, new Color(0.4f, 0.4f, 0.4f, 1f));
+        float m = Mathf.Min(sel.Grid * 0.25f, 2f);
+        EmitBox(o - new Vector3(m * 0.5f, m * 0.5f, m * 0.5f), new Vector3(m, m, m), new Color(0.8f, 0f, 0f, 1f));
         _mesh.SurfaceEnd();
     }
 
@@ -223,13 +287,51 @@ public partial class EditorController : Node3D
             {0,4},{1,5},{2,6},{3,7},
         };
         for (int e = 0; e < 12; e++)
+            Line(p[edges[e, 0]], p[edges[e, 1]], color);
+    }
+
+    private void Line(Vector3 a, Vector3 b, Color color)
+    {
+        _mesh!.SurfaceSetColor(color);
+        _mesh.SurfaceAddVertex(a);
+        _mesh.SurfaceSetColor(color);
+        _mesh.SurfaceAddVertex(b);
+    }
+
+    /// <summary>
+    /// octaedit.cpp <c>boxsgrid</c> — subdivide the selection face in its oriented
+    /// plane at grid spacing, so the cube grid is visible. Drawn on the two in-plane
+    /// axes (R and C of the oriented dimension).
+    /// </summary>
+    private void EmitGrid(Vector3 o, Vector3 s, int grid, int orient, Color color)
+    {
+        int d = Selection.Dimension(orient);
+        int ra = Octa.R[d], ca = Octa.C[d];
+        var size = new int[3];
+        size[0] = (int)s.X; size[1] = (int)s.Y; size[2] = (int)s.Z;
+        // Lines parallel to C, spaced along R.
+        for (int x = grid; x < size[ra]; x += grid)
         {
-            _mesh!.SurfaceSetColor(color);
-            _mesh.SurfaceAddVertex(p[edges[e, 0]]);
-            _mesh.SurfaceSetColor(color);
-            _mesh.SurfaceAddVertex(p[edges[e, 1]]);
+            var p0 = o; var p1 = o;
+            p0.X += Axis(ra, 0, x); p0.Y += Axis(ra, 1, x); p0.Z += Axis(ra, 2, x);
+            p1 = p0;
+            var cLen = size[ca];
+            p1.X += Axis(ca, 0, cLen); p1.Y += Axis(ca, 1, cLen); p1.Z += Axis(ca, 2, cLen);
+            Line(p0, p1, color);
+        }
+        // Lines parallel to R, spaced along C.
+        for (int y = grid; y < size[ca]; y += grid)
+        {
+            var p0 = o; var p1 = o;
+            p0.X += Axis(ca, 0, y); p0.Y += Axis(ca, 1, y); p0.Z += Axis(ca, 2, y);
+            p1 = p0;
+            var rLen = size[ra];
+            p1.X += Axis(ra, 0, rLen); p1.Y += Axis(ra, 1, rLen); p1.Z += Axis(ra, 2, rLen);
+            Line(p0, p1, color);
         }
     }
+
+    private static float Axis(int axis, int comp, float v) => comp == axis ? v : 0f;
 
     // ---- Sauerbraten (Z-up) <-> Godot (Y-up) ----
 

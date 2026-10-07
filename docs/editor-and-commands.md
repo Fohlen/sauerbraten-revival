@@ -802,17 +802,21 @@ hash differently (§9).
   cube-face and cube-corner push/pull. **Done** — `OctaEdit.EditFace`/`PushEdge`/
   `LinkedPush`, asserted against the engine by `test/OctaFaceTest.cs`. Mode 1
   (fill) was already `OctaEdit.Fill`.
-- **M4d — the selection box**: render the white rectangle + grid + cursor box
-  (Godot line/immediate mesh). **Prototype done** — `OctaRay` (grid DDA ray cast,
-  the seam the engine caster will replace), `EditorController` (wires the camera
-  ray → `EditCursor.Update`, draws the box, wheel → fill/grid), and an
-  `EmptyMap`/`scenes/empty_map.tscn` synthetic world to investigate.
-  `test/OctaRayTest.cs` locks the cast + cursor placement.
+- **M4d — the selection box + input**: render the white rectangle + grey grid +
+  red origin marker; wire the camera ray → `EditCursor.Update`; wheel/trackpad
+  dispatch. **Done** — `OctaRay` (leaf-stepping ray cast), `EditorController`,
+  `EmptyMap`/`scenes/empty_map.tscn`. `test/OctaRayTest.cs`, `test/EditorInputTest.cs`,
+  `test/DragSelectTest.cs`.
+
+  **Input binds wired** (Cube2 `editbind`): `MOUSE1` box-select (editdrag),
+  `MOUSE2` extend (editextend), wheel/trackpad scroll = fill/empty, and the
+  `delta_use` **modifier namespace** — hold `G` grid, `F` face push/pull,
+  `Q` corner push/pull, `R` rotate; `X` flip, `SPACE` cancel, `DELETE` delcube,
+  `KP4-9` nudge selection. **macOS note:** trackpad/Magic-Mouse scrolling arrives
+  as `InputEventPanGesture`, not `WheelUp/Down` — both are handled.
 
   **Todo (engine work):** replace `OctaRay.RayCube` with a port of
-  `physics.cpp:raycube` (hierarchical descent + deformed-cube clipping planes);
-  then wire the real `delta_do`-style modifier dispatch and the remaining edit
-  binds.
+  `physics.cpp:raycube` (hierarchical descent + deformed-cube clipping planes).
 - **M4e — GUI**: texture/material pickers, entity placement, keybinds via
   `InputMap`. Features.md #5 checklist.
 

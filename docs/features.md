@@ -131,6 +131,9 @@ that underpins this entire section.
       - [x] **M1d `remip`**: `VisibleFace` + `Remip`/`RemipAll`
             (`World/OctaEdit.cs`); asserted against the engine by
             `test/RemipTest.cs`. M1 complete.
+      - [x] **M1e selection transforms**: `FlipSelection` (`mpflip`) and
+            `RotateSelection` (`mprotate`); asserted by
+            `test/SelectionTransformTest.cs`.
 - [ ] Texturing, blending, entity placement.
 - [ ] Selection, copy/paste, fill, remip.
 - [ ] Save/load in our format.
