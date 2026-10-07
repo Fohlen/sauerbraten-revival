@@ -47,13 +47,20 @@ This document is the reasoning; the implementation status lives in
 
 ## 1. The core abstraction
 
+> **Naming note.** This system is **shared**, not editor-only: the editor, game
+> modes (crumbling walls, scripted platforms) and scripts all submit the *same*
+> kind of `WorldCommand` through the *same* `WorldCommandSink`. The old
+> `Edit*` names were a misnomer — there is no "edit command" distinct from a
+> "game command", only different **sources**. Only the editor *cursor*
+> (`EditCursor`) is editor-specific.
+
 ### 1.1 Command
 
 ```csharp
 namespace SauerbratenRevival.World.Commands;
 
 /// Stable numeric id — part of the wire + save format. Never reorder; append only.
-public enum EditOp : ushort
+public enum WorldOp : ushort
 {
     // --- selection/structural (mirrors Cube2's EDIT_ enum where it maps) ---
     AddCube, RemoveCube,       // add/del leaf cube in the selection
@@ -72,15 +79,20 @@ public enum EditOp : ushort
     // --- lifecycle ---
     Snapshot,                  // no-op marker; carries a full/delta world snapshot index
 }
+
+/// Who issued a command. Semantic (part of the wire/save format): it decides what
+/// consumers may do with an entry, e.g. only `Editor` commands are undoable (§5.5).
+public enum CommandSource : byte { Editor = 0, GameMode = 1, Script = 2 }
 ```
 
 ```csharp
-public sealed class EditCommand
+public sealed class WorldCommand
 {
-    public EditOp Op;
+    public WorldOp Op;
     public ulong Sequence;        // monotonic; total order in the log
     public int AuthorPeerId;      // who issued it (attribution, not authority)
-    public byte[] Payload;        // op-specific, deterministic encoding (§5)
+    public CommandSource Source;  // Editor / GameMode / Script — see §5.5, §9
+    public ICommandPayload Payload; // op-specific, typed; encoded by WorldCommandCodec (§5)
 }
 ```
 
@@ -89,6 +101,10 @@ public sealed class EditCommand
 - **Deterministic**: applying a command to a given world state always yields the
   same result. No wall-clock, no RNG seeded per client, no host floats. RNG, if
   any op needs it, carries its seed in the payload.
+- **One sink, many drivers, one total order.** The editor, game modes and scripts
+  all go through the same sink and the same log. A single sequence is required
+  because they mutate the *same* octree and races must resolve identically on
+  every peer (§5.5).
 - **Atomic at the *selection* granularity, not the cube**: `Fill` over a 64³
   selection is *one* command (one payload, one undo entry, one network message),
   not 262144. This is the key divergence from Cube2's per-cube `pastecube` loop
@@ -96,6 +112,8 @@ public sealed class EditCommand
 - **Inverse is derived, not stored**: selection-scoped ops know the old block
   (they captured it as their pre-state); the inverse is "restore that block".
   See §5.3.
+- **Undo is source- and author-scoped**: undo rolls back only *your own* `Editor`
+  commands. Game-mode/script commands are never undoable (§5.5).
 
 ### 1.2 Why selection-scoped matters (the Cube2 lesson)
 
@@ -114,7 +132,7 @@ same message shape. See §5.3 and §6.
 
 ---
 
-## 2. The WorldCommandSink — one seam, many drivers
+## 2. The WorldCommandSink — one seam, many drivers **and sources**
 
 ```
                  ┌────────────────────────────────────────────┐
@@ -149,20 +167,20 @@ Interfaces (sketch):
 
 ```csharp
 public interface IWorld {                 // the mutable octree surface
-    void Apply(EditCommand cmd);          // deterministic; mutates Octa + entities
+    void Apply(WorldCommand cmd);          // deterministic; mutates Octa + entities
     WorldSnapshot CaptureBlock(Selection sel);
 }
 
 public interface ICommandSink {
-    void Submit(EditCommand cmd);         // local origin: validate → log → apply → replicate
-    void Receive(EditCommand cmd);        // remote origin: log → apply (no echo)
+    void Submit(WorldCommand cmd);         // local origin: validate → log → apply → replicate
+    void Receive(WorldCommand cmd);        // remote origin: log → apply (no echo)
     // Undo is not a separate path: Submit(ApplyInverse(cmd)) — see §5.5.
 }
 ```
 
 `IWorld.Apply` is deliberately small. All the Cube2 algorithms we port
 (`pastecube`, `fill`, `remip`, `replacenear`, face/texture ops) live behind it
-in a ported `OctaEdit` module, one handler per `EditOp`.
+in a ported `OctaEdit` module, one handler per `WorldOp`.
 
 ---
 
@@ -197,14 +215,35 @@ Why server authority even in coop edit:
 
 ### 3.2 Channels & reliability
 
+There are two **kinds** of replicated thing, and they get different channels:
+
+**(a) World mutations** — every `WorldCommand`, whatever its source (editor,
+creative game mode, script). They all share the *same* ordered reliable stream,
+because they mutate the same octree and must have one total order (§1.1, §5.5):
+
 | Channel | Content | Mode |
 | --- | --- | --- |
-| `EDIT_REQUEST` | client → server intents | Reliable |
-| `EDIT_BROADCAST` | server → all canonical commands | Reliable |
+| `EDIT_REQUEST` | client → server `WorldCommand` intents (any source) | Reliable |
+| `EDIT_BROADCAST` | server → all canonical sequenced commands | Reliable |
 | `SNAPSHOT` | server → one client, chunked world snapshot | Reliable, chunked |
+
+**(b) Game actions** — movement, firing, using, etc. These do **not** touch
+the octree and are a *separate* system (M6/M7). They never become
+`WorldCommand`s:
+
+| Channel | Content | Mode |
+| --- | --- | --- |
+| `GAMEPLAY` | input/action intents (fire, use, jump) | Reliable or unreliable, per action |
 | `MOVEMENT` | player physics state (features.md #8) | Unreliable (latest wins) |
 
-Edit commands are **always reliable and ordered**. They are small and infrequent
+**Do not put world mutations on multiple channels.** A crumbling wall is a world
+mutation (`RemoveCube`, `CommandSource.GameMode`) and rides the *edit* channels
+with editor edits. Splitting them would give two independent orderings; a race
+between "player places a wall" and "wall crumbles" could then resolve
+differently on different peers, breaking determinism. The axis that matters is
+**world mutation vs. game action**, not editor vs. game mode.
+
+World commands are **always reliable and ordered**. They are small and infrequent
 compared to movement; the movement channel stays unreliable. This separation is
 why we don't need Cube2's giant-patch limit: reliability is a transport property
 here, and large ops are one message or a chunked reliable stream, not a
@@ -221,16 +260,16 @@ public partial class WorldNetwork : Node
     private void CmdRequest(byte[] cmd)
     {
         if (!Multiplayer.IsServer()) return;
-        var c = EditCodec.Decode(cmd);
+        var c = WorldCommandCodec.Decode(cmd);
         if (!_authority.MayApply(Multiplayer.GetRemoteSenderId(), c)) return;
         _sink.Submit(c);                       // assigns Sequence, applies locally
-        Rpc(MethodName.CmdBroadcast, EditCodec.Encode(c)); // echo to all (see note)
+        Rpc(MethodName.CmdBroadcast, WorldCommandCodec.Encode(c)); // echo to all (see note)
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority,
          TransferMode = MultiplayerPeer.TransferModeEnum.Reliable,
          Channel = 2)]
-    private void CmdBroadcast(byte[] cmd) => _sink.Receive(EditCodec.Decode(cmd));
+    private void CmdBroadcast(byte[] cmd) => _sink.Receive(WorldCommandCodec.Decode(cmd));
 }
 ```
 
@@ -306,7 +345,7 @@ The **save file is exactly this**: base snapshot blocks + command log (§7).
 
 ### 5.1 Wire format
 
-One `byte[]` per command, produced by `EditCodec`:
+One `byte[]` per command, produced by `WorldCommandCodec`:
 
 ```
 [u8 formatVersion][u64 sequence][i32 author][Variant-encoded positional Array]
@@ -332,7 +371,7 @@ C#/C++/Python schema are attractive, but FlatBuffers is *not canonical by defaul
 (breaks parity hashing) and adds a `flatc` toolchain. At our command sizes
 (remip ≈ 20 bytes; a large block ≈ hundreds of KB) parse cost is not the
 bottleneck — meshing is (~1.4 ms/chunk). If a shared tool/runtime format is ever
-needed it swaps in behind `EditCodec` without touching the sink. Decision 5.1b.
+needed it swaps in behind `WorldCommandCodec` without touching the sink. Decision 5.1b.
 
 ### 5.2 Op payloads (examples)
 
@@ -363,7 +402,7 @@ Two families:
 So the log entry for a destructive edit is:
 
 ```
-EditCommand { Op = ReplaceBlock, Payload = { selection, newBlock, oldBlock } }
+WorldCommand { Op = ReplaceBlock, Payload = { selection, newBlock, oldBlock } }
 ```
 
 and the editor-facing op (`Fill`, `Paste`, …) is sugar that produces
@@ -420,9 +459,16 @@ Cube2 treated undo as a local inverse application. That is wrong the moment the
 world is shared: the inverse is a *proposal* against state that other editors may
 have changed. We pin down the model here.
 
-**Rule 1 — You may only roll back your own changes.** The undo/redo stack holds
-the commands *this* client issued, and nothing else. You cannot undo another
-editor's edit. (Attribution is `AuthorPeerId`, §1.1; undo filters the log by it.)
+**Rule 1 — You may only roll back your own *editor* changes.** The undo/redo
+stack holds the commands *this* client issued **with `CommandSource.Editor`**, and
+nothing else. Two exclusions, both by construction:
+
+- another peer's commands (`AuthorPeerId`, §1.1), and
+- **game-mode and script commands** (`CommandSource.GameMode`/`Script`) — a
+  crumbling wall or a scripted platform is never undoable, even if this client's
+  server authored it.
+
+So undo filters the log by *both* `AuthorPeerId == me` and `Source == Editor`.
 
 **Rule 2 — Undo is an ordinary command, server-sequenced.** Ctrl-Z does not apply
 an inverse locally. It submits an `ApplyInverse` command through the same
@@ -466,7 +512,7 @@ With `ReplaceBlock` as the universal carrier:
 - **Recipe** = a *parameterized* sequence of commands (a small data script) that
   stamps geometry/entities into a region: e.g. "pillar(height, material)" emits
   N `AddCube`/`ReplaceBlock`s. Recipes are a `Resource` with parameters and a
-  `Generate(Selection) -> IEnumerable<EditCommand>` method (data-driven, no
+  `Generate(Selection) -> IEnumerable<WorldCommand>` method (data-driven, no
   CubeScript).
 - **Copy/paste across maps** = extract `ReplaceBlock` from source world, apply to
   target. Identical code path.
@@ -493,7 +539,7 @@ The native format (architecture.md §4) becomes:
 map/
 ├── Level.tscn            # scene: mode config, environment; REFS the data below
 ├── world.res             # base octree snapshot (canonical, versioned)
-├── history.res           # appended EditCommands since world.res (optional)
+├── history.res           # appended WorldCommands since world.res (optional)
 └── materials/            # material manifest
 ```
 
@@ -541,7 +587,7 @@ is what replicates, undoes, and saves it.
   `world.res` and truncate the history (compaction), exactly like the snapshot
   ring in §3.4.
 - **Versioned maps.** `world.res` carries a format `version`; each command
-  carries `EditOp` (append-only enum). A newer file opened by an older build can
+  carries `WorldOp` (append-only enum). A newer file opened by an older build can
   either (a) refuse unknown ops, or (b) — if `history.res` is present — open the
   older snapshot and skip the unknown tail. **Maps are versioned because they are
   a command history.**
@@ -666,8 +712,8 @@ round-trip/inverse checksums. This is the editor's engine, no UI/network yet.
 rebuild + dirty set + per-frame budget. Bakes in the rendering side early so
 edits are visible while we build the rest. *Prereq for any live editing.*
 
-**M3 — Command log + undo/redo (done).** `EditOp`/`EditCommand`/payloads,
-`EditCodec` (`var_to_bytes` over positional arrays, §5.1), `IWorld`/`OctaWorld`
+**M3 — Command log + undo/redo (done).** `WorldOp`/`WorldCommand`/payloads,
+`WorldCommandCodec` (`var_to_bytes` over positional arrays, §5.1), `IWorld`/`OctaWorld`
 apply seam, `WorldCommandLog` (sequence + own-commands-only undo stack),
 `WorldCommandSink` (submit/receive/undo/redo, §5.5 rules). Offline; asserted by
 `test/CommandSystemTest.cs`. **Note:** undo/redo tests compare a
@@ -692,9 +738,10 @@ snapshot transfer, late join. Headless multi-client tests. *Unblocks coop edit.*
 **M8 — Prefabs, recipes, cross-map paste.** `ReplaceBlock` content resources,
 rotation, recipe API, Workshop packaging hook. *The payoff layer.*
 
-**M9 — Runtime geometry API for game modes.** Expose the sink as a safe,
-data-driven API for modes (crumbling walls etc., architecture.md §1). *Shares
-everything above; no new mechanism.*
+**M9 — Runtime geometry for game modes.** Modes submit `WorldCommand`s with
+`CommandSource.GameMode` through the same sink (crumbling walls, scripted
+platforms; architecture.md §1). They are never undoable and ride the edit
+channels. *Shares everything above; no new mechanism.*
 
 Milestones M0–M3 are the real work and are all testable without a window. M4 is
 the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
@@ -712,8 +759,10 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
 3. **Text vs binary history log**: text is diffable/reviewable but larger and
    slower. Suggest: binary `.res` for load, generate a text sidecar for VCS
    optionally (like Godot's `.tres` for `.res`).
-4. **Per-op prediction policy**: which ops are optimistic (editor stamps) vs
-   server-only (scripted geometry)? Make it a property of `EditOp`.
+4. **Prediction policy by source, not op**: editor submissions can be optimistic
+   (local stamp, reconcile); game-mode/script geometry is server-authored and
+   applied on broadcast. This is naturally a property of `CommandSource`, so we
+   likely do not need a per-`WorldOp` flag.
 5. ~~**Undo across remip**~~ — **decided (§5.4, §5.5):** `Remip` is a
    pass-through replicated op (payload `{selection, mipvis}`, deterministic
    integer re-execution). Undo is a normal `ApplyInverse` command, capturing the
@@ -751,8 +800,10 @@ A: Ctrl-Z  (wants to undo E_A1)
 
 What happens, per the rules:
 
-- **Rule 1:** A's Ctrl-Z is about `E_A1` (A's own edit). It is permitted in
-  principle; B's `E_B1` is not on A's stack and cannot be undone by A.
+- **Rule 1:** A's Ctrl-Z is about `E_A1` (A's own `Editor` command). It is
+  permitted in principle; B's `E_B1` is not on A's stack and cannot be undone by
+  A. Nor could a `GameMode` command (e.g. a crumbling wall) ever be undone — it
+  is not `CommandSource.Editor`.
 - **Rule 4:** A's inverse is computed *now*, from `S3` (the current world), not
   from a block captured back at `S1`. So there is no stale payload.
 - **Rule 2:** A submits `ApplyInverse(E_A1)` through the sink; the server
@@ -784,14 +835,14 @@ The invariants this relies on:
 
 ```
 World/Commands/
-├── EditOp.cs              # append-only op enum
-├── EditCommand.cs         # command + codec
-├── EditCodec.cs           # canonical wire/save/demo encoding
-├── Selection.cs           # selinfo / block3 port (done, M0)
-├── WorldCommandSink.cs    # submit/receive/apply, sequence assignment
-├── WorldCommandLog.cs     # append-only log + snapshot ring
-├── IWorld.cs              # Apply + CaptureBlock seam
-└── Ops/                   # one handler per EditOp (ported algorithms)
+├── WorldOp.cs              # append-only op enum + CommandSource
+├── WorldCommand.cs         # command + typed payloads
+├── WorldCommandCodec.cs    # canonical wire/save/demo encoding
+├── Selection.cs            # selinfo / block3 port (done, M0)
+├── WorldCommandSink.cs     # submit/receive/apply, sequence assignment
+├── WorldCommandLog.cs      # append-only log + own-editor-commands undo stack
+├── IWorld.cs               # Apply + Capture seam (OctaWorld)
+└── Ops/                   # one handler per WorldOp (ported algorithms)
     ├── AddRemoveCube.cs
     ├── FaceOps.cs         # texture/material/flip/rotate/replace
     ├── Fill.cs

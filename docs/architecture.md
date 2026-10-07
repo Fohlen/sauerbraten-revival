@@ -57,26 +57,37 @@ Consequences:
 
 ---
 
-## 2. Command system (editor + game modes + network)
+## 2. World-command system (editor + game modes + network)
 
-Every world mutation is expressed as a command:
+Every world mutation is expressed as a `WorldCommand` — there is no "edit
+command" distinct from a "game command", only different **sources**:
 
 ```
-Command { op, args }        // the inverse is derived, not always stored
+WorldCommand { op, args, source }   // the inverse is derived, not always stored
+CommandSource = Editor | GameMode | Script
 ```
 
-- **Editor UI** issues commands (add cube, delete cube, texture face, fill, remip, paste).
-- **Game modes** issue commands (e.g. `crumbling_wall` schedules repeated cube
-  removals; `spawn_platform` adds geometry). Modes get a safe, data-driven API —
-  not raw memory access.
+- **Editor UI** submits commands (`CommandSource.Editor`): add cube, delete cube,
+  texture face, fill, remip, paste.
+- **Game modes** submit commands (`CommandSource.GameMode`; e.g. `crumbling_wall`
+  schedules repeated cube removals; `spawn_platform` adds geometry). Modes get a
+  safe, data-driven API — not raw memory access.
+- **One sink, one log, one total order.** All sources go through the same
+  [`WorldCommandSink`](editor-and-commands.md#2-the-worldcommandsink--one-seam-many-drivers-and-sources),
+  because they mutate the same octree and races must resolve identically on every
+  peer.
 - **Undo/redo** resubmits an inverse command (`ApplyInverse`) through the same
   sink — it is *not* a local-only path. In a shared world you may only undo your
-  own edits, and conflicting undos are rejected rather than merged. Full model:
+  own **editor** commands (`CommandSource.Editor`): another peer's edits and any
+  game-mode/script geometry are never undoable. Conflicting undos are rejected
+  rather than merged. Full model:
   [editor-and-commands.md §5.5](editor-and-commands.md#55-undo-in-a-shared-world).
-- **Networking** replicates the command stream. Value edits carry a
-  `ReplaceBlock` payload; **derivation-only ops (e.g. `Remip`) are pass-through**
-  — peers re-execute the deterministic algorithm, so optimisation patches are
-  tiny. See [editor-and-commands.md §5.4](editor-and-commands.md#54-remip-and-determinism).
+- **Networking** separates *world mutations* (reliable, ordered — the edit
+  channels; any source) from *game actions* (movement/fire/use — `GAMEPLAY`
+  channel). Value edits carry a `ReplaceBlock` payload; **derivation-only ops
+  (e.g. `Remip`) are pass-through** — peers re-execute the deterministic
+  algorithm, so optimisation patches are tiny. See
+  [editor-and-commands.md §3.2](editor-and-commands.md#32-channels--reliability).
   A server-authoritative world plus client prediction for the local player.
 
 This one mechanism covers live editing, dynamic geometry, undo, and coop-edit
