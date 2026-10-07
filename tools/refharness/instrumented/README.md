@@ -14,6 +14,7 @@ builds there. Delete `instrumented/build/` to clean up.
 | Patch | Purpose |
 | --- | --- |
 | `../patches/a2-trace.patch` | Adds the `SAUER_TRACE` CSV logger to `engine/physics.cpp`. |
+| `../patches/a2b-input-trace.patch` | Adds the `SAUER_INPUTTRACE` input/timing logger (`mousemove` + main loop + `physicsframe`). Applied after `a2-trace.patch` (filename order). |
 | `../patches/macos-arm64.patch` | Builds native arm64 against Homebrew SDL2 (the Makefile otherwise forces x86_64, which cannot run here). |
 | `../patches/ogz-metadata.patch` | Adds the `SAUER_METADATA` JSON exporter on map load (see [`../patches/README.md`](../patches/README.md)). |
 
@@ -74,6 +75,47 @@ step,time,event
 ```
 
 `step`/`time` use the same clock as the step trace, so events line up exactly.
+
+## Input / timing trace (`SAUER_INPUTTRACE`)
+
+Captures the **layer-3 (timing) and layer-4 (input) behaviour** the velocity
+model sits on top of — how the original quantises the variable frame time into
+fixed physics steps, and how it applies mouse look. Inert unless
+`SAUER_INPUTTRACE` is set (a separate path from `SAUER_TRACE`):
+
+```sh
+SAUER_INPUTTRACE=/tmp/sauer-input.csv \
+  /abs/path/to/tools/refharness/instrumented/build/sauer_client -q"$HOME/.sauerbraten"
+```
+
+One CSV, tagged by `kind` (all values are written as `%.4f`):
+
+```
+kind,seq,a,b,c,d,e,f
+I <seq> <dx> <dy> <curtime> <cursens> <yaw> <pitch>     # one per mousemove()
+T <seq> <elapsedtime> <scaledtime> <curtime> <timeerr>  # one per rendered frame
+P <seq> <diff> <physframetime> <physsteps>              # one per physicsframe()
+```
+
+- **`I`** — the **whole frame's** `SDL_MOUSEMOTION` delta is summed
+  (`checkmousemotion`) and applied **once per rendered frame** (`mousemove`), not
+  once per physics step: `yaw += dx*cursens`, `pitch -= dy*cursens`,
+  `cursens = (sensitivity[+accel])/ (33*sensitivityscale)`. `curtime` here lets
+  `mouseaccel` be reconstructed. Every physics step in that frame then reads the
+  **same** yaw/pitch.
+- **`T`** — main-loop timeline (`engine/main.cpp`): `curtime = scaletime(elapsedtime)/100`
+  (ms; `scaletime(t) = t*gamespeed`, `gamespeed=100` normally, so `curtime ==
+  elapsedtime` and `timeerr` is always 0 while unscaled).
+- **`P`** — physics scheduler (`physicsframe`): `physframetime =
+  clamp(scaletime(5)/100, 1, 5)` (always 5 ms unscaled) and `physsteps =
+  ceil(diff/physframetime)`. **The variable timestep is absorbed by the number
+  of fixed 5 ms steps, not by the step size.**
+
+Measured on a real run (church51, coop edit, 200 fps limiter): `curtime` jitters
+`5..28` ms, `physframetime` is always `5`, and `physsteps` is `1` most frames but
+`2` (and occasionally `3`–`4`) whenever `curtime > 5`. So a faithful port must run
+**fixed 5 ms steps** and catch up by step count — never feed a variable `delta`
+into `moveplayer`.
 
 ## Clipplane dump (`SAUER_TRACE.clips`)
 

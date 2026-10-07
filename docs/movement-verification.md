@@ -202,9 +202,28 @@ the harness gives the truth.
 
 Plan A validates **layer 1 (velocity model)** exactly and, once A3 runs on
 geometry, the **layer 2 collision** too. Layers 3–5 (timing, input, camera /
-feedback) need their own checks — see [architecture.md](architecture.md):
+feedback) need their own checks — see [architecture.md](architecture.md).
 
-- match FOV (100), sensitivity, mouse accel (0);
-- accumulate mouse motion per input poll and apply once per physics tick;
-- match `moveres` sub-stepping;
-- reproduce gun sway and jump/land/water sounds.
+**Layer 3–4 captured (A2 input trace).** `SAUER_INPUTTRACE`
+(`tools/refharness/patches/a2b-input-trace.patch`, see the
+[instrumented README](tools/refharness/instrumented/README.md#input--timing-trace-sauer_inputtrace))
+records the original's input + scheduling so the port can match it exactly:
+
+- **Timing.** The main loop computes a **variable `curtime`** (measured `5..28` ms
+  at a 200 fps cap, with `timeerr` always 0 while `gamespeed=100`). `physicsframe()`
+  then runs `physsteps = ceil(diff / physframetime)` **fixed 5 ms** steps
+  (`physframetime = clamp(scaletime(5)/100, 1, 5)`). So the variable frame time is
+  absorbed by the **number of fixed steps**, not the step size — the port must do
+  the same and never feed a variable `delta` into `moveplayer`.
+- **Mouse look.** The whole frame's `SDL_MOUSEMOTION` delta is summed and applied
+  **once per rendered frame** (`mousemove`), *not* once per physics tick. Every
+  physics step in that frame reads the same yaw/pitch. (The earlier note in this
+  doc — “apply once per physics tick” — was wrong.) `cursens =
+  (sensitivity[+accel]) / (33*sensitivityscale)`; `yaw += dx*cursens`,
+  `pitch -= dy*cursens`.
+- **Move/strafe/jump.** `forward`/`backward`/`left`/`right` set `move`/`strafe` to
+  `-1/0/+1` from key state; `jump` sets `jumping` on press (via `canjump()`), and
+  `modifyvelocity` consumes it on the ground.
+
+Still to check: match FOV (100), sensitivity, mouse accel (0); match `moveres`
+sub-stepping; reproduce gun sway and jump/land/water sounds.

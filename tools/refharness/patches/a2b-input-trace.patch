@@ -1,0 +1,104 @@
+diff -ruN pa/engine/engine.h pb/engine/engine.h
+--- pa/engine/engine.h	2026-10-07 09:55:42
++++ pb/engine/engine.h	2026-10-07 09:55:42
+@@ -465,6 +465,14 @@
+ 
+ // physics
+ extern void mousemove(int dx, int dy);
++
++// A2 input/timing trace hooks (defined in engine/physics.cpp; client builds only).
++// Log the raw mouse delta + its effect on the camera angles, the per-frame
++// timeline (elapsed/scaled/curtime/timeerr) and the physics scheduler output
++// (diff/physframetime/physsteps). Inert unless SAUER_INPUTTRACE is set.
++extern void a2inputlog(int dx, int dy, float cursens, float yaw, float pitch);
++extern void a2timelog(int elapsedtime, int scaledtime, int curtime, int timeerr);
++extern void a2physlog(int diff, int physframetime, int physsteps);
+ extern bool overlapsdynent(const vec &o, float radius);
+ extern void rotatebb(vec &center, vec &radius, int yaw);
+ extern float shadowray(const vec &o, const vec &ray, float radius, int mode, extentity *t = NULL);
+diff -ruN pa/engine/main.cpp pb/engine/main.cpp
+--- pa/engine/main.cpp	2026-10-07 09:55:42
++++ pb/engine/main.cpp	2026-10-07 09:55:42
+@@ -1370,6 +1370,7 @@
+         if(!multiplayer(false) && curtime>200) curtime = 200;
+         if(game::ispaused()) curtime = 0;
+ 		lastmillis += curtime;
++        a2timelog(elapsedtime, scaledtime, curtime, timeerr);
+         totalmillis = millis;
+         updatetime();
+ 
+diff -ruN pa/engine/physics.cpp pb/engine/physics.cpp
+--- pa/engine/physics.cpp	2026-10-07 09:55:42
++++ pb/engine/physics.cpp	2026-10-07 09:55:42
+@@ -1768,6 +1768,52 @@
+     fflush(a2eventfile);
+ }
+ 
++// --- A2 input/timing trace (sauerbraten-revival movement verification) -------
++// SAUER_INPUTTRACE=<path> logs the input + scheduling layer, so the port can
++// reproduce it exactly:
++//   I <seq> <dx> <dy> <curtime> <sensitivity> <yaw> <pitch>
++//       one line per mouse-look application (once per rendered frame, with the
++//       whole frame's SDL_MOUSEMOTION delta already summed). `curtime` at the
++//       time of the mouse event lets us recover mouseaccel (needs curtime).
++//   T <seq> <elapsedtime> <scaledtime> <curtime> <timeerr>
++//       the main-loop timeline, once per rendered frame.
++//   P <seq> <diff> <physframetime> <physsteps>
++//       the physics scheduler output, once per physicsframe().
++static FILE *a2inputfile = NULL;
++static bool a2inputchecked = false;
++static int a2inputseq = 0;
++static void a2inputinit()
++{
++    if(a2inputchecked) return;
++    a2inputchecked = true;
++    const char *path = getenv("SAUER_INPUTTRACE");
++    if(!path || !*path) return;
++    a2inputfile = fopen(path, "w");
++    if(a2inputfile) fprintf(a2inputfile, "kind,seq,a,b,c,d,e,f\n");
++}
++static void a2inputwriteln(const char *kind, long a, long b, long c, double d, double e, double f)
++{
++    if(!a2inputfile) return;
++    fprintf(a2inputfile, "%s,%d,%ld,%ld,%ld,%.4f,%.4f,%.4f\n", kind, a2inputseq++, a, b, c, d, e, f);
++    fflush(a2inputfile);
++}
++void a2inputlog(int dx, int dy, float cursens, float yaw, float pitch)
++{
++    a2inputinit();
++    // a=dx b=dy c=curtime, d=cursens, e=yaw, f=pitch
++    a2inputwriteln("I", dx, dy, (long)curtime, cursens, yaw, pitch);
++}
++void a2timelog(int elapsedtime, int scaledtime, int curtime, int timeerr)
++{
++    a2inputinit();
++    a2inputwriteln("T", elapsedtime, scaledtime, curtime, timeerr, 0, 0);
++}
++void a2physlog(int diff, int physframetime, int physsteps)
++{
++    a2inputinit();
++    a2inputwriteln("P", diff, physframetime, physsteps, 0, 0, 0);
++}
++
+ bool moveplayer(physent *pl, int moveres, bool local, int curtime)
+ {
+     a2traceinit();
+@@ -1850,6 +1896,7 @@
+         physsteps = (diff + physframetime - 1)/physframetime;
+         lastphysframe += physsteps * physframetime;
+     }
++    a2physlog(diff, physframetime, physsteps);
+     cleardynentcache();
+ }
+ 
+diff -ruN pa/engine/rendergl.cpp pb/engine/rendergl.cpp
+--- pa/engine/rendergl.cpp	2026-10-07 09:55:42
++++ pb/engine/rendergl.cpp	2026-10-07 09:55:42
+@@ -811,6 +811,7 @@
+     camera1->yaw += dx*cursens;
+     camera1->pitch -= dy*cursens*(invmouse ? -1 : 1);
+     fixcamerarange();
++    a2inputlog(dx, dy, cursens, camera1->yaw, camera1->pitch);
+     if(camera1!=player && !detachedcamera)
+     {
+         player->yaw = camera1->yaw;
