@@ -111,11 +111,26 @@ P <seq> <diff> <physframetime> <physsteps>              # one per physicsframe()
   ceil(diff/physframetime)`. **The variable timestep is absorbed by the number
   of fixed 5 ms steps, not by the step size.**
 
-Measured on a real run (church51, coop edit, 200 fps limiter): `curtime` jitters
-`5..28` ms, `physframetime` is always `5`, and `physsteps` is `1` most frames but
-`2` (and occasionally `3`–`4`) whenever `curtime > 5`. So a faithful port must run
-**fixed 5 ms steps** and catch up by step count — never feed a variable `delta`
-into `moveplayer`.
+Measured on a real run (church51, coop edit, 200 fps limiter,
+`traces/session-motion.input.csv`, 5224 frames): `curtime` jitters `5..32` ms
+(plus one 200 ms startup clamp), `timeerr` is always `0`, `physframetime` is
+always `5`, and `physsteps` is `1` on 87% of frames, `2` on 11%, `3` on 2%,
+`4`/`14`/`47` rarely. So a faithful port must run **fixed 5 ms steps** and catch
+up by step count — never feed a variable `delta` into `moveplayer`.
+
+Confirmed mouse facts from the same capture:
+
+- `cursens` is a **constant `0.0909`** (= `sensitivity 3 / (33 * sensitivityscale 1)`),
+  proving `mouseaccel = 0` at defaults.
+- **Exactly one `I` per rendered frame that saw motion** (max 1; 3667 frames with
+  0), and **272 frames had `physsteps > 1` *and* a mouse application** — i.e. the
+  delta is applied once for the frame and every physics step in it sees the same
+  yaw/pitch. Never apply mouse per tick.
+- `Δyaw = dx * cursens` exactly (max error `0.0012°`); `Δpitch = -dy * cursens`,
+  saturating at the `±90°` clamp from `fixcamerarange()`.
+
+Golden fixture in `traces/`: `session-motion.input.csv` (real look/move).
+Interpret with `tools/refharness/analyze_input_trace.py`.
 
 ## Clipplane dump (`SAUER_TRACE.clips`)
 

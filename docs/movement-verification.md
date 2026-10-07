@@ -218,9 +218,11 @@ records the original's input + scheduling so the port can match it exactly:
 - **Mouse look.** The whole frame's `SDL_MOUSEMOTION` delta is summed and applied
   **once per rendered frame** (`mousemove`), *not* once per physics tick. Every
   physics step in that frame reads the same yaw/pitch. (The earlier note in this
-  doc — “apply once per physics tick” — was wrong.) `cursens =
-  (sensitivity[+accel]) / (33*sensitivityscale)`; `yaw += dx*cursens`,
-  `pitch -= dy*cursens`.
+  doc — “apply once per physics tick” — was wrong.) Confirmed from a real capture
+  (`traces/session-motion.input.csv`): exactly one application per motion frame
+  (never more), 272 of which also had `physsteps > 1`; `cursens` is a constant
+  `0.0909` (= `3/(33*1)`, so `mouseaccel = 0`), `Δyaw = dx*cursens` (max error
+  `0.0012°`) and `Δpitch = -dy*cursens` saturated at `±90°` by `fixcamerarange()`.
 - **Move/strafe/jump.** `forward`/`backward`/`left`/`right` set `move`/`strafe` to
   `-1/0/+1` from key state; `jump` sets `jumping` on press (via `canjump()`), and
   `modifyvelocity` consumes it on the ground.
