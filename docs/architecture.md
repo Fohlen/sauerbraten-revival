@@ -87,7 +87,7 @@ sync. It is also the foundation for multiplayer and Workshop content.
 | `octaedit.cpp` | 3003 | 19 | **Port the algorithms**, reimplement UI/undo/selection plumbing (todo) |
 | `octarender.cpp` | 1803 | 45 | ✅ **Replaced** by the ArrayMesh mesher (`World/Meshing/`); see [rendering.md](rendering.md) |
 | `worldio.cpp` | 1388 | — | ✅ **Ported for OGZ import only** (`World/Ogz/OgzReader.cs`); see [ogz-import.md](ogz-import.md). Native format is `Resource`. |
-| octree traversal (`physics.cpp`) | ~500 | 0 | **Port to C#** for collision (todo) |
+| octree traversal (`physics.cpp`) | ~500 | 0 | ✅ **Ported to C#** (`World/Physics/`: `move`/`collide`/`trystepup`/`trystepdown` + clipping/visibility); see [movement-verification.md](movement-verification.md) |
 
 `octa.cpp` depends on only a handful of globals (`worldroot`, `worldsize`,
 `worldscale`, `allocnodes`, `lu`, `isempty`, `isentirelysolid`, `octastep`,
