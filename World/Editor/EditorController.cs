@@ -77,6 +77,14 @@ public partial class EditorController : Node3D
 
         float dist = OctaRay.RayCube(Octa, eye, dir, RayLength, out _);
         Cursor.Update(Octa, eye, dir, dist);
+
+        // Right-drag (editextend): grow the selection to the cursor each frame.
+        if (_drag == DragMode.Extend)
+        {
+            Cursor.ExtendSelection();
+            Cursor.Reorient();
+        }
+
         DrawBox();
     }
 
@@ -84,21 +92,34 @@ public partial class EditorController : Node3D
 
     private float _panAccum;
     /// <summary>Trackpad pan units per scroll notch (tuned; a wheel sends one notch per event).</summary>
-    private const float PanNotch = 10f;
+    private const float PanNotch = 5f;
+
+    /// <summary>Which drag gesture is active (set by mouse buttons).</summary>
+    private enum DragMode { None, BoxSelect, Extend }
+    private DragMode _drag = DragMode.None;
 
     public override void _UnhandledInput(InputEvent @event)
     {
         if (Octa == null) return;
 
-        // Classic wheel mouse: one notch per event.
-        if (@event is InputEventMouseButton mb && mb.Pressed)
+        // Mouse buttons: drag gestures (Cube2 editbind MOUSE1/MOUSE2).
+        if (@event is InputEventMouseButton button)
         {
-            switch (mb.ButtonIndex)
+            switch (button.ButtonIndex)
             {
-                case MouseButton.WheelUp: Scroll(+1, Shift); break;
-                case MouseButton.WheelDown: Scroll(-1, Shift); break;
+                case MouseButton.Left:
+                    // editdrag: cancel the selection, then rubber-band a new one.
+                    if (button.Pressed) { Cursor.CancelSelection(); Cursor.BeginDrag(); _drag = DragMode.BoxSelect; }
+                    else if (_drag == DragMode.BoxSelect) { Cursor.Dragging = false; _drag = DragMode.None; }
+                    return;
+                case MouseButton.Right:
+                    // editextend: grow the selection to the cursor while held.
+                    if (button.Pressed) { _drag = DragMode.Extend; }
+                    else if (_drag == DragMode.Extend) { _drag = DragMode.None; }
+                    return;
+                case MouseButton.WheelUp when button.Pressed: Scroll(+1, Shift); return;
+                case MouseButton.WheelDown when button.Pressed: Scroll(-1, Shift); return;
             }
-            return;
         }
 
         // macOS trackpad / Magic Mouse: scrolling arrives as a fractional pan
