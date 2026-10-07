@@ -555,6 +555,14 @@ Commands make the editor **testable**, which Cube2's editor never was:
 The existing `OctaGeometry` canonical checksum is the assertion primitive. We add
 a `WorldSnapshot` checksum for entity streams too.
 
+**Ground truth over reasoning.** For the octree primitives, the edge macros
+(`cubeedge`/`edgeset`/`octaindex`/`octastep`) are easy to get subtly wrong by
+hand. `tools/octaprobe/` links a small C++ driver against the original `octa.cpp`
+and dumps exact output (`lookupcube`, `subdividecube` on a deformed cube,
+`blockcube`). Ports are asserted against those bytes, not derived by argument —
+the same discipline the A1 movement harness uses. The octaprobe immediately
+caught a missing `validatec` pass in `SubdivideCube`.
+
 ---
 
 ## 10. Implementation order (milestones)
@@ -616,12 +624,13 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
 4. **Per-op prediction policy**: which ops are optimistic (editor stamps) vs
    server-only (scripted geometry)? Make it a property of `EditOp`.
 5. **Undo across remip**: capture-the-block (proposed) vs snapshot barrier.
-9. **Deformed-cube subdivision fidelity**: `SubdivideCube` currently inherits
-   solid/empty state, material and textures but does **not** resample edge
-   deformation (the original's `copyedges`/`forcemip` path). Subdividing a
-   deformed leaf is a fidelity gap to close in M1b with a direct comparison
-   against the original. Flat/solid/empty cubes — the common editor cases — are
-   exact.
+9. ~~**Deformed-cube subdivision fidelity**~~ — **closed in M1b**: `SubdivideCube`
+   now resamples deformed edges (`getcubevector`/`midedge`/`crosscenter`) and runs
+   the `validatec` pass, matching the original's exact child edge bytes. Verified
+   by `tools/octaprobe` (a C++ driver linked against the original `octa.cpp`) and
+   asserted in `test/OctaLookupTest.cs`. Note the original's `size > 0x1000`
+   auto-subdivide branch in `validatec` is not ported (never fires on the editor
+   path).
 6. **Block compression**: zlib level and threshold; must be identical across
    platforms for the parity hash (zlib is, but pin the library/level). Note this
    is *inner* block compression inside the codec, separate from the *outer* map

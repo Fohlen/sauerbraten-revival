@@ -74,4 +74,32 @@ public static class CubeGeometry
 
     /// <summary>Integer dot product.</summary>
     public static int Dot(Vector3I a, Vector3I b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+
+    /// <summary>octa.cpp:125 <c>getcubevector(c, d, x, y, z, p)</c> — read the vertex at corner (x,y,z) of dimension d.</summary>
+    public static Vector3I GetCubeVector(Cube c, int d, int x, int y, int z)
+    {
+        int[] v = { 0, 0, 0 };
+        v[d] = 0; v[Octa.R[d]] = x; v[Octa.C[d]] = y; v[Octa.D[d]] = z;
+        return new Vector3I(
+            Cube.EdgeGet(CubeEdge(c, 0, v[Octa.R[0]], v[Octa.C[0]]), v[Octa.D[0]]),
+            Cube.EdgeGet(CubeEdge(c, 1, v[Octa.R[1]], v[Octa.C[1]]), v[Octa.D[1]]),
+            Cube.EdgeGet(CubeEdge(c, 2, v[Octa.R[2]], v[Octa.C[2]]), v[Octa.D[2]]));
+    }
+
+    /// <summary>octa.h: <c>cubeedge(c, d, x, y)</c> — edge nibble pair at (x,y) on face word d.</summary>
+    public static byte CubeEdge(Cube c, int d, int x, int y) => c.CubeEdge(d, x, y);
+
+    /// <summary>octa.cpp:133 <c>getcubevector(c, i, p)</c> — vertex i (0..7) of the cube.</summary>
+    public static Vector3I GetCubeVector(Cube c, int i) => new(
+        Cube.EdgeGet(c.CubeEdge(0, (i >> Octa.R[0]) & 1, (i >> Octa.C[0]) & 1), (i >> Octa.D[0]) & 1),
+        Cube.EdgeGet(c.CubeEdge(1, (i >> Octa.R[1]) & 1, (i >> Octa.C[1]) & 1), (i >> Octa.D[1]) & 1),
+        Cube.EdgeGet(c.CubeEdge(2, (i >> Octa.R[2]) & 1, (i >> Octa.C[2]) & 1), (i >> Octa.D[2]) & 1));
+
+    /// <summary>octa.cpp:141 <c>setcubevector(c, i, p)</c> — write vertex i (0..7) of the cube.</summary>
+    public static void SetCubeVector(Cube c, int i, Vector3I p)
+    {
+        c.SetCubeEdge(0, (i >> Octa.R[0]) & 1, (i >> Octa.C[0]) & 1, (byte)p.X);
+        c.SetCubeEdge(1, (i >> Octa.R[1]) & 1, (i >> Octa.C[1]) & 1, (byte)p.Y);
+        c.SetCubeEdge(2, (i >> Octa.R[2]) & 1, (i >> Octa.C[2]) & 1, (byte)p.Z);
+    }
 }
