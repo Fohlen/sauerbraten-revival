@@ -40,4 +40,5 @@ public enum WorldOp : ushort
     Remip = 20,           // pass-through, deterministic (docs §5.4)
     // --- lifecycle ---
     Snapshot = 100,       // no-op marker; carries a snapshot-ring index
+    NewMap = 101,         // world.cpp emptymap: build a fresh empty world (floor + air)
 }

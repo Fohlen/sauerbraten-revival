@@ -19,6 +19,7 @@ public partial class FreeFlyCamera : Camera3D
     public override void _Ready()
     {
         if (Engine.IsEditorHint()) return;
+        Current = true;
         Capture(true);
     }
 

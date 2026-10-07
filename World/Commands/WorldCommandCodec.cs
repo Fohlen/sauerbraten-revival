@@ -139,6 +139,9 @@ public static class WorldCommandCodec
                 break;
             case WorldOp.Snapshot:
                 break;
+            case WorldOp.NewMap:
+                a.Add(((NewMapPayload)cmd.Payload).Scale);
+                break;
             default:
                 throw new NotSupportedException($"Cannot encode payload for {cmd.Op}");
         }
@@ -181,6 +184,8 @@ public static class WorldCommandCodec
                 return new RemipPayload((bool)a[b]);
             case WorldOp.Snapshot:
                 return EmptyPayload.Instance;
+            case WorldOp.NewMap:
+                return new NewMapPayload((int)a[b]);
             default:
                 throw new NotSupportedException($"Cannot decode payload for {op}");
         }

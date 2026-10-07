@@ -1,0 +1,36 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://cc4j8n8jb68oy" path="res://World/FreeFlyCamera.cs" id="1_flycam"]
+[ext_resource type="Script" path="res://World/Editor/EmptyMap.cs" id="2_emptymap"]
+[ext_resource type="Script" path="res://World/Editor/EditorController.cs" id="3_editor"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+
+[sub_resource type="Sky" id="Sky_sky"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_env"]
+background_mode = 2
+sky = SubResource("Sky_sky")
+ambient_light_source = 3
+
+[node name="EmptyMapScene" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.321394, 0.383022, 0, 0.766044, 0.642788, -0.5, -0.556670, 0.663414, 0, 0, 0)
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 256, 200, 256)
+script = ExtResource("1_flycam")
+
+[node name="EmptyMap" type="Node3D" parent="."]
+script = ExtResource("2_emptymap")
+WorldScale = 10
+ChunkSize = 128
+
+[node name="EditorController" type="Node3D" parent="EmptyMap"]
+script = ExtResource("3_editor")

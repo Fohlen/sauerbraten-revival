@@ -211,3 +211,35 @@ void probe_pushedge(cube &c, int d, int x, int y, int dir, int dc)
     pushedge(e, dir, dc);
     c.edges[d*4 + y*2 + x] = e;
 }
+
+// world.cpp:1277 splitocta + a familysize/depth summary for the probe.
+void probe_splitocta(cube *c, int size)
+{
+    if(size <= 0x1000) return;
+    loopi(8)
+    {
+        if(!c[i].children) c[i].children = newcubes(isempty(c[i]) ? F_EMPTY : F_SOLID);
+        probe_splitocta(c[i].children, size>>1);
+    }
+}
+static int probe_familysize(const cube &c)
+{
+    int n = 1;
+    if(c.children) loopi(8) n += probe_familysize(c.children[i]);
+    return n;
+}
+static int probe_maxleaf(const cube &c, int size)
+{
+    if(!c.children) return size;
+    int m = 0; loopi(8) m = max(m, probe_maxleaf(c.children[i], size>>1));
+    return m;
+}
+void probe_emptymap_summary(int scale, int &nodes, int &maxLeaf)
+{
+    int worldsize = 1<<scale;
+    cube *root = newcubes(F_EMPTY);
+    loopi(4) solidfaces(root[i]);
+    if(worldsize > 0x1000) probe_splitocta(root, worldsize>>1);
+    nodes = 0; loopi(8) nodes += probe_familysize(root[i]);
+    maxLeaf = 0; loopi(8) maxLeaf = max(maxLeaf, probe_maxleaf(root[i], worldsize>>1));
+}

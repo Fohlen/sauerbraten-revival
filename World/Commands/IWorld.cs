@@ -101,6 +101,12 @@ public sealed class OctaWorld : IWorld
             case WorldOp.Snapshot:
                 // Lifecycle marker; no world mutation.
                 break;
+            case WorldOp.NewMap:
+            {
+                var p = (NewMapPayload)cmd.Payload;
+                Octa.EmptyMap(p.Scale);
+                break;
+            }
             default:
                 throw new System.NotSupportedException($"Unhandled WorldOp {cmd.Op}");
         }

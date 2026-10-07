@@ -30,6 +30,8 @@ original source, used offline to generate golden values.
   Asserted by [`test/EditCursorTest.cs`](../../test/EditCursorTest.cs).
 - Face/corner push (`pushedge`, `linkedpush`) for `mpeditface` modes 0/2. Asserted
   by [`test/OctaFaceTest.cs`](../../test/OctaFaceTest.cs).
+- `emptymap` / `splitocta` (world creation). Asserted by
+  [`test/CommandSystemTest.cs`](../../test/CommandSystemTest.cs).
 
 ## Build & run
 
@@ -69,6 +71,9 @@ OP remip collapse before=9 after=1 children=0
 OP remip keep before=9 after=1 children=0
 OP remip deformed before=9 after=9 children=1
 OP remip nested before=17 after=1 children=0
+EMPTY scale=10 worldsize=1024 nodes=8 maxLeaf=512
+EMPTY scale=12 worldsize=4096 nodes=8 maxLeaf=2048
+EMPTY scale=14 worldsize=16384 nodes=72 maxLeaf=4096
 CUR raybox hit dist=3.4641 orient=1
 CUR raybox z hit dist=12.0000 orient=5
 CUR normalize g8 lu=(13,29,5) lusize=8

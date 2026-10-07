@@ -171,6 +171,14 @@ public sealed class RemipPayload : ICommandPayload
     public RemipPayload(bool mipVis) => MipVis = mipVis;
 }
 
+/// <summary><see cref="WorldOp.NewMap"/>: build a fresh empty world at a scale (world.cpp <c>emptymap</c>).</summary>
+public sealed class NewMapPayload : ICommandPayload
+{
+    public int Scale;
+
+    public NewMapPayload(int scale) => Scale = scale;
+}
+
 /// <summary>
 /// <see cref="WorldOp.ReplaceBlock"/>: the universal carrier (docs §5.3). Writes a
 /// captured region into the world. Paste, prefab placement and paste-style undo

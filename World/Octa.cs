@@ -261,6 +261,44 @@ public sealed class Octa
         WorldRoot = NewCubes(F_SOLID);
     }
 
+    /// <summary>
+    /// world.cpp:1250 <c>emptymap</c> — build the fresh editor world: eight root cubes
+    /// with the **bottom half solid** (a floor) and the top half empty, so the editor
+    /// starts with ground to build on. Distinct from <see cref="NewMap"/> (a fully
+    /// solid block, used for construction). The scale is clamped to 10…16 as the
+    /// original does.
+    ///
+    /// For worlds larger than 4096 it pre-subdivides (<see cref="SplitOcta"/>) so that
+    /// **no leaf exceeds 0x1000**, matching the original. That invariant is enforced
+    /// lazily elsewhere (`validatec`, `subdividecube`); doing it eagerly here means a
+    /// new map starts legal rather than waiting for the first lookup.
+    /// </summary>
+    public void EmptyMap(int scale)
+    {
+        WorldScale = System.Math.Clamp(scale, 10, 16);
+        WorldSize = 1 << WorldScale;
+        AllocNodes = 0;
+        WorldRoot = NewCubes(F_EMPTY);
+        for (int i = 0; i < 4; i++) WorldRoot[i].SolidFaces(); // low-Z octants = floor
+        if (WorldSize > 0x1000) SplitOcta(WorldRoot, WorldSize >> 1);
+    }
+
+    /// <summary>
+    /// world.cpp:1277 <c>splitocta</c> — recursively subdivide every node larger than
+    /// 0x1000, so no leaf exceeds that size. Empty nodes split into empty children,
+    /// solid into solid; geometry is preserved.
+    /// </summary>
+    public void SplitOcta(Cube[] c, int size)
+    {
+        if (size <= 0x1000) return;
+        for (int i = 0; i < 8; i++)
+        {
+            if (c[i].Children == null)
+                c[i].Children = NewCubes(c[i].IsEmpty() ? F_EMPTY : F_SOLID); // mat defaults to MAT_AIR, as original
+            SplitOcta(c[i].Children!, size >> 1);
+        }
+    }
+
     /// <summary>octa.h: <c>octastep(x, y, z, scale)</c>.</summary>
     public static int OctaStep(int x, int y, int z, int scale) =>
         ((((z >> scale) & 1) << 2) | (((y >> scale) & 1) << 1) | ((x >> scale) & 1));

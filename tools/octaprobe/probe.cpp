@@ -246,8 +246,18 @@ int main()
         printf("\n");
     }
 
-    // ---- op handlers on a small world ----
-    // "delete cube": discardchildren + emptyfaces on a child.
+    // ---- splitocta (emptymap) ----
+    {
+        extern void probe_emptymap_summary(int scale, int &nodes, int &maxLeaf);
+        for (int scale = 10; scale <= 14; scale += 2)
+        {
+            int nodes = 0, maxLeaf = 0;
+            probe_emptymap_summary(scale, nodes, maxLeaf);
+            printf("EMPTY scale=%d worldsize=%d nodes=%d maxLeaf=%d\n", scale, 1<<scale, nodes, maxLeaf);
+        }
+    }
+
+    // ---- op handlers on a small world ----    // "delete cube": discardchildren + emptyfaces on a child.
     {
         worldroot = newcubes(F_SOLID);
         cube &root = worldroot[0];
