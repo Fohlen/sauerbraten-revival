@@ -894,14 +894,34 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
    and cubes/selection are already integers. Determinism is therefore trivial on
    the apply paths, and pass-through `Remip` (§5.4) is hardened. Verify: the
    codec has no `float`/`Single` today (`World/Commands/WorldCommandCodec.cs`).
-8. **Permission/authority model**: who may edit (all coop clients? server
-   config?), and how it interacts with the edit lock and game modes.
-9. **Prediction scope (M6/M7)**: movement must predict only against the world at
-   the last **acknowledged** `WorldCommand` sequence, or an in-flight mutation
-   (notably a pass-through `Remip`) makes client and server collide against
-   different state. The rule is stated in
-   [authority-and-latency.md §7](authority-and-latency.md#7-the-rule-this-forces-prediction-scope-open);
-   the reconciliation policy (snap / smooth / flag-for-review) is undecided.
+8. ~~**Permission/authority model**~~ — **decided: it is configuration.** The
+   server decides what each mode permits, enforced in `Sink.MayApply(peer, cmd)`:
+   - **edit mode**: `Editor` commands from connected peers (subject to a
+     master/admin gate if we add one, like Cube2's `mastermode`);
+   - **game mode**: `Editor` commands rejected; only `GameMode`/`Script`
+     geometry allowed.
+
+   This is a mode/permission config, not a new mechanism.
+9. ~~**Prediction scope (M6/M7)**~~ — **decided, and much smaller than feared.**
+   The rule stands (movement predicts only against the world at the last
+   **acknowledged** `WorldCommand` sequence) — see
+   [authority-and-latency.md §7](authority-and-latency.md#7-the-rule-this-forces-prediction-scope-decided).
+   But #8 shrinks the risk to near-zero:
+   - In **game mode there are no editor edits**, so the in-flight-`WorldCommand`
+     race (source #1) does not arise during play — the map is static, as in CS:GO.
+   - Any runtime mutation (crumbling wall, race door) is `GameMode`/`Script`,
+     **run by the server** and broadcast in sequence order — a bounded, ordered
+     event, not a client-originated race.
+   - A **map hash** gate (clients and server agree on the map before play) removes
+     the whole "client has geometry the server doesn't" class at the *session*
+     level.
+
+   Residual risk is only "a scripted mid-game mutation races a player's movement",
+   which the acked-sequence rule makes a few-ms-late effect, not a correction. The
+   rule is therefore *required* (it is what makes the risk small) but **cheap to
+   validate**: a test that movement prediction converges across a server-authored
+   scripted mutation, rather than an open-ended investigation. Reconciliation
+   policy (snap / smooth) is a minor, local choice (see #1).
 10. ~~**Deformed-cube subdivision fidelity**~~ — **closed in M1b**: `SubdivideCube`
    now resamples deformed edges (`getcubevector`/`midedge`/`crosscenter`) and runs
    the `validatec` pass, matching the original's exact child edge bytes. Verified

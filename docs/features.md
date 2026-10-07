@@ -159,10 +159,14 @@ See [authority-and-latency.md](authority-and-latency.md) — the network model i
 diverges deliberately from Cube 2's client-authoritative model because of the
 Steam leaderboard. **Prerequisite:** close the movement determinism gap first.
 
-- [ ] **Authority decision** — documented; server authority is a hard requirement
+- [x] **Authority decision** — documented; server authority is a hard requirement
       of the leaderboard (client authority ruled out for the product).
+- [x] **Permission model** — a mode/config concern (editor vs game mode), enforced
+      in `Sink.MayApply` (editor-commands.md §11.8).
 - [ ] **Prediction-scope rule** — movement predicts only against the last
-      acknowledged world-command sequence ([authority-and-latency.md §7](authority-and-latency.md#7-the-rule-this-forces-prediction-scope-open)).
+      acknowledged world-command sequence ([authority-and-latency.md §7](authority-and-latency.md#7-the-rule-this-forces-prediction-scope-decided)).
+- [ ] **Map-hash gate** — clients and server agree on the map before play; a
+      mismatch refuses the match.
 - [ ] Steamworks networking (movement + command replication).
 - [ ] Server-authoritative world; client prediction + reconciliation; lag
       compensation for hitscan.

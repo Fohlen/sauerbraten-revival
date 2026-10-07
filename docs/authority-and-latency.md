@@ -115,7 +115,7 @@ Corrections are not only float divergence. Enumerating them matters, because
 
 | # | Source | Fixed by 100% determinism? | Response |
 | --- | --- | --- | --- |
-| 1 | **World-state mismatch** (in-flight `WorldCommand`, e.g. a remip) | **No** — timing | predict only against the last *acknowledged* command sequence (§7) |
+| 1 | **World-state mismatch** (in-flight `WorldCommand`, e.g. a remip) | **No** — timing | rare in play: game mode has no editor edits and a map-hash gate; predict against the last *acknowledged* command sequence (§7) |
 | 2 | Other players' collision/push | No | tolerate (as CS:GO does) |
 | 3 | Input timing / loss / jitter | No | input buffer + ack/replay |
 | 4 | Non-replicated state read by movement (game-mode flag, jumppad, conveyor) | No | make the model's inputs explicit and replicated |
@@ -146,7 +146,7 @@ testing and then shipping client authority would waste it.
 
 ---
 
-## 7. The rule this forces: prediction scope (open)
+## 7. The rule this forces: prediction scope (decided)
 
 Prediction must be pinned to a **known** world. The rule:
 
@@ -162,9 +162,27 @@ different node granularities. Pinning prediction to the acked sequence means the
 remip's effect becomes visible a few milliseconds late (unnoticed) instead of
 causing a correction.
 
-Exact reconciliation policy (snap / smooth-over-N / flag-for-review) and whether
-"flag for review" is needed for leaderboards is **undecided** — see
-[editor-and-commands.md §11](editor-and-commands.md#11-open-questions--decisions).
+**Why this risk is small in practice** (editor-and-commands.md §11.8–11.9):
+
+- **Game mode has no editor edits** — the map is static during play, as in CS:GO,
+  so the in-flight-`WorldCommand` race essentially does not arise.
+- **Runtime mutations are server-run and ordered.** A crumbling wall or race-mode
+  door is `CommandSource.GameMode`/`Script`, executed by the server and broadcast
+  in sequence order — bounded and deterministic, not a client-originated race.
+- **A map hash gates the session.** Clients and server agree on the map before
+  play; a mismatch refuses the match, eliminating the "client has geometry the
+  server doesn't" class at the session level.
+
+So the residual case is only "a scripted mid-game mutation races a player's
+movement", which the acked-sequence rule turns into a few-ms-late effect. The rule
+is therefore *required* — it is what makes the risk small — but **cheap to
+validate**: a test that movement prediction converges across a server-authored
+scripted mutation (built on the A3 trace harness), not an open-ended
+investigation.
+
+Reconciliation policy (snap / smooth-over-N) is a minor, local choice; with
+immutable match maps the correction path barely fires. A "flag for review"
+leaderboard path is not needed given the map-hash gate.
 
 ---
 
@@ -189,7 +207,10 @@ a leaderboard that means anything.
 - **Decided:** server authority for edits, movement, and combat; Steam +
   leaderboard is the forcing function; client authority is ruled out for the
   intended product.
+- **Decided:** permission is a mode/config concern (editor vs game mode), enforced
+  in `Sink.MayApply`; the prediction-scope rule (§7) is required and cheap to
+  validate, not an open investigation.
 - **Prerequisite:** close the movement determinism gap (features.md #3) and prove
   it under a prediction loop (§5 source #5, then #1) — **before** designing M6/M7.
-- **Open:** the prediction-scope rule (§7) needs to be written into the M6/M7
-  design; the reconciliation policy is undecided.
+- **Remaining:** a small reconciliation policy (snap / smooth) and the map-hash
+  gate; both are local, not architectural.

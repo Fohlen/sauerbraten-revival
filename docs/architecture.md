@@ -237,7 +237,10 @@ imports cover maps, materials, entities, weapon stats, and mode parameters.
 - **UGC loop**: edit a map live in-game → save our format → upload to Workshop →
   subscribers download and play. Maps made in coop edit become Workshop content.
 - **Multiplayer parity**: content hashes/IDs in the manifest let matchmaking
-  require identical mods/maps.
+  require identical mods/maps. This is also the runtime **map-hash gate**: a
+  client whose map hash differs from the server's is refused before play, which
+  is what makes prediction-scope a near-non-issue in game mode
+  ([authority-and-latency.md §7](authority-and-latency.md#7-the-rule-this-forces-prediction-scope-decided)).
 
 ---
 
