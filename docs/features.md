@@ -94,7 +94,8 @@ that underpins this entire section.
 - [x] **Selection model** (M0): `Selection`/`Block3` port of `selinfo`
       (`World/Commands/`, asserted by `test/SelectionTest.cs`).
 - [ ] **Command system**: every mutation is a serializable command with an inverse.
-- [ ] Undo/redo via the command stack.
+- [ ] Undo/redo via the command stack (see editor doc §5.5: undo is a
+      server-sequenced `ApplyInverse` command, own-changes-only).
 - [ ] Port editor algorithms (add/remove/fill/texture/remip/select).
       - [x] **M1a structural primitives**: `CopyCube`/`PasteCube`
             (`World/OctaEdit.cs`), `DiscardChildren`/`GetMippedTexture`/`FreeOcta`/
@@ -113,8 +114,10 @@ that underpins this entire section.
             `RotateCube`, `ForceMip` (`World/OctaEdit.cs`); asserted against the
             engine by `test/OctaFaceTest.cs`. Fixed a latent whole-byte vertex-write
             bug in `CubeGeometry.SetCubeVector` (now nibble-correct).
-      - [ ] **M1d `remip`** — deferred: needs a dedicated pass (`visibleface`,
-            merges) and the inverse-strategy decision (editor doc §11.5).
+      - [ ] **M1d `remip`** — design **decided** (editor doc §5.4/§5.5:
+            pass-through replicated, deterministic integer re-execution; inverse
+            captured at undo time). Implementation deferred; needs `visibleface`
+            and merges.
 - [ ] Texturing, blending, entity placement.
 - [ ] Selection, copy/paste, fill, remip.
 - [ ] Save/load in our format.

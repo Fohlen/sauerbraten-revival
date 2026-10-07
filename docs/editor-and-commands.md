@@ -129,10 +129,11 @@ same message shape. See §5.3 and §6.
                  │  used by: undo, network, demo, save, tests  │
                  └───┬───────────────┬───────────────┬────────┘
                      │               │               │
-                 UndoStack       NetworkSender    DemoRecorder
-                                 (RPC/ENet)       (same bytes)
+             UndoStack (own cmds) NetworkSender   DemoRecorder
+              submits ApplyInverse   (RPC/ENet)    (same bytes)
                      │
-                 applyInverse
+                     ▼  (back through the sink — never a local apply)
+                 WorldCommandSink
 ```
 
 - **Single entry point.** Nothing mutates the octree directly; everything goes
@@ -141,6 +142,8 @@ same message shape. See §5.3 and §6.
 - **Apply is the same code path** on the issuing client, the server, and every
   peer. There is no "local edit" vs "remote edit" divergence.
 - **The log is the source of truth**; the octree is a materialized view.
+- **Undo is a command too** (§5.5): it is submitted back through the sink as
+  `ApplyInverse`, not applied locally. See §5.5 for the full model.
 
 Interfaces (sketch):
 
@@ -153,6 +156,7 @@ public interface IWorld {                 // the mutable octree surface
 public interface ICommandSink {
     void Submit(EditCommand cmd);         // local origin: validate → log → apply → replicate
     void Receive(EditCommand cmd);        // remote origin: log → apply (no echo)
+    // Undo is not a separate path: Submit(ApplyInverse(cmd)) — see §5.5.
 }
 ```
 
@@ -368,13 +372,71 @@ save, network, and demo.
 
 ### 5.4 Remip and determinism
 
-`Remip` (merge/discard children, recompute cube sizes — Cube2's `remip`) is
-deterministic *given the same input octree and selection*, so it can be a
-"derive the result" op. But its inverse is not a simple op swap; treat it as a
-destructive op that captures the old block, OR forbid undo across remip and
-snapshot instead. **Decision: `Remip` captures the old block** for uniformity;
-the block is often small (remip on tight selections). Documented cost: remip undo
-is the largest payload; acceptable.
+`Remip` (merge/discard children, recompute cube sizes — Cube2's `remip`) is a
+**pure deterministic function** of `(octree, mipvis)`: its whole merge decision
+(`faces`, `textures`, `visibleface`/`genfacevecs`/`insideface`/`occludesface`)
+is integer-only, with no RNG, time or float arithmetic. Two peers given the same
+octree collapse the same nodes the same way, byte-for-byte.
+
+**Decision: `Remip` is a *pass-through* replicated op.** The wire/demo payload is
+just `{selection, mipvis}`; every peer re-executes the algorithm. A 10 MB
+optimization is a ~20-byte message — this fully solves the Cube2
+"big patches can't sync" limitation for remip.
+
+`mipvis` is a user VAR (`VAR(mipvis, 0, 0, 1)`) that changes the collapse
+decision, so it **must** ride in the payload (or be pinned). Omitting it would
+let peers with different toggles diverge.
+
+Pass-through is sound only if every peer's octree is already byte-identical when
+the command applies. That is guaranteed by the log model (base snapshot + ordered
+commands), but it makes the **rest of the stream's determinism load-bearing** — a
+divergence bug elsewhere is faithfully propagated by every remip. We therefore
+treat command determinism as a tested invariant (see §9), the same way movement
+fidelity is.
+
+Remip's **inverse** is covered by §5.5; the capture is local (never on the wire).
+This splits two concerns the unified `ReplaceBlock` model conflates:
+**replication** (the function, tiny) vs **undo** (the inverse, local).
+
+### 5.5 Undo in a shared world
+
+Cube2 treated undo as a local inverse application. That is wrong the moment the
+world is shared: the inverse is a *proposal* against state that other editors may
+have changed. We pin down the model here.
+
+**Rule 1 — You may only roll back your own changes.** The undo/redo stack holds
+the commands *this* client issued, and nothing else. You cannot undo another
+editor's edit. (Attribution is `AuthorPeerId`, §1.1; undo filters the log by it.)
+
+**Rule 2 — Undo is an ordinary command, server-sequenced.** Ctrl-Z does not apply
+an inverse locally. It submits an `ApplyInverse` command through the same
+`WorldCommandSink` as any edit, and it goes through the same authority,
+sequencing, and validation path. Undo therefore inherits prediction/rollback
+(§3.4) for free, and cannot silently diverge from the shared world.
+
+**Rule 3 — First writer wins; conflicts are rejected, never merged.** If someone
+else has changed the cells an inverse needs to restore, the command's
+pre-condition no longer holds and the **server rejects it**. The editor surfaces
+"can't undo — the region was changed." We do **not** attempt OT/CRDT-style merging
+of concurrent cube edits; a cube editor is not a collaborative document. Silent
+corruption is the failure mode to avoid, and rejection is honest.
+
+A rejected undo is **discarded from the stack** — it is not retried and does not
+block the rest of the history. This is safe because undo is always a *conscious*
+action: the user pressed a button, so telling them "sorry, this can't be undone,
+the region changed" is a sufficient and honest outcome. (Undo is never applied
+implicitly, so a discarded entry can never surprise anyone.)
+
+**Rule 4 — Capture the inverse at undo time, from the current world.** Rather
+than storing a region capture when an edit is applied (which can go stale), the
+inverse payload is produced *when the user presses undo*, from the state being
+undone. This sidesteps the "captured at apply time, stale by undo time" problem
+entirely: the pre-condition is always evaluated against the world you are undoing
+from. For derivation-only ops (e.g. `Remip`) there is no stored payload at all —
+the inverse is recomputed/re-executed.
+
+The consequences of Rules 3–4 for the concrete scenario are worked through in
+§11.6 (concurrent remip + undo).
 
 ---
 
@@ -615,7 +677,7 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
 
 ---
 
-## 11. Open questions / decisions to make
+## 11. Open questions / decisions
 
 1. **Snapshot cadence for rollback**: every N commands, every T ms, or every
    frame? Trade memory vs rollback latency. Suggest: ring of 32 snapshots,
@@ -628,7 +690,20 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
    optionally (like Godot's `.tres` for `.res`).
 4. **Per-op prediction policy**: which ops are optimistic (editor stamps) vs
    server-only (scripted geometry)? Make it a property of `EditOp`.
-5. **Undo across remip**: capture-the-block (proposed) vs snapshot barrier.
+5. ~~**Undo across remip**~~ — **decided (§5.4, §5.5):** `Remip` is a
+   pass-through replicated op (payload `{selection, mipvis}`, deterministic
+   integer re-execution). Undo is a normal `ApplyInverse` command, capturing the
+   inverse at undo time; it is never transmitted and needs no special case.
+6. **Block compression**: zlib level and threshold; must be identical across
+   platforms for the parity hash (zlib is, but pin the library/level). Note this
+   is *inner* block compression inside the codec, separate from the *outer* map
+   archive (§7.4), whose hash is the parity unit.
+7. **Float determinism**: positions are f32 on the wire; confirm no accumulation
+   of arithmetic in apply paths (only integer octree math + exact f32 copies).
+   Pass-through `Remip` (§5.4) makes this load-bearing: a float in any apply path
+   would diverge peers. `visibleface` and its subtree are verified integer-only.
+8. **Permission/authority model**: who may edit (all coop clients? server
+   config?), and how it interacts with the edit lock and game modes.
 9. ~~**Deformed-cube subdivision fidelity**~~ — **closed in M1b**: `SubdivideCube`
    now resamples deformed edges (`getcubevector`/`midedge`/`crosscenter`) and runs
    the `validatec` pass, matching the original's exact child edge bytes. Verified
@@ -636,14 +711,48 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
    asserted in `test/OctaLookupTest.cs`. Note the original's `size > 0x1000`
    auto-subdivide branch in `validatec` is not ported (never fires on the editor
    path).
-6. **Block compression**: zlib level and threshold; must be identical across
-   platforms for the parity hash (zlib is, but pin the library/level). Note this
-   is *inner* block compression inside the codec, separate from the *outer* map
-   archive (§7.4), whose hash is the parity unit.
-7. **Float determinism**: positions are f32 on the wire; confirm no accumulation
-   of arithmetic in apply paths (only integer octree math + exact f32 copies).
-8. **Permission/authority model**: who may edit (all coop clients? server
-   config?), and how it interacts with the edit lock and game modes.
+
+### 11.6 Worked example: concurrent remip + undo
+
+Two editors, A and B, on a shared server. This is the scenario that motivated
+Rules 1–4 (§5.5).
+
+```
+S0
+A: E_A1 (adds a wall)              -> S1     A's stack: [E_A1]
+B: E_B1 (textures an adjacent cell) -> S2    B's stack: [E_B1]
+A: Remip(region covering both)     -> S3     (pass-through; B re-executes it)
+A: Ctrl-Z  (wants to undo E_A1)
+```
+
+What happens, per the rules:
+
+- **Rule 1:** A's Ctrl-Z is about `E_A1` (A's own edit). It is permitted in
+  principle; B's `E_B1` is not on A's stack and cannot be undone by A.
+- **Rule 4:** A's inverse is computed *now*, from `S3` (the current world), not
+  from a block captured back at `S1`. So there is no stale payload.
+- **Rule 2:** A submits `ApplyInverse(E_A1)` through the sink; the server
+  sequences and applies it like any edit.
+- **Rule 3:** the inverse removes A's wall. If B's `E_B1` touched a cell inside
+  A's wall, the **first writer (A) wins** — B's texture was applied to a cube A is
+  now removing, so it is simply gone with the wall. If instead A's inverse needs
+  to restore a cell B has since changed in a way that conflicts, the server
+  **rejects** the undo, A is told the region changed, and the entry is **discarded
+  from A's stack** (Rule 3). A is free to carry on undoing further back.
+
+Note what remip does **not** do here: it is not a barrier, and it loses no
+history. A's undo stack still contains `E_A1` for the whole time. The remip
+changed node *granularity*, not the logical edit history; pasting A's inverse
+re-subdivides whatever region it touches (`lookupcube` with a positive size),
+producing a valid — if momentarily less-merged — octree. The next remip
+re-optimises it.
+
+The invariants this relies on:
+
+1. **Deterministic re-execution** (§5.4) — B's remip lands where A's did.
+2. **Edit-time capture, not apply-time** (§5.5 Rule 4) — the inverse is never
+   stale.
+3. **Rejection over merging** (§5.5 Rule 3) — no silent corruption.
 
 ---
 
@@ -666,7 +775,6 @@ World/Commands/
     ├── EntityOps.cs
     └── ReplaceBlock.cs    # the universal carrier (paste/prefab/undo/fill)
 World/OctaEdit.cs          # structural primitives + ported edit algorithms (M1)
-```
 World/Net/
 ├── WorldNetwork.cs        # RPC nodes, channels, authority
 └── WorldSnapshot.cs       # canonical snapshot encode/decode + hash
@@ -682,9 +790,16 @@ World/Meshing/
 
 ## 13. Summary
 
-- **One mechanism**: mutation = command = undo = network = demo = prefab.
-- **Selection-scoped, block-capturing commands** fix Cube2's big-patch/prefab
-  limitation and give undo for free.
+- **One mechanism**: mutation = command = network = demo = prefab. Undo is the
+  *same* mechanism again (`ApplyInverse`), not a parallel one.
+- **Undo in a shared world is explicit** (§5.5): you roll back only your own
+  changes; undo is a server-sequenced command; first writer wins and conflicts
+  are rejected, never merged; the inverse is captured at undo time, never stale.
+- **Derivation-only ops are pass-through** (§5.4): `Remip` replicates as
+  `{selection, mipvis}` and every peer re-executes it, so optimisation patches are
+  tiny — the "big patches can't sync" limit is gone.
+- **Selection-scoped, block-capturing commands** fix Cube2's bulk-edit/prefab
+  limitation.
 - **Server authority + reliable ordered edit channel**, unreliable movement
   channel; snapshots handle late join and rollback.
 - **Versioned maps are command histories** — diffable, replayable, and the same

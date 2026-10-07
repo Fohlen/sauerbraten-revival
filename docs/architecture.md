@@ -59,19 +59,25 @@ Consequences:
 
 ## 2. Command system (editor + game modes + network)
 
-Every world mutation is expressed as a command with an inverse:
+Every world mutation is expressed as a command:
 
 ```
-Command { op, args, inverse }
+Command { op, args }        // the inverse is derived, not always stored
 ```
 
 - **Editor UI** issues commands (add cube, delete cube, texture face, fill, remip, paste).
 - **Game modes** issue commands (e.g. `crumbling_wall` schedules repeated cube
   removals; `spawn_platform` adds geometry). Modes get a safe, data-driven API —
   not raw memory access.
-- **Undo/redo** is a command stack (inverse ops).
-- **Networking** replicates the command stream; a server-authoritative world plus
-  client prediction for the local player.
+- **Undo/redo** resubmits an inverse command (`ApplyInverse`) through the same
+  sink — it is *not* a local-only path. In a shared world you may only undo your
+  own edits, and conflicting undos are rejected rather than merged. Full model:
+  [editor-and-commands.md §5.5](editor-and-commands.md#55-undo-in-a-shared-world).
+- **Networking** replicates the command stream. Value edits carry a
+  `ReplaceBlock` payload; **derivation-only ops (e.g. `Remip`) are pass-through**
+  — peers re-execute the deterministic algorithm, so optimisation patches are
+  tiny. See [editor-and-commands.md §5.4](editor-and-commands.md#54-remip-and-determinism).
+  A server-authoritative world plus client prediction for the local player.
 
 This one mechanism covers live editing, dynamic geometry, undo, and coop-edit
 sync. It is also the foundation for multiplayer and Workshop content.
