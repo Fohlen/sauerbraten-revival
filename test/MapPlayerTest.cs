@@ -83,6 +83,19 @@ public class MapPlayerTest : TestClass
     }
 
     [Test]
+    public void FovConvertsHorizontalToVertical()
+    {
+        // Sauerbraten fov=100 is horizontal; Godot wants vertical.
+        // 16:9: fovy = 2*atan(tan(50deg)/(16/9)) = 2*atan(1.19175/1.7778) ~= 67.67 deg.
+        float v = MapPlayer.FovToVertical(100f, 16f / 9f);
+        GD.Print($"[player] fov 100 (h, 16:9) -> {v:F3} (v)");
+        TestAssert.True(Mathf.Abs(v - 67.67f) < 0.1f, $"16:9 vertical fov ~= 67.67 (got {v})");
+
+        // Square viewport: horizontal == vertical.
+        TestAssert.True(Mathf.Abs(MapPlayer.FovToVertical(100f, 1f) - 100f) < 1e-3f, "1:1 keeps fov");
+    }
+
+    [Test]
     public void CameraForwardMatchesVecFromYawPitch()
     {
         var octa = TestData.ReadMap().ToOcta();

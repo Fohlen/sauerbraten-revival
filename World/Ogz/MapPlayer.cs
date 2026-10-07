@@ -23,6 +23,13 @@ namespace SauerbratenRevival.World.Ogz;
 [GlobalClass]
 public partial class MapPlayer : Node3D
 {
+    /// <summary>
+    /// Original <c>fov</c> (rendergl.cpp VARP, default 100). This is the
+    /// <b>horizontal</b> field of view; it is converted to Godot's vertical FOV via
+    /// the engine's <c>fovy = 2*atan(tan(fov/2)/aspect)</c> (rendergl.cpp:1872).
+    /// </summary>
+    [Export] public float Fov { get; set; } = 100.0f;
+
     /// <summary>Original <c>sensitivity</c> default (rendergl.cpp FVARP).</summary>
     [Export] public float Sensitivity { get; set; } = 3.0f;
 
@@ -53,8 +60,31 @@ public partial class MapPlayer : Node3D
 
     public override void _Ready()
     {
-        // Make this player's nested camera authoritative.
-        if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) cam.Current = true;
+        // Make this player's nested camera authoritative and match the original FOV.
+        if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam)
+        {
+            cam.Current = true;
+            ApplyFov(cam);
+        }
+    }
+
+    /// <summary>
+    /// Port the original's horizontal <see cref="Fov"/> onto the Godot camera as a
+    /// vertical FOV (Godot <c>Fov</c> is vertical under the default KeepHeight mode).
+    /// </summary>
+    public void ApplyFov(Camera3D camera)
+    {
+        float aspect = (float)camera.GetViewport().GetVisibleRect().Size.X
+                     / (float)camera.GetViewport().GetVisibleRect().Size.Y;
+        camera.Fov = FovToVertical(Fov, aspect);
+    }
+
+    /// <summary>rendergl.cpp:1872 <c>fovy = 2*atan2(tan(fov/2), aspect)</c>.</summary>
+    public static float FovToVertical(float horizontalFovDegrees, float aspect)
+    {
+        if (aspect <= 0f) return horizontalFovDegrees;
+        float halfH = Mathf.DegToRad(horizontalFovDegrees) * 0.5f;
+        return Mathf.RadToDeg(2f * Mathf.Atan(Mathf.Tan(halfH) / aspect));
     }
 
     /// <summary>
@@ -71,6 +101,7 @@ public partial class MapPlayer : Node3D
         Pitch = 0f;
         Initialized = true;
         SyncTransform();
+        if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
     }
 
     public override void _UnhandledInput(InputEvent @event)
