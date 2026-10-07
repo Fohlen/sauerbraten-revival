@@ -26,6 +26,8 @@ original source, used offline to generate golden values.
 - `remip` collapse decisions (consistent solid children collapse even with differing
   but invisible textures; a deformed child prevents collapse; nested levels collapse
   together). Asserted by [`test/RemipTest.cs`](../../test/RemipTest.cs).
+- Cursor geometry (`rayboxintersect`, `normalizelookupcube`) for the editor cursor.
+  Asserted by [`test/EditCursorTest.cs`](../../test/EditCursorTest.cs).
 
 ## Build & run
 
@@ -62,6 +64,11 @@ OP remip collapse before=9 after=1 children=0
 OP remip keep before=9 after=1 children=0
 OP remip deformed before=9 after=9 children=1
 OP remip nested before=17 after=1 children=0
+CUR raybox hit dist=3.4641 orient=1
+CUR raybox z hit dist=12.0000 orient=5
+CUR normalize g8 lu=(13,29,5) lusize=8
+CUR normalize g32 lu=(0,0,0) lusize=32
+CUR normalize g8b lu=(16,16,8) lusize=8
 OP delcube child0 empty=1 tex0=3
 OP fill child0 solid=1 tex0=9 mat=0
 ```

@@ -186,6 +186,35 @@ int main()
         printf("OP remip nested before=%d after=%d children=%d\n", before, after, root.children ? 1 : 0);
     }
 
+    // ---- cursor geometry (rayboxintersect + normalizelookupcube) ----
+    {
+        extern bool probe_raybox(const vec &b, const vec &s, const vec &o, const vec &ray, float &dist, int &orient);
+        extern void probe_normalize(ivec &lu, int &lusize, const ivec &o, int gridsize);
+
+        // Ray from (10,10,10) heading -x/-y toward box at (0,0,0) size 8.
+        vec b(0,0,0), s(8,8,8), o(10,10,10), ray(-1,-1,-1);
+        ray.normalize();
+        float dist = 0; int orient = 0;
+        if(probe_raybox(b, s, o, ray, dist, orient))
+            printf("CUR raybox hit dist=%.4f orient=%d\n", dist, orient);
+        else printf("CUR raybox miss\n");
+
+        // Straight -z ray toward the top face: expect orient 5 (+Z, dc=1).
+        vec o2(4,4,20), ray2(0,0,-1);
+        if(probe_raybox(b, s, o2, ray2, dist, orient))
+            printf("CUR raybox z hit dist=%.4f orient=%d\n", dist, orient);
+
+        // normalize: lusize 8 -> gridsize 8 (no change), then to 32 (snap to 32).
+        ivec lu(13, 29, 5); int lusize = 8;
+        probe_normalize(lu, lusize, ivec(16, 16, 8), 8);
+        printf("CUR normalize g8 lu=(%d,%d,%d) lusize=%d\n", lu.x, lu.y, lu.z, lusize);
+        probe_normalize(lu, lusize, ivec(16, 16, 8), 32);
+        printf("CUR normalize g32 lu=(%d,%d,%d) lusize=%d\n", lu.x, lu.y, lu.z, lusize);
+        // then back down to gridsize 8: lu should stay within the cell via the /8*8 path
+        probe_normalize(lu, lusize, ivec(20, 20, 12), 8);
+        printf("CUR normalize g8b lu=(%d,%d,%d) lusize=%d\n", lu.x, lu.y, lu.z, lusize);
+    }
+
     // ---- op handlers on a small world ----
     // "delete cube": discardchildren + emptyfaces on a child.
     {

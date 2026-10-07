@@ -114,6 +114,13 @@ public sealed class WorldCommand
   See §5.3.
 - **Undo is source- and author-scoped**: undo rolls back only *your own* `Editor`
   commands. Game-mode/script commands are never undoable (§5.5).
+- **The selection/cursor is client-local, not replicated.** Each client owns its
+  cursor and selection state; it is **never** part of the command log or shared
+  world state. The `SelectionPayload` riding on a command describes *what that
+  command edited*, so peers can apply it — it is not a broadcast of anyone's
+  cursor. You cannot see another player's selection (Cube2 behaves the same way).
+  A coop "see each other's cursor" affordance would be a separate, ephemeral
+  broadcast, not a `WorldCommand`; not planned.
 
 ### 1.2 Why selection-scoped matters (the Cube2 lesson)
 
@@ -781,9 +788,25 @@ subdivision-invariant *content* snapshot, not the `OgzGeometry` structural
 checksum — `LookupCube` subdivides as a side effect, so equivalent octrees can
 hash differently (§9).
 
-**M4 — Editor UI (Godot).** Grid/plane cursor (port `editmoveplane` +
-`rendereditcursor`), selection extend/rotate/flip, texture picker, material
-picker, entity placement, keybinds via `InputMap`. Features.md #5 checklist.
+**M4 — Editor UI (Godot).** Core editing mechanics first, then GUI:
+
+- **M4a — cursor cast**: eye ray → `(lu, gridsize, orient, cur, cor, corner)`,
+  `editmoveplane`/`rayboxintersect`/`normalizelookupcube` (`World/Editor/`).
+  **Done** — `CursorGeometry` + `EditCursor`, asserted against the engine by
+  `test/EditCursorTest.cs`. (The world ray cast that supplies `rayDist` is still
+  to be wired from the octree.)
+- **M4b — grid/orient/selection**: `gridpower`, `reorient`, drag-select,
+  `selextend`, `cancelsel`; client-local state (see §1.1), never in the log.
+- **M4c — wheel dispatch + `editface` modes 0/2**: `linkedpush`/`pushedge`,
+  cube-face and cube-corner push/pull. Mode 1 (fill) is already `OctaEdit.Fill`.
+- **M4d — the selection box**: render the white rectangle + grid + cursor box
+  (Godot line/immediate mesh).
+- **M4e — GUI**: texture/material pickers, entity placement, keybinds via
+  `InputMap`. Features.md #5 checklist.
+
+The wheel is bound like Cube2: `InputMap` actions for wheel up/down plus a
+modifier namespace selecting grid / face / corner / rotate (§ see the
+`delta_do` note below).
 
 **M5 — Save/load in native format.** `WorldSnapshot` encoder/decoder; `world.res`
 + `history.res`; version field; compaction; archive packaging + content hash

@@ -164,3 +164,41 @@ static void probe_forcemip_impl(cube &c, bool fixtex)
     if(fixtex) loopj(6) c.texture[j] = getmippedtexture(c, j);
 }
 void probe_forcemip(cube &c, bool fixtex) { probe_forcemip_impl(c, fixtex); }
+
+// Cursor geometry (geom.cpp rayboxintersect + octaedit.cpp normalizelookupcube).
+bool probe_raybox(const vec &b, const vec &s, const vec &o, const vec &ray, float &dist, int &orient)
+{
+    loop(d, 3) if(ray[d])
+    {
+        int dc = ray[d]<0 ? 1 : 0;
+        float pdist = (b[d]+s[d]*dc - o[d]) / ray[d];
+        vec v(ray);
+        v.mul(pdist).add(o);
+        if(v[R[d]] >= b[R[d]] && v[R[d]] <= b[R[d]]+s[R[d]]
+        && v[C[d]] >= b[C[d]] && v[C[d]] <= b[C[d]]+s[C[d]])
+        {
+            dist = pdist;
+            orient = 2*d+dc;
+            return true;
+        }
+    }
+    return false;
+}
+
+// normalizelookupcube, made pure: returns the normalized (lu, lusize).
+void probe_normalize(ivec &lu, int &lusize, const ivec &o, int gridsize)
+{
+    if(lusize>gridsize)
+    {
+        lu.x += (o.x-lu.x)/gridsize*gridsize;
+        lu.y += (o.y-lu.y)/gridsize*gridsize;
+        lu.z += (o.z-lu.z)/gridsize*gridsize;
+    }
+    else if(gridsize>lusize)
+    {
+        lu.x &= ~(gridsize-1);
+        lu.y &= ~(gridsize-1);
+        lu.z &= ~(gridsize-1);
+    }
+    lusize = gridsize;
+}
