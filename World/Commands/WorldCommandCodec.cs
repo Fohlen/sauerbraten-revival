@@ -21,38 +21,40 @@ namespace SauerbratenRevival.World.Commands;
 /// real cost is meshing). If a shared C#/C++/Python format is ever needed, it swaps
 /// in behind this one class.
 /// </summary>
-public static class EditCodec
+public static class WorldCommandCodec
 {
     /// <summary>Bump when the payload layout changes incompatibly.</summary>
     public const byte FormatVersion = 1;
 
     // ---- command framing ----
 
-    /// <summary>Encode a command as [u8 version][u64 sequence][i32 author][Variant array].</summary>
-    public static byte[] Encode(EditCommand cmd)
+    /// <summary>Encode a command as [u8 version][u64 sequence][i32 author][u8 source][Variant array].</summary>
+    public static byte[] Encode(WorldCommand cmd)
     {
         var payload = new Godot.Collections.Array { (int)cmd.Op };
         WritePayload(payload, cmd);
 
         var body = GD.VarToBytes(payload);
-        var outBytes = new byte[1 + 8 + 4 + body.Length];
+        var outBytes = new byte[1 + 8 + 4 + 1 + body.Length];
         outBytes[0] = FormatVersion;
         BitConverter.TryWriteBytes(outBytes.AsSpan(1, 8), cmd.Sequence);
         BitConverter.TryWriteBytes(outBytes.AsSpan(9, 4), cmd.AuthorPeerId);
-        body.CopyTo(outBytes, 13);
+        outBytes[13] = (byte)cmd.Source;
+        body.CopyTo(outBytes, 14);
         return outBytes;
     }
 
     /// <summary>Decode bytes produced by <see cref="Encode"/>. Object-free and safe for untrusted input.</summary>
-    public static EditCommand Decode(byte[] data)
+    public static WorldCommand Decode(byte[] data)
     {
         byte version = data[0];
         if (version != FormatVersion)
             throw new InvalidOperationException($"Unsupported command format version {version} (expected {FormatVersion})");
         ulong sequence = BitConverter.ToUInt64(data, 1);
         int author = BitConverter.ToInt32(data, 9);
-        var body = new byte[data.Length - 13];
-        Array.Copy(data, 13, body, 0, body.Length);
+        var source = (CommandSource)data[13];
+        var body = new byte[data.Length - 14];
+        Array.Copy(data, 14, body, 0, body.Length);
 
         var decoded = GD.BytesToVar(body);
         if (decoded.VariantType != Variant.Type.Array)
@@ -61,8 +63,8 @@ public static class EditCodec
         if (arr.Count < 1)
             throw new InvalidOperationException("Malformed command payload");
 
-        var op = (EditOp)(int)arr[0];
-        return new EditCommand(op, ReadPayload(op, arr), author) { Sequence = sequence };
+        var op = (WorldOp)(int)arr[0];
+        return new WorldCommand(op, ReadPayload(op, arr), author, source) { Sequence = sequence };
     }
 
     // ---- payloads (positional arrays) ----
@@ -80,21 +82,21 @@ public static class EditCodec
         new Vector3I((int)a[i + 3], (int)a[i + 4], (int)a[i + 5]),
         (int)a[i + 6], (int)a[i + 7]);
 
-    private static void WritePayload(Godot.Collections.Array a, EditCommand cmd)
+    private static void WritePayload(Godot.Collections.Array a, WorldCommand cmd)
     {
         switch (cmd.Op)
         {
-            case EditOp.DeleteCube:
+            case WorldOp.DeleteCube:
                 WriteSelection(a, ((DeleteCubePayload)cmd.Payload).Selection);
                 break;
-            case EditOp.Fill:
+            case WorldOp.Fill:
             {
                 var p = (FillPayload)cmd.Payload;
                 WriteSelection(a, p.Selection);
                 a.Add(p.Dir); a.Add(p.Mode);
                 break;
             }
-            case EditOp.ReplaceBlock:
+            case WorldOp.ReplaceBlock:
             {
                 var p = (ReplaceBlockPayload)cmd.Payload;
                 WriteSelection(a, p.Target);
@@ -102,14 +104,14 @@ public static class EditCodec
                 else { a.Add(true); WriteBlock(a, p.Block); }
                 break;
             }
-            case EditOp.SetFaceTexture:
+            case WorldOp.SetFaceTexture:
             {
                 var p = (SetFaceTexturePayload)cmd.Payload;
                 WriteSelection(a, p.Selection);
                 a.Add(p.Texture); a.Add(p.Orient);
                 break;
             }
-            case EditOp.ReplaceTexture:
+            case WorldOp.ReplaceTexture:
             {
                 var p = (ReplaceTexturePayload)cmd.Payload;
                 a.Add(p.InSelection);
@@ -117,67 +119,67 @@ public static class EditCodec
                 a.Add(p.OldTexture); a.Add(p.NewTexture);
                 break;
             }
-            case EditOp.SetFaceMaterial:
+            case WorldOp.SetFaceMaterial:
             {
                 var p = (SetFaceMaterialPayload)cmd.Payload;
                 WriteSelection(a, p.Selection);
                 a.Add(p.MaterialId); a.Add(p.Filter);
                 break;
             }
-            case EditOp.FlipCube:
-            case EditOp.RotateCube:
+            case WorldOp.FlipCube:
+            case WorldOp.RotateCube:
             {
                 var p = (TransformCubePayload)cmd.Payload;
                 WriteSelection(a, p.Selection);
                 a.Add(p.Axis); a.Add(p.Direction);
                 break;
             }
-            case EditOp.Remip:
+            case WorldOp.Remip:
                 a.Add(((RemipPayload)cmd.Payload).MipVis);
                 break;
-            case EditOp.Snapshot:
+            case WorldOp.Snapshot:
                 break;
             default:
                 throw new NotSupportedException($"Cannot encode payload for {cmd.Op}");
         }
     }
 
-    private static ICommandPayload ReadPayload(EditOp op, Godot.Collections.Array a)
+    private static ICommandPayload ReadPayload(WorldOp op, Godot.Collections.Array a)
     {
         // Index 0 is the op; payload begins at 1.
         const int b = 1;
         switch (op)
         {
-            case EditOp.DeleteCube:
+            case WorldOp.DeleteCube:
                 return new DeleteCubePayload(ReadSelection(a, b));
-            case EditOp.Fill:
+            case WorldOp.Fill:
             {
                 var sel = ReadSelection(a, b);
                 return new FillPayload(sel, (int)a[b + 8], (int)a[b + 9]);
             }
-            case EditOp.ReplaceBlock:
+            case WorldOp.ReplaceBlock:
             {
                 var target = ReadSelection(a, b);
                 if (!(bool)a[b + 8]) return new ReplaceBlockPayload(target, null);
                 return new ReplaceBlockPayload(target, ReadBlock(a, b + 9));
             }
-            case EditOp.SetFaceTexture:
+            case WorldOp.SetFaceTexture:
                 return new SetFaceTexturePayload(ReadSelection(a, b), (int)a[b + 8], (int)a[b + 9]);
-            case EditOp.ReplaceTexture:
+            case WorldOp.ReplaceTexture:
             {
                 bool inSel = (bool)a[b];
                 SelectionPayload? sel = (bool)a[b + 1] ? ReadSelection(a, b + 2) : null;
                 int idx = inSel && sel.HasValue ? b + 2 + 8 : b + 2;
                 return new ReplaceTexturePayload(sel, inSel, (int)a[idx], (int)a[idx + 1]);
             }
-            case EditOp.SetFaceMaterial:
+            case WorldOp.SetFaceMaterial:
                 return new SetFaceMaterialPayload(ReadSelection(a, b), (int)a[b + 8], (int)a[b + 9]);
-            case EditOp.FlipCube:
-            case EditOp.RotateCube:
+            case WorldOp.FlipCube:
+            case WorldOp.RotateCube:
                 return new TransformCubePayload(ReadSelection(a, b), (int)a[b + 8], (int)a[b + 9]);
-            case EditOp.Remip:
+            case WorldOp.Remip:
                 return new RemipPayload((bool)a[b]);
-            case EditOp.Snapshot:
+            case WorldOp.Snapshot:
                 return EmptyPayload.Instance;
             default:
                 throw new NotSupportedException($"Cannot decode payload for {op}");

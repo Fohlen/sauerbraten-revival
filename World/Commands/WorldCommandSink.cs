@@ -19,16 +19,16 @@ public sealed class WorldCommandSink
     private readonly WorldCommandLog _log;
 
     /// <summary>Ops whose forward application is destructive and needs a pre-state capture to undo.</summary>
-    private static readonly HashSet<EditOp> Destructive = new()
+    private static readonly HashSet<WorldOp> Destructive = new()
     {
-        EditOp.DeleteCube,
-        EditOp.Fill,
-        EditOp.SetFaceTexture,
-        EditOp.ReplaceTexture,
-        EditOp.SetFaceMaterial,
-        EditOp.FlipCube,
-        EditOp.RotateCube,
-        EditOp.ReplaceBlock,
+        WorldOp.DeleteCube,
+        WorldOp.Fill,
+        WorldOp.SetFaceTexture,
+        WorldOp.ReplaceTexture,
+        WorldOp.SetFaceMaterial,
+        WorldOp.FlipCube,
+        WorldOp.RotateCube,
+        WorldOp.ReplaceBlock,
     };
 
     public IWorld World => _world;
@@ -41,13 +41,13 @@ public sealed class WorldCommandSink
     }
 
     /// <summary>True if a given op needs a captured pre-state for undo.</summary>
-    public static bool IsDestructive(EditOp op) => Destructive.Contains(op);
+    public static bool IsDestructive(WorldOp op) => Destructive.Contains(op);
 
     /// <summary>
     /// Submit a locally-issued command: capture undo state, apply, record. Returns
     /// the log entry.
     /// </summary>
-    public LogEntry Submit(EditCommand cmd)
+    public LogEntry Submit(WorldCommand cmd)
     {
         var entry = PrepareUndo(cmd);
         _world.Apply(cmd);
@@ -59,7 +59,7 @@ public sealed class WorldCommandSink
     }
 
     /// <summary>Apply and record a command that originated on another peer (no undo entry for us).</summary>
-    public void Receive(EditCommand cmd)
+    public void Receive(WorldCommand cmd)
     {
         _world.Apply(cmd);
         _log.RecordRemote(cmd);
@@ -78,12 +78,12 @@ public sealed class WorldCommandSink
         {
             // Restore the captured region (Rule 4: the pre-state was captured when
             // the forward command was applied).
-            var restore = new EditCommand(EditOp.ReplaceBlock,
+            var restore = new WorldCommand(WorldOp.ReplaceBlock,
                 new ReplaceBlockPayload(new SelectionPayload(entry.UndoRegion.O, entry.UndoRegion.S, entry.UndoRegion.Grid, entry.UndoRegion.Orient), entry.UndoBlock))
             { AuthorPeerId = _log.LocalPeerId };
             _world.Apply(restore);
         }
-        else if (entry.Command.Op == EditOp.Remip)
+        else if (entry.Command.Op == WorldOp.Remip)
         {
             // Derivation-only op: no pre-state to restore. Not undoable (a forward
             // remip is lossy); discard rather than corrupt. See §5.4/§5.5.
@@ -102,9 +102,9 @@ public sealed class WorldCommandSink
         // re-apply. For ReplaceBlock we re-apply the exact written block; otherwise
         // re-apply the original command (deterministic given the undone state).
         var fresh = PrepareUndo(entry.Command);
-        if (entry.Command.Op == EditOp.ReplaceBlock && entry.RedoBlock != null)
+        if (entry.Command.Op == WorldOp.ReplaceBlock && entry.RedoBlock != null)
         {
-            var again = new EditCommand(EditOp.ReplaceBlock,
+            var again = new WorldCommand(WorldOp.ReplaceBlock,
                 new ReplaceBlockPayload(new SelectionPayload(entry.UndoRegion.O, entry.UndoRegion.S, entry.UndoRegion.Grid, entry.UndoRegion.Orient), entry.RedoBlock))
             { AuthorPeerId = _log.LocalPeerId };
             _world.Apply(again);
@@ -123,29 +123,29 @@ public sealed class WorldCommandSink
 
     /// <summary>
     /// Build the undo state for a command before it is applied. Destructive ops
-    /// capture the region they are about to change; <see cref="EditOp.ReplaceBlock"/>
+    /// capture the region they are about to change; <see cref="WorldOp.ReplaceBlock"/>
     /// additionally captures what it is about to write (for redo).
     /// </summary>
-    private LogEntry PrepareUndo(EditCommand cmd)
+    private LogEntry PrepareUndo(WorldCommand cmd)
     {
         var entry = new LogEntry { Command = cmd };
         if (!IsDestructive(cmd.Op)) return entry;
 
         switch (cmd.Op)
         {
-            case EditOp.DeleteCube:
-            case EditOp.SetFaceTexture:
-            case EditOp.ReplaceTexture:
-            case EditOp.SetFaceMaterial:
-            case EditOp.FlipCube:
-            case EditOp.RotateCube:
+            case WorldOp.DeleteCube:
+            case WorldOp.SetFaceTexture:
+            case WorldOp.ReplaceTexture:
+            case WorldOp.SetFaceMaterial:
+            case WorldOp.FlipCube:
+            case WorldOp.RotateCube:
             {
                 var region = SelectionRegion(cmd);
                 entry.UndoRegion = region;
                 entry.UndoBlock = _world.Capture(region, region.Grid);
                 break;
             }
-            case EditOp.Fill:
+            case WorldOp.Fill:
             {
                 // Fill collapses the selection to one grid slice and may move it by
                 // one cell along the oriented axis, so capture one cell either side to
@@ -162,7 +162,7 @@ public sealed class WorldCommandSink
                 entry.UndoBlock = _world.Capture(region, region.Grid);
                 break;
             }
-            case EditOp.ReplaceBlock:
+            case WorldOp.ReplaceBlock:
             {
                 var p = (ReplaceBlockPayload)cmd.Payload;
                 var region = p.Target.ToBlock();
@@ -175,7 +175,7 @@ public sealed class WorldCommandSink
         return entry;
     }
 
-    private static Block3 SelectionRegion(EditCommand cmd) => cmd.Payload switch
+    private static Block3 SelectionRegion(WorldCommand cmd) => cmd.Payload switch
     {
         DeleteCubePayload p => p.Selection.ToBlock(),
         FillPayload p => p.Selection.ToBlock(),

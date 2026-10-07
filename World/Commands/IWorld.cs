@@ -14,14 +14,14 @@ public interface IWorld
     Octa Octa { get; }
 
     /// <summary>Apply a command. Must be deterministic and must not depend on wall-clock state.</summary>
-    void Apply(EditCommand cmd);
+    void Apply(WorldCommand cmd);
 
     /// <summary>Capture a region into a portable block (the pre-state for a destructive edit).</summary>
     OctaEdit.CapturedBlock Capture(Block3 region, int rgrid);
 }
 
 /// <summary>
-/// The default <see cref="IWorld"/>: routes each <see cref="EditOp"/> to the
+/// The default <see cref="IWorld"/>: routes each <see cref="WorldOp"/> to the
 /// verified <see cref="OctaEdit"/> op. This is the single place that turns a
 /// serializable command into an octree mutation.
 /// </summary>
@@ -33,38 +33,38 @@ public sealed class OctaWorld : IWorld
 
     public OctaEdit.CapturedBlock Capture(Block3 region, int rgrid) => OctaEdit.BlockCopy(Octa, region, rgrid);
 
-    public void Apply(EditCommand cmd)
+    public void Apply(WorldCommand cmd)
     {
         switch (cmd.Op)
         {
-            case EditOp.DeleteCube:
+            case WorldOp.DeleteCube:
             {
                 var p = (DeleteCubePayload)cmd.Payload;
                 OctaEdit.DeleteCube(Octa, p.Selection.ToBlock());
                 break;
             }
-            case EditOp.Fill:
+            case WorldOp.Fill:
             {
                 var p = (FillPayload)cmd.Payload;
                 var sel = p.Selection.ToSelection();
                 OctaEdit.Fill(Octa, sel, p.Dir, p.Mode);
                 break;
             }
-            case EditOp.ReplaceBlock:
+            case WorldOp.ReplaceBlock:
             {
                 var p = (ReplaceBlockPayload)cmd.Payload;
                 if (p.Block != null)
                     OctaEdit.PasteBlock(Octa, p.Block, p.Target.ToBlock(), p.Target.Grid);
                 break;
             }
-            case EditOp.SetFaceTexture:
+            case WorldOp.SetFaceTexture:
             {
                 var p = (SetFaceTexturePayload)cmd.Payload;
                 OctaEdit.ForEachSelCube(Octa, p.Selection.ToBlock(), p.Selection.Grid,
                     (x, y, z, c) => OctaEdit.SetFaceTexture(c, p.Texture, p.Orient));
                 break;
             }
-            case EditOp.ReplaceTexture:
+            case WorldOp.ReplaceTexture:
             {
                 var p = (ReplaceTexturePayload)cmd.Payload;
                 OctaEdit.ReplaceTexture(Octa,
@@ -72,37 +72,37 @@ public sealed class OctaWorld : IWorld
                     p.OldTexture, p.NewTexture, p.InSelection);
                 break;
             }
-            case EditOp.SetFaceMaterial:
+            case WorldOp.SetFaceMaterial:
             {
                 var p = (SetFaceMaterialPayload)cmd.Payload;
                 OctaEdit.EditMaterial(Octa, p.Selection.ToBlock(), p.MaterialId, p.Filter);
                 break;
             }
-            case EditOp.FlipCube:
+            case WorldOp.FlipCube:
             {
                 var p = (TransformCubePayload)cmd.Payload;
                 OctaEdit.ForEachSelCube(Octa, p.Selection.ToBlock(), p.Selection.Grid,
                     (x, y, z, c) => OctaEdit.FlipCube(c, p.Axis));
                 break;
             }
-            case EditOp.RotateCube:
+            case WorldOp.RotateCube:
             {
                 var p = (TransformCubePayload)cmd.Payload;
                 OctaEdit.ForEachSelCube(Octa, p.Selection.ToBlock(), p.Selection.Grid,
                     (x, y, z, c) => OctaEdit.RotateCube(c, p.Axis));
                 break;
             }
-            case EditOp.Remip:
+            case WorldOp.Remip:
             {
                 var p = (RemipPayload)cmd.Payload;
                 OctaEdit.RemipAll(Octa, p.MipVis);
                 break;
             }
-            case EditOp.Snapshot:
+            case WorldOp.Snapshot:
                 // Lifecycle marker; no world mutation.
                 break;
             default:
-                throw new System.NotSupportedException($"Unhandled EditOp {cmd.Op}");
+                throw new System.NotSupportedException($"Unhandled WorldOp {cmd.Op}");
         }
     }
 }

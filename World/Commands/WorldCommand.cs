@@ -8,12 +8,12 @@ namespace SauerbratenRevival.World.Commands;
 /// (attribution, not authority — docs/editor-and-commands.md §1.1).
 ///
 /// Payloads are typed objects here; their canonical <c>byte[]</c> form is the
-/// codec's job (<see cref="EditCodec"/>), so save/demo/network share one encoding.
+/// codec's job (<see cref="WorldCommandCodec"/>), so save/demo/network share one encoding.
 /// </summary>
-public sealed class EditCommand
+public sealed class WorldCommand
 {
     /// <summary>What the command does.</summary>
-    public EditOp Op { get; init; }
+    public WorldOp Op { get; init; }
 
     /// <summary>Monotonic position in the log; assigned by the sink, not the caller.</summary>
     public ulong Sequence { get; set; }
@@ -21,25 +21,33 @@ public sealed class EditCommand
     /// <summary>Which peer issued it (undo may only roll back this peer's commands, §5.5 Rule 1).</summary>
     public int AuthorPeerId { get; init; }
 
+    /// <summary>
+    /// What kind of author issued it. Only <see cref="CommandSource.Editor"/> commands
+    /// by this peer are undoable; game-mode and script commands never are (§5.5).
+    /// </summary>
+    public CommandSource Source { get; init; } = CommandSource.Editor;
+
     /// <summary>Op-specific parameters.</summary>
     public ICommandPayload Payload { get; init; } = EmptyPayload.Instance;
 
-    public EditCommand() { }
+    public WorldCommand() { }
 
-    public EditCommand(EditOp op, ICommandPayload payload, int author = 0)
+    public WorldCommand(WorldOp op, ICommandPayload payload, int author = 0,
+        CommandSource source = CommandSource.Editor)
     {
         Op = op;
         Payload = payload;
         AuthorPeerId = author;
+        Source = source;
     }
 
-    public override string ToString() => $"{Op}#{Sequence}(peer {AuthorPeerId})";
+    public override string ToString() => $"{Op}#{Sequence}(peer {AuthorPeerId}, {Source})";
 }
 
-/// <summary>Marker for op-specific parameter sets. Each concrete type maps 1:1 to an <see cref="EditOp"/>.</summary>
+/// <summary>Marker for op-specific parameter sets. Each concrete type maps 1:1 to an <see cref="WorldOp"/>.</summary>
 public interface ICommandPayload { }
 
-/// <summary>Payload for ops that carry no parameters (e.g. <see cref="EditOp.Snapshot"/> has an index, but the no-arg form is a valid marker).</summary>
+/// <summary>Payload for ops that carry no parameters (e.g. <see cref="WorldOp.Snapshot"/> has an index, but the no-arg form is a valid marker).</summary>
 public sealed class EmptyPayload : ICommandPayload
 {
     public static readonly EmptyPayload Instance = new();
@@ -71,14 +79,14 @@ public readonly struct SelectionPayload : ICommandPayload
     public Selection ToSelection() => new(Origin, Size, Grid, Orient);
 }
 
-/// <summary><see cref="EditOp.DeleteCube"/>: empty every cube in the selection.</summary>
+/// <summary><see cref="WorldOp.DeleteCube"/>: empty every cube in the selection.</summary>
 public sealed class DeleteCubePayload : ICommandPayload
 {
     public SelectionPayload Selection;
     public DeleteCubePayload(SelectionPayload sel) => Selection = sel;
 }
 
-/// <summary><see cref="EditOp.Fill"/>: mpeditface mode 1 over a selection.</summary>
+/// <summary><see cref="WorldOp.Fill"/>: mpeditface mode 1 over a selection.</summary>
 public sealed class FillPayload : ICommandPayload
 {
     public SelectionPayload Selection;
@@ -93,7 +101,7 @@ public sealed class FillPayload : ICommandPayload
     }
 }
 
-/// <summary><see cref="EditOp.SetFaceTexture"/>: edittexcube over a selection.</summary>
+/// <summary><see cref="WorldOp.SetFaceTexture"/>: edittexcube over a selection.</summary>
 public sealed class SetFaceTexturePayload : ICommandPayload
 {
     public SelectionPayload Selection;
@@ -108,7 +116,7 @@ public sealed class SetFaceTexturePayload : ICommandPayload
     }
 }
 
-/// <summary><see cref="EditOp.ReplaceTexture"/>: replacetexcube.</summary>
+/// <summary><see cref="WorldOp.ReplaceTexture"/>: replacetexcube.</summary>
 public sealed class ReplaceTexturePayload : ICommandPayload
 {
     public SelectionPayload? Selection;   // null = whole world
@@ -125,7 +133,7 @@ public sealed class ReplaceTexturePayload : ICommandPayload
     }
 }
 
-/// <summary><see cref="EditOp.SetFaceMaterial"/>: mpeditmat.</summary>
+/// <summary><see cref="WorldOp.SetFaceMaterial"/>: mpeditmat.</summary>
 public sealed class SetFaceMaterialPayload : ICommandPayload
 {
     public SelectionPayload Selection;
@@ -140,7 +148,7 @@ public sealed class SetFaceMaterialPayload : ICommandPayload
     }
 }
 
-/// <summary><see cref="EditOp.FlipCube"/> / <see cref="EditOp.RotateCube"/>: a selection plus an axis (and direction for rotate).</summary>
+/// <summary><see cref="WorldOp.FlipCube"/> / <see cref="WorldOp.RotateCube"/>: a selection plus an axis (and direction for rotate).</summary>
 public sealed class TransformCubePayload : ICommandPayload
 {
     public SelectionPayload Selection;
@@ -155,7 +163,7 @@ public sealed class TransformCubePayload : ICommandPayload
     }
 }
 
-/// <summary><see cref="EditOp.Remip"/>: pass-through. Only the selection and the user's mipvis toggle (docs §5.4).</summary>
+/// <summary><see cref="WorldOp.Remip"/>: pass-through. Only the selection and the user's mipvis toggle (docs §5.4).</summary>
 public sealed class RemipPayload : ICommandPayload
 {
     public bool MipVis;
@@ -164,7 +172,7 @@ public sealed class RemipPayload : ICommandPayload
 }
 
 /// <summary>
-/// <see cref="EditOp.ReplaceBlock"/>: the universal carrier (docs §5.3). Writes a
+/// <see cref="WorldOp.ReplaceBlock"/>: the universal carrier (docs §5.3). Writes a
 /// captured region into the world. Paste, prefab placement and paste-style undo
 /// all reduce to this. The block is held as live cubes for now; its canonical
 /// serialized form lands with the save format (M5).

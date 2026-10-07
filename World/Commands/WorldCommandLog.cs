@@ -10,7 +10,7 @@ namespace SauerbratenRevival.World.Commands;
 /// </summary>
 public sealed class LogEntry
 {
-    public EditCommand Command = null!;
+    public WorldCommand Command = null!;
 
     /// <summary>
     /// Pre-state captured before the command was applied, for ops whose inverse is
@@ -19,12 +19,12 @@ public sealed class LogEntry
     public OctaEdit.CapturedBlock? UndoBlock;
 
     /// <summary>
-    /// The region the undo block covers. For <see cref="EditOp.ReplaceBlock"/> this
+    /// The region the undo block covers. For <see cref="WorldOp.ReplaceBlock"/> this
     /// is the target; for the destructive selection ops it is the selection.
     /// </summary>
     public Block3 UndoRegion;
 
-    /// <summary>Redo state: for <see cref="EditOp.ReplaceBlock"/>, the block that was written.</summary>
+    /// <summary>Redo state: for <see cref="WorldOp.ReplaceBlock"/>, the block that was written.</summary>
     public OctaEdit.CapturedBlock? RedoBlock;
 }
 
@@ -48,12 +48,20 @@ public sealed class WorldCommandLog
     /// <summary>All applied entries, in order.</summary>
     public IReadOnlyList<LogEntry> Entries => _entries;
 
-    /// <summary>This peer's own applied entries, in order (the undo candidates).</summary>
+    /// <summary>This peer's own *editor* applied entries, in order (the undo candidates).</summary>
     public IEnumerable<LogEntry> OwnEntries()
     {
         foreach (var e in _entries)
-            if (e.Command.AuthorPeerId == LocalPeerId) yield return e;
+            if (IsUndoCandidate(e)) yield return e;
     }
+
+    /// <summary>
+    /// Whether an entry is undoable by this client: it must be our own command
+    /// (§5.5 Rule 1, part 1) **and** an editor command (Rule 1, part 2 — game-mode
+    /// and script geometry is never undoable).
+    /// </summary>
+    public bool IsUndoCandidate(LogEntry e) =>
+        e.Command.AuthorPeerId == LocalPeerId && e.Command.Source == CommandSource.Editor;
 
     public WorldCommandLog(int localPeerId = 0) => LocalPeerId = localPeerId;
 
@@ -61,7 +69,7 @@ public sealed class WorldCommandLog
     public ulong NextSequence() => _nextSequence;
 
     /// <summary>Record an applied command and advance the sequence. Clears the redo stack.</summary>
-    public LogEntry Record(EditCommand cmd)
+    public LogEntry Record(WorldCommand cmd)
     {
         cmd.Sequence = _nextSequence++;
         var entry = new LogEntry { Command = cmd };
@@ -70,11 +78,11 @@ public sealed class WorldCommandLog
         return entry;
     }
 
-    /// <summary>The most recent action of the given peer: the next undo candidate (own commands only).</summary>
+    /// <summary>The most recent action of this peer: the next undo candidate (own editor commands only).</summary>
     public LogEntry? PeekUndo()
     {
         for (int i = _entries.Count - 1; i >= 0; i--)
-            if (_entries[i].Command.AuthorPeerId == LocalPeerId) return _entries[i];
+            if (IsUndoCandidate(_entries[i])) return _entries[i];
         return null;
     }
 
@@ -89,7 +97,7 @@ public sealed class WorldCommandLog
     {
         for (int i = _entries.Count - 1; i >= 0; i--)
         {
-            if (_entries[i].Command.AuthorPeerId != LocalPeerId) continue;
+            if (!IsUndoCandidate(_entries[i])) continue;
             var entry = _entries[i];
             _entries.RemoveAt(i);
             _undone.Add(entry);
@@ -115,7 +123,7 @@ public sealed class WorldCommandLog
     {
         for (int i = _entries.Count - 1; i >= 0; i--)
         {
-            if (_entries[i].Command.AuthorPeerId != LocalPeerId) continue;
+            if (!IsUndoCandidate(_entries[i])) continue;
             var entry = _entries[i];
             _entries.RemoveAt(i);
             return entry;
@@ -124,7 +132,7 @@ public sealed class WorldCommandLog
     }
 
     /// <summary>Append an already-sequenced remote command (does not affect redo).</summary>
-    public LogEntry RecordRemote(EditCommand cmd)
+    public LogEntry RecordRemote(WorldCommand cmd)
     {
         var entry = new LogEntry { Command = cmd };
         _entries.Add(entry);
