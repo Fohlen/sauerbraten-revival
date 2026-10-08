@@ -298,6 +298,9 @@ def main() -> int:
         # game-mode entities: CTF flags (ctf.h), capture bases (capture.h)
         "flags/neutral", "flags/red", "flags/blue",
         "base/neutral", "base/red", "base/blue",
+        # monsters (monster.cpp monstertypes)
+        "ogro", "monster/rhino", "monster/rat", "monster/slith", "monster/bauul",
+        "monster/hellpig", "monster/knight", "monster/goblin", "monster/spider",
     ]
     entries = [{"index": -1, "path": name} for name in builtins]
     seen = {e["path"] for e in entries}
