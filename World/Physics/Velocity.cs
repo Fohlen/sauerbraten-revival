@@ -41,7 +41,9 @@ public static class Movement
         }
         else if (pl.PhysState >= Phys.PhysSlope || water)
         {
-            if (water) pl.Vel /= 8f;
+            // physics.cpp:1602 — only dampen on the frame the entity *enters* water,
+            // not every frame it stays in.
+            if (water && pl.InWater == Phys.MatAir) pl.Vel /= 8f;
             if (pl.Jumping)
             {
                 pl.Jumping = false;
@@ -54,7 +56,8 @@ public static class Movement
         Vector3 m = Vector3.Zero;
         if (pl.Move != 0 || pl.Strafe != 0)
         {
-            m = VecFromYawPitch(pl.Yaw, floating || water || pl.Type == Phys.EntCamera ? 0f : 0f, pl.Move, pl.Strafe);
+            // physics.cpp:1618 — pitch feeds movement only when floating/in water/camera.
+            m = VecFromYawPitch(pl.Yaw, floating || water || pl.Type == Phys.EntCamera ? pl.Pitch : 0f, pl.Move, pl.Strafe);
             if (!floating && pl.PhysState >= Phys.PhysSlope)
             {
                 float dz = -(m.X * pl.Floor.X + m.Y * pl.Floor.Y) / pl.Floor.Z;
@@ -66,7 +69,11 @@ public static class Movement
         Vector3 d = m * pl.MaxSpeed;
         if (pl.Type == Phys.EntPlayer)
         {
-            if (floating) { /* floatspeed/100 for the local player; not used here */ }
+            if (floating)
+            {
+                // physics.cpp:1636 — floatspeed scales the local player's fly speed.
+                if (pl.IsLocalPlayer) d *= pl.FloatSpeed / 100.0f;
+            }
             else if (!water) d *= (pl.Move != 0 && pl.Strafe == 0 ? 1.3f : 1.0f) * (pl.PhysState < Phys.PhysSlope ? 1.3f : 1.0f);
         }
         float fric = water && !floating ? 20.0f : (pl.PhysState >= Phys.PhysSlope || floating ? 6.0f : 30.0f);

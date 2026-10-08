@@ -235,9 +235,19 @@ Still to do / known deviations:
 - Collision volume/`moveres` are shared with A3; velocity + collision are verified
   to ~99.8% of steps (deformed-cube slope landings are the residual — see
   [movement-verification.md](movement-verification.md)).
-- Water, crouch, spectator-float, gun sway and jump/land/water sounds are not
-  ported yet.
+- Water, spectator-float and the strafe-roll camera state are now ported
+  (`PhysEnt.InWater`, `PhysEnt.State`, `Movement.ModifyVelocity`/
+  `ModifyGravity`, `OctaPhysics.MovePlayer`): the one-time `vel /= 8` entry damp,
+  the mid-body water-exit re-lookup, `physicstrigger` water transitions and the
+  `CS_EDITING`/`CS_SPECTATOR` floating branch. Verified against the original via
+  the A1 golden fixtures (`tools/refharness/golden/`, diffed by
+  `test/WaterPhysicsTest.cs`).
+- Water gun sway / jump / land / water sounds are wired through the
+  `OctaPhysics.PhysTrigger` seam but not yet emitted by the game layer.
+- **Crouch is not a thing in Cube 2 / Sauerbraten r6889** — there is no crouch
+  key and no variable player height in the original `src/`. The player volume is
+  fixed (`radius 4.1`, `eyeheight 14`, `aboveeye 1`). Nothing to port.
 - `MapPlayer.Setup` spawns at the first `ET_PLAYERSTART`; multi-spawn/team modes
-  and `game::suicide` respawn are not wired.
+  and `game::suicide` respawn are not wired. F1 toggles the spectator-float state.
 - `scripts/Player.cs`, `scenes/player.tscn` and `scenes/test_level.tscn` (the old
   `move_and_slide()` prototype and its CSG level) have been removed.

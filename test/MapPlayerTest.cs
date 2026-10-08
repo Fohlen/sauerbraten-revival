@@ -96,6 +96,77 @@ public class MapPlayerTest : TestClass
     }
 
     [Test]
+    public void SpectatorFloatIgnoresGravityAndFliesOnPitch()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        Step(player, 400); // settle on the floor
+
+        player.ToggleFloat();
+        TestAssert.True(player.Floating, "floating after toggle");
+
+        // Fly forward with a downward pitch: the floating branch moves along the view
+        // direction and never applies gravity/collision.
+        player.SetView(0f, -30f);
+        player.Entity.Move = 1;
+        var before = player.Entity.O;
+        Step(player, 40);
+        var after = player.Entity.O;
+
+        GD.Print($"[player] float: {before} -> {after} ps={player.Entity.PhysState}");
+        TestAssert.Equal(Phys.PhysFloat, player.Entity.PhysState, "physstate is PHYS_FLOAT");
+        TestAssert.True(after.Y > before.Y + 1f, "flew forward");
+        TestAssert.True(after.Z < before.Z - 1f, "pitch-down flew downward despite gravity");
+        player.Free();
+    }
+
+    [Test]
+    public void WaterEntersAndSlows()
+    {
+        // Synthetic 32^3 world: solid floor (z<8), water band (z 8..16), air above.
+        // The mid-body sample for eye z=14 is z=11.25, which lands in the band.
+        var octa = new Octa(5);
+        PaintByZ(octa.WorldRoot, 0, octa.WorldSize);
+
+        var phys = new OctaPhysics(octa);
+        var pl = new PhysEnt { Type = Phys.EntPlayer, O = new Vector3(16, 16, 14), PhysState = Phys.PhysFall };
+
+        // First step inside water damps velocity (inwater transitions 0 -> MAT_WATER).
+        phys.MovePlayer(pl, Phys.MoveRes, Phys.PhysFrameTime);
+        TestAssert.Equal((int)Phys.MatWater, pl.InWater, "water volume sets InWater = MAT_WATER");
+        TestAssert.True(pl.PhysState != Phys.PhysFloat, "swimming is not the floating state");
+
+        // Once established in water, the per-frame damping must NOT re-apply (which
+        // would pin velocity near zero). Give it horizontal velocity and step.
+        pl.Vel = new Vector3(100, 0, 0);
+        phys.MovePlayer(pl, Phys.MoveRes, Phys.PhysFrameTime);
+        TestAssert.True(pl.Vel.X > 50f, $"velocity persists in water (got {pl.Vel.X})");
+        TestAssert.Equal((int)Phys.MatWater, pl.InWater, "still in water");
+    }
+
+    /// <summary>Paint the octree into an 8-unit leaf grid: solid below z=8, water 8..16, empty above.</summary>
+    private static void PaintByZ(Cube[] c, int oz, int size)
+    {
+        if (size > 8)
+        {
+            c[0].Children ??= new Octa(0).NewCubes(Octa.F_EMPTY);
+            for (int i = 0; i < 8; i++)
+            {
+                c[i].Children ??= new Octa(0).NewCubes(Octa.F_EMPTY);
+                PaintByZ(c[i].Children!, oz + ((i >> 2) & 1) * (size >> 1), size >> 1);
+            }
+            return;
+        }
+        int z = oz + size / 2;
+        for (int i = 0; i < 8; i++)
+        {
+            if (z < 8) { c[i].SetFaces(Octa.F_SOLID); c[i].Material = Octa.MAT_AIR; }
+            else if (z < 16) { c[i].SetFaces(Octa.F_EMPTY); c[i].Material = Octa.MAT_WATER; }
+            else { c[i].SetFaces(Octa.F_EMPTY); c[i].Material = Octa.MAT_AIR; }
+        }
+    }
+
+    [Test]
     public void CameraForwardMatchesVecFromYawPitch()
     {
         var octa = TestData.ReadMap().ToOcta();

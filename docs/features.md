@@ -91,11 +91,20 @@ Done:
 - [x] External events (teleports, jump pads, death/respawn) resynced; fixed 200 Hz `moveres` substeps.
 - [x] Deterministic reference replay (`SAUER_REPLAY`, self-terminating) + reference `move()` trace (`SAUER_MOVETRACE`).
 - [x] Live player on the ported physics (`MapPlayer.cs`; timing/input layers 3–4 ported).
+- [x] Water + spectator-float states (`PhysEnt.InWater`/`State`, the `vel /= 8`
+      entry damp, mid-body water-exit re-lookup, `CS_EDITING`/`CS_SPECTATOR`
+      floating branch) — verified against the original via the A1 golden fixtures
+      (`tools/refharness/golden/water_*.csv`, `float_forward.csv`) and
+      `test/WaterPhysicsTest.cs`. **Crouch does not exist in Cube 2 r6889** (no
+      crouch key, fixed player height) and is therefore not a port item.
 - [x] Close the last ~0.2%: deformed-cube slope/step-up landing timing (fixed via the `-ffast-math` step-up fold + event-free recording; the 3/7001 residual are `PHYS_STEP_UP` **label-only** flips on a 45° slope contour with zero position/velocity error).
 
 Remaining:
 
-- [ ] Water, crouch, spectator-float physics states.
+- [x] Water, spectator-float physics states (crouch is not a Cube 2 feature —
+      no crouch key and a fixed player volume; nothing to port).
+- [ ] `bounce()` for `ENT_BOUNCE` movers (boxes/platforms) — lands with movable
+      entities, not the player.
 
 ## 4. Editor MVP *(defining feature)*
 

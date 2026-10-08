@@ -29,6 +29,7 @@ public static class Phys
     public const int CollideEllipse = 0, CollideObb = 1, CollideEllipsePrecise = 2;
 
     // iengine.h material flags (MATF_*).
+    public const ushort MatAir = 0;
     public const ushort MatWater = 1 << 2, MatLava = 2 << 2, MatGlass = 3 << 2;
     public const ushort MatNoClip = 1 << 5, MatClip = 2 << 5, MatGameClip = 3 << 5;
     public const ushort MatFIndex = 3, MatFVolume = 7 << 2, MatFClip = 7 << 5;
@@ -58,8 +59,23 @@ public sealed class PhysEnt
     public int TimeInAir;
     public bool Dead; // hit MAT_DEATH / fell out of the world (game::suicide)
     public float Yaw;
+    public float Pitch;          // ents.h:71 — used by vecfromyawpitch when floating/water/camera
+    public float Roll;           // ents.h:71 — strafe roll (camera only)
     public bool Jumping;
     public float MaxSpeed = 100.0f;
+    /// <summary>physics.cpp:1587 <c>floatspeed</c> — spectator/edit fly speed (% of maxspeed).</summary>
+    public float FloatSpeed = 100.0f;
+    /// <summary>True for the local player (<c>pl == player</c>); floatspeed only applies to it.</summary>
+    public bool IsLocalPlayer = true;
+
+    /// <summary>ents.h:79 <c>inwater</c> — the material volume the entity is currently in
+    /// (0 = MAT_AIR). The velocity damping on entering water keys off this.</summary>
+    public int InWater;
+
+    // ents.h:60 CS_* player states (only the two physics cares about are named here).
+    public const int CsAlive = 0, CsDead = 1, CsSpawning = 2, CsLagged = 3, CsEditing = 4, CsSpectator = 5;
+    /// <summary>ents.h:82 <c>state</c>; <see cref="CsEditing"/>/<see cref="CsSpectator"/> imply floating.</summary>
+    public int State = CsAlive;
 }
 
 /// <summary>The move()/collide() state machine. One per world (collision is stateless).</summary>
@@ -569,13 +585,21 @@ public sealed class OctaPhysics
 
     // ---- moveplayer ------------------------------------------------------
 
-    /// <summary>physics.cpp:1681 <c>moveplayer</c>.</summary>
-    public void MovePlayer(PhysEnt pl, int moveres, int curtime, bool floating = false)
+    /// <summary>
+    /// physics.cpp:1681 <c>moveplayer</c>. <paramref name="floatingOverride"/> is a test
+    /// seam: when null (the default) floating is derived from the player state exactly
+    /// like the engine (<c>state == CS_EDITING || state == CS_SPECTATOR</c>).
+    /// </summary>
+    public void MovePlayer(PhysEnt pl, int moveres, int curtime, bool? floatingOverride = null, bool local = true)
     {
         int material = _octa.LookupMaterial(new Vector3(pl.O.X, pl.O.Y, pl.O.Z + (3 * pl.AboveEye - pl.EyeHeight) / 4));
         bool water = Phys.IsLiquid((ushort)(material & Phys.MatFVolume));
+        bool floating = floatingOverride ?? (pl.Type == Phys.EntPlayer && (pl.State == PhysEnt.CsEditing || pl.State == PhysEnt.CsSpectator));
         float secs = curtime / 1000f;
+
+        // apply gravity
         if (!floating) Movement.ModifyGravity(pl, water, curtime);
+        // apply any player generated changes in velocity
         Movement.ModifyVelocity(pl, water, floating, curtime);
 
         Vector3 d = pl.Vel;
@@ -584,12 +608,12 @@ public sealed class OctaPhysics
         d *= secs;
         pl.Blocked = false;
 
-        if (floating)
+        if (floating)                // just apply velocity
         {
             if (pl.PhysState != Phys.PhysFloat) { pl.PhysState = Phys.PhysFloat; pl.TimeInAir = 0; pl.Falling = Vector3.Zero; }
             pl.O += d;
         }
-        else
+        else                        // apply velocity with collision
         {
             float f = 1.0f / moveres;
             int collisions = 0;
@@ -598,9 +622,40 @@ public sealed class OctaPhysics
                 if (!Move(pl, ref d) && ++collisions < 5) i--; // discrete steps + sliding
         }
 
+        // physics.cpp:1725 — smooth strafe roll (camera only; never affects collision).
+        UpdateRoll(pl, floating, curtime);
+
+        // physics.cpp:1731 — play sounds on water transitions. The engine re-looks-up
+        // the material at the mid-body when the eye has left the volume, so a
+        // chest-high step out of water still reports "exited" rather than swimming.
+        if (pl.InWater != Phys.MatAir && !water)
+        {
+            material = _octa.LookupMaterial(new Vector3(pl.O.X, pl.O.Y, pl.O.Z + (pl.AboveEye - pl.EyeHeight) / 2));
+            water = Phys.IsLiquid((ushort)(material & Phys.MatFVolume));
+        }
+        if (pl.InWater == Phys.MatAir && water) PhysicalTrigger(pl, local, 0, -1, material & Phys.MatFVolume);
+        else if (pl.InWater != Phys.MatAir && !water) PhysicalTrigger(pl, local, 0, 1, pl.InWater);
+        pl.InWater = water ? (material & Phys.MatFVolume) : Phys.MatAir;
+
         // physics.cpp:1740 — suicide on death material / out of the world (game logic).
         if (pl.O.Z < 0 || (material & Phys.MatDeath) != 0) pl.Dead = true;
     }
+
+    /// <summary>physics.cpp:1725 — the automatic strafe roll (camera only).</summary>
+    private static void UpdateRoll(PhysEnt pl, bool floating, int curtime)
+    {
+        if (floating) { pl.Roll = 0; return; }
+        const float maxroll = 0.0f; // VARP(maxroll, 0, 0, 20): default off in r6889
+        if (pl.Strafe != 0 && maxroll != 0) pl.Roll = 0; // (kept for parity; off by default)
+        else if (curtime == Phys.PhysFrameTime) pl.Roll *= 0.95f;
+        else pl.Roll *= Mathf.Pow(0.95f, curtime / (float)Phys.PhysFrameTime);
+    }
+
+    /// <summary>game::physicstrigger seam — sounds/events on floor/water transitions.
+    /// Null in production; wired by the game layer later.</summary>
+    public static System.Action<PhysEnt, bool, int, int, int> PhysTrigger;
+    private static void PhysicalTrigger(PhysEnt pl, bool local, int floorLevel, int waterLevel, int material = -1)
+        => PhysTrigger?.Invoke(pl, local, floorLevel, waterLevel, material);
 
     // ---- vector helpers (engine vec::project / projectxy) ----------------
 

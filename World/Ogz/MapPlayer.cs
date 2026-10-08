@@ -141,6 +141,11 @@ public partial class MapPlayer : Node3D
         Entity.Strafe = (Input.IsActionPressed("strafe_right") ? 1 : 0) - (Input.IsActionPressed("strafe_left") ? 1 : 0);
         Entity.Jumping = Input.IsActionPressed("jump");
 
+        // Toggle spectator/edit float (physics.cpp:5682 — CS_EDITING/CS_SPECTATOR
+        // make moveplayer() fly). pitch feeds movement while floating (see
+        // Movement.ModifyVelocity).
+        if (Input.IsActionJustPressed("spectate")) ToggleFloat();
+
         Advance(delta);
     }
 
@@ -152,6 +157,7 @@ public partial class MapPlayer : Node3D
     public void Advance(double delta)
     {
         if (!Initialized || _phys == null) return;
+        Entity.Pitch = Pitch; // pitch feeds movement only while floating (vecfromyawpitch)
         _accum += delta;
         int guard = 0;
         while (_accum >= StepSeconds && guard++ < 100)
@@ -161,6 +167,21 @@ public partial class MapPlayer : Node3D
         }
         SyncTransform();
     }
+
+    /// <summary>
+    /// Toggle the spectator/edit floating state (<c>CS_SPECTATOR</c>). While floating
+    /// the player ignores gravity and collision and flies along the view direction,
+    /// exactly like the engine's <c>moveplayer()</c> floating branch. Bound to
+    /// <c>spectate</c> (F1).
+    /// </summary>
+    public void ToggleFloat()
+    {
+        Entity.State = Entity.State == PhysEnt.CsSpectator ? PhysEnt.CsAlive : PhysEnt.CsSpectator;
+        if (Entity.State == PhysEnt.CsSpectator) Entity.Jumping = false;
+    }
+
+    /// <summary>True while the player is in the spectator/edit floating state.</summary>
+    public bool Floating => Entity.State == PhysEnt.CsEditing || Entity.State == PhysEnt.CsSpectator;
 
     /// <summary>Set the view angles directly (tests/diagnostics).</summary>
     public void SetView(float yawDegrees, float pitchDegrees)

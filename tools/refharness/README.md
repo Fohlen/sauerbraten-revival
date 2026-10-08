@@ -36,6 +36,10 @@ reproducible; the authoritative values live in the table below.
 | `ground_strafe` | 99.989 u/s | — | — |
 | `jump_only` | — | 19.604 u | 700 ms |
 | `jump_forward` | 151.238 u/s | 19.604 u | 700 ms |
+| `water_forward` | 99.408 u/s | — | — |
+| `water_diag` | 99.408 u/s | — | — |
+| `water_jump` | 99.408 u/s | 24.070 u | — |
+| `float_forward` | 93.959 u/s | 30.535 u | — |
 
 Notes:
 - Top speeds approach but do not fully reach 130/100 within 1 s — the friction
@@ -44,6 +48,24 @@ Notes:
   but is throttled by air control (`fric = 30`).
 - The jump is **damped**: the impulse lives in `vel`, which is friction-lerped
   toward zero in the air. A naive ballistic estimate gives ~39 u / 1.25 s — wrong.
+- Water is entered at t=0 (`inwater` 0→`MAT_WATER`), so the one-time `vel /= 8`
+  entry damp is applied to the initial zero velocity. In water there is no
+  forward-only/airborne bonus and `fric = 20`; horizontal speed converges to
+  `maxspeed = 100`. `water_jump` rises **higher** than on land (24.07 vs 19.60 u)
+  because water halves gravity (`falling` damped with `fric = 2`).
+- `float_forward` is the spectator/edit state with `pitch = 20°`: no gravity, the
+  view pitch feeds movement, and the apex grows ballistically.
+
+`water_*.csv` and `float_forward.csv` are committed under `golden/` and diffed
+against the C# port by `test/WaterPhysicsTest.cs` at float precision.
+
+### Crouch
+
+Cube 2 / Sauerbraten **r6889 has no crouch** — there is no crouch key and no
+variable player height anywhere in `src/` (`grep -ri crouch src` is empty). The
+player volume is fixed (`radius = 4.1`, `eyeheight = 14`, `aboveeye = 1`). This
+is a deliberate non-feature of the original and is *not* part of the physics
+port; see [../movement-physics.md](../movement-physics.md) §5.
 
 ## Roadmap
 
