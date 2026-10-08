@@ -83,10 +83,10 @@ Done:
 - [x] External events (teleports, jump pads, death/respawn) resynced; fixed 200 Hz `moveres` substeps.
 - [x] Deterministic reference replay (`SAUER_REPLAY`, self-terminating) + reference `move()` trace (`SAUER_MOVETRACE`).
 - [x] Live player on the ported physics (`MapPlayer.cs`; timing/input layers 3–4 ported).
+- [x] Close the last ~0.2%: deformed-cube slope/step-up landing timing (fixed via the `-ffast-math` step-up fold + event-free recording; the 3/7001 residual are `PHYS_STEP_UP` **label-only** flips on a 45° slope contour with zero position/velocity error).
 
 Remaining:
 
-- [x] Close the last ~0.2%: deformed-cube slope/step-up landing timing (fixed via the `-ffast-math` step-up fold + event-free recording; the 3/7001 residual are `PHYS_STEP_UP` **label-only** flips on a 45° slope contour with zero position/velocity error).
 - [ ] Water, crouch, spectator-float physics states.
 
 ## 4. Editor MVP *(defining feature)*
