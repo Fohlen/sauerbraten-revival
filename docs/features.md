@@ -111,13 +111,13 @@ Done (lives in the dev viewer; not yet a standalone offline tool):
       stream, not a revived SP-only rigid-body subsystem. The mode entities stay
       as **representation** (models + gizmos), which is correct. Revisited only if
       we ship the SP campaign, and then via commands.
-
-Remaining:
-
-- [ ] Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn`.
+- [x] Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn`.
       - [x] **Geometry + entities**: `OgzConverter` writes `world.res` + `Level.tscn` from
             a parsed `.ogz` (asserted by `test/MapFormatTest.cs`, church51 round-trips
             exactly). Metadata-driven material manifest emission is still pending.
+
+Remaining:
+
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
