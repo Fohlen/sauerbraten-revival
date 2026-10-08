@@ -28,6 +28,7 @@ public class A3ReplayTest : TestClass
     [Test] public void ReplaysSession2() => Replay("session2.csv");
     [Test] public void ReplaysSession3() => Replay("session3.csv");
     [Test] public void ReplaysSessionStable() => Replay("session-stable.csv");
+    [Test] public void ReplaysSessionStable2() => Replay("session-stable2.csv");
 
     private static void Replay(string file)
     {
@@ -45,7 +46,11 @@ public class A3ReplayTest : TestClass
             foreach (var l in File.ReadAllLines(events).Skip(1))
             {
                 var p = l.Split(',');
-                if (p.Length >= 3 && (p[2] == "teleport" || p[2] == "jumppad")) resync.Add(int.Parse(p[0]));
+                // External movement impulses the port does not model: teleports,
+                // jump pads, weapon recoil (kick) and impact push (hitpush, which
+                // also covers being shot). Resync at each instead of diverging.
+                if (p.Length >= 3 && (p[2] == "teleport" || p[2] == "jumppad" || p[2] == "kick" || p[2] == "hitpush"))
+                    resync.Add(int.Parse(p[0]));
             }
 
         var octa = TestData.ReadMap("church51").ToOcta();

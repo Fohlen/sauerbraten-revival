@@ -1,0 +1,33 @@
+--- a/fpsgame/weapon.cpp
++++ b/fpsgame/weapon.cpp
+@@ -797,6 +797,9 @@
+         float dist = to.dist(from);
+         vec kickback = vec(dir).mul(guns[d->gunselect].kickamount*-2.5f);
+         d->vel.add(kickback);
++#ifndef STANDALONE
++        if(d==player1) a2traceevent("kick,%d,%.5f,%.5f,%.5f", d->gunselect, kickback.x, kickback.y, kickback.z);
++#endif
+         float shorten = 0;
+         if(guns[d->gunselect].range && dist > guns[d->gunselect].range)
+             shorten = guns[d->gunselect].range;
+--- a/fpsgame/game.h
++++ b/fpsgame/game.h
+@@ -537,6 +537,8 @@
+         return gun >= 0 && gun <= NUMGUNS && gun != exclude && ammo[gun] > 0;
+     }
+ };
++
++namespace game { extern fpsent *player1; } // fwd decl for the A2 hook in fpsent::hitpush
+ 
+ struct fpsent : dynent, fpsstate
+ {
+@@ -581,6 +583,9 @@
+         vec push(dir);
+         push.mul((actor==this && guns[gun].exprad ? EXP_SELFPUSH : 1.0f)*guns[gun].hitpush*damage/weight);
+         vel.add(push);
++#ifndef STANDALONE
++        if(this==game::player1) a2traceevent("hitpush,%d,%.5f,%.5f,%.5f", gun, push.x, push.y, push.z);
++#endif
+     }
+ 
+     void stopattacksound()
