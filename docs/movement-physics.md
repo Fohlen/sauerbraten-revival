@@ -219,8 +219,6 @@ step count**, never scale the step by a variable `delta`.
 
 ## 5. Port notes / deviations in the current MVP
 
-Roadmap/status authority: [features.md §3](features.md#3-physics-movement--collision).
-
 The live player is `World/Ogz/MapPlayer.cs`. It uses the **ported octree physics**
 (`World/Physics/OctaPhysics.cs` — `collide`/`move`/`trystepup`/`trystepdown`/…), so
 it climbs ramp lips and stairs like the original, and shares one implementation

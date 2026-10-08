@@ -13,9 +13,6 @@ deliberately go beyond the original by making the world **mutable at runtime**
 
 ## Scope
 
-Roadmap/status authority: [features.md](features.md). This section is the
-standing scope; timing lives in the roadmap.
-
 - Port the original movement/physics first, and prove it against the original
   (see [movement-verification.md](movement-verification.md)).
 - Reuse the original engine only as a **one-time offline source** for content

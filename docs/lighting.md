@@ -444,8 +444,5 @@ Project:
 
 ## 8. Sequencing
 
-Roadmap timing and status are **not** duplicated here — see
-[features.md](features.md) (the post-MVP fidelity list and the ordered roadmap).
-The only design-level ordering this doc fixes is **T1 before T2**: import the
-original atlases first (cheap, locks the vertex/surface contract), rebake last
-(needs `shadowray`).
+T1 (import) comes before T2 (rebake): import the original atlases first — cheap,
+and it locks the vertex/surface contract — then rebake last (needs `shadowray`).

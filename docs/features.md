@@ -48,9 +48,6 @@ This list is the one place these are tracked; design lives in the linked docs.
 - **`movable.cpp`** (box/barrel/platform/elevator) — deliberately not ported; SP-only.
 - **Single-player / bot AI** — out of MVP scope.
 
-> **Do not re-litigate ordering in other docs.** If a design doc needs to note
-> what is not yet implemented, link here instead of restating the plan.
-
 ---
 
 ## 1. World core (octree + rendering)

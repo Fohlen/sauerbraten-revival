@@ -229,8 +229,7 @@ The native format is:
 
 ## Lightmap handling
 
-Roadmap/status: [features.md §2](features.md#2-ogz-import-pipeline).
-Design: [lighting.md](lighting.md).
+See [lighting.md](lighting.md) for the design.
 
 Options for imported lightmaps:
 
@@ -465,9 +464,6 @@ field order), so the map archive hash covers it like the octree. Asserted by
 [`test/ResourceManifestTest.cs`](../test/ResourceManifestTest.cs).
 
 ## Converter GUI
-
-Roadmap/status (CLI front end, one-shot export):
-[features.md §2](features.md#2-ogz-import-pipeline).
 
 A single-panel wizard imports one map at a time:
 [`scenes/converter.tscn`](../scenes/converter.tscn) +

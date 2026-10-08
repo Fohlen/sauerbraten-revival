@@ -7,9 +7,6 @@ The reference source is assumed at `/Users/fohlen/Downloads/sauerbraten-code-r68
 
 ## Status
 
-Verification-tooling status for A1–A4 (roadmap/status authority:
-[features.md §3](features.md#3-physics-movement--collision)).
-
 | Stage | State | Where |
 | --- | --- | --- |
 | A1 — standalone reference harness | ✅ | `tools/refharness/` (velocity model, golden CSVs, determinism) |
@@ -292,7 +289,6 @@ nondeterminism.
 
 ## Collision acceptance criteria (layer 2)
 
-Tracked in [features.md §3](features.md#3-physics-movement--collision).
 Once our own collision is ported, these must match the original. **Step-up is
 mandatory** — see `movement-physics.md` and `physics.cpp:1102`.
 
@@ -310,7 +306,7 @@ mandatory** — see `movement-physics.md` and `physics.cpp:1102`.
 ## Golden numbers
 
 The A1 harness (`tools/refharness/`) is the source of truth; the values below are
-the derived expectations. Status: [features.md §3](features.md#3-physics-movement--collision).
+the derived expectations.
 
 | Quantity | Expected |
 | --- | --- |
@@ -329,7 +325,6 @@ the harness gives the truth.
 
 ## Layer coverage
 
-Tracked in [features.md §3](features.md#3-physics-movement--collision).
 Plan A validates **layer 1 (velocity model)** exactly and, once A3 runs on
 geometry, the **layer 2 collision** too. Layers 3–5 (timing, input, camera /
 feedback) need their own checks — see [architecture.md](architecture.md).

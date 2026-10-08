@@ -5,9 +5,6 @@ with the engine reference and the intended fix. Names mirror engine tokens so
 entries stay greppable against the C++ source. Add an entry whenever we find a
 divergence we are not fixing right now.
 
-> Remediation **timing/priorities** are tracked in [features.md](features.md);
-> this file is the bug list, not the roadmap.
-
 ---
 
 ## Water & waterfalls
