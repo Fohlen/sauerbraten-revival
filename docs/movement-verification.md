@@ -289,8 +289,9 @@ nondeterminism.
 
 ## Collision acceptance criteria (layer 2)
 
-Once our own collision is ported, these must match the original. **Step-up is
-mandatory** — see `movement-physics.md` and `physics.cpp:1102`.
+Validated by the A3 real-geometry differential. These are the behaviours it
+covers — **step-up is mandatory** — see `movement-physics.md` and
+`physics.cpp:1102`.
 
 - Walk onto the base of a ~18° ramp with no jump (base lip ~1 u) — must succeed
   via `trystepup`.
@@ -325,8 +326,8 @@ the harness gives the truth.
 
 ## Layer coverage
 
-Plan A validates **layer 1 (velocity model)** exactly and, once A3 runs on
-geometry, the **layer 2 collision** too. Layers 3–5 (timing, input, camera /
+Plan A validates **layer 1 (velocity model)** and **layer 2 (collision)** exactly
+via the A3 real-geometry differential. Layers 3–5 (timing, input, camera /
 feedback) need their own checks — see [architecture.md](architecture.md).
 
 **Layer 3–4 captured (A2 input trace).** `SAUER_INPUTTRACE`

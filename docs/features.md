@@ -176,7 +176,7 @@ Done:
 - [x] **A1** reference harness (`tools/refharness/`), **A2** trace capture (`SAUER_TRACE`), **A4** determinism gate.
 - [x] Velocity model validated: **100% flat-floor**, **97.3% free-air** exact matches.
 - [x] Port `move`/`collide`/`trystepup`/`trystepdown` + clipping/visibility machinery (`World/Physics/`).
-- [x] **A3** input-replay differential on real geometry: **`session-clean.csv` 100.0% velocity, 100.0% falling, 0.0149 u max position error** (7001 steps, event-free movement).
+- [x] **A3** input-replay differential on real geometry: **`session-clean.csv` 100.0% velocity, 100.0% falling, 0.0149 u max position error** (7001 steps, event-free movement). This validates **layer 2 (collision)** — ramps, step-up/down, wall slide, `FLOORZ`/`SLOPEZ` cutoffs.
 - [x] External events (teleports, jump pads, death/respawn) resynced; fixed 200 Hz `moveres` substeps.
 - [x] Deterministic reference replay (`SAUER_REPLAY`, self-terminating) + reference `move()` trace (`SAUER_MOVETRACE`).
 - [x] Live player on the ported physics (`MapPlayer.cs`; timing/input layers 3–4 ported).
@@ -199,9 +199,6 @@ Done:
 
 Remaining:
 
-- [ ] Layer 2 collision acceptance criteria on real geometry (walk ramp/steps,
-      wall slide, `FLOORZ`/`SLOPEZ` cutoffs) — see
-      [movement-verification.md § Collision acceptance criteria](movement-verification.md#collision-acceptance-criteria-layer-2).
 - [ ] Layers 3–5 camera/feedback: match FOV (100), tune sensitivity, mouse accel,
       gun sway, jump/land/water sounds. See
       [movement-physics.md § Port notes](movement-physics.md#5-port-notes--deviations-in-the-current-mvp).
