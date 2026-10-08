@@ -162,6 +162,9 @@ ship. The **unit of distribution, hashing, and multiplayer parity is the archive
 
 ## 5. Material & lighting fidelity (staged)
 
+Design framing; **roadmap timing/status is in [features.md](features.md)** (see the
+post-MVP fidelity list) and the model in [lighting.md](lighting.md).
+
 We work up from approximate to exact, keeping the data model stable so we never
 have to rewrite world data to improve rendering:
 
@@ -188,6 +191,9 @@ between stages.
 No CubeScript, no interpreter, no cross-map ambiguity.
 
 ### 6.1 Keybinds: defaults, remapping, and what is (not yet) bound
+
+Status/roadmap for remapping: [features.md › configuration](features.md#cross-cutting-configuration).
+The mechanism below is the design.
 
 Editor/game actions are `InputMap` actions, **not** hardcoded keys, so they can be
 rebound. The state today and the intended shape:
@@ -220,6 +226,9 @@ table consulted in `_UnhandledInput`, not a pure action lookup. Deferred.
 
 ## 7. Modding & Workshop
 
+Roadmap/status: [features.md › modding](features.md#cross-cutting-modding). The
+text below is the design.
+
 **Content mods are easy** — Resources, ConfigFiles, our world format, and model
 imports cover maps, materials, entities, weapon stats, and mode parameters.
 
@@ -246,6 +255,7 @@ imports cover maps, materials, entities, weapon stats, and mode parameters.
 
 ## 8. Movement verification (Plan A)
 
+Roadmap/status: [features.md §3](features.md#3-physics-movement--collision).
 Full detail in [movement-verification.md](movement-verification.md). Summary:
 
 - **A1** — standalone C++ harness running the *original* movement functions at

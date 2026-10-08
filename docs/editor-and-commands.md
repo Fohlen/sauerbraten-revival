@@ -765,6 +765,10 @@ caught a missing `validatec` pass in `SubdivideCube`.
 
 ## 10. Implementation order (milestones)
 
+**Roadmap/status authority: [features.md §4](features.md#4-editor-mvp-defining-feature).**
+This section is the editor's internal design/order; it must not contradict the
+global roadmap.
+
 Ordered so each step is independently verifiable and unblocks the next.
 
 **M0 — Selection model (`selinfo` port).** `Selection` struct: origin, size, grid,
@@ -999,6 +1003,8 @@ The invariants this relies on:
 ---
 
 ## 12. File layout (planned)
+
+Design detail for [features.md §4](features.md#4-editor-mvp-defining-feature).
 
 ```
 World/Commands/

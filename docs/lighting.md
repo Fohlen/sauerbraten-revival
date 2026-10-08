@@ -442,20 +442,10 @@ Project:
 
 ---
 
-## 8. Sequencing / ROI
+## 8. Sequencing
 
-1. **Now:** push the roadmap (editor MVP → combat → modes). Renderer fidelity
-   does not gate movement feel or most roadmap risk.
-2. **Pull T1 forward** to ride along with the first editor-driven mesher/format
-   change (~1.5–2.5 weeks): locks the vertex/surface contract, gives classic-map
-   fidelity, and provides an A/B against the original.
-3. **Layers:** the editor MVP's "blending" is coupled to the blendmap + lightmap
-   alpha. Paint-blind (blendmap only) is possible; visualize when T1/T2 lands.
-   Treat this as a known editor dependency, not a free deferral.
-4. **Envmap sampling:** ~1 week once the normal channel + full key exist; share it
-   between the world mesher and `MaterialMesher`.
-5. **T2 rebake:** after editor/new-map flow is primary, before community/polish.
-
-Cheap insurance while deferring: keep the full surface key and extensible vertex
-arrays, keep the format versioned, decide custom-atlas-sampling over `LightmapGI`,
-and run the one-shot full export so no data is ever lost.
+Roadmap timing and status are **not** duplicated here — see
+[features.md](features.md) (the post-MVP fidelity list and the ordered roadmap).
+The only design-level ordering this doc fixes is **T1 before T2**: import the
+original atlases first (cheap, locks the vertex/surface contract), rebake last
+(needs `shadowray`).

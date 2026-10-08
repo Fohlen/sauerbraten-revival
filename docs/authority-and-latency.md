@@ -204,6 +204,9 @@ a leaderboard that means anything.
 
 ## 9. Status
 
+Roadmap/status authority: [features.md §7](features.md#7-community--online). The
+entries below are the decided design positions, not a schedule.
+
 - **Decided:** server authority for edits, movement, and combat; Steam +
   leaderboard is the forcing function; client authority is ruled out for the
   intended product.

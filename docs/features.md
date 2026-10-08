@@ -1,11 +1,19 @@
 # Features & Roadmap
 
-Living inventory. Order reflects intent, not schedule. MVP target:
-**insta CTF, effic CTF, FFA, and coop edit.**
+**Single source of truth for the roadmap and status.** Design docs explain *how*
+something works; this file says *what* we are building, *in what order*, and
+*what is done*. If another doc and this file disagree about ordering, timing, or
+status, this file wins — fix the other doc.
 
-This file only tracks status. Detail lives in the per-topic docs referenced below.
+MVP target: **insta CTF, effic CTF, FFA, and coop edit.**
+
+Status legend: `[x]` done · `[~]` partial · `[ ]` not started / deferred.
+
+---
 
 ## Roadmap
+
+Order reflects intent, not schedule.
 
 1. **World core** — native, dynamic octree (C#/.NET): structure, collision
    traversal, incremental meshing, our `Resource` format, Godot rendering. — *core done*
@@ -24,9 +32,30 @@ This file only tracks status. Detail lives in the per-topic docs referenced belo
 > validated against the real maps the trace was captured on. So map loading
 > comes before movement/collision refinement, and the editor follows.
 
+### Post-MVP / deferred fidelity
+
+Explicitly **out of scope for the MVP**, to be picked up after the roadmap above.
+This list is the one place these are tracked; design lives in the linked docs.
+
+- **Lighting** ([lighting.md](lighting.md)) — **T1** import the original baked
+  lightmaps (cheap, high value). *Opportunistic*: schedule it to ride along with
+  the first editor-driven mesher/format change rather than as a dedicated phase.
+  **T2** rebake (`calclight`), envmap world sampling, blend-layer rendering —
+  strictly post-MVP.
+- **Renderer extras** ([rendering.md](rendering.md)) — LOD, specular maps,
+  alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), exact `visibletris`,
+  face merges, T-joints, grass, RenderingServer mesh streaming.
+- **`movable.cpp`** (box/barrel/platform/elevator) — deliberately not ported; SP-only.
+- **Single-player / bot AI** — out of MVP scope.
+
+> **Do not re-litigate ordering in other docs.** If a design doc needs to note
+> what is not yet implemented, link here instead of restating the plan.
+
 ---
 
-## 1. World core (octree + rendering) — see [rendering.md](rendering.md)
+## 1. World core (octree + rendering)
+
+See [rendering.md](rendering.md).
 
 Done:
 
@@ -54,9 +83,15 @@ Done:
 Remaining:
 
 - [ ] LOD via `ArrayMesh.add_lod()`.
-- [ ] Deferred: specular maps, alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), blend shader.
+- [ ] RenderingServer mesh streaming (bypass the scene tree; [rendering.md](rendering.md#renderingserver-usage-planned-optimisation)).
+- [ ] Exact `visibletris` culling, face merges, T-joints, grass.
+- [ ] **Post-MVP fidelity** (see [Post-MVP / deferred fidelity](#post-mvp--deferred-fidelity)):
+      lightmaps/layers/envmap ([lighting.md](lighting.md)), specular maps,
+      alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), blend shader.
 
-## 2. OGZ import pipeline — see [ogz-import.md](ogz-import.md)
+## 2. OGZ import pipeline
+
+See [ogz-import.md](ogz-import.md).
 
 Done (lives in the dev viewer; not yet a standalone offline tool):
 
@@ -74,7 +109,7 @@ Done (lives in the dev viewer; not yet a standalone offline tool):
             (4..9, capped by `envmapsize` 7), `attr3` blur (1..2). Asserted by
             `test/EntityEnvMapTest.cs` on **earthstation** (38 probes). The
             sampling material side (`SHADER_ENVMAP`, `closestenvmap`) is still
-            open — see [rendering.md](rendering.md).
+            open — see [lighting.md](lighting.md).
       - [x] Mode entities (CTF/capture) with their **models and gizmos**:
             `ModeEntityBuilder` handles `FLAG`, `BASE`, `BOX`, `BARREL`,
             `PLATFORM`, `ELEVATOR`, `RESPAWNPOINT`, `CARROT` (the `fixentity`
@@ -117,24 +152,26 @@ Remaining:
 - [ ] Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn`.
       - [x] **Geometry + entities**: `OgzConverter` writes `world.res` + `Level.tscn` from
             a parsed `.ogz` (asserted by `test/MapFormatTest.cs`, church51 round-trips
-            exactly).
-      - [x] **Metadata-driven resource manifest**: `OgzConverter` bakes the
-            `metadata-catalogue/` entry into `materials/manifest.res` — every texture,
-            model and sound stored as its **full engine path** (not bare indices), so the
-            converted map is self-describing. `MapLevel` reloads it into a `MaterialSet`,
-            so native maps render textured. Asserted by `test/ResourceManifestTest.cs`.
-      - [x] **Converter GUI**: a single-panel wizard
-            (`scenes/converter.tscn` / `scripts/ConverterWizard.cs`) — pick the
-            Sauerbraten folder (remembered in `user://settings.cfg`), pick a map
-            (filterable), convert to `user://maps/<map>/`.
-      - [ ] Remaining: no CLI/headless entry point yet (GUI only); lightmaps still
-            deferred (see below).
-- [ ] Lightmap import / rebake (post-MVP) — see [lighting.md](lighting.md).
+            exactly). Metadata-driven material manifest emission is still pending.
+      - [ ] CLI/headless front end for `OgzConverter` (the GUI wizard exists;
+            [ogz-import.md § Converter GUI](ogz-import.md#converter-gui)).
+- [ ] **One-shot full metadata export** — capture all resolved engine state in the
+      single ~25-min sweep (resolved shaders/slots/vslots/config + binary sidecar
+      for lightmaps, blendmap, PVS, layer masks). Design:
+      [lighting.md § Export everything in one pass](lighting.md#4-export-everything-in-one-pass).
+- [ ] **Lightmap import** (T1; opportunistic — piggyback on the editor mesher/
+      format change, not a dedicated phase; [lighting.md](lighting.md)) — read the
+      embedded atlases, preserve the per-face lightmap link (`lmid`/`uv`/`norm`)
+      through our format, sample in a custom shader.
+- [ ] Parse the **blendmap** and **PVS** sections (post-MVP; [lighting.md](lighting.md)).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
 **New maps use our compact binary format only** — no OGZ at runtime.
 
-## 3. Physics (movement + collision) — see [movement-verification.md](movement-verification.md), [movement-physics.md](movement-physics.md)
+## 3. Physics (movement + collision)
+
+See [movement-verification.md](movement-verification.md) and
+[movement-physics.md](movement-physics.md).
 
 Done:
 
@@ -163,10 +200,22 @@ Done:
       (`movable.cpp:90`), unused by every target mode, and superseded by the
       command-based dynamic-world plan (see §2 above).~~
 
+Remaining:
+
+- [ ] Layer 2 collision acceptance criteria on real geometry (walk ramp/steps,
+      wall slide, `FLOORZ`/`SLOPEZ` cutoffs) — see
+      [movement-verification.md § Collision acceptance criteria](movement-verification.md#collision-acceptance-criteria-layer-2).
+- [ ] Layers 3–5 camera/feedback: match FOV (100), tune sensitivity, mouse accel,
+      gun sway, jump/land/water sounds. See
+      [movement-physics.md § Port notes](movement-physics.md#5-port-notes--deviations-in-the-current-mvp).
+- [ ] Optional: extend the refharness to give `bounce()` a golden differential
+      (current harness collision is a flat-floor stand-in).
+
 ## 4. Editor MVP *(defining feature)*
 
 See [editor-and-commands.md](editor-and-commands.md) for the command-system design
-that underpins this entire section.
+that underpins this entire section, and §10 there for the M0–M9 **implementation
+order** (design detail for this roadmap item).
 
 - [x] Runtime in-game editing.
       - [x] **M4 prototype**: `World/Editor/` — `EditCursor` (cursor cast + grid/
@@ -236,7 +285,15 @@ that underpins this entire section.
 
 Remaining:
 
-- [ ] Texturing, blending, entity placement.
+- [ ] **M4e GUI**: texture/material pickers, entity placement, keybinds via
+      `InputMap` ([editor-and-commands.md §10](editor-and-commands.md#10-implementation-order-milestones)).
+- [ ] Texturing, blending (the blendmap + lightmap-alpha pipeline is the layer
+      model — see [lighting.md § Layers](lighting.md#14-layers--the-alpha-channel-is-the-blend-mask)),
+      entity placement.
+- [ ] **Prefabs, recipes, cross-map paste** (M8) — `ReplaceBlock` content
+      resources, rotation, recipe API.
+- [ ] Persistent user keybinds (`user://input.cfg`) — see
+      [Cross-cutting: configuration](#cross-cutting-configuration).
 
 ## 5. Combat & spawns
 
@@ -293,12 +350,20 @@ networked world changes. This is a first-class feature, not a side effect.
 
 ## Cross-cutting: modding
 
-- Data-first mods (Resources, ConfigFiles, our maps) are safe and easy.
-- Opt-in code mods (C#) for total conversions; require trust.
-- Workshop packaging: `.pck`/folder + `mod.json`, API-versioned, load-ordered,
-  multiplayer-parity-checked. See [architecture.md §7](architecture.md#7-modding--workshop).
+See [architecture.md §7](architecture.md#7-modding--workshop) for the design.
+
+- [ ] Data-first mods (Resources, ConfigFiles, our maps) — safe and easy.
+- [ ] Opt-in code mods (C#) for total conversions; require trust.
+- [ ] Workshop packaging: `.pck`/folder + `mod.json`, API-versioned,
+      load-ordered, multiplayer-parity-checked.
 
 ## Cross-cutting: configuration
 
 Godot-native only — `ProjectSettings`, `ConfigFile`, `Resource`, `InputMap`.
 No CubeScript.
+
+- [x] Editor/game actions are `InputMap` actions (`editor_*` in `project.godot`).
+- [ ] Persistent user remaps via `user://input.cfg` (load on startup, write on
+      rebind) — lands with the settings UI / M4e. Design:
+      [architecture.md §6.1](architecture.md#61-keybinds-defaults-remapping-and-what-is-not-yet-bound).
+- [ ] Remappable mouse gestures (editor press+release / analog scroll) — deferred.

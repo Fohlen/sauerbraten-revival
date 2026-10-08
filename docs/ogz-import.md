@@ -229,6 +229,9 @@ The native format is:
 
 ## Lightmap handling
 
+Roadmap/status: [features.md §2](features.md#2-ogz-import-pipeline).
+Design: [lighting.md](lighting.md).
+
 Options for imported lightmaps:
 
 1. **Convert to baked textures**: Extract Sauer's packed lightmaps, assign to
@@ -236,7 +239,6 @@ Options for imported lightmaps:
 2. **Rebake with LightmapGI**: Place lights from entity data, run Godot's bake.
 3. **Dynamic lighting only**: Skip lightmaps for MVP; use real-time lights.
 
-Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later.
 **Decided:** (1) — sample the original atlases with our own shader; `LightmapGI`
 is ruled out. Full design, coupling with layers/envmap, and the one-shot metadata
 export live in [lighting.md](lighting.md).
@@ -463,6 +465,9 @@ field order), so the map archive hash covers it like the octree. Asserted by
 [`test/ResourceManifestTest.cs`](../test/ResourceManifestTest.cs).
 
 ## Converter GUI
+
+Roadmap/status (CLI front end, one-shot export):
+[features.md §2](features.md#2-ogz-import-pipeline).
 
 A single-panel wizard imports one map at a time:
 [`scenes/converter.tscn`](../scenes/converter.tscn) +

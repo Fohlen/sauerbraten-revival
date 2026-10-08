@@ -123,6 +123,8 @@ Godot physics (Jolt) is used only for entities (players, projectiles, mapmodels)
 
 ## LOD integration
 
+Tracked in [features.md §1](features.md#1-world-core-octree--rendering).
+
 Godot's `ArrayMesh` supports multiple LOD levels:
 
 ```csharp
@@ -175,7 +177,10 @@ equivalent manifest into the native format at conversion time.
 
 ---
 
-## Staged fidelity (from architecture.md)
+## Staged fidelity
+
+Design framing only; timing/status live in [features.md](features.md) (post-MVP
+fidelity list) and [lighting.md](lighting.md).
 
 1. **Approximate**: Base texture + tint, dynamic Godot lighting.
 2. **Blended**: Multi-layer material blending, per-face UVs.
@@ -187,8 +192,9 @@ The ArrayMesh approach supports all three stages — only the materials/shaders 
 
 ## RenderingServer usage *(planned optimisation)*
 
-The current mesher keeps the `ArrayMesh` on a `MeshInstance3D`. For maximum
-performance, a later pass can stream meshes directly to RenderingServer:
+Tracked in [features.md §1](features.md#1-world-core-octree--rendering). The current
+mesher keeps the `ArrayMesh` on a `MeshInstance3D`; a later pass can stream meshes
+directly to RenderingServer:
 
 ```csharp
 // Create mesh RID (once per chunk)
@@ -229,6 +235,9 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
 ---
 
 ## Implementation status
+
+Roadmap/status authority: [features.md §1](features.md#1-world-core-octree--rendering).
+This section records the current code, not the plan.
 
 - **Runtime octree** — `World/Ogz/OgzReader.cs` builds the runtime `Cube`/
   `CubeExt` octree directly while parsing (edges, textures, material, children,
