@@ -28,6 +28,7 @@ public class A3ReplayTest : TestClass
     [Test] public void ReplaysSession2() => Replay("session2.csv");
     [Test] public void ReplaysSession3() => Replay("session3.csv");
     [Test] public void ReplaysSessionStable2() => Replay("session-stable2.csv");
+    [Test] public void ReplaysSessionStable3() => Replay("session-stable3.csv");
 
     private static void Replay(string file)
     {
