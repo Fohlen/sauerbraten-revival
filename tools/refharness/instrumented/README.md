@@ -144,7 +144,7 @@ byte-identical (determinism / A4), and the same file drives the port
 ```sh
 cd "$SAUER_REF"
 SAUER_TRACE=/tmp/replay-trace.csv \
-SAUER_REPLAY=/abs/path/to/traces/session-stable.csv \
+SAUER_REPLAY=/abs/path/to/traces/session-stable2.csv \
   /abs/path/to/tools/refharness/instrumented/build/sauer_client -q"$HOME/.sauerbraten" -lbase/church51
 ```
 
