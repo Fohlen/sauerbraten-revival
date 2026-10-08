@@ -17,28 +17,39 @@ and a canonical FNV-1a checksum).
 | `church51.json` | 334 entities; the A2 trace fixture (`session1.csv`) was captured here. |
 | `bt_falls.json` | 373 entities: 167 mapmodels, 5 `ET_SOUND`, water surfaces; skybox `meister/uzze`. |
 
-The exporter only emits what the map actually uses (geometry-referenced textures,
-entity-referenced mapmodels and sounds). See [`docs/ogz-import.md`](../docs/ogz-import.md).
+The catalogue currently holds **one entry per map**: all 335 `*.ogz` in the
+reference dump's `packages/base/`. The exporter only emits what the map actually
+uses (geometry-referenced textures, entity-referenced mapmodels and sounds). See
+[`docs/ogz-import.md`](../docs/ogz-import.md).
 
 ## Regenerating
 
-Build the patched reference client once:
+The batch exporter runs the instrumented client once per map and writes the JSON
+directly here. Build the client once, then:
 
 ```sh
-tools/refharness/build_instrumented.sh
+tools/refharness/build_instrumented.sh          # once
+tools/metadata-catalogue/export-all-maps.sh      # all maps not yet exported
+tools/metadata-catalogue/export-all-maps.sh -f church51 bt_falls  # refresh some
 ```
 
-Then load the map from the reference dump root, writing the export to `/tmp`
-(never into the repo), and copy the JSON in manually:
+Existing entries are skipped unless `--force` is passed. See
+[`tools/metadata-catalogue/README.md`](../tools/metadata-catalogue/README.md) for
+options and environment.
+
+### Regenerating one entry by hand
 
 ```sh
 cd /path/to/sauerbraten-code-r6889
-SAUER_METADATA=/tmp/church51.json \
+SAUER_METADATA=/tmp/church51.json SAUER_METADATA_EXIT=1 \
   /abs/path/to/tools/refharness/instrumented/build/sauer_client \
   -q/tmp/sauer-meta-home -lbase/church51
 
 cp /tmp/church51.json /abs/path/to/metadata-catalogue/church51.json
 ```
+
+`SAUER_METADATA_EXIT` makes the client quit right after writing the JSON (the
+batch exporter relies on it); omit it to keep the client open.
 
 The `geometry` block is asserted by
 [`test/OgzReaderTest.cs`](../test/OgzReaderTest.cs), which reads the map itself
