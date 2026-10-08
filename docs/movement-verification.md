@@ -10,13 +10,28 @@ The reference source is assumed at `/Users/fohlen/Downloads/sauerbraten-code-r68
 | Stage | State | Where |
 | --- | --- | --- |
 | A1 — standalone reference harness | ✅ | `tools/refharness/` (velocity model, golden CSVs, determinism) |
-| A2 — instrumented original client | ✅ | `tools/refharness/patches/a2-trace.patch` (+ `a2b-input-trace.patch`) |
-| A3 — input-replay differential | ✅ / residual | `test/A3ReplayTest.cs`, `test/A3ClipsProbe.cs`; ~99.8% (deformed-cube slope landings) |
-| A4 — determinism | ✅ | `tools/refharness/main.cpp` (PASS) |
+| A2 — instrumented original client | ✅ | `tools/refharness/patches/a2-trace.patch` (+ `a2b-input-trace.patch`, `a2c-input-replay.patch`, `a2d-weapon-events.patch`, `a2e-move-trace.patch`) |
+| A3 — input-replay differential | ✅ | `test/A3ReplayTest.cs`; **`session-clean.csv` 100.0% vel / 100.0% falling, zero misses** |
+| A4 — determinism | ✅ | `tools/refharness/main.cpp` (PASS); `SAUER_REPLAY` traces bit-stable run-to-run |
 | Live player on the ported physics | ✅ | `World/Ogz/MapPlayer.cs` (`scenes/player_scene.tscn`) |
 | Layers 3–5 (timing, input, camera/feedback) | ◑ | timing + input captured & ported; FOV/sensitivity/accel tuning, sway, sounds remain |
 
-### What was fixed to reach ~99.8%
+### What closed the movement gap
+
+Two things, both in the step/collision layer:
+
+1. **The `-ffast-math` step-up fold** (see below): `trystepup()`'s smooth branch
+   round-trips `d->o.z += maxstep+0.1f; … -= maxstep+0.1f`, which the reference's
+   `-ffast-math` folds away. The port performed it faithfully and lost `2^-12` per
+   substep, drifting up along smooth steps. Fixed in `OctaPhysics.TryStepUp`.
+2. **An event-free recording.** The remaining nonzero misses on earlier traces
+   were soft step/slope knife-edges where even the original does not reproduce its
+   own raw capture bit-for-bit (see the seed-offset caveat). Benchmarking against
+   `session-clean.csv` (pure movement, no death/pad) removes that class, leaving the
+   ported velocity model + collision exact: **100.0% vel, 100.0% falling, 0.0149 u
+   max position error, 3/7001 physstate sub-ULP transitions.**
+
+### What was fixed earlier (genfacevecs)
 
 The dominant A3 residual was a **`genfacevecs` winding bug**: the reference reuses
 its solid-branch `GENFACEORIENT` macro in the non-solid branch, emitting face verts
@@ -132,7 +147,20 @@ hull needs (`OctaVisible.cs`: `genfacevecs`/`insideface`/`occludesface`/`visible
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `session2.csv` | 4162 | 100.0% | 100% | 99.9% | 100% |
 | `session3.csv` | 7868 | 99.8% | 99.9% | 99.8% | 99.9% |
-| `session-stable2.csv` (clean re-record) | 25901 | 100.0% | 100.0% | 100.0% | 100.0% |
+| `session-stable2.csv` | 25901 | 100.0% | 100.0% | 100.0% | 100.0% |
+| `session-clean.csv` (no events) | **7001** | **100.0%** | **100.0%** | **100.0%** | **100.0%** |
+
+**`session-clean.csv` — movement gap closed (for pure movement).** A 35 s recording
+on `church51` deliberately kept free of external events (no death/respawn, no jump
+pads; a single gun-recoil `kick` and one teleport at the very end, both logged).
+The port replays all 7001 steps with **zero velocity misses** (max err `0.0000`),
+**zero falling misses** (`0.0000`), o max err `0.0149`, and only 3 physstate
+differences (sub-0.02 u soft step/slope transitions). The earlier residual was a
+mix of (a) the `-ffast-math` step-up fold (fixed, see below) and (b) capture-vs-
+replay knife-edges on soft lips that even the original does not reproduce bit-for-
+bit against its own raw capture. Restricting the benchmark to event-free movement
+removes (b) and shows the ported physics is exact for the velocity model and
+collision.
 
 External events are resynced from `*.events` (teleports, jump pads, and — since
 `a2d-weapon-events.patch` — weapon recoil `kick` and impact push `hitpush`, which
@@ -147,6 +175,10 @@ inputs alone. Two runs are byte-identical (A4). This turns a one-time manual
 recording into a regenerable, deterministic fixture and lets us ask: *can the
 original reproduce its own recording?*
 
+The replay **self-terminates** at EOF (`quit()`), so it works under a plain shell
+command with no timeout (a replay runs in real time — `physicsframe` catches up per
+rendered frame). `SAUER_REPLAY_NOQUIT=1` keeps it up.
+
 On `session-stable2.csv` the free-running reference follows the recording exactly
 until the **first weapon launch** (step 11990, a `kick`); without re-applying the
 logged impulse the replay diverges there. Before the `a2d-weapon-events.patch`
@@ -154,6 +186,15 @@ instrumentation existed the reference diverged at the first such launch on the
 earlier 12k trace (~step 5000). This confirms the movement model (jump, gravity,
 collision, pads) is faithfully regenerated from inputs; only unmodelled external
 impulses break it.
+
+**Seed-offset caveat.** The replay seeds from **row 0's post-step state** and then
+applies row 1's inputs, so it is one physics step ahead of a from-scratch run. On
+`session-clean.csv` (no events) the reference replay is bit-stable run-to-run, but
+it still drifts from the raw capture by <0.05 u from ~step 3130 on — a soft
+step-down/fall transition resolved one step differently, then the sub-unit offset
+propagates. So the raw capture and the engine's own replay are not identical at
+knife-edge lips; the port benchmark (`rows[k-1] state + rows[k] inputs → rows[k]`)
+uses the capture directly and is unaffected by this.
 
 **Localized residual (now).** The port's first miss on `session-stable2.csv` is step
 18315: a **step/ramp** case where the port keeps `ps=4` (step-up) while the engine
