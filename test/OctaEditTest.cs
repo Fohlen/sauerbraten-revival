@@ -34,10 +34,11 @@ public class OctaEditTest : GoTestBase
         OctaEdit.SubdivideCube(w, w.WorldRoot[0]);
 
         TestAssert.True(w.WorldRoot[0].Children is not null, "children allocated");
-        TestAssert.Equal(8, w.WorldRoot[0].Children!.Length, "eight children");
+        Cube[] children = w.WorldRoot[0].Children!;
+        TestAssert.Equal(8, children.Length, "eight children");
         TestAssert.Equal(before + 1, w.AllocNodes, "allocnodes incremented once");
         for (int i = 0; i < 8; i++)
-            TestAssert.True(w.WorldRoot[0].Children[i].IsEntirelySolid(), "solid parent -> solid children");
+            TestAssert.True(children[i].IsEntirelySolid(), "solid parent -> solid children");
     }
 
     [Test]
@@ -56,10 +57,11 @@ public class OctaEditTest : GoTestBase
         w.WorldRoot[0].EmptyFaces();
         w.WorldRoot[0].Texture[0] = 7;
         OctaEdit.SubdivideCube(w, w.WorldRoot[0]);
+        Cube[] children = w.WorldRoot[0].Children!;
         for (int i = 0; i < 8; i++)
         {
-            TestAssert.True(w.WorldRoot[0].Children![i].IsEmpty(), "empty parent -> empty children");
-            TestAssert.Equal(7, w.WorldRoot[0].Children[i].Texture[0], "texture inherited");
+            TestAssert.True(children[i].IsEmpty(), "empty parent -> empty children");
+            TestAssert.Equal(7, children[i].Texture[0], "texture inherited");
         }
     }
 
@@ -77,7 +79,7 @@ public class OctaEditTest : GoTestBase
         TestAssert.Equal(8, dst.Children!.Length, "eight children");
         TestAssert.Equal(Octa.MAT_WATER, dst.Material, "material copied");
         TestAssert.Equal(42, dst.Texture[2], "texture copied");
-        TestAssert.True(ReferenceEquals(src.Faces[0], dst.Faces[0]) || src.Faces[0] == dst.Faces[0], "faces copied");
+        TestAssert.True(src.Faces[0] == dst.Faces[0], "faces copied");
 
         // Mutating the copy must not affect the source.
         dst.Children![0].EmptyFaces();

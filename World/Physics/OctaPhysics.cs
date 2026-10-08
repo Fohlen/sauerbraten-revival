@@ -331,9 +331,10 @@ public sealed class OctaPhysics
         {
             if ((possible & (1 << i)) == 0) continue;
             var o = new Vector3I(cor.X + ((i & 1) >> 0) * size, cor.Y + ((i & 2) >> 1) * size, cor.Z + ((i & 4) >> 2) * size);
-            if (c[i].Children != null)
+            Cube[]? children = c[i].Children;
+            if (children != null)
             {
-                if (OctaCollide(d, dir, cutoff, bo, bs, c[i].Children, o, size >> 1)) return true;
+                if (OctaCollide(d, dir, cutoff, bo, bs, children, o, size >> 1)) return true;
                 continue;
             }
             bool solid = false;
@@ -738,7 +739,7 @@ public sealed class OctaPhysics
 
     /// <summary>Optional diagnostic sink for <see cref="Move"/> (null in production).
     /// Set by test probes to diff the move() decision chain against the reference.</summary>
-    public static System.Action<string> MoveTrace;
+    public static System.Action<string>? MoveTrace;
     private static void MT(string s) { MoveTrace?.Invoke(s); }
 
     /// <summary>physics.cpp:1340 <c>move</c>.</summary>
@@ -971,7 +972,7 @@ public sealed class OctaPhysics
 
     /// <summary>game::physicstrigger seam — sounds/events on floor/water transitions.
     /// Null in production; wired by the game layer later.</summary>
-    public static System.Action<PhysEnt, bool, int, int, int> PhysTrigger;
+    public static System.Action<PhysEnt, bool, int, int, int>? PhysTrigger;
     private static void PhysicalTrigger(PhysEnt pl, bool local, int floorLevel, int waterLevel, int material = -1)
         => PhysTrigger?.Invoke(pl, local, floorLevel, waterLevel, material);
 

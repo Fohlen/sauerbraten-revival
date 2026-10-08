@@ -96,16 +96,18 @@ public class RemipTest : GoTestBase
         var w = new Octa(4);
         Cube root = w.WorldRoot[0];
         OctaEdit.SubdivideCube(w, root);
+        Cube[] rootChildren = root.Children!;
         for (int i = 0; i < 8; i++)
         {
-            root.Children![i].SolidFaces();
-            for (int l = 0; l < 6; l++) root.Children[i].Texture[l] = 1;
+            rootChildren[i].SolidFaces();
+            for (int l = 0; l < 6; l++) rootChildren[i].Texture[l] = 1;
         }
-        OctaEdit.SubdivideCube(w, root.Children![0]);
+        OctaEdit.SubdivideCube(w, rootChildren[0]);
+        Cube[] nestedChildren = rootChildren[0].Children!;
         for (int i = 0; i < 8; i++)
         {
-            root.Children[0].Children![i].SolidFaces();
-            for (int l = 0; l < 6; l++) root.Children[0].Children[i].Texture[l] = 1;
+            nestedChildren[i].SolidFaces();
+            for (int l = 0; l < 6; l++) nestedChildren[i].Texture[l] = 1;
         }
 
         var (before, after, hasChildren) = Run(w, root);
