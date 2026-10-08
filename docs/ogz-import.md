@@ -194,12 +194,13 @@ and a canonical FNV-1a checksum.
    - etc.
    These materialize at load via `IWorld.Apply` from the entity command list —
    they are **not** serialized into `Level.tscn` (see the native format below).
-6. Build material manifest (index → ShaderMaterial).
-7. Save:
+5. Build the resource manifest (vslot index → full texture paths, plus models and
+   sounds; §"Resource manifest" below).
+6. Save:
    - world.res (octree Resource)
    - history.res (entity + geometry commands; empty for a fresh import)
    - Level.tscn (scene referencing world.res + materials)
-   - materials/ (imported materials)
+   - materials/manifest.res (resource manifest)
 ```
 
 ---
@@ -436,6 +437,45 @@ The pipeline is split into offline tools, all reading the read-only reference du
 Godot imports `assets/models/` and `assets/textures/` as Resources; the viewer loads
 the imported Resources and falls back to the dump for anything not imported.
 
+## Resource manifest
+
+Implemented in [`World/Save/ResourceManifest.cs`](../World/Save/ResourceManifest.cs)
+(a `Resource` wrapper around a canonical, versioned blob) and
+[`World/Save/ManifestBuilder.cs`](../World/Save/ManifestBuilder.cs) (catalogue →
+manifest). It is written to `materials/manifest.res` by `MapStore.Save` and read
+back by `MapLevel`, which rebuilds a `MaterialSet` from the stored full paths.
+
+Stored per map:
+
+- **Materials** (one per vslot): the octree's face texture index, its transform
+  (scale/rotation/offset), tint/glow/alpha, shader name, and the **full engine
+  path** of each texture layer (diffuse/normal/glow).
+- **Models**: `mapmodels` index → model path (full).
+- **Sounds**: `sounds` index → sound path (full).
+
+**Index → full path, never index → index.** The catalogue's global slot/model/
+sound registries are meaningless outside the original engine's load order, so the
+resolved paths are baked in once. The blob is byte-stable (magic + version, fixed
+field order), so the map archive hash covers it like the octree. Asserted by
+[`test/ResourceManifestTest.cs`](../test/ResourceManifestTest.cs).
+
+## Converter GUI
+
+A single-panel wizard imports one map at a time:
+[`scenes/converter.tscn`](../scenes/converter.tscn) +
+[`scripts/ConverterWizard.cs`](../scripts/ConverterWizard.cs).
+
+1. Pick the Sauerbraten install folder (`FileDialog`); the path is remembered in
+   `user://settings.cfg` (`sauerbraten/path`).
+2. Pick a map from a filterable list of `<install>/packages/**/*.ogz`.
+3. Convert: `OgzConverter` reads the OGZ, loads the committed
+   `metadata-catalogue/<map>.json`, and writes `user://maps/<map>/` (user space,
+   §7.4 of [editor-and-commands.md](editor-and-commands.md)); the panel shows the
+   entity/resource counts and the archive content hash.
+
+The CLI/headless equivalent (`OgzConverter.ConvertFile`) exists but has no
+argument-parsing front end yet.
+
 ## File locations
 
 Current (dev viewer; reads `.ogz` directly at runtime — **not** the shipping path):
@@ -452,15 +492,22 @@ assets/models/                # git-ignored, Godot-imported
 assets/textures/              # git-ignored, Godot-imported
 ```
 
-Planned (native format, roadmap #2):
+Importer (native format):
 
 ```
-World/Import/                 # OGZ + metadata → native octree Resource + Level.tscn
-assets/maps/<map>/
+World/Save/OgzConverter.cs    # OGZ (+ catalogue) → native map directory
+World/Save/ResourceManifest.cs# Resource manifest: resource/data type + blob codec
+World/Save/ManifestBuilder.cs # catalogue → manifest; manifest → MaterialSet
+World/Save/MapStore.cs        # writes world.res/history.res/Level.tscn/materials/
+World/Save/MapLevel.cs        # loads a native map dir; rebuilds materials from manifest
+scripts/ConverterWizard.cs    # GUI wizard (scenes/converter.tscn)
+
+user://maps/<map>/            # Converted maps (user space, §7.4)
 ├── Level.tscn                # Scene: refs world.res + materials; mode config
 ├── world.res                 # Native octree Resource
 ├── history.res               # Command log (empty on import)
-└── materials/                # Imported materials
+└── materials/
+    └── manifest.res          # Resource manifest (textures/models/sounds by full path)
 ```
 
 The map is a directory of external resources; its **archive** (`.zip`/`.tar`) is
@@ -473,7 +520,8 @@ the unit of distribution, hashing, and parity. See
 
 1. **Metadata patch**: One-time CubeScript export → JSON for all target maps.
 2. **OGZ parser**: C# binary parser for octree + entities.
-3. **Importer**: Combines OGZ + metadata → native format + Godot scene.
+3. **Importer**: Combines OGZ + metadata → native format + Godot scene, with a
+   full resource manifest (textures/models/sounds by full path) and a GUI wizard.
 4. **Native format**: New maps use compact binary, not OGZ.
 5. **No runtime OGZ**: The importer is a build-time tool only.
 

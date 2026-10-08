@@ -117,7 +117,18 @@ Remaining:
 - [ ] Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn`.
       - [x] **Geometry + entities**: `OgzConverter` writes `world.res` + `Level.tscn` from
             a parsed `.ogz` (asserted by `test/MapFormatTest.cs`, church51 round-trips
-            exactly). Metadata-driven material manifest emission is still pending.
+            exactly).
+      - [x] **Metadata-driven resource manifest**: `OgzConverter` bakes the
+            `metadata-catalogue/` entry into `materials/manifest.res` — every texture,
+            model and sound stored as its **full engine path** (not bare indices), so the
+            converted map is self-describing. `MapLevel` reloads it into a `MaterialSet`,
+            so native maps render textured. Asserted by `test/ResourceManifestTest.cs`.
+      - [x] **Converter GUI**: a single-panel wizard
+            (`scenes/converter.tscn` / `scripts/ConverterWizard.cs`) — pick the
+            Sauerbraten folder (remembered in `user://settings.cfg`), pick a map
+            (filterable), convert to `user://maps/<map>/`.
+      - [ ] Remaining: no CLI/headless entry point yet (GUI only); lightmaps still
+            deferred (see below).
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
 

@@ -32,6 +32,7 @@ public static class MapStore
     public const string WorldResourceName = "world.res";
     public const string HistoryResourceName = "history.res";
     public const string MaterialsDirName = "materials";
+    public const string ManifestResourceName = "manifest.res";
 
     /// <summary>Read the base world snapshot from a map directory.</summary>
     public static WorldSnapshot LoadWorld(string mapDir)
@@ -95,9 +96,13 @@ public static class MapStore
     /// <c>history.res</c>. When <paramref name="compact"/> is true the world is
     /// snapshotted as-is and no history is written — the compaction path (§7.3).
     /// When false, the caller's history is written alongside the snapshot.
+    ///
+    /// When <paramref name="manifest"/> is supplied it is written to
+    /// <c>materials/manifest.res</c>, making the directory self-describing; a null
+    /// manifest (editor maps with no imported resources) leaves the dir empty.
     /// </summary>
     public static void Save(string mapDir, WorldSnapshot snapshot, IReadOnlyList<WorldCommand>? history,
-        bool compact = true)
+        bool compact = true, ManifestData? manifest = null)
     {
         string dir = Globalize(mapDir);
         Directory.CreateDirectory(dir);
@@ -106,6 +111,13 @@ public static class MapStore
         var worldRes = WorldResource.FromSnapshot(snapshot);
         Error err = ResourceSaver.Save(worldRes, Path.Combine(dir, WorldResourceName));
         if (err != Error.Ok) throw new IOException($"Saving {WorldResourceName} failed: {err}");
+
+        if (manifest != null)
+        {
+            var manifestRes = ResourceManifest.FromData(manifest);
+            err = ResourceSaver.Save(manifestRes, Path.Combine(dir, MaterialsDirName, ManifestResourceName));
+            if (err != Error.Ok) throw new IOException($"Saving {ManifestResourceName} failed: {err}");
+        }
 
         string historyPath = Path.Combine(dir, HistoryResourceName);
         if (compact || history == null || history.Count == 0)
@@ -124,8 +136,25 @@ public static class MapStore
     }
 
     /// <summary>Convenience: snapshot a live octree and save it, compacted.</summary>
-    public static void SaveCompacted(string mapDir, Octa octa, IEnumerable<MapEntity>? entities = null) =>
-        Save(mapDir, WorldSnapshot.Capture(octa, entities), history: null, compact: true);
+    public static void SaveCompacted(string mapDir, Octa octa, IEnumerable<MapEntity>? entities = null,
+        ManifestData? manifest = null) =>
+        Save(mapDir, WorldSnapshot.Capture(octa, entities), history: null, compact: true, manifest: manifest);
+
+    /// <summary>Load the resource manifest from a map directory, or null if the map has none.</summary>
+    public static ManifestData? LoadManifest(string mapDir)
+    {
+        string path = Path.Combine(Globalize(mapDir), MaterialsDirName, ManifestResourceName);
+        if (!ResourceLoader.Exists(path) && !File.Exists(path)) return null;
+        var res = ResourceLoader.Load(path, "", ResourceLoader.CacheMode.Replace);
+        if (res == null) throw new InvalidDataException($"Failed to load {path}.");
+
+        if (res is ResourceManifest typed) return typed.ToData();
+
+        // Fall back to the exported blob property (headless/CLI contexts).
+        if (res.Get("Data").VariantType == Variant.Type.PackedByteArray)
+            return ManifestData.Decode(res.Get("Data").As<byte[]>());
+        throw new InvalidDataException($"{path} is not a resource manifest.");
+    }
 
     /// <summary>
     /// Content hash of a map directory — the unit of Workshop distribution and

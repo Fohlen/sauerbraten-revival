@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.IO;
 using Godot;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 
 namespace SauerbratenRevival.World.Save;
@@ -37,6 +39,16 @@ public partial class MapLevel : Node3D
     /// <summary>The loaded snapshot (octree + entities).</summary>
     public WorldSnapshot? Snapshot { get; private set; }
 
+    /// <summary>
+    /// Root of the reference dump's <c>packages/</c> tree, used to resolve the
+    /// manifest's full texture paths when the project Resources do not have them.
+    /// Empty disables the dump fallback (project Resources only).
+    /// </summary>
+    [Export] public string ReferenceRoot { get; set; } = "";
+
+    /// <summary>The map directory (os or res:// path) the manifest is loaded from.</summary>
+    [Export] public string MapDir { get; set; } = "";
+
     /// <summary>Entities loaded from the snapshot (view of the command log; §7.2).</summary>
     public IReadOnlyList<MapEntity> Entities => Snapshot?.Entities ?? (IReadOnlyList<MapEntity>)System.Array.Empty<MapEntity>();
 
@@ -65,7 +77,22 @@ public partial class MapLevel : Node3D
             BudgetPerFrame = 4,
         };
         AddChild(Renderer);
-        Renderer.Setup(octa, materials: null);
+
+        // Resolve the manifest (if any) into a material set so the map renders
+        // textured; editor maps without an imported manifest mesh untextured.
+        MaterialSet? materials = null;
+        string mapDir = !string.IsNullOrEmpty(MapDir) ? MapDir
+            : World?.ResourcePath is { Length: > 0 } p ? Path.GetDirectoryName(p) ?? "" : "";
+        if (mapDir.Length > 0)
+        {
+            var manifest = MapStore.LoadManifest(mapDir);
+            if (manifest != null)
+            {
+                var textures = BuildTextureSource();
+                materials = ManifestBuilder.ToMaterialSet(manifest, textures);
+            }
+        }
+        Renderer.Setup(octa, materials);
 
         // Hand the world to any child editor controller (same contract as EmptyMap).
         foreach (var child in GetChildren())
@@ -77,5 +104,13 @@ public partial class MapLevel : Node3D
             }
 
         GD.Print($"[maplevel] worldsize={octa.WorldSize} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount} entities={Entities.Count}");
+    }
+
+    /// <summary>Project Resources first, then the reference dump (when configured).</summary>
+    private ITextureSource BuildTextureSource()
+    {
+        var primary = new ResourceTextureSource();
+        if (string.IsNullOrEmpty(ReferenceRoot)) return primary;
+        return new FallbackTextureSource(primary, new DumpTextureSource(ReferenceRoot));
     }
 }
