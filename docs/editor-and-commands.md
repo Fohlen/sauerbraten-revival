@@ -716,22 +716,20 @@ map archive (map.zip / map.tar)
 ## 8. Applying to the octree: dirty chunks & budget
 
 `IWorld.Apply` mutates the octree, then notifies the renderer. This ties into the
-already-planned dirty-chunk system (rendering.md §Chunking):
+dirty-chunk system (rendering.md §Chunking):
 
 1. Command reports its affected `Aabb` (selection expanded by boundary — Cube2's
    `readychanges` expands by 1 to catch merges/t-joints).
-2. `ChunkedWorldMesh` marks overlapping chunk ids dirty (bitmask/set).
-3. Per-frame budget re-meshes up to N dirty chunks (`OctaMesher.BuildChunked`
-   refactored to rebuild one chunk).
+2. `WorldChunkRenderer` marks overlapping chunk ids dirty (bitmask/set),
+   `MarkDirty(Aabb, margin)`.
+3. Per-frame budget re-meshes up to N dirty chunks (`OctaMesher.BuildChunk`,
+   `OctaFaceWalker.WalkRegion`).
 4. Collision reads the live octree immediately — no shape rebuild (rendering.md
    §Collision).
 
 Determinism caveat: meshing must not affect world state. It doesn't — the octree
 is the truth; meshes are derived. This keeps rollback cheap (re-mesh only dirty
 chunks after replay).
-
-**TODO prerequisite:** incremental chunk rebuild API (currently `BuildChunked`
-is all-at-once). This is a blocker for the editor and should land first.
 
 ---
 
@@ -782,11 +780,13 @@ round-trip/inverse checksums. This is the editor's engine, no UI/network yet.
 > fill), and M1d (face/texture/material/flip/rotate, `forcemip`, `remip`) are
 > **done**, each asserted against the original engine via `tools/octaprobe`
 > (`test/OctaEditTest.cs`, `OctaLookupTest.cs`, `OctaOpsTest.cs`, `OctaFaceTest.cs`,
-> `RemipTest.cs`). Next: **M2** (incremental meshing), then **M3** (command log).
+> `RemipTest.cs`). Then **M2** (incremental meshing) and **M3** (command log).
 
-**M2 — Incremental meshing.** Refactor `OctaMesher.BuildChunked` into per-chunk
-rebuild + dirty set + per-frame budget. Bakes in the rendering side early so
-edits are visible while we build the rest. *Prereq for any live editing.*
+**M2 — Incremental meshing (done).** `OctaMesher.BuildChunked` split into per-chunk
+rebuild + dirty set + per-frame budget (`OctaMesher.BuildChunk`,
+`OctaFaceWalker.WalkRegion`, `WorldChunkRenderer`); asserted by
+`test/IncrementalMeshTest.cs`. Bakes in the rendering side early so edits are
+visible while we build the rest.
 
 **M3 — Command log + undo/redo (done).** `WorldOp`/`WorldCommand`/payloads,
 `WorldCommandCodec` (`var_to_bytes` over positional arrays, §5.1), `IWorld`/`OctaWorld`
@@ -802,8 +802,8 @@ hash differently (§9).
 - **M4a — cursor cast**: eye ray → `(lu, gridsize, orient, cur, cor, corner)`,
   `editmoveplane`/`rayboxintersect`/`normalizelookupcube` (`World/Editor/`).
   **Done** — `CursorGeometry` + `EditCursor`, asserted against the engine by
-  `test/EditCursorTest.cs`. (The world ray cast that supplies `rayDist` is still
-  to be wired from the octree.)
+  `test/EditCursorTest.cs` (the world ray cast that supplies `rayDist` is wired
+  via `OctaRaycast` — see M4d).
 - **M4b — grid/orient/selection**: `gridpower`, `reorient`, drag-select,
   `selextend`, `cancelsel`, selection moves; client-local state (see §1.1), never
   in the log. **Done** — `EditCursor` commands, asserted by `test/EditCursorTest.cs`.

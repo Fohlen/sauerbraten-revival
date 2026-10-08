@@ -264,5 +264,5 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   [ogz-import.md](ogz-import.md#entity-porting-status) — but nothing reads them),
   **specular maps** (packed/non-PBR), **alpha/transparency**
   (`alphafront`/`alphaback`, `LAYER_*`), blended layers, exact `visibletris`
-  culling, face merges, T-joints, grass, lightmaps, and incremental dirty-chunk
-  rebuilds. Tracked divergences live in [known-bugs.md](known-bugs.md).
+  culling, face merges, T-joints, grass and lightmaps. Tracked divergences live
+  in [known-bugs.md](known-bugs.md).

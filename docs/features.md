@@ -252,8 +252,8 @@ Steam leaderboard. **Prerequisite:** close the movement determinism gap first.
       of the leaderboard (client authority ruled out for the product).
 - [x] **Permission model** — a mode/config concern (editor vs game mode), enforced
       in `Sink.MayApply` (editor-commands.md §11.8).
-- [ ] **Prediction-scope rule** — movement predicts only against the last
-      acknowledged world-command sequence ([authority-and-latency.md §7](authority-and-latency.md#7-the-rule-this-forces-prediction-scope-decided)).
+- [x] **Prediction-scope rule** — decided: movement predicts only against the
+      last acknowledged world-command sequence ([authority-and-latency.md §7](authority-and-latency.md#7-the-rule-this-forces-prediction-scope-decided)).
 - [ ] **Map-hash gate** — clients and server agree on the map before play; a
       mismatch refuses the match.
 - [ ] Steamworks networking (movement + command replication).
