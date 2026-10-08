@@ -250,13 +250,13 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 | ET_TELEDEST | 20 | TeleDest (trigger node) | ✅ `TriggerBuilder` (representation) |
 | ET_JUMPPAD | 23 | JumpPad (trigger node) | ✅ `TriggerBuilder` (representation) |
 | Items | 8–18 | Item nodes | ✅ `ItemBuilder` (models converted) |
-| Game-specific rest | 19–30 | mode nodes | triggers ✅, rest later |
+| Mode entities | 22, 24–30 | mode nodes | ✅ `ModeEntityBuilder` (flag/base/box/barrel/platform/elevator/respawnpoint/carrot) |
 
 ### Entity porting status
 
 Ported: lights + spotlights, envmaps, playerstarts, mapmodels, triggers, items,
-particles and sounds. The remainder is being done **one slice at a time, each
-verified** (the `docs/features.md` roadmap mirrors this):
+particles, sounds and the mode entities. The remainder is being done **one slice
+at a time, each verified** (the `docs/features.md` roadmap mirrors this):
 
 1. **Triggers** ✅ — `TriggerBuilder` represents `ET_TELEPORT` (`attr1` = destination tag,
    `attr2` = model: `>0` a mapmodel, `0` the built-in teleporter, `<0` invisible; `attr3` =
@@ -282,43 +282,51 @@ verified** (the `docs/features.md` roadmap mirrors this):
    blur (1..2). Verified on **earthstation** (38 probes, mixed radii). The
    `SHADER_ENVMAP` materials that *sample* a probe aren't ported yet (see
    [rendering.md](rendering.md)); this is the reflector only.
+6. **Mode entities** ✅ — `ModeEntityBuilder` maps `FLAG`, `BASE`, `BOX`,
+   `BARREL`, `PLATFORM`, `ELEVATOR`, `RESPAWNPOINT` and `CARROT` to `ModeEntity`
+   nodes, resolving the built-in models (flag colour by `attr2` team, base
+   neutral, carrot, checkpoint) and the movable's `mapmodelname(attr2)`. Applies
+   the `fixentity` attribute shift and the `entradius` facing arrows. The model
+   importer now also converts `flags/{neutral,red,blue}` and
+   `base/{neutral,red,blue}` (via `exec`-delegating cfgs). Verified on
+   **bt_falls** (5 bases, 2 flags) and **lost** (57 box, 114 barrel, 11 platform,
+   13 elevator, +respawnpoints). Representation only — see the gaps below.
 
-Later: monsters, and the remaining mode entities (flag, box, barrel, platform,
-elevator, …).
+Later: monsters.
 
 #### Remaining gaps (detailed)
 
-The item below has no builder today; the type ids exist in
-[`EntityType.cs`](../World/Entities/EntityType.cs) but `MapWorld`/`OgzConverter`
-dispatch no handler, so the entity is silently dropped. Attribute semantics are the
-`fpsgame/game.h` comments + `entities::fixentity`/`entradius`/`entmodel`.
+Attribute semantics are the `fpsgame/game.h` comments +
+`entities::fixentity`/`entradius`/`entmodel`. The mode entities are **represented**;
+their runtime still needs game logic.
 
 **`ET_ENVMAP` (4) — reflection/cubemap probe** ✅ done, see item 5 above. The
 remaining fidelity gap is the material side: engine `SHADER_ENVMAP` surfaces (and
 `closestenvmap` selection) are not ported, so nothing samples the probe yet.
 
-**CTF / capture mode entities**
+**CTF / capture mode entities** ✅ represented, see item 6 above.
 
-| Type | id | Attrs | Projection |
-| --- | --- | --- | --- |
-| `BASE` | 24 | `attr1` = ammo type, `attr2` = tag | mode node + `base/neutral\|red\|blue` model |
-| `RESPAWNPOINT` | 25 | `attr1` = yaw, `attr2` = type | SpawnPoint (classic SP) |
-| `BOX` | 26 | `attr1` yaw, `attr2` model, `attr3` weight | movable + mapmodel `attr2` |
-| `BARREL` | 27 | + `attr4` health (default 50) | movable + explode on death |
-| `PLATFORM` | 28 | `attr3` tag, `attr4` speed | movable, yaw-directed |
-| `ELEVATOR` | 29 | `attr3` tag, `attr4` speed | movable, vertical |
-| `FLAG` | 30 | `attr1` yaw, `attr2` team | mode node + `flags/\{red,blue,neutral\}` |
-| `CARROT` | 22 | classic SP carrot | mapmodel `carrot` (exists) |
+| Type | id | Attrs | Projection | Status |
+| --- | --- | --- | --- | --- |
+| `BASE` | 24 | `attr1` = ammo type, `attr2` = tag | `ModeEntity` + `base/neutral\|red\|blue` | ✅ representation |
+| `RESPAWNPOINT` | 25 | `attr1` = yaw, `attr2` = type | `ModeEntity` + `checkpoint` | ✅ representation |
+| `BOX` | 26 | `attr1` yaw, `attr2` model, `attr3` weight | `ModeEntity` + mapmodel `attr2` | ✅ representation |
+| `BARREL` | 27 | + `attr4` health (default 50) | `ModeEntity` + mapmodel `attr2` | ✅ representation |
+| `PLATFORM` | 28 | `attr3` tag, `attr4` speed | `ModeEntity` + mapmodel `attr2` | ✅ representation |
+| `ELEVATOR` | 29 | `attr3` tag, `attr4` speed | `ModeEntity` + mapmodel `attr2` | ✅ representation |
+| `FLAG` | 30 | `attr1` yaw, `attr2` team | `ModeEntity` + `flags/{red,blue,neutral}` | ✅ representation |
+| `CARROT` | 22 | classic SP carrot | `ModeEntity` + `carrot` | ✅ representation |
 
 - Movement attributes are **stored shifted**: `fixentity` copies `attr5=attr4`,
   `attr4=attr3` for `FLAG/BOX/BARREL/PLATFORM/ELEVATOR`, so on-disk `attr1`=yaw,
-  `attr2`=model/team, `attr3`=weight/tag, `attr4`=health/speed. `PLATFORM`/
-  `ELEVATOR` velocity comes from `yaw` + `maxspeed=attr4` (default 8, sign = dir).
-- `entradius` draws a yaw arrow for `FLAG/MONSTER/TELEDEST/RESPAWNPOINT/BOX/
-  BARREL/PLATFORM/ELEVATOR` (size 4) — reuse `EntityFacing.ApplyYaw` + an arrow
-  marker like `TeleDest` does.
-- `ENT_BOUNCE` movables need `bounce()` (`engine/physics.cpp`), still unported
-  (features.md roadmap item 3) — without it boxes/barrels can't move correctly.
+  `attr2`=model/team, `attr3`=weight/tag, `attr4`=health/speed. `ModeEntityBuilder`
+  resolves these onto the node (weight/health/speed/tag/team/direction).
+- `PLATFORM`/`ELEVATOR` velocity comes from `yaw` + `maxspeed=attr4` (default 8,
+  sign = dir).
+- **Still needed for behaviour:** `ENT_BOUNCE` movables need `bounce()`
+  (`engine/physics.cpp`), still unported (features.md roadmap item 3) — without it
+  boxes/barrels can't move correctly. The mode logic itself (`ctf.h`,
+  `capture.h`, `movable.cpp`) lands with Combat/Modes (roadmap items 5–6).
 
 **Monsters (`MONSTER`, 21)**
 
@@ -330,10 +338,13 @@ remaining fidelity gap is the material side: engine `SHADER_ENVMAP` surfaces (an
   (`monster.cpp`, `ai.cpp`, `waypoint.cpp`) are game logic**, not import; they land
   with Combat/Modes, not here.
 
-**Model import work** (`tools/model-import/`): `flags/` (md2), `base/` (md3 +
-`red`/`blue`/`neutral` skins), the nine monster models, and any mapmodels used by
-`BOX`/`BARREL`/`PLATFORM`/`ELEVATOR` map entities are not converted today — only
-item/teleporter/checkpoint/carrot are.
+**Model import work** (`tools/model-import/`): ✅ `flags/` (md2) and `base/` (md3,
+`red`/`blue`/`neutral` via `exec`-delegating cfgs) now convert, alongside
+item/teleporter/checkpoint/carrot. The nine monster models
+(`ogro`, `monster/rhino`, `monster/rat`, `monster/slith`, `monster/bauul`,
+`monster/hellpig`, `monster/knight`, `monster/goblin`, `monster/spider`) remain
+unconverted, and so do mapmodels only referenced by box/barrel/platform/elevator
+maps (resolved per-map through the catalogue as usual).
 
 ### Edit-mode entity markers
 
@@ -341,9 +352,11 @@ In edit mode Cube2 spawns a blue `PART_EDIT` splash at every entity
 (`renderparticles.cpp`). We mirror it with a **static blue billboard**
 (`World/Entities/EntityMarker.cs`, texture `packages/particles/base.png`, colour
 `0x3232FF`), plus a small facing arrow for directional entities. Markers are added
-for **playerstarts** and **triggers** (`teleport`/`teledest`/`jumppad`), and will be
-added for **items**. They are **not** added to **mapmodels** (they render their real
-model) or **lights** (they have their own gizmos). The whole layer is in the
+for **playerstarts**, **triggers** (`teleport`/`teledest`/`jumppad`), **items**,
+**particles**, **sounds** and the **mode entities** (with a facing arrow for
+`flag`/`respawnpoint`/`box`/`barrel`/`platform`/`elevator`, matching `entradius`).
+They are **not** added to **mapmodels** (they render their real model),
+**lights** or **envmaps** (their probe has its own extent). The whole layer is in the
 `entity_markers` group so a future game/edit-mode split can hide it via
 `EntityMarker.SetVisible`.
 
@@ -389,7 +402,7 @@ The pipeline is split into offline tools, all reading the read-only reference du
 
 | Tool | Output | Purpose |
 | --- | --- |
-| `tools/model-import/import_models.py` | `assets/models/*.glb` + `models.json` | Converts mapmodels and built-in item/teleporter models to glTF with **assimp**, applies per-model skins/bumps, and writes the model manifest. Handles parent-folder geometry fallback (e.g. `armor/*` sharing `armor/tris.md3`) and the engine's `mdlscale/4`. |
+| `tools/model-import/import_models.py` | `assets/models/*.glb` + `models.json` | Converts mapmodels and built-in item/teleporter/flag/base models to glTF with **assimp**, applies per-model skins/bumps, and writes the model manifest. Handles parent-folder geometry fallback (e.g. `armor/*` sharing `armor/tris.md3`, `base/*` resolving `../base.md3` via `exec`-delegating cfgs) and the engine's `mdlscale/4`. |
 | `tools/texture-import/import_textures.py` | `assets/textures/**` | Copies every texture a map references (slot textures, model skins/bumps, and the engine defaults for water/lava/particles) into the project, preserving relative paths. |
 | `tools/refharness/build_instrumented.sh` | `metadata-catalogue/<map>.json` | Builds the patched reference client that exports the metadata (see above). |
 

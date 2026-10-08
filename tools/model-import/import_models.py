@@ -28,10 +28,12 @@ import sys
 def parse_cfg(path: str) -> dict:
     """Extract the model parameters we care about from a model .cfg."""
     params: dict = {"scale": 1.0, "trans": [0.0, 0.0, 0.0], "glow": None, "spec": None,
-                    "skin": None, "bump": None, "source": None, "objdir": None, "cfgs": []}
+                    "skin": None, "bump": None, "source": None, "objdir": None,
+                    "execs": [], "cfgs": []}
     if not os.path.isfile(path):
         return params
     params["cfgs"].append(path)
+    cfg_dir = os.path.dirname(path)
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         for raw in f:
             line = raw.split("//", 1)[0].strip()
@@ -44,7 +46,9 @@ def parse_cfg(path: str) -> dict:
             if not toks:
                 continue
             cmd, args = toks[0], toks[1:]
-            if cmd == "mdlscale" and args:
+            if cmd == "exec" and args:
+                params["execs"].append((args[0], cfg_dir))
+            elif cmd == "mdlscale" and args:
                 params["scale"] = int(float(args[0])) / 100.0
             elif cmd == "mdltrans" and len(args) >= 3:
                 params["trans"] = [float(args[0]), float(args[1]), float(args[2])]
@@ -65,12 +69,48 @@ def parse_cfg(path: str) -> dict:
     return params
 
 
+def _execute_cfg(params: dict, models_root: str, packages_root: str) -> None:
+    """Follow ``exec`` directives (e.g. ``base/neutral/md3.cfg`` -> ``base/base.cfg``)
+    and merge the parameters the exec'd file declares.
+
+    Cube2 model dirs often delegate to a shared parent cfg that holds the real
+    ``md3load``/``mdlscale`` directives (the ``base`` family, ``armor`` sharing).
+    The exec'd cfg's directory is recorded in ``exec_dirs`` so relative paths such
+    as ``../base.md3`` resolve against it later.
+    """
+    pending = [(t, d) for t, d in params.get("execs", [])]
+    seen = set(params["cfgs"])
+    exec_dirs = params.setdefault("exec_dirs", [])
+    while pending:
+        target, cfg_dir = pending.pop(0)
+        if target.startswith("packages/"):
+            path = os.path.join(packages_root, target[len("packages/"):])
+        else:
+            path = os.path.join(cfg_dir, target)
+        path = os.path.normpath(path)
+        if path in seen or not os.path.isfile(path):
+            continue
+        seen.add(path)
+        sub = parse_cfg(path)
+        sub_dir = os.path.dirname(path)
+        exec_dirs.append(sub_dir)
+        pending.extend(sub["execs"])
+        for key in ("source", "objdir"):
+            if not params.get(key) and sub.get(key):
+                params[key] = sub[key]
+        for key in ("scale", "trans", "glow", "spec", "skin", "bump"):
+            if params.get(key) in (None, 1.0, [0.0, 0.0, 0.0]) and sub.get(key) not in (None, 1.0, [0.0, 0.0, 0.0]):
+                params[key] = sub[key]
+
+
 def find_model(models_root: str, name: str) -> tuple[str | None, dict]:
     """Resolve a registered model name to a source geometry file + its params.
 
     Mirrors the engine: try the model dir, then fall back to the parent dir for
     "vert sharing" (e.g. `armor/green` uses `armor/tris.md3` + `armor/md3.cfg`).
+    ``exec``-delegating cfgs (the ``base`` family) are followed too.
     """
+    packages_root = os.path.dirname(models_root)
     base = os.path.join(models_root, name)
     dirs = [base]
     if os.path.isdir(base) and os.path.dirname(base) != models_root:
@@ -84,18 +124,19 @@ def find_model(models_root: str, name: str) -> tuple[str | None, dict]:
             if not os.path.isfile(cfg):
                 continue
             params = parse_cfg(cfg)
+            _execute_cfg(params, models_root, packages_root)
             if params["source"]:
-                load_dir = os.path.join(models_root, params["objdir"]) if params["objdir"] else d
-                source = os.path.normpath(os.path.join(load_dir, params["source"]))
-                if os.path.isfile(source):
+                resolved = _resolve_source(params, models_root, d)
+                if resolved:
                     _merge_cfg_params(params, d)
                     params["cfg_dir"] = d
-                    return source, params
+                    return resolved, params
         for conv, cfg_name in (("tris.obj", "obj.cfg"), ("tris.md2", "md2.cfg"), ("tris.md3", "md3.cfg"),
                                ("tris.md5mesh", "md5.cfg"), ("tris.iqm", "iqm.cfg")):
             source = os.path.join(d, conv)
             if os.path.isfile(source):
                 params = parse_cfg(os.path.join(d, cfg_name))
+                _execute_cfg(params, models_root, packages_root)
                 _merge_cfg_params(params, d)
                 params["cfg_dir"] = d
                 return source, params
@@ -104,10 +145,30 @@ def find_model(models_root: str, name: str) -> tuple[str | None, dict]:
         source = base + ext
         if os.path.isfile(source):
             params = parse_cfg(base + ".cfg")
+            _execute_cfg(params, models_root, packages_root)
             params["cfg_dir"] = os.path.dirname(source)
             return source, params
 
     return None, {}
+
+
+def _resolve_source(params: dict, models_root: str, name_dir: str) -> str | None:
+    """Resolve a ``*load`` source path against objdir then each candidate dir.
+
+    Relative paths like ``../base.md3`` are relative to the cfg that declared
+    them, which may be an ``exec``'d parent cfg.
+    """
+    src = params["source"]
+    search_dirs = []
+    if params.get("objdir"):
+        search_dirs.append(os.path.join(models_root, params["objdir"]))
+    search_dirs.append(name_dir)
+    search_dirs.extend(params.get("exec_dirs", []))
+    for d in search_dirs:
+        candidate = os.path.normpath(os.path.join(d, src))
+        if os.path.isfile(candidate):
+            return candidate
+    return None
 
 
 def _merge_cfg_params(params: dict, base: str) -> None:
@@ -234,6 +295,9 @@ def main() -> int:
         "armor/green", "armor/yellow",
         "ammo/shells", "ammo/bullets", "ammo/rockets", "ammo/rrounds", "ammo/grenades", "ammo/cartridges",
         "carrot", "checkpoint",
+        # game-mode entities: CTF flags (ctf.h), capture bases (capture.h)
+        "flags/neutral", "flags/red", "flags/blue",
+        "base/neutral", "base/red", "base/blue",
     ]
     entries = [{"index": -1, "path": name} for name in builtins]
     seen = {e["path"] for e in entries}

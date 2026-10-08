@@ -82,13 +82,17 @@ Remaining:
             `test/EntityEnvMapTest.cs` on **earthstation** (38 probes). The
             sampling material side (`SHADER_ENVMAP`, `closestenvmap`) is still
             open — see [rendering.md](rendering.md).
-      - [ ] Mode entities (CTF/capture) with their **models and gizmos** only:
-            `FLAG` (30), `BASE` (24), `BOX` (26), `BARREL` (27), `PLATFORM`
-            (28), `ELEVATOR` (29), `RESPAWNPOINT` (25), `CARROT` (22). No builder
-            exists for any of them today (except implicit attributes on markers).
+      - [x] Mode entities (CTF/capture) with their **models and gizmos**:
+            `ModeEntityBuilder` handles `FLAG`, `BASE`, `BOX`, `BARREL`,
+            `PLATFORM`, `ELEVATOR`, `RESPAWNPOINT`, `CARROT` (the `fixentity`
+            attribute shift + `entradius` facing arrows). Model import now also
+            converts `flags/{neutral,red,blue}` and `base/{neutral,red,blue}`.
+            Asserted by `test/EntityModeTest.cs` on **bt_falls** (5 base, 2 flag)
+            and **lost** (57 box, 114 barrel, 11 platform, 13 elevator).
       - [ ] Monsters (`MONSTER`, 21): spawn markers + `entradius` facing arrows
             first; the actual AI/physics (`monster.cpp`, `movable.cpp`) is game
-            logic, not import, and lands with Modes/Combat.
+            logic, not import, and lands with Modes/Combat. Models not yet
+            converted.
 - [ ] `bounce()` physics for `ENT_BOUNCE` movables — needed before box/barrel/
       platform behaviour can work (see roadmap item 3).
 - [ ] Lightmap import / rebake (post-MVP).

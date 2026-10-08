@@ -100,6 +100,7 @@ public partial class MapWorld : Node3D
         AddChild(LightBuilder.Build(map));
         AddChild(EnvMapBuilder.Build(map));
         AddChild(PlayerStartBuilder.Build(map, textures));
+        AddChild(ModeEntityBuilder.Build(map, catalogue, modelCatalog, textures));
         AddChild(TriggerBuilder.Build(map, catalogue, textures));
         AddChild(ItemBuilder.Build(map, modelCatalog, textures));
         AddChild(ParticleBuilder.Build(map, textures));
