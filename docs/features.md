@@ -91,7 +91,12 @@ Remaining:
       - [x] **Texture layers** — bottom-layer geometry rendered (`LAYER_BOTTOM`, `vslot.layer`):
             `MaterialSet`/`MetadataCatalogue` carry the layer mapping, `OctaMesher` emits the
             second layer with its own material/UVs. Asserted on `bt_falls` by
-            `test/LayerMeshTest.cs`. The top/bottom **blend** (blend shader + blendmap) is still open.
+            `test/LayerMeshTest.cs`.
+      - [x] **Alpha/transparency** (`MAT_ALPHA` cubes): the mesher keys alpha faces to a separate
+            surface (`MaterialSet.AlphaBit`), alpha never culls against opaque neighbours (both
+            directions), and `AlphaMaterial` supplies a premultiplied, two-sided,
+            per-`alphafront`/`alphaback` transparent shader. Asserted by `test/AlphaMeshTest.cs`.
+            The top/bottom **blend** (blendmap) is still open.
 
 ## 2. OGZ import pipeline
 

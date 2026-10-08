@@ -262,6 +262,17 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   `vslot.layer` mapping (the metadata patch already exports it). Asserted on
   **bt_falls** by `test/LayerMeshTest.cs`; church51 uses no layers, so its mesh is
   unchanged.
+- **Alpha / transparency** — `MAT_ALPHA` cube faces render as transparent,
+  two-sided surfaces. The mesher keys them into their own surface
+  (`MaterialSet.AlphaBit`, so an alpha face and an opaque face sharing a vslot stay
+  separate) and never culls an alpha face against an opaque neighbour (nor the
+  reverse — `octa.cpp visibletris` treats `MAT_ALPHA` as see-through).
+  `AlphaMaterial` reproduces the engine's alpha path: premultiplied blend
+  (`diffuse.rgb *= diffuse.a`, `GL_ONE, GL_ONE_MINUS_SRC_ALPHA`) and per-side
+  alpha (`alphafront` front-facing, `alphaback` back-facing, with the engine's
+  zero-side fallback). The engine's separate back/front passes are folded into one
+  Godot two-sided material because Godot already sorts transparent surfaces. See
+  `test/AlphaMeshTest.cs`.
 - **Material surfaces** — `MaterialMesher` emits the empty-space water/lava/glass
   boundary faces (a simplified `material.cpp genmatsurfs`, no face merging) as one
   mesh per material; `MaterialTextures` supplies an unshaded `ShaderMaterial` with

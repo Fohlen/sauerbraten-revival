@@ -90,10 +90,8 @@ public static class MaterialBuilder
             set.SetLayer(vs.Index, vs.Layer);
 
             // Transparent variant, used for MAT_ALPHA cube faces (see AlphaMaterial).
-            var tintColor = new Color(vs.Color.X, vs.Color.Y, vs.Color.Z);
-            var glowColor = new Color(vs.Glow.X, vs.Glow.Y, vs.Glow.Z);
             set.SetAlphaMaterial(vs.Index, AlphaMaterial.Create(
-                albedo, normal, glow, tintColor, glowColor, vs.AlphaFront, vs.AlphaBack));
+                albedo, normal, glow, tint, glowColor, vs.AlphaFront, vs.AlphaBack));
         }
         return set;
     }
