@@ -15,6 +15,7 @@ builds there. Delete `instrumented/build/` to clean up.
 | --- | --- |
 | `../patches/a2-trace.patch` | Adds the `SAUER_TRACE` CSV logger to `engine/physics.cpp`. |
 | `../patches/a2b-input-trace.patch` | Adds the `SAUER_INPUTTRACE` input/timing logger (`mousemove` + main loop + `physicsframe`). Applied after `a2-trace.patch` (filename order). |
+| `../patches/a2c-input-replay.patch` | Adds the `SAUER_REPLAY` deterministic input replay (reads an A2 trace back as inputs). Applied after `a2b-input-trace.patch`. |
 | `../patches/macos-arm64.patch` | Builds native arm64 against Homebrew SDL2 (the Makefile otherwise forces x86_64, which cannot run here). |
 | `../patches/ogz-metadata.patch` | Adds the `SAUER_METADATA` JSON exporter on map load (see [`../patches/README.md`](../patches/README.md)). |
 
@@ -131,6 +132,26 @@ Confirmed mouse facts from the same capture:
 
 Golden fixture in `traces/`: `session-motion.input.csv` (real look/move).
 Interpret with `tools/refharness/analyze_input_trace.py`.
+
+## Deterministic input replay (`SAUER_REPLAY`)
+
+Re-feeds a recorded A2 trace back into the original as **inputs**, so the engine
+re-runs its own physics from the recorded start state. The state is seeded from
+row 0 only; thereafter it is **free-running**. Two runs with the same file are
+byte-identical (determinism / A4), and the same file drives the port
+(`test/A3ReplayTest.cs`).
+
+```sh
+cd "$SAUER_REF"
+SAUER_TRACE=/tmp/replay-trace.csv \
+SAUER_REPLAY=/abs/path/to/traces/session-stable.csv \
+  /abs/path/to/tools/refharness/instrumented/build/sauer_client -q"$HOME/.sauerbraten" -lbase/church51
+```
+
+This is how a one-time manual recording becomes a **stable** fixture: replay it
+to confirm the original reproduces its own trajectory, then check whether our
+port does. Divergence at an external event (jump pad / teleport) is expected
+unless it was captured in `*.events`.
 
 ## Clipplane dump (`SAUER_TRACE.clips`)
 

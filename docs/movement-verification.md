@@ -132,10 +132,35 @@ hull needs (`OctaVisible.cs`: `genfacevecs`/`insideface`/`occludesface`/`visible
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `session2.csv` | 4162 | 100.0% | 100% | 99.9% | 100% |
 | `session3.csv` | 7868 | 99.8% | 99.9% | 99.8% | 99.9% |
+| `session-stable.csv` (clean re-record) | 12139 | 99.9% | 100.0% | 99.9% | 99.9% |
 
 External events are resynced from `*.events` (teleports, jump pads) plus a
 death/respawn detector (a >40 u one-step position jump — the engine's
 `game::suicide` on `MAT_DEATH`/`o.z<0`).
+
+**Deterministic replay of the reference (`SAUER_REPLAY`).**
+`tools/refharness/patches/a2c-input-replay.patch` makes the instrumented client read
+an A2 trace back as **inputs** (`SAUER_REPLAY=<trace.csv>`), seeding only the row-0
+state and then free-running, so the original must regenerate the trajectory from
+inputs alone. Two runs are byte-identical (A4). This turns a one-time manual
+recording into a regenerable, deterministic fixture and lets us ask: *can the
+original reproduce its own recording?*
+
+On `session-stable.csv` the free-running reference follows the recording exactly
+for **~5000 steps**, then diverges at an **unlogged vertical impulse** (a jump-pad
+kick at step 4996 that the `.events` logger did not capture). This is the same
+class of gap the A3 resync already tolerates, and it localizes the events
+instrumentation hole rather than a physics difference. The port's own first miss on
+the same trace is later (step 5195).
+
+**Localized residual (now).** The port's first miss on `session-stable.csv` is step
+5195: the player lands (flat floor, `ps=4`) at high horizontal speed, and the
+next 5 ms step the **original relaunches** it (`ps=1`, `vz=+17.3`) while **dropping**
+horizontal velocity (`(104,42)→(92,33)`), whereas the port stays grounded. The same
+signature recurs at steps 8399, 9791, 10197 (`vz=+14..24`). It is a **lip / step
+launch** on landing (`trystepup`/`cansmooth`/`trystepdown` interplay), not a
+velocity-model error — the low-air-error columns stay at 100%. The remaining
+vel/physstate misses are this category plus unlogged jump-pad resyncs.
 
 **Clipplane ground truth (A3.3–A3.4).** The instrumented client also dumps
 `SAUER_TRACE.clips`: for every deformed cube the player's collision touches, its
