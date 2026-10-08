@@ -1,0 +1,137 @@
+using System.Collections.Generic;
+using Chickensoft.GoDotTest;
+using Godot;
+using SauerbratenRevival.World;
+using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Save;
+
+namespace SauerbratenRevival.Tests;
+
+/// <summary>
+/// Covers M5's core: the canonical <see cref="WorldSnapshot"/> encode/decode and
+/// content hash (docs/editor-and-commands.md §4, §5.1, §7). A snapshot must round-trip
+/// an octree byte-for-byte (geometry checksum equal) and hash deterministically.
+/// </summary>
+public class WorldSnapshotTest : GoTestBase
+{
+    public WorldSnapshotTest(Node testScene) : base(testScene) { }
+
+    private static ulong Checksum(Octa octa) => OgzGeometry.Compute(octa.WorldRoot).Checksum;
+
+    private static Octa SmallEditedWorld()
+    {
+        var octa = new Octa(8);
+        octa.EmptyMap(8);
+        var sink = new WorldCommandSink(new OctaWorld(octa));
+        // A handful of edits so the octree has normal (deformed-capable) leaves.
+        sink.Submit(new WorldCommand(WorldOp.EditFace,
+            new EditFacePayload(new SelectionPayload(new Vector3I(64, 64, 64), new Vector3I(2, 2, 2), 8, 0), -1, 1)));
+        sink.Submit(new WorldCommand(WorldOp.DeleteCube,
+            new DeleteCubePayload(new SelectionPayload(new Vector3I(80, 80, 80), new Vector3I(1, 1, 1), 8, 0))));
+        sink.Submit(new WorldCommand(WorldOp.SetFaceTexture,
+            new SetFaceTexturePayload(new SelectionPayload(new Vector3I(72, 72, 72), new Vector3I(1, 1, 1), 8, 0), 5, -1)));
+        return octa;
+    }
+
+    [Test]
+    public void EmptyWorldRoundTrips()
+    {
+        var octa = new Octa(6);
+        var snap = WorldSnapshot.Capture(octa);
+        var back = WorldSnapshot.Decode(snap.Encode());
+        TestAssert.Equal(octa.WorldScale, back.Scale, "scale");
+        TestAssert.Equal(Checksum(octa), OgzGeometry.Compute(back.Root).Checksum, "geometry checksum");
+    }
+
+    [Test]
+    public void EditedWorldRoundTrips()
+    {
+        var octa = SmallEditedWorld();
+        var snap = WorldSnapshot.Capture(octa);
+        var back = WorldSnapshot.Decode(snap.Encode()).ToOcta();
+        TestAssert.Equal(octa.WorldSize, back.WorldSize, "worldsize");
+        TestAssert.Equal(Checksum(octa), Checksum(back), "geometry checksum after edits");
+    }
+
+    [Test]
+    public void EncodeIsDeterministic()
+    {
+        var octa = SmallEditedWorld();
+        var a = WorldSnapshot.Capture(octa).Encode();
+        var b = WorldSnapshot.Capture(octa).Encode();
+        TestAssert.True(System.Linq.Enumerable.SequenceEqual(a, b), "two captures encode identically");
+    }
+
+    [Test]
+    public void HashIsStableAcrossRoundTrip()
+    {
+        var octa = SmallEditedWorld();
+        ulong before = WorldSnapshot.Capture(octa).Hash();
+        ulong after = WorldSnapshot.Decode(WorldSnapshot.Capture(octa).Encode()).Hash();
+        TestAssert.Equal(before, after, "content hash survives encode/decode");
+    }
+
+    [Test]
+    public void HashDistinguishesEdits()
+    {
+        var octa = new Octa(6);
+        ulong before = WorldSnapshot.Capture(octa).Hash();
+
+        var sink = new WorldCommandSink(new OctaWorld(octa));
+        sink.Submit(new WorldCommand(WorldOp.SetFaceTexture,
+            new SetFaceTexturePayload(new SelectionPayload(new Vector3I(0, 0, 0), new Vector3I(1, 1, 1), 8, 0), 9, -1)));
+
+        TestAssert.True(WorldSnapshot.Capture(octa).Hash() != before, "hash changes after a texture edit");
+    }
+
+    [Test]
+    public void RejectsUnknownVersion()
+    {
+        var octa = new Octa(6);
+        byte[] data = WorldSnapshot.Capture(octa).Encode();
+        data[4] = 0xEE; // corrupt the format version (after the 4-byte magic)
+        var threw = false;
+        try { WorldSnapshot.Decode(data); }
+        catch (System.IO.InvalidDataException) { threw = true; }
+        TestAssert.True(threw, "unknown version is rejected");
+    }
+
+    [Test]
+    public void EntitiesRoundTrip()
+    {
+        var snap = new WorldSnapshot { Scale = 10, Root = new Octa(10).WorldRoot };
+        snap.Entities.Add(new MapEntity { Type = 3, X = 16, Y = 32, Z = -48, Attr1 = 1, Attr2 = 2, Attr3 = 3, Attr4 = 4, Attr5 = 5 });
+
+        var back = WorldSnapshot.Decode(snap.Encode());
+        TestAssert.Equal(1, back.Entities.Count, "entity count");
+        TestAssert.Equal((byte)3, back.Entities[0].Type, "type");
+        TestAssert.Equal(16, back.Entities[0].X, "x fixed-point");
+        TestAssert.Equal(-48, back.Entities[0].Z, "z fixed-point");
+        TestAssert.Equal((short)5, back.Entities[0].Attr5, "attr5");
+    }
+
+    // ---- real map fidelity (like the OGZ golden tests) ----
+
+    [Test]
+    public void Church51RoundTripsExactly()
+    {
+        var map = TestData.ReadMap();
+        var octa = map.ToOcta();
+        ulong before = Checksum(octa);
+
+        var back = WorldSnapshot.Decode(WorldSnapshot.Capture(octa).Encode()).ToOcta();
+
+        TestAssert.Equal(octa.WorldScale, back.WorldScale, "worldscale");
+        TestAssert.Equal(before, Checksum(back), "church51 geometry survives the native format");
+    }
+
+    [Test]
+    public void Church51HashIsStable()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        ulong first = WorldSnapshot.Capture(octa).Hash();
+        ulong second = WorldSnapshot.Decode(WorldSnapshot.Capture(octa).Encode()).Hash();
+        TestAssert.Equal(first, second, "church51 content hash is round-trip stable");
+    }
+}

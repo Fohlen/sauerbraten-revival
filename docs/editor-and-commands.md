@@ -845,9 +845,14 @@ The wheel is bound like Cube2: `InputMap` actions for wheel up/down plus a
 modifier namespace selecting grid / face / corner / rotate (§ see the
 `delta_do` note below).
 
-**M5 — Save/load in native format.** `WorldSnapshot` encoder/decoder; `world.res`
-+ `history.res`; version field; compaction; archive packaging + content hash
-(§7.4). Round-trip tests. *Unblocks #3 importer too.*
+**M5 — Save/load in native format (done).** `WorldSnapshot` encoder/decoder
+(canonical child-order octree traversal + entity blob, version field, content
+hash), Godot `WorldResource`/`HistoryResource`, the map directory (`world.res` +
+`history.res` + `Level.tscn`) with compaction and archive content hash, and the
+`OgzConverter` import path. Round-trip/replay tests in `test/WorldSnapshotTest.cs`
+and `test/MapFormatTest.cs`; church51 reloads with an identical geometry checksum.
+The map is a directory of external resources; the archive is the hashing/parity
+unit. *Unblocks #3 importer (geometry + entities).*
 
 **M6 — Networking.** `WorldNetwork` RPC nodes, channels, authority, sequence,
 snapshot transfer, late join. Headless multi-client tests. *Unblocks coop edit.*
@@ -998,6 +1003,14 @@ World/Commands/
     ├── EntityOps.cs
     └── ReplaceBlock.cs    # the universal carrier (paste/prefab/undo/fill)
 World/OctaEdit.cs          # structural primitives + ported edit algorithms (M1)
+World/Save/
+├── WorldSnapshot.cs       # canonical snapshot encode/decode + content hash (M5)
+├── MapEntity.cs           # serializable entity (fixed-point; no floats on disk)
+├── WorldResource.cs       # Godot Resource wrapper for world.res (M5)
+├── HistoryResource.cs     # Godot Resource wrapper for history.res (M5)
+├── MapStore.cs            # map directory load/save, compaction, archive hash (M5)
+├── MapLevel.cs            # scene node: refs the data resources (M5)
+└── OgzConverter.cs        # OGZ + metadata -> native format (import)
 World/Net/
 ├── WorldNetwork.cs        # RPC nodes, channels, authority
 └── WorldSnapshot.cs       # canonical snapshot encode/decode + hash

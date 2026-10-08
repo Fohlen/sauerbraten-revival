@@ -130,6 +130,31 @@ public class EditorClipboardTest : GoTestBase
     }
 
     [Test]
+    public void SaveThenLoadRoundTripsThroughTheEditorBind()
+    {
+        var ec = Setup(out var map);
+        ec.MapDir = $"user://test_maps/editor_{System.Guid.NewGuid():N}";
+
+        // Make an edit, save it, then load it back and confirm the observable state.
+        ec.Cursor.Selection.O = new Vector3I(512, 512, 128);
+        ec.Cursor.Selection.S = new Vector3I(1, 1, 1);
+        bool solidBefore = !Empty(map, new Vector3I(512, 512, 128));
+        ec.EditDelete();
+        TestAssert.True(Empty(map, new Vector3I(512, 512, 128)), "delete emptied the cell");
+
+        ec.SaveMap();
+        ec.LoadMap();
+
+        TestAssert.True(ec.Octa != null, "editor has an octree after load");
+        TestAssert.True(Empty(map, new Vector3I(512, 512, 128)), "loaded world preserved the delete");
+        TestAssert.True(solidBefore, "sanity: the cell was solid before the edit");
+
+        // Cleanup the temp map directory.
+        System.IO.Directory.Delete(ProjectSettings.GlobalizePath(ec.MapDir), recursive: true);
+        map.QueueFree();
+    }
+
+    [Test]
     public void RotateFlipAreRecordedAsCommands()
     {
         var ec = Setup(out var map);

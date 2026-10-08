@@ -22,6 +22,7 @@ public class EditorInputMapTest : GoTestBase
             "editor_mod_grid", "editor_mod_face", "editor_mod_corner", "editor_mod_rotate",
             "editor_grid_shift", "editor_sel_left", "editor_sel_right",
             "editor_sel_fwd", "editor_sel_back", "editor_sel_up", "editor_sel_down",
+            "editor_save", "editor_load",
         };
         foreach (var a in actions)
             TestAssert.True(InputMap.HasAction(a), $"action '{a}' is registered");

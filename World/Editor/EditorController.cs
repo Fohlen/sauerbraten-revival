@@ -2,6 +2,7 @@ using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Meshing;
+using SauerbratenRevival.World.Save;
 
 namespace SauerbratenRevival.World.Editor;
 
@@ -31,6 +32,13 @@ public partial class EditorController : Node3D
 
     /// <summary>The world being edited. Set by the scene (e.g. a MapWorld or a synthetic world root).</summary>
     public Octa? Octa { get; set; }
+
+    /// <summary>
+    /// Where this map is saved in the native format (docs §7.4). Defaults to a
+    /// writable <c>user://</c> path; <c>res://</c> is read-only at runtime, so live
+    /// edits must round-trip through <c>user://</c>.
+    /// </summary>
+    [Export] public string MapDir { get; set; } = "user://maps/untitled";
 
     /// <summary>The local editor cursor (client-local state).</summary>
     public EditCursor Cursor { get; } = new();
@@ -181,6 +189,8 @@ public partial class EditorController : Node3D
         if (Pressed(e, "editor_cut")) EditCut();
         if (Pressed(e, "editor_undo")) EditUndo();
         if (Pressed(e, "editor_redo")) EditRedo();
+        if (Pressed(e, "editor_save")) SaveMap();
+        if (Pressed(e, "editor_load")) LoadMap();
 
         // Numpad selection nudge (KP4-9 = movesel).
         if (Pressed(e, "editor_sel_left")) Cursor.MoveSelection(-1, 0);
@@ -328,6 +338,51 @@ public partial class EditorController : Node3D
 
     /// <summary>redo — re-apply the last undone command.</summary>
     public void EditRedo() { Sink?.Redo(); InvalidateAll(); }
+
+    // ---- save / load (native format, docs §7) ----
+
+    /// <summary>
+    /// Save the current world to <see cref="MapDir"/> in the native format. Compacts:
+    /// the octree is snapshotted as the new base and any prior history is truncated
+    /// (docs §7.3). Entities are stored in the snapshot (runtime projections on load).
+    /// </summary>
+    public void SaveMap()
+    {
+        if (Octa == null) return;
+        MapStore.SaveCompacted(MapDir, Octa);
+        GD.Print($"[editor] saved '{MapDir}' (hash {MapStore.ContentHash(MapDir)})");
+    }
+
+    /// <summary>
+    /// Load the world from <see cref="MapDir"/>, replacing the live octree. The
+    /// command log is reset: the loaded state is the new base (docs §7.3). Undo does
+    /// not span a load.
+    /// </summary>
+    public void LoadMap()
+    {
+        if (!DirAccess.DirExistsAbsolute(ProjectSettings.GlobalizePath(MapDir))) return;
+        var loaded = MapStore.Load(MapDir);
+        Octa = loaded.World;
+        Sink = new WorldCommandSink(new OctaWorld(loaded.World));
+
+        // The renderer was built for the old octree: rebuild it against the loaded one.
+        Renderer?.Setup(loaded.World, materials: null);
+        DetachWorldFromParent();
+        GD.Print($"[editor] loaded '{MapDir}'");
+    }
+
+    /// <summary>Re-point the owning map node at the newly loaded octree, if any.</summary>
+    private void DetachWorldFromParent()
+    {
+        foreach (var node in GetParent().GetChildren())
+        {
+            switch (node)
+            {
+                case EmptyMap em: em.Octa = Octa; em.Sink = Sink; em.Renderer = Renderer; break;
+                case MapLevel ml: ml.Octa = Octa; ml.Sink = Sink; ml.Renderer = Renderer; break;
+            }
+        }
+    }
 
     /// <summary>Re-mesh the region an edit touched (expanded by one grid cell).</summary>
     private void InvalidateRegion(Selection sel)

@@ -23,9 +23,9 @@ public partial class EmptyMap : Node3D
     /// <summary>Chunk size for the mesher.</summary>
     [Export] public int ChunkSize { get; set; } = 128;
 
-    public Octa? Octa { get; private set; }
-    public WorldCommandSink? Sink { get; private set; }
-    public WorldChunkRenderer? Renderer { get; private set; }
+    public Octa? Octa { get; set; }
+    public WorldCommandSink? Sink { get; set; }
+    public WorldChunkRenderer? Renderer { get; set; }
 
     public override void _Ready()
     {

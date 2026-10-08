@@ -43,7 +43,12 @@ Done:
 
 Remaining:
 
-- [ ] `Resource`-based world save/load (compact binary format) — blocks the editor and the standalone importer.
+- [x] `Resource`-based world save/load (compact binary format) — `WorldSnapshot`
+      (canonical octree + entity blob, versioned, content-hashed) wrapped in Godot
+      `WorldResource`/`HistoryResource`, plus the map-directory layout + compaction +
+      archive content hash (`World/Save/`, asserted by `test/WorldSnapshotTest.cs`
+      and `test/MapFormatTest.cs`). Round-trips church51 exactly. See
+      [editor-and-commands.md](editor-and-commands.md#7-map-format-versioned-command-history).
 - [x] Per-frame chunk update budget + incremental dirty-chunk rebuilds
       (`WorldChunkRenderer`, `OctaMesher.BuildChunk`, `OctaFaceWalker.WalkRegion`;
       `test/IncrementalMeshTest.cs`). Default chunk 128, budget 4/frame — see
@@ -64,7 +69,10 @@ Done (lives in the dev viewer; not yet a standalone offline tool):
 
 Remaining:
 
-- [ ] Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn` (blocks on §1 save format).
+- [ ] Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn`.
+      - [x] **Geometry + entities**: `OgzConverter` writes `world.res` + `Level.tscn` from
+            a parsed `.ogz` (asserted by `test/MapFormatTest.cs`, church51 round-trips
+            exactly). Metadata-driven material manifest emission is still pending.
 - [ ] envmap / monsters / mode entities (flag, box, platform, elevator, …).
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
@@ -141,7 +149,10 @@ that underpins this entire section.
             `test/SelectionTransformTest.cs`.
 - [ ] Texturing, blending, entity placement.
 - [ ] Selection, copy/paste, fill, remip.
-- [ ] Save/load in our format.
+- [x] Save/load in our format (M5): `WorldSnapshot` + map directory (`world.res`,
+      `history.res`, `Level.tscn`) + compaction + archive hash; `OgzConverter`;
+      `F2` save / `F3` load binds in `EditorController`. See
+      [editor-and-commands.md](editor-and-commands.md#7-map-format-versioned-command-history).
 
 ## 5. Combat & spawns
 
