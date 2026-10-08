@@ -85,6 +85,37 @@ This is the GoDotTest runner rather than a `dotnet test` adapter because the
 world core uses Godot types and lives in the game assembly. Tests are excluded
 from `ExportRelease` builds.
 
+### Running a single suite or test
+
+GoDotTest filters by suite or by suite + method — pass the name to `--run-tests`
+with `=`, **not** as a separate argument (a bare name after the flag is ignored
+and the whole assembly runs):
+
+```sh
+# One suite
+"$GODOT" --headless --path . --run-tests=OctaMeshTest --quit-on-finish
+
+# One method
+"$GODOT" --headless --path . --run-tests=EditorClipboardTest.ScrollEditIsUndoable --quit-on-finish
+
+# Via the helper (GODOT defaults to the macOS .NET editor path)
+GODOT=/path/to/Godot ./run-tests.sh   # note: run-tests.sh itself always runs everything
+```
+
+(If `$GODOT` is unset, `run-tests.sh` and the commands above fall back to
+`/Applications/Godot_mono.app/Contents/MacOS/Godot`.)
+
+### Why the full suite is CPU-heavy
+
+A full run is **compute-bound on world meshing** (≈90–100% `%CPU`) rather than
+on the assertions, because every `EmptyMap` fixture meshes the whole world up
+front. This arrived with the chunk mesher in `98e5b8f`; it is tracked as a known
+performance issue, with mitigations, in
+[known-bugs.md](docs/known-bugs.md#1-eager-world-meshing-saturates-a-cpu-core-test-runs--world-load).
+
+To keep local iteration cheap, run only the suite you are touching (above)
+rather than the whole assembly.
+
 ## Inspecting a map
 
 `scenes/editor_scene.tscn` is a dev tool: it reads a legacy `.ogz` from the
