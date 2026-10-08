@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Materials;
@@ -20,8 +21,18 @@ public static class MonsterBuilder
     /// <summary>shared/ents.h <c>physent</c> default radius.</summary>
     public const float BaseRadius = 4.1f;
 
-    public static Node3D Build(OgzMap map, ModelCatalog? models = null, ITextureSource? textures = null)
+    /// <param name="warn">
+    /// Sink for fallback diagnostics. Defaults to <see cref="GD.PushWarning"/>;
+    /// tests substitute a collector so an intentionally out-of-range type does
+    /// not surface as an unexpected engine warning (with C# backtrace).
+    /// </param>
+    public static Node3D Build(
+        OgzMap map,
+        ModelCatalog? models = null,
+        ITextureSource? textures = null,
+        Action<string>? warn = null)
     {
+        warn ??= GD.PushWarning;
         var root = new Node3D { Name = "Monsters" };
         var skinCache = new Dictionary<string, Material>();
 
@@ -31,7 +42,7 @@ public static class MonsterBuilder
             var info = MonsterTypes.Get(type);
             if (info == null)
             {
-                GD.PushWarning($"[monster] unknown monster type {type} at entity {i}; using type 0");
+                warn($"[monster] unknown monster type {type} at entity {i}; using type 0");
                 type = 0;
                 info = MonsterTypes.All[0];
             }

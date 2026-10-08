@@ -129,7 +129,8 @@ public class EntityMonsterTest : GoTestBase
         var map = TestData.ReadMap("lost");
         map.Entities.Add(new World.Ogz.OgzEntity { Type = EntityType.Monster, Attr1 = 90, Attr2 = 200, Attr3 = 7 });
 
-        var root = MonsterBuilder.Build(map);
+        var warnings = new System.Collections.Generic.List<string>();
+        var root = MonsterBuilder.Build(map, warn: warnings.Add);
         Monster? last = null;
         foreach (var child in root.GetChildren())
             if (child is Monster m) last = m;
@@ -138,6 +139,9 @@ public class EntityMonsterTest : GoTestBase
         TestAssert.Equal(0, last!.MonsterType, "clamped to type 0");
         TestAssert.Equal("ogro", last.ModelPath, "ogro model");
         TestAssert.Equal(7, last.Tag, "tag preserved");
+        // The fallback must still report the unknown type exactly once.
+        TestAssert.Equal(1, warnings.Count, "one warning emitted");
+        TestAssert.True(warnings[0].Contains("unknown monster type 200"), "warning names the bad type");
         root.Free();
     }
 }
