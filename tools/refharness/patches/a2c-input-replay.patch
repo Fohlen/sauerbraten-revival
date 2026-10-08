@@ -1,6 +1,6 @@
 --- a/engine/physics.cpp
 +++ b/engine/physics.cpp
-@@ -1812,11 +1812,89 @@
+@@ -1812,11 +1812,101 @@
  {
      a2inputinit();
      a2inputwriteln("P", diff, physframetime, physsteps, 0, 0, 0);
@@ -55,6 +55,18 @@
 +    pl->resetinterp();
 +}
 +
++extern void quit(); // engine/main.cpp
++static void a2replaydone()
++{
++    a2replayeof = true;
++    // A replay plays back in real time (physicsframe catches up per rendered
++    // frame), so it must terminate itself rather than be killed by a timeout.
++    // Quit when the input is exhausted so a capture/replay script is
++    // deterministic and self-terminating. SAUER_REPLAY_NOQUIT=1 to stay up.
++    const char *nq = getenv("SAUER_REPLAY_NOQUIT");
++    if(!nq || !*nq || *nq == '0') quit();
++}
++
 +static bool a2replayapply(physent *pl)
 +{
 +    if(!a2replaychecked)
@@ -69,11 +81,11 @@
 +    {
 +        a2replayfirst = false;
 +        while(fgets(line, sizeof(line), a2replayfile)) if(a2replayparse(line, a2replayprev)) break;
-+        if(feof(a2replayfile)) { a2replayeof = true; return false; }
++        if(feof(a2replayfile)) { a2replaydone(); return false; }
 +        a2replayrestore(pl, a2replayprev);
 +    }
 +    while(fgets(line, sizeof(line), a2replayfile)) if(a2replayparse(line, a2replayrow)) break;
-+    if(feof(a2replayfile)) { a2replayeof = true; return false; }
++    if(feof(a2replayfile)) { a2replaydone(); return false; }
 +    pl->move = (schar)a2replayrow[2];
 +    pl->strafe = (schar)a2replayrow[3];
 +    pl->jumping = a2replayrow[4] != 0;
