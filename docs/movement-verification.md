@@ -164,6 +164,28 @@ show the same signature. It is a lip / step launch (`trystepup`/`cansmooth`/
 (`session-stable` step 5195: landing relaunch `vz=+17.3` while dropping horizontal
 speed `(104,42)→(92,33)`).
 
+**`-ffast-math` step-up fix.** `trystepup()`'s smooth branch does
+`d->o.z += maxstep+0.1f; … d->o.z -= maxstep+0.1f;`. Under the reference's
+`-ffast-math` the compiler **folds the two z adds**, so the settled z is exactly
+`old + smoothdir.z`. The port performed the round-trip faithfully and lost
+`2^-12 ≈ 0.00024` **per substep** in float32, drifting the player up along the
+smooth ramp and flipping `collide()` at the lip. `OctaPhysics.TryStepUp` now
+computes the raised z without mutating the settled z (`zadd = old.z + smoothdir.z`),
+reproducing the fold. No regressions on any trace; moves the `session-stable3`
+first miss from step 3035 → 3036. Also matched the reference's `rescale(1)`
+(`mul(1/mag)`, not `div(mag)`) for `stairdir`/`smoothdir`, which likewise changes
+rounding.
+
+**Knife-edge caveat (3036).** Replaying `session-stable3.csv` through the **original
+engine** (free-running, `SAUER_REPLAY`) diverges from the recording at step ~3030
+and transitions `ps=5→4` one substep earlier than the recording shows — the
+recording and the original's own replay disagree at this lip. So the port matching
+the recording at 3036 is partly chance; the reproducible target is the *reference
+replay's* trace, not the raw capture. Reference `move()` ground truth:
+`tools/refharness/patches/a2e-move-trace.patch` (`SAUER_MOVETRACE=<path>`) dumps the
+per-substep `move()`/`trystepup()` decision chain; the port's equivalent is
+`OctaPhysics.MoveTrace` + `test/MoveTraceProbe.cs`.
+
 **Clipplane ground truth (A3.3–A3.4).** The instrumented client also dumps
 `SAUER_TRACE.clips`: for every deformed cube the player's collision touches, its
 edge bytes, `material`, the **stored `c.visible`**, and per face the

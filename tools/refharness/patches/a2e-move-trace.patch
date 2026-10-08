@@ -1,0 +1,175 @@
+--- a/engine/physics.cpp
++++ b/engine/physics.cpp
+@@ -14,6 +14,7 @@
+ static int clipcacheversion = -2;
+ 
+ static void a2traceclip(const cube &c, const ivec &o, int size, const clipplanes &p);
++static void a2mtlog(const char *fmt, ...);
+ 
+ static inline clipplanes &getclipplanes(const cube &c, const ivec &o, int size, bool collide = true, int offset = 0)
+ {
+@@ -853,6 +854,7 @@
+     if(fabs(d->o.x - p.o.x) > p.r.x + d->radius || fabs(d->o.y - p.o.y) > p.r.y + d->radius ||
+        d->o.z + d->aboveeye < p.o.z - p.r.z || d->o.z - d->eyeheight > p.o.z + p.r.z)
+         return false;
++    if(d==player) a2mtlog("    fcp co=(%d,%d,%d) size=%d cvisible=%d pVis=%d nplanes=%d o=(%.4f,%.4f,%.4f) dir=(%.4f,%.4f,%.4f)", co.x, co.y, co.z, size, (int)c.visible, (int)p.visible, (int)p.size, d->o.x, d->o.y, d->o.z, dir.x, dir.y, dir.z);
+ 
+     collidewall = vec(0, 0, 0);
+     float bestdist = -1e10f;
+@@ -890,9 +892,11 @@
+     if(bestplane >= 0) collidewall = p.p[bestplane];
+     else if(collidewall.iszero())
+     {
++        if(d==player) a2mtlog("    fcp -> false (inside) bestplane=%d wall=(%.4f,%.4f,%.4f)", bestplane, collidewall.x, collidewall.y, collidewall.z);
+         collideinside++;
+         return false;
+     }
++    if(d==player) a2mtlog("    fcp -> true bestplane=%d wall=(%.4f,%.4f,%.4f)", bestplane, collidewall.x, collidewall.y, collidewall.z);
+     return true;
+ }
+ 
+@@ -1109,6 +1113,7 @@
+ {
+     vec old(d->o), stairdir = (obstacle.z >= 0 && obstacle.z < SLOPEZ ? vec(-obstacle.x, -obstacle.y, 0) : vec(dir.x, dir.y, 0)).rescale(1);
+     bool cansmooth = true;
++    if(d==player) a2mtlog("  tsu enter obstacle=(%.4f,%.4f,%.4f) maxstep=%.2f floor=(%.4f,%.4f,%.4f) stairdir=(%.4f,%.4f,%.4f) ps=%d", obstacle.x, obstacle.y, obstacle.z, maxstep, floor.x, floor.y, floor.z, stairdir.x, stairdir.y, stairdir.z, d->physstate);
+     /* check if there is space atop the stair to move to */
+     if(d->physstate != PHYS_STEP_UP)
+     {
+@@ -1119,10 +1124,11 @@
+         if(collide(d))
+         {
+             d->o = old;
+-            if(!collide(d, vec(0, 0, -1), SLOPEZ)) return false;
++            if(!collide(d, vec(0, 0, -1), SLOPEZ)) { if(d==player) a2mtlog("  tsu false (headroom, no floor)"); return false; }
+             cansmooth = false;
+         }
+     }
++    if(d==player) a2mtlog("  tsu cansmooth=%d", cansmooth);
+ 
+     if(cansmooth)
+     {
+@@ -1163,7 +1169,9 @@
+             else smoothdir.z = dir.z;
+             d->o.add(smoothdir);
+             d->o.z += maxstep + 0.1f;
+-            if(!collide(d, smoothdir))
++            bool smoothHit = collide(d, smoothdir);
++            if(d==player) a2mtlog("  tsu smoothdir=(%.4f,%.4f,%.4f) scale=%d smoothCollide=%d", smoothdir.x, smoothdir.y, smoothdir.z, scale, smoothHit);
++            if(!smoothHit)
+             {
+                 d->o.z -= maxstep + 0.1f;
+                 if(d->physstate == PHYS_FALL || d->floor != floor)
+@@ -1173,6 +1181,7 @@
+                     switchfloor(d, dir, d->floor);
+                 }
+                 d->physstate = PHYS_STEP_UP;
++                if(d==player) a2mtlog("  tsu true (smooth)");
+                 return true;
+             }
+         }
+@@ -1181,7 +1190,9 @@
+     /* try stepping up */
+     d->o = old;
+     d->o.z += dir.magnitude();
+-    if(!collide(d, vec(0, 0, 1)))
++    bool upHit = collide(d, vec(0, 0, 1));
++    if(d==player) a2mtlog("  tsu plain-up collide=%d", upHit);
++    if(!upHit)
+     {
+         if(d->physstate == PHYS_FALL || d->floor != floor)
+         {
+@@ -1190,9 +1201,11 @@
+             switchfloor(d, dir, d->floor);
+         }
+         if(cansmooth) d->physstate = PHYS_STEP_UP;
++        if(d==player) a2mtlog("  tsu true (plain)");
+         return true;
+     }
+     d->o = old;
++    if(d==player) a2mtlog("  tsu false");
+     return false;
+ }
+ 
+@@ -1342,16 +1355,27 @@
+     d->o = moved;
+     return found;
+ }
++
++// --- A3 move() decision trace (SAUER_MOVETRACE=<path>) ----------------------
++// Dumps the local player's move()/trystepup() control flow per substep so the
++// port's OctaPhysics.MoveTrace can be diffed against it at a miss.
++static FILE *a2mtfile = NULL;
++static bool a2mtchecked = false, a2mtactive = false;
++static int a2mtsub = 0;
++static void a2mtlog(const char *fmt, ...);
+ 
+ bool move(physent *d, vec &dir)
+ {
++    if(d==player) a2mtsub++;
+     vec old(d->o);
+     bool collided = false, slidecollide = false;
+     vec obstacle;
+     d->o.add(dir);
++    if(d==player) a2mtlog("move in o=(%.4f,%.4f,%.4f) dir=(%.4f,%.4f,%.4f) ps=%d floor=(%.4f,%.4f,%.4f)", d->o.x, d->o.y, d->o.z, dir.x, dir.y, dir.z, d->physstate, d->floor.x, d->floor.y, d->floor.z);
+     if(collide(d, dir) || ((d->type==ENT_AI || d->type==ENT_INANIMATE) && collide(d, vec(0, 0, 0), 0, false)))
+     {
+         obstacle = collidewall;
++        if(d==player) a2mtlog("  collide hit obstacle=(%.4f,%.4f,%.4f)", obstacle.x, obstacle.y, obstacle.z);
+         /* check to see if there is an obstacle that would prevent this one from being used as a floor (or ceiling bump) */
+         if(d->type==ENT_PLAYER && ((collidewall.z>=SLOPEZ && dir.z<0) || (collidewall.z<=-SLOPEZ && dir.z>0)) && (dir.x || dir.y) && collide(d, vec(dir.x, dir.y, 0)))
+         {
+@@ -1361,11 +1385,13 @@
+         d->o = old;
+         d->o.z -= STAIRHEIGHT;
+         d->zmargin = -STAIRHEIGHT;
+-        if(d->physstate == PHYS_SLOPE || d->physstate == PHYS_FLOOR || (collide(d, vec(0, 0, -1), SLOPEZ) && (d->physstate==PHYS_STEP_UP || d->physstate==PHYS_STEP_DOWN || collidewall.z>=FLOORZ)))
++        bool tryup = d->physstate == PHYS_SLOPE || d->physstate == PHYS_FLOOR || (collide(d, vec(0, 0, -1), SLOPEZ) && (d->physstate==PHYS_STEP_UP || d->physstate==PHYS_STEP_DOWN || collidewall.z>=FLOORZ));
++        if(d==player) a2mtlog("  stepup-branch tryup=%d ps=%d", tryup, d->physstate);
++        if(tryup)
+         {
+             d->o = old;
+             d->zmargin = 0;
+-            if(trystepup(d, dir, obstacle, STAIRHEIGHT, d->physstate == PHYS_SLOPE || d->physstate == PHYS_FLOOR ? d->floor : vec(collidewall))) return true;
++            if(trystepup(d, dir, obstacle, STAIRHEIGHT, d->physstate == PHYS_SLOPE || d->physstate == PHYS_FLOOR ? d->floor : vec(collidewall))) { if(d==player) a2mtlog("  trystepup -> true"); return true; }
+         }
+         else
+         {
+@@ -1394,6 +1420,7 @@
+     vec floor(0, 0, 0);
+     bool slide = collided,
+          found = findfloor(d, collided, obstacle, slide, floor);
++    if(d==player) a2mtlog("  findfloor collided=%d found=%d slide=%d floor=(%.4f,%.4f,%.4f)", collided, found, slide, floor.x, floor.y, floor.z);
+     if(slide || (!collided && floor.z > 0 && floor.z < WALLZ))
+     {
+         slideagainst(d, dir, slide ? obstacle : floor, found, slidecollide);
+@@ -1402,6 +1429,7 @@
+     }
+     if(found) landing(d, dir, floor, collided);
+     else falling(d, dir, floor);
++    if(d==player) a2mtlog("move out collided=%d found=%d ps=%d vel=(%.4f,%.4f,%.4f) floor=(%.4f,%.4f,%.4f)", collided, found, d->physstate, d->vel.x, d->vel.y, d->vel.z, d->floor.x, d->floor.y, d->floor.z);
+     return !collided;
+ }
+ 
+@@ -1715,7 +1743,21 @@
+         pl->o.x, pl->o.y, pl->o.z, pl->vel.x, pl->vel.y, pl->vel.z,
+         pl->falling.x, pl->falling.y, pl->falling.z,
+         pl->physstate, (int)pl->timeinair, pl->floor.x, pl->floor.y, pl->floor.z);
++    a2mtsub = 0;
+ }
++static void a2mtlog(const char *fmt, ...)
++{
++    if(!a2mtchecked)
++    {
++        a2mtchecked = true;
++        const char *path = getenv("SAUER_MOVETRACE");
++        if(path && *path) { a2mtfile = fopen(path, "w"); a2mtactive = a2mtfile != NULL; }
++    }
++    if(!a2mtactive) return;
++    fprintf(a2mtfile, "step %d sub %d | ", a2tracestep, a2mtsub);
++    va_list args; va_start(args, fmt); vfprintf(a2mtfile, fmt, args); va_end(args);
++    fprintf(a2mtfile, "\n");
++}
+ // --- A3 clipplane dump: every deformed cube the player's collision touches ----
+ // Format:  C <step> <time> <co> <size> <visible> <nplanes> <o> <r> <edges hex>
+ //          F <orient> <classifyface> <collideface>

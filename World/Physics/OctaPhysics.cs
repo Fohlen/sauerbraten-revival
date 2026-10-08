@@ -117,8 +117,10 @@ public sealed class OctaPhysics
     private bool CubeCollide(PhysEnt d, Vector3 dir, float cutoff, Cube c, Vector3I co, int size, bool solid)
     {
         if (d.CollideType == Phys.CollideObb) return false;
-        if (c.IsEntirelySolid() || solid) return FuzzyCollideSolid(d, dir, cutoff, c, co, size);
-        return FuzzyCollidePlanes(d, dir, cutoff, c, co, size);
+        bool entire = c.IsEntirelySolid() || solid;
+        bool r = entire ? FuzzyCollideSolid(d, dir, cutoff, c, co, size) : FuzzyCollidePlanes(d, dir, cutoff, c, co, size);
+        if (MoveTrace != null) MT($"    cubecollide co={co} size={size} entire={entire} solid={solid} -> {r} wall={CollideWall}");
+        return r;
     }
 
     /// <summary>physics.cpp:777 <c>fuzzycollidesolid</c> (AABB test).</summary>
@@ -161,13 +163,15 @@ public sealed class OctaPhysics
     /// <summary>physics.cpp:843 <c>fuzzycollideplanes</c> — COLLIDE_ELLIPSE vs a deformed cube.</summary>
     private bool FuzzyCollidePlanes(PhysEnt d, Vector3 dir, float cutoff, Cube c, Vector3I co, int size)
     {
-        var p = OctaClipping.GetClipPlanes(_octa, c, co, size, OctaVisible.CollisionVisibleMask(_octa, c, co, size));
+        int mask = OctaVisible.CollisionVisibleMask(_octa, c, co, size);
+        var p = OctaClipping.GetClipPlanes(_octa, c, co, size, mask);
         if (Mathf.Abs(d.O.X - p.O.X) > p.R.X + d.Radius || Mathf.Abs(d.O.Y - p.O.Y) > p.R.Y + d.Radius ||
             d.O.Z + d.AboveEye < p.O.Z - p.R.Z || d.O.Z - d.EyeHeight > p.O.Z + p.R.Z) return false;
 
         CollideWall = Vector3.Zero;
         float bestdist = -1e10f;
         int visible = p.Visible;
+        if (MoveTrace != null) MT($"    fcp co={co} size={size} mask={mask} pVis={p.Visible} nplanes={p.Size} o={d.O} dir={dir}");
 
         bool Side(int side, float dist, float dotval, float margin, Vector3 normal)
         {
@@ -294,8 +298,11 @@ public sealed class OctaPhysics
     public bool TryStepUp(PhysEnt d, ref Vector3 dir, Vector3 obstacle, float maxstep, Vector3 floor)
     {
         Vector3 old = d.O;
-        Vector3 stairdir = (obstacle.Z >= 0 && obstacle.Z < Phys.SlopeZ ? new Vector3(-obstacle.X, -obstacle.Y, 0) : new Vector3(dir.X, dir.Y, 0)).Normalized();
+        // geom.h rescale(1): mul(1/mag), NOT div(mag) — the rounding differs.
+        Vector3 stairdir = obstacle.Z >= 0 && obstacle.Z < Phys.SlopeZ ? new Vector3(-obstacle.X, -obstacle.Y, 0) : new Vector3(dir.X, dir.Y, 0);
+        { float mag = stairdir.Length(); if (mag > 1e-6f) stairdir *= 1.0f / mag; }
         bool cansmooth = true;
+        if (MoveTrace != null) MT($"  tsu enter obstacle={obstacle} maxstep={maxstep} floor={floor} stairdir={stairdir} ps={d.PhysState}");
         if (d.PhysState != Phys.PhysStepUp)
         {
             Vector3 checkdir = stairdir * 0.1f;
@@ -304,10 +311,11 @@ public sealed class OctaPhysics
             if (Collide(d, Vector3.Zero))
             {
                 d.O = old;
-                if (!Collide(d, new Vector3(0, 0, -1), Phys.SlopeZ)) return false;
+                if (!Collide(d, new Vector3(0, 0, -1), Phys.SlopeZ)) { if (MoveTrace != null) MT("  tsu false (headroom, no floor)"); return false; }
                 cansmooth = false;
             }
         }
+        if (MoveTrace != null) MT($"  tsu cansmooth={cansmooth}");
         if (cansmooth)
         {
             Vector3 checkdir = stairdir; checkdir.Z += 1; checkdir *= maxstep;
@@ -332,37 +340,49 @@ public sealed class OctaPhysics
             {
                 if (magxy > scale * dir.Z)
                 {
-                    smoothdir = smoothdir / magxy;
+                    smoothdir *= 1.0f / magxy; // vec::mul(1/magxy), not div(magxy)
                     smoothdir.Z = 1.0f / scale;
                     smoothdir *= dir.Length() / smoothdir.Length();
                 }
                 else smoothdir.Z = dir.Z;
+                // Reference: d->o.add(smoothdir); d->o.z += maxstep+0.1f; [collide];
+                // d->o.z -= maxstep+0.1f. Under -ffast-math the compiler folds the
+                // two z adds, so the settled z is exactly old+smoothdir.z (no float
+                // round-trip loss). Reproduce that here instead of add/subtracting.
+                float zadd = d.O.Z + smoothdir.Z;
                 d.O += smoothdir;
-                d.O = d.O with { Z = d.O.Z + maxstep + 0.1f };
-                if (!Collide(d, smoothdir))
+                d.O = d.O with { Z = zadd + (maxstep + 0.1f) };
+                bool smoothHit = Collide(d, smoothdir);
+                if (MoveTrace != null) MT($"  tsu smoothdir={smoothdir} scale={scale} smoothCollide={smoothHit}");
+                if (!smoothHit)
                 {
-                    d.O = d.O with { Z = d.O.Z - (maxstep + 0.1f) };
+                    d.O = d.O with { Z = zadd };
                     if (d.PhysState == Phys.PhysFall || d.Floor != floor)
                     {
                         d.TimeInAir = 0; d.Floor = floor; SwitchFloor(d, ref dir, d.Floor);
                     }
                     d.PhysState = Phys.PhysStepUp;
+                    if (MoveTrace != null) MT("  tsu true (smooth)");
                     return true;
                 }
             }
         }
         d.O = old;
         d.O = d.O with { Z = d.O.Z + dir.Length() };
-        if (!Collide(d, new Vector3(0, 0, 1)))
+        bool upHit = Collide(d, new Vector3(0, 0, 1));
+        if (MoveTrace != null) MT($"  tsu plain-up collide={upHit}");
+        if (!upHit)
         {
             if (d.PhysState == Phys.PhysFall || d.Floor != floor)
             {
                 d.TimeInAir = 0; d.Floor = floor; SwitchFloor(d, ref dir, d.Floor);
             }
             if (cansmooth) d.PhysState = Phys.PhysStepUp;
+            if (MoveTrace != null) MT("  tsu true (plain)");
             return true;
         }
         d.O = old;
+        if (MoveTrace != null) MT("  tsu false");
         return false;
     }
 
@@ -478,6 +498,11 @@ public sealed class OctaPhysics
         return found;
     }
 
+    /// <summary>Optional diagnostic sink for <see cref="Move"/> (null in production).
+    /// Set by test probes to diff the move() decision chain against the reference.</summary>
+    public static System.Action<string> MoveTrace;
+    private static void MT(string s) { MoveTrace?.Invoke(s); }
+
     /// <summary>physics.cpp:1340 <c>move</c>.</summary>
     public bool Move(PhysEnt d, ref Vector3 dir)
     {
@@ -485,9 +510,11 @@ public sealed class OctaPhysics
         bool collided = false, slidecollide = false;
         Vector3 obstacle = Vector3.Zero;
         d.O += dir;
+        if (MoveTrace != null) MT($"move in o={d.O} dir={dir} ps={d.PhysState} floor={d.Floor}");
         if (Collide(d, dir))
         {
             obstacle = CollideWall;
+            if (MoveTrace != null) MT($"  collide hit obstacle={obstacle} ps={d.PhysState}");
             if (d.Type == Phys.EntPlayer && ((CollideWall.Z >= Phys.SlopeZ && dir.Z < 0) || (CollideWall.Z <= -Phys.SlopeZ && dir.Z > 0)) && (dir.X != 0 || dir.Y != 0) && Collide(d, new Vector3(dir.X, dir.Y, 0)))
             {
                 if (CollideWall.Dot(dir) >= 0) slidecollide = true;
@@ -496,21 +523,25 @@ public sealed class OctaPhysics
             d.O = old;
             d.O = d.O with { Z = d.O.Z - Phys.StairHeight };
             d.Zmargin = -Phys.StairHeight;
-            if (d.PhysState == Phys.PhysSlope || d.PhysState == Phys.PhysFloor ||
-                (Collide(d, new Vector3(0, 0, -1), Phys.SlopeZ) && (d.PhysState == Phys.PhysStepUp || d.PhysState == Phys.PhysStepDown || CollideWall.Z >= Phys.FloorZ)))
+            bool tryup = d.PhysState == Phys.PhysSlope || d.PhysState == Phys.PhysFloor ||
+                (Collide(d, new Vector3(0, 0, -1), Phys.SlopeZ) && (d.PhysState == Phys.PhysStepUp || d.PhysState == Phys.PhysStepDown || CollideWall.Z >= Phys.FloorZ));
+            if (MoveTrace != null) MT($"  stepup-branch tryup={tryup} ps={d.PhysState}");
+            if (tryup)
             {
                 d.O = old; d.Zmargin = 0;
-                if (TryStepUp(d, ref dir, obstacle, Phys.StairHeight, d.PhysState == Phys.PhysSlope || d.PhysState == Phys.PhysFloor ? d.Floor : CollideWall)) return true;
+                if (TryStepUp(d, ref dir, obstacle, Phys.StairHeight, d.PhysState == Phys.PhysSlope || d.PhysState == Phys.PhysFloor ? d.Floor : CollideWall)) { if (MoveTrace != null) MT("  trystepup -> true"); return true; }
             }
             else { d.O = old; d.Zmargin = 0; }
             collided = true;
         }
         else if (d.PhysState == Phys.PhysStepUp)
         {
-            if (Collide(d, new Vector3(0, 0, -1), Phys.SlopeZ))
+            bool c = Collide(d, new Vector3(0, 0, -1), Phys.SlopeZ);
+            if (MoveTrace != null) MT($"  stepup-state collide_down={c}");
+            if (c)
             {
                 d.O = old;
-                if (TryStepUp(d, ref dir, new Vector3(0, 0, 1), Phys.StairHeight, CollideWall)) return true;
+                if (TryStepUp(d, ref dir, new Vector3(0, 0, 1), Phys.StairHeight, CollideWall)) { if (MoveTrace != null) MT("  trystepup -> true"); return true; }
                 d.O += dir;
             }
         }
@@ -518,12 +549,13 @@ public sealed class OctaPhysics
         {
             Vector3 moved = d.O;
             d.O = old;
-            if (TryStepDown(d, ref dir)) return true;
+            if (TryStepDown(d, ref dir)) { if (MoveTrace != null) MT("  trystepdown -> true"); return true; }
             d.O = moved;
         }
         Vector3 floor = Vector3.Zero;
         bool slide = collided;
         bool found = FindFloor(d, collided, obstacle, ref slide, ref floor);
+        if (MoveTrace != null) MT($"  findfloor collided={collided} found={found} slide={slide} floor={floor}");
         if (slide || (!collided && floor.Z > 0 && floor.Z < Phys.WallZ))
         {
             SlideAgainst(d, ref dir, slide ? obstacle : floor, found, slidecollide);
@@ -531,6 +563,7 @@ public sealed class OctaPhysics
         }
         if (found) Landing(d, ref dir, floor, collided);
         else Falling(d, ref dir, floor);
+        if (MoveTrace != null) MT($"move out collided={collided} found={found} ps={d.PhysState} vel={d.Vel} floor={d.Floor}");
         return !collided;
     }
 
