@@ -212,7 +212,6 @@ that underpins this entire section.
       - [x] **M1e selection transforms**: `FlipSelection` (`mpflip`) and
             `RotateSelection` (`mprotate`); asserted by
             `test/SelectionTransformTest.cs`.
-- [ ] Texturing, blending, entity placement.
 - [x] Selection, copy/paste, fill, remip — `Selection`/`Block3` (`World/Commands/`),
       `BlockCopy`/`PasteBlock`/`Fill`/`DeleteCube`/`Remip`/`RemipAll`
       (`World/OctaEdit.cs`); asserted by `test/SelectionTest.cs`,
@@ -223,6 +222,10 @@ that underpins this entire section.
       `history.res`, `Level.tscn`) + compaction + archive hash; `OgzConverter`;
       `F2` save / `F3` load binds in `EditorController`. See
       [editor-and-commands.md](editor-and-commands.md#7-map-format-versioned-command-history).
+
+Remaining:
+
+- [ ] Texturing, blending, entity placement.
 
 ## 5. Combat & spawns
 
