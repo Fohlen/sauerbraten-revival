@@ -259,7 +259,10 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   the engine-default textures and a time-based UV scroll for the flowing animation
   (mirrors `water.cpp`/`material.cpp`; the catalogue doesn't export `matwater`/
   `matlava` yet).
-- **TODO (deferred)** — **specular maps** (packed/non-PBR), **alpha/transparency**
+- **TODO (deferred)** — **envmap sampling** (`SHADER_ENVMAP`, `closestenvmap`;
+  the `ET_ENVMAP` probes themselves are now imported — see
+  [ogz-import.md](ogz-import.md#entity-porting-status) — but nothing reads them),
+  **specular maps** (packed/non-PBR), **alpha/transparency**
   (`alphafront`/`alphaback`, `LAYER_*`), blended layers, exact `visibletris`
   culling, face merges, T-joints, grass, lightmaps, and incremental dirty-chunk
   rebuilds. Tracked divergences live in [known-bugs.md](known-bugs.md).

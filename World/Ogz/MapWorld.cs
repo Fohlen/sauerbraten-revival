@@ -98,6 +98,7 @@ public partial class MapWorld : Node3D
         var modelCatalog = ModelCatalog.Load(Path.Combine(modelsDir, "models.json"), modelsDir, modelsResDir);
 
         AddChild(LightBuilder.Build(map));
+        AddChild(EnvMapBuilder.Build(map));
         AddChild(PlayerStartBuilder.Build(map, textures));
         AddChild(TriggerBuilder.Build(map, catalogue, textures));
         AddChild(ItemBuilder.Build(map, modelCatalog, textures));

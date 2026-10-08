@@ -242,7 +242,7 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 | ET_LIGHT | 1 | OmniLight3D / SpotLight3D | ✅ `LightBuilder` |
 | ET_MAPMODEL | 2 | MeshInstance3D | ✅ `MapModel` (assimp → glTF Resources) |
 | ET_PLAYERSTART | 3 | SpawnPoint (custom) | ✅ `PlayerStartBuilder` |
-| ET_ENVMAP | 4 | ReflectionProbe | later |
+| ET_ENVMAP | 4 | ReflectionProbe | ✅ `EnvMapBuilder` (earthstation, 38 probes) |
 | ET_PARTICLES | 5 | GPUParticles3D | ✅ `ParticleBuilder`/`ParticleRenderer` (billboards; custom effects deferred) |
 | ET_SOUND | 6 | AudioStreamPlayer3D | ✅ `SoundBuilder` (bt_falls) |
 | ET_SPOTLIGHT | 7 | SpotLight3D | ✅ (attaches to a light) |
@@ -254,9 +254,9 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 
 ### Entity porting status
 
-Ported: lights + spotlights, playerstarts, mapmodels, triggers, items, particles and
-sounds. The remainder is being done **one slice at a time, each verified** (the
-`docs/features.md` roadmap mirrors this):
+Ported: lights + spotlights, envmaps, playerstarts, mapmodels, triggers, items,
+particles and sounds. The remainder is being done **one slice at a time, each
+verified** (the `docs/features.md` roadmap mirrors this):
 
 1. **Triggers** ✅ — `TriggerBuilder` represents `ET_TELEPORT` (`attr1` = destination tag,
    `attr2` = model: `>0` a mapmodel, `0` the built-in teleporter, `<0` invisible; `attr3` =
@@ -276,9 +276,64 @@ sounds. The remainder is being done **one slice at a time, each verified** (the
    .ogg/.wav are loaded from the dump and loop in the dev viewer. Verified on
    **bt_falls** (outdoors/waterfall/hum7, 5 sound entities). Runtime playback control
    is future game logic.
+5. **EnvMaps** ✅ — `EnvMapBuilder` maps `ET_ENVMAP` to `EnvMapProbe`
+   (`ReflectionProbe`, box mode): `attr1` = radius (0 → `envmapradius` 128, clamped
+   0..10000), `attr2` = cubemap size (4..9, then capped by `envmapsize` 7), `attr3` =
+   blur (1..2). Verified on **earthstation** (38 probes, mixed radii). The
+   `SHADER_ENVMAP` materials that *sample* a probe aren't ported yet (see
+   [rendering.md](rendering.md)); this is the reflector only.
 
-Later: `ET_ENVMAP`, monsters, and the remaining mode entities (flag, box, barrel,
-platform, elevator, …).
+Later: monsters, and the remaining mode entities (flag, box, barrel, platform,
+elevator, …).
+
+#### Remaining gaps (detailed)
+
+The item below has no builder today; the type ids exist in
+[`EntityType.cs`](../World/Entities/EntityType.cs) but `MapWorld`/`OgzConverter`
+dispatch no handler, so the entity is silently dropped. Attribute semantics are the
+`fpsgame/game.h` comments + `entities::fixentity`/`entradius`/`entmodel`.
+
+**`ET_ENVMAP` (4) — reflection/cubemap probe** ✅ done, see item 5 above. The
+remaining fidelity gap is the material side: engine `SHADER_ENVMAP` surfaces (and
+`closestenvmap` selection) are not ported, so nothing samples the probe yet.
+
+**CTF / capture mode entities**
+
+| Type | id | Attrs | Projection |
+| --- | --- | --- | --- |
+| `BASE` | 24 | `attr1` = ammo type, `attr2` = tag | mode node + `base/neutral\|red\|blue` model |
+| `RESPAWNPOINT` | 25 | `attr1` = yaw, `attr2` = type | SpawnPoint (classic SP) |
+| `BOX` | 26 | `attr1` yaw, `attr2` model, `attr3` weight | movable + mapmodel `attr2` |
+| `BARREL` | 27 | + `attr4` health (default 50) | movable + explode on death |
+| `PLATFORM` | 28 | `attr3` tag, `attr4` speed | movable, yaw-directed |
+| `ELEVATOR` | 29 | `attr3` tag, `attr4` speed | movable, vertical |
+| `FLAG` | 30 | `attr1` yaw, `attr2` team | mode node + `flags/\{red,blue,neutral\}` |
+| `CARROT` | 22 | classic SP carrot | mapmodel `carrot` (exists) |
+
+- Movement attributes are **stored shifted**: `fixentity` copies `attr5=attr4`,
+  `attr4=attr3` for `FLAG/BOX/BARREL/PLATFORM/ELEVATOR`, so on-disk `attr1`=yaw,
+  `attr2`=model/team, `attr3`=weight/tag, `attr4`=health/speed. `PLATFORM`/
+  `ELEVATOR` velocity comes from `yaw` + `maxspeed=attr4` (default 8, sign = dir).
+- `entradius` draws a yaw arrow for `FLAG/MONSTER/TELEDEST/RESPAWNPOINT/BOX/
+  BARREL/PLATFORM/ELEVATOR` (size 4) — reuse `EntityFacing.ApplyYaw` + an arrow
+  marker like `TeleDest` does.
+- `ENT_BOUNCE` movables need `bounce()` (`engine/physics.cpp`), still unported
+  (features.md roadmap item 3) — without it boxes/barrels can't move correctly.
+
+**Monsters (`MONSTER`, 21)**
+
+- Attributes: `attr1` = yaw, `attr2` = monstertype (`0–8`), `attr3` = tag.
+  Nine models under `packages/models/` (`ogro`, `monster/rhino`, `monster/rat`,
+  `monster/slith`, `monster/bauul`, `monster/hellpig`, `monster/knight`,
+  `monster/goblin`, `monster/spider`) — none are in the model-import manifest yet.
+- Import slice = spawn marker + facing arrow + model. **AI and combat
+  (`monster.cpp`, `ai.cpp`, `waypoint.cpp`) are game logic**, not import; they land
+  with Combat/Modes, not here.
+
+**Model import work** (`tools/model-import/`): `flags/` (md2), `base/` (md3 +
+`red`/`blue`/`neutral` skins), the nine monster models, and any mapmodels used by
+`BOX`/`BARREL`/`PLATFORM`/`ELEVATOR` map entities are not converted today — only
+item/teleporter/checkpoint/carrot are.
 
 ### Edit-mode entity markers
 

@@ -73,7 +73,24 @@ Remaining:
       - [x] **Geometry + entities**: `OgzConverter` writes `world.res` + `Level.tscn` from
             a parsed `.ogz` (asserted by `test/MapFormatTest.cs`, church51 round-trips
             exactly). Metadata-driven material manifest emission is still pending.
-- [ ] envmap / monsters / mode entities (flag, box, platform, elevator, …).
+- [ ] envmap / monsters / mode entities. See
+      [ogz-import.md § Entity porting status](ogz-import.md#entity-porting-status)
+      for the concrete work items:
+      - [x] `ET_ENVMAP` (4) → `EnvMapProbe` (`ReflectionProbe`). `EnvMapBuilder`
+            resolves `attr1` radius (0 → 128, clamp 0..10000), `attr2` cubemap size
+            (4..9, capped by `envmapsize` 7), `attr3` blur (1..2). Asserted by
+            `test/EntityEnvMapTest.cs` on **earthstation** (38 probes). The
+            sampling material side (`SHADER_ENVMAP`, `closestenvmap`) is still
+            open — see [rendering.md](rendering.md).
+      - [ ] Mode entities (CTF/capture) with their **models and gizmos** only:
+            `FLAG` (30), `BASE` (24), `BOX` (26), `BARREL` (27), `PLATFORM`
+            (28), `ELEVATOR` (29), `RESPAWNPOINT` (25), `CARROT` (22). No builder
+            exists for any of them today (except implicit attributes on markers).
+      - [ ] Monsters (`MONSTER`, 21): spawn markers + `entradius` facing arrows
+            first; the actual AI/physics (`monster.cpp`, `movable.cpp`) is game
+            logic, not import, and lands with Modes/Combat.
+- [ ] `bounce()` physics for `ENT_BOUNCE` movables — needed before box/barrel/
+      platform behaviour can work (see roadmap item 3).
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
