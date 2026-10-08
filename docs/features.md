@@ -95,12 +95,16 @@ that underpins this entire section.
 
 - [ ] Runtime in-game editing.
       - [x] **M4 prototype**: `World/Editor/` — `EditCursor` (cursor cast + grid/
-            orient/selection), `CursorGeometry`, `OctaRay` (prototype ray cast),
+            orient/selection), `CursorGeometry`, `OctaRay` (ray cast),
             `EditorController` (wire-up + selection box), `EmptyMap` +
             `scenes/empty_map.tscn` (synthetic editable world). Asserted by
             `test/EditCursorTest.cs`, `test/OctaRayTest.cs`.
-      - [ ] Replace `OctaRay` with the real `raycube` port; full `delta_do`
-            modifier dispatch; remaining edit binds.
+      - [x] Replace `OctaRay` with the real `raycube` port
+            (`World/Physics/OctaRaycast.cs` + render-hull `genclipplanes` in
+            `OctaClipping.GetRenderClipPlanes`), asserted against the engine via
+            `tools/rayprobe/` (`test/OctaRaycastTest.cs`). `OctaRay` is now a thin
+            editor seam (RAY_SKIPFIRST + grid size).
+      - [ ] Full `delta_do` modifier dispatch; remaining edit binds.
 - [x] **Selection model** (M0): `Selection`/`Block3` port of `selinfo`
       (`World/Commands/`, asserted by `test/SelectionTest.cs`).
 - [x] **World-command system** (M3): `WorldOp`/`WorldCommand`/payloads,

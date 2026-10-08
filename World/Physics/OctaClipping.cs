@@ -133,6 +133,42 @@ public static class OctaClipping
         return p;
     }
 
+    /// <summary>
+    /// octa.cpp:1204 <c>genclipplanes</c> with <c>collide=false</c>: the render hull
+    /// used by <c>raycube</c>/<c>shadowray</c>. All six faces are tested with the
+    /// default <c>visibletris</c> (MAT_ALPHA/MAT_ALPHA) rather than the collision
+    /// mask, and a plane is emitted for each surviving triangle. Not cached: the
+    /// ray cast visits a handful of leaves per call, and this path depends on the
+    /// neighbour geometry at <paramref name="co"/>.
+    /// </summary>
+    public static ClipPlanes GetRenderClipPlanes(Octa octa, Cube c, Vector3I co, int size)
+    {
+        var p = new ClipPlanes();
+        for (int i = 0; i < 8; i++) p.V[i] = CalcVert(c, co, size, i);
+        Vector3 mn = p.V[0], mx = p.V[0];
+        for (int i = 1; i < 8; i++) { mn = mn.Min(p.V[i]); mx = mx.Max(p.V[i]); }
+        p.R = (mx - mn) * 0.5f;
+        p.O = mn + p.R;
+        p.Size = 0;
+        p.Visible = 0;
+
+        for (int i = 0; i < 6; i++)
+        {
+            int vis = OctaVisible.VisibleTris(octa, c, i, co, size);
+            if (vis == 0) continue;
+            if (c.FlatAxisFace(i)) { p.Visible |= 1 << i; continue; }
+
+            int convex = c.FaceConvexity(i);
+            int order = (vis & 4) != 0 || convex < 0 ? 1 : 0;
+            Vector3 v0 = p.V[Fv[i][order]], v1 = p.V[Fv[i][(order + 1) & 3]],
+                    v2 = p.V[Fv[i][(order + 2) & 3]], v3 = p.V[Fv[i][(order + 3) & 3]];
+            if ((vis & 1) != 0) { p.Side[p.Size] = (byte)i; p.P[p.Size++].ToPlane(v0, v1, v2); }
+            if ((vis & 2) != 0 && ((vis & 1) == 0 || convex != 0)) { p.Side[p.Size] = (byte)i; p.P[p.Size++].ToPlane(v0, v2, v3); }
+        }
+
+        return p;
+    }
+
     /// <summary>physics.cpp:795 <c>clampcollide</c>.</summary>
     public static bool ClampCollide(ClipPlanes p, EntCapsule entvol, Plane w, Vector3 pw)
     {

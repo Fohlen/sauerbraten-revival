@@ -81,7 +81,7 @@ public partial class EditorController : Node3D
         Vector3 eye = ToSauer(eyeGodot);
         Vector3 dir = ToSauerDir(fwdGodot);
 
-        float dist = OctaRay.RayCube(Octa, eye, dir, RayLength, out _);
+        float dist = OctaRay.RayCube(Octa, eye, dir, RayLength, Cursor.GridSize, out _);
         Cursor.Update(Octa, eye, dir, dist);
 
         // Right-drag (editextend): grow the selection to the cursor each frame.

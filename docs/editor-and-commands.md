@@ -833,8 +833,11 @@ hash differently (§9).
   persistent user remaps via `user://input.cfg` (architecture.md §6.1, with the
   settings UI); remappable mouse gestures.
 
-  **Todo (engine work):** replace `OctaRay.RayCube` with a port of
-  `physics.cpp:raycube` (hierarchical descent + deformed-cube clipping planes).
+  **Done (engine work):** `OctaRay.RayCube` is now a port of
+  `physics.cpp:raycube` (hierarchical DDA + deformed-cube clipping planes) in
+  `World/Physics/OctaRaycast.cs`, with the render-hull `genclipplanes` in
+  `OctaClipping.GetRenderClipPlanes`. Ground truth lives in `tools/rayprobe/`;
+  asserted by `test/OctaRaycastTest.cs` and the re-baselined `test/OctaRayTest.cs`.
 - **M4e — GUI**: texture/material pickers, entity placement, keybinds via
   `InputMap`. Features.md #5 checklist.
 
