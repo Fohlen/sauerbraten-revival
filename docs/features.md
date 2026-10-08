@@ -144,16 +144,13 @@ Done:
 - [x] Close the last ~0.2%: deformed-cube slope/step-up landing timing (fixed via the `-ffast-math` step-up fold + event-free recording; the 3/7001 residual are `PHYS_STEP_UP` **label-only** flips on a 45° slope contour with zero position/velocity error).
 - [x] Water, spectator-float physics states (crouch is not a Cube 2 feature —
       no crouch key and a fixed player volume; nothing to port).
-
-Remaining:
-
 - [x] `bounce()` for `ENT_BOUNCE` bodies (grenades/debris/gibs) — ported and
       wired (`OctaPhysics.Bounce`, `BounceBody`, the dynent cache + `plcollide`;
       asserted by `test/BouncePhysicsTest.cs` / `test/BounceBodyTest.cs`).
-- [ ] Movable physics (box/barrel/platform/elevator) — `ENT_INANIMATE`,
+- [x] ~~Movable physics (box/barrel/platform/elevator) — `ENT_INANIMATE`,
       `moveplayer`/`moveplatform`. **Deliberately not ported**: SP-only
       (`movable.cpp:90`), unused by every target mode, and superseded by the
-      command-based dynamic-world plan (see §2 above).
+      command-based dynamic-world plan (see §2 above).~~
 
 ## 4. Editor MVP *(defining feature)*
 
