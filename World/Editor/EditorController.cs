@@ -345,27 +345,70 @@ public partial class EditorController : Node3D
         if (_mesh == null) return;
 
         var sel = Cursor.Selection;
-        bool visible = Cursor.HasSelection || !sel.IsZero;
-        // Rebuild only when the box actually changed (avoids per-frame GPU churn).
-        string key = visible ? $"{sel.O}|{sel.S}|{sel.Grid}" : "";
+        bool showSel = Cursor.HasSelection;
+        // Rebuild only when the cursor/box actually changed (avoids per-frame GPU churn).
+        // The cursor tracks the pointed cube every frame, so it must be part of the key.
+        string key = $"{Cursor.Lu}|{Cursor.LuSize}|{Cursor.Orient}|{(showSel ? $"{sel.O}|{sel.S}|{sel.Grid}|{sel.Orient}" : "")}";
         if (key == _lastBoxKey) return;
         _lastBoxKey = key;
 
         _mesh.ClearSurfaces();
-        _box!.Visible = visible;
-        if (!visible) return;
-
-        var o = new Vector3(sel.O.X, sel.O.Y, sel.O.Z);
-        var s = new Vector3(sel.S.X * sel.Grid, sel.S.Y * sel.Grid, sel.S.Z * sel.Grid);
+        _box!.Visible = true;
 
         _mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
-        // White selection box, grey grid lines, red origin marker (Cube2 boxs/boxsgrid/boxs3D).
-        EmitBox(o, s, new Color(1f, 1f, 1f, 1f));
-        EmitGrid(o, s, sel.Grid, sel.Orient, new Color(0.4f, 0.4f, 0.4f, 1f));
-        float m = Mathf.Min(sel.Grid * 0.25f, 2f);
-        EmitBox(o - new Vector3(m * 0.5f, m * 0.5f, m * 0.5f), new Vector3(m, m, m), new Color(0.8f, 0f, 0f, 1f));
+
+        // The grey cursor: the face rectangle of the pointed cube. This is drawn
+        // every frame and follows the mouse even while a selection exists — the
+        // original's `boxs(orient, vec(lu), vec(lusize))` (octaedit.cpp:542). Without
+        // it the only box on screen is the selection, which is anchored once a
+        // selection exists, so the cursor appears to stop following.
+        EmitFaceRect(new Vector3(Cursor.Lu.X, Cursor.Lu.Y, Cursor.Lu.Z), Cursor.LuSize,
+            Cursor.Orient, new Color(120f / 255f, 120f / 255f, 120f / 255f, 1f));
+
+        if (showSel)
+        {
+            var o = new Vector3(sel.O.X, sel.O.Y, sel.O.Z);
+            var s = new Vector3(sel.S.X * sel.Grid, sel.S.Y * sel.Grid, sel.S.Z * sel.Grid);
+            // White selection box, grey grid lines, red origin marker (Cube2 boxs/boxsgrid/boxs3D).
+            EmitBox(o, s, new Color(1f, 1f, 1f, 1f));
+            EmitGrid(o, s, sel.Grid, sel.Orient, new Color(0.4f, 0.4f, 0.4f, 1f));
+            float m = Mathf.Min(sel.Grid * 0.25f, 2f);
+            EmitBox(o - new Vector3(m * 0.5f, m * 0.5f, m * 0.5f), new Vector3(m, m, m), new Color(0.8f, 0f, 0f, 1f));
+        }
+
         _mesh.SurfaceEnd();
     }
+
+    /// <summary>
+    /// octaedit.cpp <c>boxs(orient, o, s)</c> — the pointed face's outline: a line
+    /// loop on the plane perpendicular to <paramref name="orient"/>, at the far side
+    /// of the cube (so it sits on the face the ray struck).
+    /// </summary>
+    private void EmitFaceRect(Vector3 o, int size, int orient, Color color)
+    {
+        int d = Selection.Dimension(orient), dc = Selection.DimCoord(orient);
+        int ra = Octa.R[d], ca = Octa.C[d];
+        float s = size;
+
+        // boxs: o[D[d]] += dc * s[D[d]]
+        o[d] += dc * s;
+
+        Vector3 p0 = o;
+        Vector3 p1 = AddAxis(o, ra, s);
+        Vector3 p2 = AddAxis(p1, ca, s);
+        Vector3 p3 = AddAxis(o, ca, s);
+        Line(p0, p1, color);
+        Line(p1, p2, color);
+        Line(p2, p3, color);
+        Line(p3, p0, color);
+    }
+
+    private static Vector3 AddAxis(Vector3 v, int axis, float amount) => axis switch
+    {
+        0 => new Vector3(v.X + amount, v.Y, v.Z),
+        1 => new Vector3(v.X, v.Y + amount, v.Z),
+        _ => new Vector3(v.X, v.Y, v.Z + amount),
+    };
 
     private void EmitBox(Vector3 o, Vector3 s, Color color)
     {
