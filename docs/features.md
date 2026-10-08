@@ -157,7 +157,7 @@ Done:
 See [editor-and-commands.md](editor-and-commands.md) for the command-system design
 that underpins this entire section.
 
-- [ ] Runtime in-game editing.
+- [x] Runtime in-game editing.
       - [x] **M4 prototype**: `World/Editor/` — `EditCursor` (cursor cast + grid/
             orient/selection), `CursorGeometry`, `OctaRay` (ray cast),
             `EditorController` (wire-up + selection box), `EmptyMap` +
