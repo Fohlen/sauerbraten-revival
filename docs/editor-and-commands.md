@@ -820,18 +820,32 @@ hash differently (§9).
   **Input binds wired** (Cube2 `editbind`). Keyboard binds are **`InputMap`
   actions** (`editor_*` in `project.godot`), not hardcoded keys, so they are
   remappable: hold `G` grid, `F` face push/pull, `Q` corner push/pull,
-  `R` rotate (scroll with those held = the `delta_use` namespace); `X` flip,
-  `SPACE` cancel, `DELETE` delcube, `KP4-9` nudge selection, `C`/`V` copy/paste
-  (clipboard is client-local), `B` cut, `U`/`I` undo/redo. Mouse gestures
-  (`MOUSE1` box-select, `MOUSE2` extend, `MOUSE3` selcorners, `MOUSE6/7` cut,
-  wheel/trackpad scroll) stay raw events — they need press+release and analog
-  scroll, which `InputMap` actions cannot carry (architecture.md §6.1).
+  `R` rotate, `Y` texture, `1`-`4` entity-attr/texture-param combos: scroll with
+  those held = the `delta_use` namespace. `X` flip, `SPACE` cancel, `DELETE`
+  delcube, `KP4-9` nudge selection, `C`/`V` copy/paste (clipboard is
+  client-local), `B` cut, `U`/`I` undo/redo, `O` remip, `T` re-apply texture,
+  `[`/`]` pushsel, `\`/`;`/`'` apply air/clip/death material, `P` pastehilite,
+  `6` allfaces, `N` selcorners. Mouse gestures (`MOUSE1` box-select, `MOUSE2`
+  extend, `MOUSE3` selcorners, `MOUSE6/7` cut, wheel/trackpad scroll) stay raw
+  events — they need press+release and analog scroll, which `InputMap` actions
+  cannot carry (architecture.md §6.1).
   **macOS note:** trackpad/Magic-Mouse scrolling arrives as `InputEventPanGesture`,
   not `WheelUp/Down` — both are handled.
 
-  **Not wired yet:** `Y`+scroll texture change (needs the M4e texture picker);
-  persistent user remaps via `user://input.cfg` (architecture.md §6.1, with the
-  settings UI); remappable mouse gestures.
+  **`delta_do` dispatch (done).** `EditorController.DeltaDo` ports the universal
+  delta (`data/stdlib.cfg`): a held `delta_use` key selects the *active* modifier
+  (first pressed wins, matching the original's `delta__active` guard), and a wheel
+  notch dispatches on it — `delta__edit_@active @dir`. The **full id table**
+  (`DeltaModifier`, ids 0-7 / 11-15 / 21-24 / 31-35, identical to the original) is
+  routed; the ids whose subsystems are not ported yet (height-map brush, entity
+  attributes, vslot parameters, the combos) are **explicit no-ops** so their binds
+  cannot silently fall through to the fill default. Asserted by
+  `test/DeltaDispatchTest.cs`.
+
+  **Not wired yet:** the texture/material picker UI (M4e) — the texture/material
+  wheel ops walk the current index and apply it until the picker lands; persistent
+  user remaps via `user://input.cfg` (architecture.md §6.1, with the settings UI);
+  remappable mouse gestures.
 
   **Done (engine work):** `OctaRay.RayCube` is now a port of
   `physics.cpp:raycube` (hierarchical DDA + deformed-cube clipping planes) in
@@ -841,9 +855,9 @@ hash differently (§9).
 - **M4e — GUI**: texture/material pickers, entity placement, keybinds via
   `InputMap`. Features.md #5 checklist.
 
-The wheel is bound like Cube2: `InputMap` actions for wheel up/down plus a
-modifier namespace selecting grid / face / corner / rotate (§ see the
-`delta_do` note below).
+The wheel is bound like Cube2: `InputMap` actions for the modifier keys, plus a
+single wheel/trackpad path that dispatches through `delta_do` on the active
+modifier (see the `delta_do` note below).
 
 **M5 — Save/load in native format (done).** `WorldSnapshot` encoder/decoder
 (canonical child-order octree traversal + entity blob, version field, content

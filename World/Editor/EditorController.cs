@@ -13,9 +13,15 @@ namespace SauerbratenRevival.World.Editor;
 /// key input drive grid size and the fill/push edits through a local
 /// <see cref="WorldCommandSink"/>.
 ///
-/// **Prototype scope:** no GUI, no textures/materials; the ray cast is the deferred
-/// engine caster's seam (see <see cref="OctaRay"/>). Selection/cursor are
-/// client-local — nothing here is replicated (docs/editor-and-commands.md §1.1).
+/// **Scroll dispatch** is a port of Cube2's universal delta (`data/stdlib.cfg`): a
+/// held <c>delta_use</c> key sets the *active modifier*, and the mouse wheel calls
+/// <c>delta_do</c>, which dispatches on that id — <c>delta__edit_@active @dir</c>.
+/// See <see cref="DeltaModifier"/> for the full table. Only one modifier is active
+/// at a time (first key down wins), matching the original's <c>delta__active</c>.
+///
+/// **Prototype scope:** no GUI, no texture/material/entity pickers; the ray cast is
+/// the deferred engine caster's seam (see <see cref="OctaRay"/>). Selection/cursor
+/// are client-local — nothing here is replicated (docs/editor-and-commands.md §1.1).
 ///
 /// Coordinate note: the octree is Sauerbraten Z-up; the world node is rotated
 /// −90° about X, so a Sauerbraten point (x,y,z) appears in Godot at (x,z,−y).
@@ -50,6 +56,29 @@ public partial class EditorController : Node3D
     public WorldChunkRenderer? Renderer { get; set; }
 
     /// <summary>
+    /// The currently-selected texture index (the editor's "current texture"), applied
+    /// by <c>edittex</c> and the <c>&#96;delta__edit_5&#96;</c> wheel modifier. Set by the M4e
+    /// texture picker; a stable default keeps the binds usable before the picker exists.
+    /// </summary>
+    public int CurrentTexture { get; set; } = Octa.DEFAULT_GEOM;
+
+    /// <summary>The currently-selected material id (the "current material"), applied by <c>editmat</c>.</summary>
+    public int CurrentMaterial { get; set; } = Octa.MAT_AIR;
+
+    /// <summary>
+    /// <c>allfaces</c> (editbindvar): when true, texture/material edits apply to all
+    /// six faces instead of only the pointed face.
+    /// </summary>
+    public bool AllFaces { get; set; }
+
+    /// <summary>
+    /// The active <c>delta_use</c> modifier id, or null when none is held. This is a
+    /// port of the original's <c>delta__active</c> variable: the first modifier key
+    /// pressed wins and further presses are ignored until it is released.
+    /// </summary>
+    public DeltaModifier? ActiveModifier { get; private set; }
+
+    /// <summary>
     /// The local copy buffer (editcopy). Client-local: a copy is not a world
     /// mutation, so it never enters the command log; only a paste does.
     /// </summary>
@@ -82,6 +111,9 @@ public partial class EditorController : Node3D
     public override void _Process(double delta)
     {
         if (Octa == null || Camera == null) return;
+
+        // Keep the delta_use active modifier in sync with currently-held keys.
+        UpdateActiveModifier();
 
         Vector3 eyeGodot = Camera.GlobalPosition;
         Vector3 fwdGodot = -Camera.GlobalTransform.Basis.Z.Normalized();
@@ -170,6 +202,8 @@ public partial class EditorController : Node3D
             return;
         }
 
+        UpdateActiveModifier();
+
         // One-shot editor actions (InputMap, remappable).
         DispatchActions(@event);
     }
@@ -192,6 +226,20 @@ public partial class EditorController : Node3D
         if (Pressed(e, "editor_save")) SaveMap();
         if (Pressed(e, "editor_load")) LoadMap();
 
+        // Remaining edit binds (data/defaults.cfg editbind).
+        if (Pressed(e, "editor_allfaces")) ToggleAllFaces();          // editbindvar 6
+        if (Pressed(e, "editor_selcorners")) ToggleSelCorners();      // editbind MOUSE3 is a mouse gesture
+        if (Pressed(e, "editor_remip")) EditRemip();                  // K/remip
+        if (Pressed(e, "editor_tex")) EditTex(CurrentTexture);        // edittex (current texture)
+        if (Pressed(e, "editor_mat_air")) EditMat(Octa.MAT_AIR);      // editmat air
+        if (Pressed(e, "editor_mat_clip")) EditMat(Octa.MAT_CLIP);    // editmat clip
+        if (Pressed(e, "editor_mat_death")) EditMat(Octa.MAT_DEATH); // editmat death
+        if (Pressed(e, "editor_pastehilite")) PasteHilite();          // pastehilite
+
+        // pushsel: move the selection along the oriented axis (editbind PUSH/PULL use wheel).
+        if (Pressed(e, "editor_pushsel_fwd")) PushSelection(+1);
+        if (Pressed(e, "editor_pushsel_back")) PushSelection(-1);
+
         // Numpad selection nudge (KP4-9 = movesel).
         if (Pressed(e, "editor_sel_left")) Cursor.MoveSelection(-1, 0);
         if (Pressed(e, "editor_sel_right")) Cursor.MoveSelection(+1, 0);
@@ -208,24 +256,145 @@ public partial class EditorController : Node3D
         return e.IsActionPressed(action);
     }
 
-    /// <summary>Is a held modifier action pressed (the <c>delta_use</c> namespace)?</summary>
-    private static bool Held(string action) => Input.IsActionPressed(action);
+    // ---- delta_use / delta_do (data/stdlib.cfg) ----
 
     /// <summary>
-    /// One scroll notch: plain = fill/empty (mpeditface mode 1, the white-box
-    /// push/pull); Shift = change grid size. Mirrors Cube2's <c>delta_do</c> dispatch.
+    /// The modifier each <c>editor_mod_*</c> action selects. Ids match the original's
+    /// <c>delta_use</c> arguments (the defaults in <c>data/defaults.cfg</c>). Ordered
+    /// so the first pressed of several wins deterministically (see
+    /// <see cref="PressModifier"/>).
     /// </summary>
-    public void Scroll(int notch)
+    private static readonly (string Action, DeltaModifier Modifier)[] ModifierActions =
     {
-        // Cube2 delta_use namespace: the held modifier action selects the operation.
-        // (Shift is also accepted for grid, matching the original's muscle memory.)
-        if (Held("editor_mod_grid") || Input.IsActionPressed("editor_grid_shift")) { SetGrid(Cursor.GridPower + notch); return; }
-        if (Held("editor_mod_face")) { EditFace(notch, 0); return; }    // push/pull cube face
-        if (Held("editor_mod_corner")) { EditFace(notch, 2); return; }  // push/pull cube corner
-        if (Held("editor_mod_rotate")) { EditRotate(notch); return; }    // rotate
-        // Default: fill/empty (mpeditface mode 1), the white-box push/pull.
-        EditFace(notch, 1);
+        ("editor_mod_grid", DeltaModifier.Grid),
+        ("editor_mod_face", DeltaModifier.Face),
+        ("editor_mod_corner", DeltaModifier.Corner),
+        ("editor_mod_rotate", DeltaModifier.Rotate),
+        ("editor_mod_texture", DeltaModifier.Texture),
+        ("editor_mod_attr1", DeltaModifier.ComboEntAttr1TexOffsetX),
+        ("editor_mod_attr2", DeltaModifier.ComboEntAttr2TexOffsetY),
+        ("editor_mod_attr3", DeltaModifier.ComboEntAttr3TexRotate),
+        ("editor_mod_attr4", DeltaModifier.ComboEntAttr4TexScale),
+    };
+
+    /// <summary>True if a held modifier action is currently pressed (the <c>delta_use</c> namespace).</summary>
+    private static bool Held(string action) => InputMap.HasAction(action) && Input.IsActionPressed(action);
+
+    /// <summary>
+    /// <c>delta_use N</c> — select the active modifier. Only the first key down wins:
+    /// while a modifier is active, further presses are ignored; the active one is
+    /// cleared when it is released. This mirrors the original's <c>delta__active</c>
+    /// guard, which exists to stop "janky behavior if multiple delta_use keys are
+    /// pressed simultaneously".
+    /// </summary>
+    public void PressModifier(DeltaModifier modifier)
+    {
+        ActiveModifier ??= modifier;
     }
+
+    /// <summary><c>delta_use</c> release — clear the active modifier if it matches.</summary>
+    public void ReleaseModifier(DeltaModifier modifier)
+    {
+        if (ActiveModifier == modifier) ActiveModifier = null;
+    }
+
+    /// <summary>
+    /// Poll held modifier actions each frame (the original resolves the active
+    /// modifier from held keys at wheel time). A key down sets the active modifier;
+    /// the first still-held modifier keeps it; nothing held clears it. Shift is an
+    /// extra grid modifier for muscle memory.
+    /// </summary>
+    private void UpdateActiveModifier()
+    {
+        if (ActiveModifier.HasValue && !Held(ActionFor(ActiveModifier.Value)) &&
+            !(ActiveModifier == DeltaModifier.Grid && Held("editor_grid_shift")))
+            ActiveModifier = null;
+        if (ActiveModifier.HasValue) return;
+        foreach (var (action, modifier) in ModifierActions)
+        {
+            if (Held(action)) { ActiveModifier = modifier; return; }
+        }
+        // Shift is accepted as a grid modifier for the original's muscle memory
+        // (the old hardcoded dispatch, before the full delta table).
+        if (Held("editor_grid_shift")) ActiveModifier = DeltaModifier.Grid;
+    }
+
+    private static string ActionFor(DeltaModifier modifier)
+    {
+        foreach (var (action, m) in ModifierActions)
+            if (m == modifier) return action;
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// <c>delta_do &lt;arg&gt;</c> — one scroll notch, dispatched on the active modifier
+    /// (or the fill default when none is held). This is the editor half of Cube2's
+    /// universal delta; the full <c>delta__edit_@active</c> table is reproduced here
+    /// so every bind routes to the right op (or an explicit no-op for subsystems not
+    /// yet ported) instead of silently falling through to fill.
+    /// </summary>
+    public void DeltaDo(int notch)
+    {
+        switch (ActiveModifier ?? DeltaModifier.Fill)
+        {
+            case DeltaModifier.Fill:
+                EditFace(notch, 1);          // delta__edit_0: editpush dir 1
+                break;
+            case DeltaModifier.Grid:
+                SetGrid(Cursor.GridPower + notch); // delta__edit_1: gridpower
+                break;
+            case DeltaModifier.Face:
+                EditFace(notch, 0);          // delta__edit_2: editpush dir 0
+                break;
+            case DeltaModifier.Corner:
+                EditFace(notch, 2);          // delta__edit_3: editpush dir 2
+                break;
+            case DeltaModifier.Rotate:
+                EditRotate(notch);           // delta__edit_4: editrotate dir
+                break;
+            case DeltaModifier.Texture:
+                EditTexScroll(notch);       // delta__edit_5: edittex dir
+                break;
+
+            // Height-map brush (6) and entity auto-view (7): no subsystem yet.
+            case DeltaModifier.HeightMapBrush:
+            case DeltaModifier.EntAutoView:
+                break;
+
+            // Entity attributes: no entity editing yet (delta__edit_11..15).
+            case DeltaModifier.EntAttr1:
+            case DeltaModifier.EntAttr2:
+            case DeltaModifier.EntAttr3:
+            case DeltaModifier.EntAttr4:
+            case DeltaModifier.EntAttr5:
+                break;
+
+            // Texture/vslot parameters: no vslot model yet (delta__edit_21..24).
+            case DeltaModifier.TexOffsetX:
+            case DeltaModifier.TexOffsetY:
+            case DeltaModifier.TexRotate:
+            case DeltaModifier.TexScale:
+                break;
+
+            // Combos (delta__edit_31..35): entity attr when entities are selected,
+            // else the texture parameter. Entity editing is not ported; with the
+            // `entediting` var off the original also picks the texture branch, which
+            // is likewise not ported yet — so these are no-ops until M4e/M4f.
+            case DeltaModifier.ComboEntAttr1TexOffsetX:
+            case DeltaModifier.ComboEntAttr2TexOffsetY:
+            case DeltaModifier.ComboEntAttr3TexRotate:
+            case DeltaModifier.ComboEntAttr4TexScale:
+            case DeltaModifier.ComboEntAttr5:
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Legacy entry point: a scroll notch through the delta dispatch. Kept so the
+    /// existing input tests and callers keep working; <see cref="DeltaDo"/> is the
+    /// canonical name.
+    /// </summary>
+    public void Scroll(int notch) => DeltaDo(notch);
 
     /// <summary>Adjust the grid power and rebuild the cursor grid.</summary>
     public void SetGrid(int power)
@@ -273,6 +442,90 @@ public partial class EditorController : Node3D
             source: CommandSource.Editor));
         InvalidateRegion(sel);
     }
+
+    /// <summary>
+    /// <c>edittex dir</c> (octaedit.cpp:2486) — step the current texture through the
+    /// most-recently-used list and paint it across the selection. Also the
+    /// <c>delta__edit_5</c> wheel op.
+    ///
+    /// The MRU history is a picker concern (M4e); until it lands, a scroll walks the
+    /// texture index by <paramref name="dir"/>, which exercises the same
+    /// <see cref="WorldOp.SetFaceTexture"/> path. <c>allfaces</c> paints all six faces.
+    /// </summary>
+    public void EditTexScroll(int dir)
+    {
+        CurrentTexture = System.Math.Max(0, CurrentTexture + dir);
+        EditTex(CurrentTexture);
+    }
+
+    /// <summary>Paint texture <paramref name="tex"/> across the selection (edittex). <c>allfaces</c> paints all six faces.</summary>
+    public void EditTex(int tex)
+    {
+        if (Sink == null) return;
+        CurrentTexture = tex;
+        var sel = CurrentSelection();
+        Sink.Submit(new WorldCommand(WorldOp.SetFaceTexture,
+            new SetFaceTexturePayload(new SelectionPayload(sel), tex, AllFaces ? -1 : sel.Orient),
+            source: CommandSource.Editor));
+        InvalidateRegion(sel);
+    }
+
+    /// <summary>
+    /// <c>editmat name filter</c> (octaedit.cpp:2763) — apply a material across the
+    /// selection. <paramref name="filter"/> is the original's packed
+    /// <c>filtermat | (filtergeom &lt;&lt; 16)</c>; pass -1 for none.
+    /// </summary>
+    public void EditMat(int materialId, int filter = -1)
+    {
+        if (Sink == null) return;
+        CurrentMaterial = materialId;
+        var sel = CurrentSelection();
+        Sink.Submit(new WorldCommand(WorldOp.SetFaceMaterial,
+            new SetFaceMaterialPayload(new SelectionPayload(sel), materialId, filter),
+            source: CommandSource.Editor));
+        InvalidateRegion(sel);
+    }
+
+    /// <summary>
+    /// <c>editremip</c> — merge/split cube runs (octaedit.cpp remip). Pass-through and
+    /// deterministic (docs §5.4); <c>mipvis</c> is the user toggle that changes the
+    /// collapse decision, so it rides the payload.
+    /// </summary>
+    public void EditRemip(bool mipvis = false)
+    {
+        if (Sink == null) return;
+        Sink.Submit(new WorldCommand(WorldOp.Remip, new RemipPayload(mipvis),
+            source: CommandSource.Editor));
+        InvalidateAll();
+    }
+
+    /// <summary>
+    /// <c>pushsel dir</c> (octaedit.cpp:2070) — move the selection one grid cell along
+    /// the oriented axis in the direction of the pointed face. Client-local (a
+    /// selection move, not a world mutation), so it does not enter the command log.
+    /// </summary>
+    public void PushSelection(int dir) => Cursor.MoveSelectionOriented(dir);
+
+    /// <summary>
+    /// <c>pastehilite</c> — give the clipboard block a selection the size of what was
+    /// copied, at the cursor, so the paste lands where it was previewed.
+    /// </summary>
+    public void PasteHilite()
+    {
+        if (Clipboard == null) return;
+        var d = Clipboard.Descriptor;
+        Cursor.CancelSelection();
+        Cursor.SetSelectionPos(Cursor.Cur);
+        Cursor.Selection.S = d.S;
+        Cursor.Selection.Grid = d.Grid;
+        Cursor.Selection.Reorient(d.Orient);
+    }
+
+    /// <summary>Toggle <c>allfaces</c> (editbindvar): texture/material edits target all six faces.</summary>
+    public void ToggleAllFaces() => AllFaces = !AllFaces;
+
+    /// <summary>Toggle <c>selcorners</c>: corner-exact drag selection (also Mouse3).</summary>
+    public void ToggleSelCorners() => Cursor.SelectCorners = !Cursor.SelectCorners;
 
     /// <summary>Delete the selected cubes (editdel / delcube).</summary>
     public void EditDelete()

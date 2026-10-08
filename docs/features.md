@@ -168,7 +168,17 @@ that underpins this entire section.
             `OctaClipping.GetRenderClipPlanes`), asserted against the engine via
             `tools/rayprobe/` (`test/OctaRaycastTest.cs`). `OctaRay` is now a thin
             editor seam (RAY_SKIPFIRST + grid size).
-      - [ ] Full `delta_do` modifier dispatch; remaining edit binds.
+      - [x] Full `delta_do` modifier dispatch; remaining edit binds.
+            `EditorController` ports the `delta_use`/`delta_do` universal delta
+            (`data/stdlib.cfg`): a held modifier key sets the active operation, the
+            wheel dispatches on it. The full id table (`DeltaModifier`) is routed —
+            fill (0), grid (1), face (2), corner (3), rotate (4), texture (5) — with
+            the not-yet-ported ids (height-map brush, entity attrs, vslot params,
+            combos) explicit no-ops rather than a silent fall-through to fill.
+            Remaining binds wired: `edittex`, `editmat`, `editremip`, `allfaces`,
+            `selcorners`, `pastehilite`, `pushsel`. Asserted by
+            `test/DeltaDispatchTest.cs`; binds are `InputMap` actions asserted by
+            `test/EditorInputMapTest.cs`.
 - [x] **Selection model** (M0): `Selection`/`Block3` port of `selinfo`
       (`World/Commands/`, asserted by `test/SelectionTest.cs`).
 - [x] **World-command system** (M3): `WorldOp`/`WorldCommand`/payloads,
@@ -206,8 +216,9 @@ that underpins this entire section.
 - [x] Selection, copy/paste, fill, remip — `Selection`/`Block3` (`World/Commands/`),
       `BlockCopy`/`PasteBlock`/`Fill`/`DeleteCube`/`Remip`/`RemipAll`
       (`World/OctaEdit.cs`); asserted by `test/SelectionTest.cs`,
-      `test/OctaOpsTest.cs`, `test/RemipTest.cs`. Still pending: the edit binds
-      and `delta_do` dispatch that drive them interactively (tracked above).
+      `test/OctaOpsTest.cs`, `test/RemipTest.cs`. The edit binds and `delta_do`
+      dispatch that drive them interactively are **done** — see the M4d item above
+      (`EditorController` + `DeltaModifier`, `test/DeltaDispatchTest.cs`).
 - [x] Save/load in our format (M5): `WorldSnapshot` + map directory (`world.res`,
       `history.res`, `Level.tscn`) + compaction + archive hash; `OgzConverter`;
       `F2` save / `F3` load binds in `EditorController`. See
