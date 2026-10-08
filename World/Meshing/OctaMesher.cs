@@ -133,14 +133,38 @@ public sealed class OctaMesher
         Vector3 a1 = MeshFace.ToWorld(v[(order + 1) & 3], face.Co, face.Size);
         Vector3 a2 = MeshFace.ToWorld(v[(order + 2) & 3], face.Co, face.Size);
         Vector3 a3 = MeshFace.ToWorld(v[(order + 3) & 3], face.Co, face.Size);
+        Vector3 l0 = a0 - local, l1 = a1 - local, l2 = a2 - local, l3 = a3 - local;
 
+        // octarender.cpp gencubeverts emits the top layer when the surface has no
+        // surfaceinfo at all (`!surf.numverts`) or carries LAYER_TOP. A face whose
+        // surfaceinfo marks only LAYER_BOTTOM is bottom-only in the original.
+        var surfInfo = face.Cube.Ext?.Surfaces[face.Orient];
+        bool hasSurf = surfInfo is { NumVerts: not 0 };
+        if (!hasSurf || (surfInfo!.Value.NumVerts & Octa.LAYER_TOP) != 0)
+            EmitLayer(builder, vslot, dim, face.Orient, l0, l1, l2, l3, a0, a1, a2, a3);
+
+        // Bottom layer: the same face re-textured with the vslot's layer. The
+        // engine passes `layer ? *layer : vslot`, but a bottom layer only has a
+        // distinct texture when `vslot.layer` is set, so require one.
+        int layer = _materials?.LayerFor(vslot) ?? 0;
+        if (layer != 0 && hasSurf && (surfInfo!.Value.NumVerts & Octa.LAYER_BOTTOM) != 0)
+            EmitLayer(builder, layer, dim, face.Orient, l0, l1, l2, l3, a0, a1, a2, a3);
+    }
+
+    /// <summary>
+    /// Emit one layer of a face: the same geometry and winding, but the given
+    /// vslot's material and world-space UVs (octarender.cpp calctexgen is applied
+    /// per-layer, so the top and bottom textures tile independently).
+    /// </summary>
+    private void EmitLayer(ArrayMeshBuilder builder, int vslot, int dim, int orient,
+        Vector3 l0, Vector3 l1, Vector3 l2, Vector3 l3,
+        Vector3 a0, Vector3 a1, Vector3 a2, Vector3 a3)
+    {
         Vector2 uv0 = _materials?.Uv(vslot, dim, a0) ?? Vector2.Zero;
         Vector2 uv1 = _materials?.Uv(vslot, dim, a1) ?? Vector2.Zero;
         Vector2 uv2 = _materials?.Uv(vslot, dim, a2) ?? Vector2.Zero;
         Vector2 uv3 = _materials?.Uv(vslot, dim, a3) ?? Vector2.Zero;
-
-        MeshFace.Quad(builder, vslot, face.Orient,
-            a0 - local, a1 - local, a2 - local, a3 - local, uv0, uv1, uv2, uv3);
+        MeshFace.Quad(builder, vslot, orient, l0, l1, l2, l3, uv0, uv1, uv2, uv3);
     }
 
     /// <summary>
@@ -159,15 +183,14 @@ public sealed class OctaMesher
         Vector3 a1 = VertWorld(verts, surf.Verts, 1);
         Vector3 a2 = VertWorld(verts, surf.Verts, 2);
         Vector3 a3 = total >= 4 ? VertWorld(verts, surf.Verts, 3) : a2;
+        Vector3 l0 = a0 - local, l1 = a1 - local, l2 = a2 - local, l3 = a3 - local;
 
-        // The albedo UV is world-space (calctexgen).
-        Vector2 uv0 = _materials?.Uv(vslot, dim, a0) ?? Vector2.Zero;
-        Vector2 uv1 = _materials?.Uv(vslot, dim, a1) ?? Vector2.Zero;
-        Vector2 uv2 = _materials?.Uv(vslot, dim, a2) ?? Vector2.Zero;
-        Vector2 uv3 = _materials?.Uv(vslot, dim, a3) ?? Vector2.Zero;
+        if (surf.NumVerts == 0 || (surf.NumVerts & Octa.LAYER_TOP) != 0)
+            EmitLayer(builder, vslot, dim, face.Orient, l0, l1, l2, l3, a0, a1, a2, a3);
 
-        MeshFace.Quad(builder, vslot, face.Orient,
-            a0 - local, a1 - local, a2 - local, a3 - local, uv0, uv1, uv2, uv3);
+        int layer = _materials?.LayerFor(vslot) ?? 0;
+        if (layer != 0 && (surf.NumVerts & Octa.LAYER_BOTTOM) != 0)
+            EmitLayer(builder, layer, dim, face.Orient, l0, l1, l2, l3, a0, a1, a2, a3);
     }
 
     /// <summary>World position of the k-th stored vertex (VertInfo xyz are 1/8-world units).</summary>

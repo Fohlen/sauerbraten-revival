@@ -23,6 +23,7 @@ public sealed class CatalogueVSlot
     public float Scale = 1f;
     public int Rotation;
     public int OffsetX, OffsetY;
+    public int Layer;                       // vslot index of the bottom layer texture (0 = none)
     public Vector3 Color = Vector3.One;
     public Vector3 Glow = Vector3.One;
     public float AlphaFront = 0.5f, AlphaBack;
@@ -103,6 +104,7 @@ public sealed class MetadataCatalogue
                 Rotation = v.GetProperty("rotation").GetInt32(),
                 OffsetX = off[0].GetInt32(),
                 OffsetY = off[1].GetInt32(),
+                Layer = v.TryGetProperty("layer", out var lay) ? lay.GetInt32() : 0,
                 Color = new Vector3((float)color[0].GetDouble(), (float)color[1].GetDouble(), (float)color[2].GetDouble()),
                 Glow = new Vector3((float)glow[0].GetDouble(), (float)glow[1].GetDouble(), (float)glow[2].GetDouble()),
                 AlphaFront = (float)alpha[0].GetDouble(),

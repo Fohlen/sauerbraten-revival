@@ -28,6 +28,7 @@ public sealed class MaterialSet
 {
     private readonly Dictionary<int, Material> _materials = new();
     private readonly Dictionary<int, TexGen[]> _uv = new();
+    private readonly Dictionary<int, int> _layer = new();
 
     public IEnumerable<KeyValuePair<int, Material>> Materials => _materials;
 
@@ -36,6 +37,15 @@ public sealed class MaterialSet
         _materials[vslot] = material;
         _uv[vslot] = uvByDim;
     }
+
+    /// <summary>Record a vslot's bottom-layer vslot (<c>vslot.layer</c>; 0 means none).</summary>
+    public void SetLayer(int vslot, int layer)
+    {
+        if (layer != 0) _layer[vslot] = layer;
+    }
+
+    /// <summary>The bottom-layer vslot index for a face texture, or 0 if it has none.</summary>
+    public int LayerFor(int vslot) => _layer.GetValueOrDefault(vslot);
 
     /// <summary>Material for a vslot.</summary>
     public Material? MaterialFor(int vslot) => _materials.GetValueOrDefault(vslot);

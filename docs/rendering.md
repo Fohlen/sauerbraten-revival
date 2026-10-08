@@ -255,6 +255,13 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
 - **Normal + glow** — `MaterialBuilder` also sets `NormalTexture` and
   `EmissionTexture`/`Emission` from the catalogue's `normal`/`glow` layers and the
   vslot `glowcolor`.
+- **Texture layers** — `OctaMesher` emits the **bottom layer** of a face whose
+  vslot defines a `layer` (the `LAYER_BOTTOM` case of `octarender.cpp
+  gencubeverts`): the same geometry and winding, re-textured with the layer
+  vslot and its own `calctexgen` UVs. `MetadataCatalogue`/`MaterialSet` carry the
+  `vslot.layer` mapping (the metadata patch already exports it). Asserted on
+  **bt_falls** by `test/LayerMeshTest.cs`; church51 uses no layers, so its mesh is
+  unchanged.
 - **Material surfaces** — `MaterialMesher` emits the empty-space water/lava/glass
   boundary faces (a simplified `material.cpp genmatsurfs`, no face merging) as one
   mesh per material; `MaterialTextures` supplies an unshaded `ShaderMaterial` with
@@ -264,9 +271,7 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
 - **TODO (deferred)** — **envmap sampling** (`SHADER_ENVMAP`, `closestenvmap`;
   the `ET_ENVMAP` probes themselves are now imported — see
   [ogz-import.md](ogz-import.md#entity-porting-status) — but nothing reads them),
-  **specular maps** (packed/non-PBR), **alpha/transparency**
-  (`alphafront`/`alphaback`, `LAYER_*`), blended layers, exact `visibletris`
+  **specular maps** (packed/non-PBR), blended layers, exact `visibletris`
   culling, face merges, T-joints and grass. World lighting is the L1 SH probe
   volume ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)); the baked-lightmap path is
-  dropped. Tracked divergences live in [known-bugs.md](known-bugs.md). See
-  [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md) for lighting.
+  dropped. Tracked divergences live in [known-bugs.md](known-bugs.md).

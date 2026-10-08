@@ -226,6 +226,7 @@ public sealed class Octa
     public const int LAYER_TOP = 1 << 5;
     public const int LAYER_BOTTOM = 1 << 6;
     public const int LAYER_DUP = 1 << 7;
+    public const int LAYER_BLEND = LAYER_TOP | LAYER_BOTTOM;
 
     // shared/geom.h:1125 — axis lookup.
     public static readonly int[] R = { 1, 2, 0 };

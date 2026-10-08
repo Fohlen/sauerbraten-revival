@@ -87,6 +87,7 @@ public static class MaterialBuilder
             var uv = new TexGen[3];
             for (int dim = 0; dim < 3; dim++) uv[dim] = CalcTexGen(vs, dim, texSize);
             set.Add(vs.Index, material, uv);
+            set.SetLayer(vs.Index, vs.Layer);
         }
         return set;
     }

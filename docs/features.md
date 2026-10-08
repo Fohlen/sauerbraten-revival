@@ -86,8 +86,12 @@ Remaining:
 - [ ] RenderingServer mesh streaming (bypass the scene tree; [rendering.md](rendering.md#renderingserver-usage-planned-optimisation)).
 - [ ] Exact `visibletris` culling, face merges, T-joints, grass.
 - [ ] **Post-MVP fidelity** (see [Post-MVP / deferred fidelity](#post-mvp--deferred-fidelity)):
-      lighting ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)), layers/envmap, specular maps,
-      alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), blend shader.
+      lighting ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)), envmap, specular maps,
+      blend shader.
+      - [x] **Texture layers** — bottom-layer geometry rendered (`LAYER_BOTTOM`, `vslot.layer`):
+            `MaterialSet`/`MetadataCatalogue` carry the layer mapping, `OctaMesher` emits the
+            second layer with its own material/UVs. Asserted on `bt_falls` by
+            `test/LayerMeshTest.cs`. The top/bottom **blend** (blend shader + blendmap) is still open.
 
 ## 2. OGZ import pipeline
 
@@ -168,6 +172,8 @@ Remaining:
       catalogue still pending.
 - [ ] Parse the **blendmap** and **PVS** sections (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
+      - [x] **Layers** — bottom-layer geometry emitted (`LAYER_BOTTOM`, `vslot.layer`) and
+            asserted on `bt_falls` (`test/LayerMeshTest.cs`).
 
 **New maps use our compact binary format only** — no OGZ at runtime.
 
