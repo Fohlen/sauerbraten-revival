@@ -31,7 +31,7 @@ public static class Phys
     // iengine.h material flags (MATF_*).
     public const ushort MatWater = 1 << 2, MatLava = 2 << 2, MatGlass = 3 << 2;
     public const ushort MatNoClip = 1 << 5, MatClip = 2 << 5, MatGameClip = 3 << 5;
-    public const ushort MatFIndex = 3, MatFVolume = 7 << 2, MatFClip = 3 << 5;
+    public const ushort MatFIndex = 3, MatFVolume = 7 << 2, MatFClip = 7 << 5;
     public const ushort MatAlpha = 4 << 8;
     public const ushort MatDeath = 1 << 8;
 
