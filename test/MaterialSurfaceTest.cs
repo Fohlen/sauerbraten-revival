@@ -28,7 +28,5 @@ public class MaterialSurfaceTest : TestClass
         long triangles = surfaces.Sum(s => MeshAssert.Triangles(s.Mesh));
         GD.Print($"[material] bt_falls: {surfaces.Count} material meshes, {water} water, {triangles} triangles");
         TestAssert.True(triangles > 0, "material surfaces have geometry");
-
-        foreach (var surface in surfaces) surface.Mesh.Free();
     }
 }
