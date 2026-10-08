@@ -122,6 +122,12 @@ public static class OctaFaceWalker
 
         var nb = octa.LeafCube(centre, out int nsize);
         if (nb == null) return true;
+        // MAT_ALPHA is see-through (octa.cpp visibletris): a face of an alpha cube
+        // is never hidden by an opaque neighbour, and an opaque face bordering an
+        // alpha cube stays visible so you can see the solid through the alpha.
+        if ((c.Material & Octa.MAT_ALPHA) != 0) return true;
+        if ((nb.Material & Octa.MAT_ALPHA) != 0) return true;
+
         // octa.cpp visibletris: occluded when entirely solid, OR when the neighbour
         // is solid across the shared face (touchingface + all-solid edges) even if
         // not wholly solid. Omitting the second clause draws coplanar faces the
