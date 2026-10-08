@@ -72,30 +72,6 @@ vertex displacement.
 
 ---
 
-## Movement & collision
-
-### Deformed-cube collision is approximated (A3.2)
-
-`fuzzycollideplanes()` (`physics.cpp:843`) and `genclipplanes()` (`octa.cpp:1204`)
-are not ported. `COLLIDE_ELLIPSE` collision against a non-fully-solid (`Normal`)
-cube falls back to the full-AABB `fuzzycollidesolid()` (`OctaPhysics.CubeCollide`).
-Flat floors match, but a slope fabricates a wall (the player loses the tangential
-velocity it should keep) and step-up is approximate. This caps A3.1 at ~95% vel /
-~97% physstate on `session2` (see
-[movement-verification.md](movement-verification.md#a3--input-replay-differential)).
-Closing it needs `visibletris`/`occludesface`/`insideface`/`genfacevecs` +
-`classifyface` for the clipplane generation.
-
-### A2 trace `jumping` column is always 0
-
-`tools/refharness/patches/a2-trace.patch` logs `pl->jumping` **after**
-`modifyvelocity()` has consumed it, so the column never records a jump. Jump-pad
-impulses are also absent from `session2.csv.events` (only the teleport is logged),
-so A3 detects the impossible one-step `+vz` spike and resyncs. A re-capture should
-log the jump input before it is consumed.
-
----
-
 ## Correctness notes (engine rules worth preserving)
 
 Ported faithfully already — keep these in mind when touching the meshers; several
