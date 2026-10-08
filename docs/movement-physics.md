@@ -256,8 +256,11 @@ Still to do / known deviations:
   hit). A golden differential would still need a bounce extension to the
   refharness, whose collision is a flat-floor stand-in.
 - **Boxes/barrels/platforms are not `ENT_BOUNCE`** — they are `ENT_INANIMATE` and
-  run through `moveplayer`/`moveplatform` (`fpsgame/movable.cpp`), which is not
-  ported yet.
+  run through `moveplayer`/`moveplatform` (`fpsgame/movable.cpp`). That subsystem
+  is **deliberately not ported**: it is hard-gated to single-player
+  (`movable.cpp:90`), unused by the target modes (CTF/FFA/coop edit), and
+  superseded by the command-based dynamic-world plan (a moving platform should be
+  a `GameMode`/`Script` command stream). See [features.md](features.md).
 - **Crouch is not a thing in Cube 2 / Sauerbraten r6889** — there is no crouch
   key and no variable player height in the original `src/`. The player volume is
   fixed (`radius 4.1`, `eyeheight 14`, `aboveeye 1`). Nothing to port.

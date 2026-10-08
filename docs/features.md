@@ -104,9 +104,20 @@ Remaining:
       The runtime node is `World/Entities/BounceBody.cs`. Asserted by
       `test/BouncePhysicsTest.cs` and `test/BounceBodyTest.cs`. Note: boxes/
       barrels/platforms are **not** `ENT_BOUNCE` — they are `ENT_INANIMATE` and use
-      `moveplayer`/`moveplatform` (`movable.cpp`), still to do.
-- [ ] `movable` runtime (`movable.cpp`): box/barrel/platform/elevator physics via
-      `moveplayer`/`moveplatform`, with the platform-passenger collision DAG.
+      `moveplayer`/`moveplatform` (`movable.cpp`).
+- [x] **`movable.cpp` (box/barrel/platform/elevator) — deliberately not ported.**
+      It is hard-gated to single-player (`if(!m_dmsp && !m_classicsp) return;`,
+      `movable.cpp:90`), so **every mode we target (insta/effic CTF, FFA, coop edit)
+      never simulates one** — and none of `ctf.h`/`capture.h`/`collect.h` reference
+      it. Only **16 of 316** base maps use these types, all SP-campaign maps
+      (`mpsp10`, `crnsp1`, `skrsp1`, `level9`, …); our fixtures (`church51`,
+      `bt_falls`) have zero. It is also the *wrong* mechanism for the dynamic-world
+      plan: our mutation path is `WorldCommand`-based (see
+      [Cross-cutting: dynamic world geometry](#cross-cutting-dynamic-world-geometry)),
+      so a moving platform / crumble should be a `GameMode`/`Script` command
+      stream, not a revived SP-only rigid-body subsystem. The mode entities stay
+      as **representation** (models + gizmos), which is correct. Revisited only if
+      we ship the SP campaign, and then via commands.
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
@@ -139,8 +150,10 @@ Remaining:
 - [x] `bounce()` for `ENT_BOUNCE` bodies (grenades/debris/gibs) — ported and
       wired (`OctaPhysics.Bounce`, `BounceBody`, the dynent cache + `plcollide`;
       asserted by `test/BouncePhysicsTest.cs` / `test/BounceBodyTest.cs`).
-- [ ] Movable physics (box/barrel/platform/elevator) — `ENT_INANIMATE`, uses
-      `moveplayer`/`moveplatform`, not `bounce()`.
+- [ ] Movable physics (box/barrel/platform/elevator) — `ENT_INANIMATE`,
+      `moveplayer`/`moveplatform`. **Deliberately not ported**: SP-only
+      (`movable.cpp:90`), unused by every target mode, and superseded by the
+      command-based dynamic-world plan (see §2 above).
 
 ## 4. Editor MVP *(defining feature)*
 

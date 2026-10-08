@@ -339,10 +339,14 @@ remaining fidelity gap is the material side: engine `SHADER_ENVMAP` surfaces (an
   resolves these onto the node (weight/health/speed/tag/team/direction).
 - `PLATFORM`/`ELEVATOR` velocity comes from `yaw` + `maxspeed=attr4` (default 8,
   sign = dir).
-- **Still needed for behaviour:** `ENT_BOUNCE` movables need `bounce()`
-  (`engine/physics.cpp`), still unported (features.md roadmap item 3) — without it
-  boxes/barrels can't move correctly. The mode logic itself (`ctf.h`,
-  `capture.h`, `movable.cpp`) lands with Combat/Modes (roadmap items 5–6).
+- **Runtime behaviour is not ported, by decision:** the box/barrel/platform/
+  elevator simulation lives in `fpsgame/movable.cpp`, which is hard-gated to
+  single-player (`if(!m_dmsp && !m_classicsp) return;`) — none of the target modes
+  (CTF/FFA/coop edit) ever runs it. It is **deliberately not ported**; a moving
+  platform belongs to the command-based dynamic-world plan instead. The other mode
+  logic (`ctf.h`, `capture.h`) lands with Combat/Modes (roadmap items 5–6).
+  (Note: these are `ENT_INANIMATE`; `bounce()` is for grenades/debris/gibs, not
+  them — see [movement-physics.md](movement-physics.md).)
 
 **Monsters (`MONSTER`, 21)** ✅ represented, see item 7 above.
 
