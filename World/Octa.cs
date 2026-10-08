@@ -252,6 +252,48 @@ public sealed class Octa
         AllocNodes = allocNodes;
     }
 
+    /// <summary>
+    /// Deep-copy this world into a fresh <see cref="Octa"/>: the same scale,
+    /// geometry, textures and materials, with an independent node tree. Only
+    /// subtrees that exist are copied, so cloning a sparsely-subdivided world is
+    /// much cheaper than rebuilding it from scratch. Cube render caches
+    /// (<see cref="Cube.Ext"/>, <see cref="Cube.Visible"/>, <see cref="Cube.Merged"/>) are
+    /// cleared, matching <see cref="OctaEdit.CopyCube"/>.
+    /// </summary>
+    public Octa Clone() => new(WorldScale, WorldSize, CloneCubes(WorldRoot), AllocNodes);
+
+    /// <summary>
+    /// Deep-copy a cube block and, recursively, every subtree that exists. Shared
+    /// with <see cref="Ogz.OgzMap.Clone"/> so both clone paths stay in step.
+    /// </summary>
+    public static Cube[] CloneCubes(Cube[] src)
+    {
+        var dst = new Cube[8];
+        for (int i = 0; i < 8; i++)
+        {
+            Cube s = src[i];
+            dst[i] = new Cube
+            {
+                Faces = s.Faces,
+                Texture = s.Texture,
+                Material = s.Material,
+                Ext = CloneExt(s.Ext),
+                Children = s.Children != null ? CloneCubes(s.Children) : null,
+            };
+        }
+        return dst;
+    }
+
+    /// <summary>Deep-copy a cube's extended surface data, or null if it has none.</summary>
+    private static CubeExt? CloneExt(CubeExt? src)
+    {
+        if (src == null) return null;
+        var ext = new CubeExt { TJoints = src.TJoints, MaxVerts = src.MaxVerts };
+        System.Array.Copy(src.Surfaces, ext.Surfaces, src.Surfaces.Length);
+        ext.Verts = (VertInfo[])src.Verts.Clone();
+        return ext;
+    }
+
     /// <summary>Create an empty (solid) world at the given scale.</summary>
     public void NewMap(int worldscale)
     {

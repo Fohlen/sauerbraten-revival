@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using Godot;
 using SauerbratenRevival.World.Ogz;
@@ -30,7 +31,21 @@ public static class TestData
 
     public static OgzMap ReadMap(string map) => ReadMapAt(OgzPathFor(map));
 
+    // Parsing church51 costs ~115 ms (decompress + octree decode) and the suite
+    // calls ReadMap ~36 times. Parse each map once and hand out deep clones
+    // (~28 ms) instead — a fresh, independently-mutable map per call, no re-read
+    // and no shared state.
+    private static readonly Dictionary<string, OgzMap> Cache = new();
+
     private static OgzMap ReadMapAt(string path)
+    {
+        if (Cache.TryGetValue(path, out var cached)) return cached.Clone();
+        var map = ParseAt(path);
+        Cache[path] = map;
+        return map.Clone();
+    }
+
+    private static OgzMap ParseAt(string path)
     {
         if (!File.Exists(path))
             throw new FileNotFoundException(

@@ -13,6 +13,15 @@ public abstract class GoTestBase : TestClass
 {
     protected GoTestBase(Node testScene) : base(testScene) { }
 
+    [SetupAll]
+    public void EnableWorldSeedCache()
+    {
+        // Rebuild the canonical EmptyMap once and clone it per test instead of
+        // re-building + re-meshing the whole world for every fixture. See
+        // EmptyMap.UseSeedCache.
+        SauerbratenRevival.World.Editor.EmptyMap.UseSeedCache = true;
+    }
+
     [CleanupAll]
     public void ReleaseGodotObjects()
     {

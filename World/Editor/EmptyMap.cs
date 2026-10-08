@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
@@ -27,12 +28,37 @@ public partial class EmptyMap : Node3D
     public WorldCommandSink? Sink { get; set; }
     public WorldChunkRenderer? Renderer { get; set; }
 
+    /// <summary>
+    /// Reuse a built-once canonical world (octree + meshes) across instances by
+    /// cloning the octree and sharing the meshes, instead of rebuilding and
+    /// re-meshing from scratch. Every <see cref="EmptyMap"/> builds the same world,
+    /// so the seed is deterministic; the clone keeps mutations instance-local. This
+    /// matters in tests, where dozens of fresh maps otherwise pay the full build +
+    /// mesh cost each. Meshes are shared read-only (Godot resources), which is
+    /// safe because the seed meshes are never mutated.
+    /// </summary>
+    public static bool UseSeedCache { get; set; }
+
+    private static readonly Dictionary<(int Scale, int Chunk), (Octa Seed, ChunkedWorldMesh Mesh)> SeedCache = new();
+
     public override void _Ready()
     {
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
 
-        // A fresh octree; the actual "new map" is issued as a WorldOp through the
-        // sink, exactly as the editor will (world.cpp emptymap).
+        if (UseSeedCache && SeedCache.TryGetValue((WorldScale, ChunkSize), out var seed))
+        {
+            // Fast path: clone the cached octree and reuse its meshes.
+            var cachedOcta = seed.Seed.Clone();
+            Octa = cachedOcta;
+            Sink = new WorldCommandSink(new OctaWorld(cachedOcta));
+            CreateRenderer(cachedOcta, seed.Mesh);
+            LinkChildEditors(cachedOcta);
+            GD.Print($"[emptymap] seed-cache worldsize={cachedOcta.WorldSize} chunks={Renderer!.ChunkCount} tris={Renderer.TriangleCount}");
+            return;
+        }
+
+        // Build path: construct the octree, carve the room, mesh it, and (when the
+        // seed cache is on) remember it for later instances.
         var octa = new Octa(WorldScale);
         Octa = octa;
         Sink = new WorldCommandSink(new OctaWorld(octa));
@@ -46,6 +72,23 @@ public partial class EmptyMap : Node3D
                              new Vector3I(inner / 8, inner / 8, inner / 8), 8, 0);
         OctaEdit.DeleteCube(octa, sel);
 
+        ChunkedWorldMesh? prebuilt = null;
+        if (UseSeedCache)
+        {
+            var mesher = new OctaMesher(octa, null);
+            var mesh = mesher.BuildChunked(ChunkSize);
+            SeedCache[(WorldScale, ChunkSize)] = (octa.Clone(), mesh);
+            prebuilt = mesh;
+        }
+
+        CreateRenderer(octa, prebuilt);
+        LinkChildEditors(octa);
+
+        GD.Print($"[emptymap] worldsize={size} chunks={Renderer!.ChunkCount} tris={Renderer.TriangleCount}");
+    }
+
+    private void CreateRenderer(Octa octa, ChunkedWorldMesh? prebuilt)
+    {
         Renderer = new WorldChunkRenderer
         {
             Name = "WorldMesh",
@@ -53,9 +96,12 @@ public partial class EmptyMap : Node3D
             BudgetPerFrame = 4,
         };
         AddChild(Renderer);
-        Renderer.Setup(octa, materials: null);
+        Renderer.Setup(octa, materials: null, prebuilt);
+    }
 
-        // Hand the world to any child editor controller (it draws in this Z-up space).
+    // Hand the world to any child editor controller (it draws in this Z-up space).
+    private void LinkChildEditors(Octa octa)
+    {
         foreach (var child in GetChildren())
             if (child is EditorController ec)
             {
@@ -63,8 +109,6 @@ public partial class EmptyMap : Node3D
                 ec.Sink = Sink;
                 ec.Renderer = Renderer;
             }
-
-        GD.Print($"[emptymap] worldsize={size} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount}");
     }
 
 }

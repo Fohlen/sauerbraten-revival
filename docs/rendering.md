@@ -94,23 +94,6 @@ This spreads large edits across frames, avoiding hitches.
 > chunks its AABB overlaps, expanded by the cube margin) — over-marking is safe,
 > under-marking leaves stale geometry.
 
-<a id="meshing-cost"></a>
-### Meshing cost (CPU)
-
-Meshing dominates CPU in the test run: it is the reason a full `run-tests.sh`
-run pins a core (≈90–100% `%CPU`). This was introduced by `98e5b8f` ("Add
-chunked world mesh") — before it the run sat at ≈33–50% CPU (I/O/setup-bound).
-The mechanism is that `WorldChunkRenderer.Setup` eagerly meshes every chunk, and
-each `EmptyMap` test fixture meshes the whole world before its body runs.
-
-Because `%CPU ≈ (user + sys) / real`, a `time ./run-tests.sh` figure near 100%
-means the run is mesher-bound again. To localise a regression, run suites
-individually (see [README.md](../README.md#running-a-single-suite-or-test)).
-
-See [known-bugs.md § Performance 1](known-bugs.md#1-eager-world-meshing-saturates-a-cpu-core-test-runs--world-load)
-for the tracked issue and the deferred mitigations (skip/cache empty chunks,
-lazy chunk builds, sharing a world across tests).
-
 ---
 
 ## Collision detection

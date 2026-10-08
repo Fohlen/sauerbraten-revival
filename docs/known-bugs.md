@@ -70,43 +70,6 @@ vertex displacement.
 
 ---
 
-## Performance
-
-### 1. Eager world meshing saturates a CPU core (test runs / world load)
-
-**Symptom.** `time ./run-tests.sh` reports `%CPU` near 90–100%: the full run
-pins a core instead of waiting on I/O, and its wall time grew substantially
-across the project's history.
-
-**Regression point.** Commit `98e5b8f` ("Add chunked world mesh"). Bisected on
-`%CPU` from `9c38e6e` (good, ≈33–50% CPU) to `478cb94` (bad, ≈92%): the process
-flips from I/O/setup-bound to compute-bound exactly when the chunk mesher lands.
-`%CPU` is `(user + sys) / real`, so a figure near 100% means meshing dominates;
-a much lower figure means the run is I/O/wait-bound again.
-
-**Cause.** Not a bug in the strict sense — it is the expected cost of
-`WorldChunkRenderer.Setup`, which **eagerly meshes every chunk** of the world.
-Two multipliers make it painful in tests:
-
-- Every test that builds an `EmptyMap` (`WorldScale = 10` → 1024³,
-  `ChunkSize = 128`) meshes the whole world before the test body runs.
-- `ReSetup()` (added for undo/redo) remeshes **every** chunk on a full-world
-  invalidation, so undo/redo tests pay the full cost too.
-
-**Intended fix / mitigations** (none applied yet — see
-[rendering.md](rendering.md#meshing-cost) for the meshing-cost context):
-
-- Skip or cache chunks with no visible faces, so an empty world meshes in
-  ~nothing.
-- Build chunks lazily / on demand instead of eagerly in `Setup`.
-- Let tests share one world (or use a smaller `WorldScale`) instead of meshing a
-  fresh `EmptyMap` per method.
-
-Run individual suites while iterating to avoid paying the full cost; see
-[README.md](../README.md#running-a-single-suite-or-test).
-
----
-
 ## Correctness notes (engine rules worth preserving)
 
 Ported faithfully already — keep these in mind when touching the meshers; several

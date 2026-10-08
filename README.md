@@ -105,16 +105,21 @@ GODOT=/path/to/Godot ./run-tests.sh   # note: run-tests.sh itself always runs ev
 (If `$GODOT` is unset, `run-tests.sh` and the commands above fall back to
 `/Applications/Godot_mono.app/Contents/MacOS/Godot`.)
 
-### Why the full suite is CPU-heavy
+### Test fixtures are cached
 
-A full run is **compute-bound on world meshing** (≈90–100% `%CPU`) rather than
-on the assertions, because every `EmptyMap` fixture meshes the whole world up
-front. This arrived with the chunk mesher in `98e5b8f`; it is tracked as a known
-performance issue, with mitigations, in
-[known-bugs.md](docs/known-bugs.md#1-eager-world-meshing-saturates-a-cpu-core-test-runs--world-load).
+The suite is compute-bound (a full run pins a core) because many suites build
+full worlds. Two fixtures are cached so tests don't repay that cost:
 
-To keep local iteration cheap, run only the suite you are touching (above)
-rather than the whole assembly.
+- `TestData.ReadMap()` parses each `.ogz` **once** and hands out deep clones
+  (`OgzMap.Clone` / `Octa.Clone`), instead of re-reading and re-parsing the map
+  on every call (36 call sites). Parsing church51 is ~115 ms; a clone is ~28 ms.
+- `EmptyMap` can reuse a built-once seed world (enabled in tests via
+  `GoTestBase`), cloning its octree and sharing its meshes rather than rebuilding
+  and re-meshing per fixture.
+
+Both hand out independent, mutable worlds, so tests stay isolated. To keep local
+iteration cheap, run only the suite you are touching (above) rather than the
+whole assembly.
 
 ## Inspecting a map
 

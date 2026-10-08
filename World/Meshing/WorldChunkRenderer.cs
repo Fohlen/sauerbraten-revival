@@ -67,7 +67,16 @@ public partial class WorldChunkRenderer : Node3D
     /// Initialise against a world and build every chunk once. Call before adding
     /// mutations.
     /// </summary>
-    public void Setup(Octa octa, MaterialSet? materials)
+    public void Setup(Octa octa, MaterialSet? materials) => Setup(octa, materials, prebuilt: null);
+
+    /// <summary>
+    /// Initialise against a world and populate its chunks. When
+    /// <paramref name="prebuilt"/> is supplied its meshes are reused verbatim
+    /// instead of re-meshing — a warm-start for callers that already hold the
+    /// meshes for an identical world (e.g. a cached test seed). Meshes are Godot
+    /// resources shared read-only across instances, so reuse is safe.
+    /// </summary>
+    public void Setup(Octa octa, MaterialSet? materials, ChunkedWorldMesh? prebuilt)
     {
         _octa = octa;
         _materials = materials;        _nodes.Clear();
@@ -77,9 +86,16 @@ public partial class WorldChunkRenderer : Node3D
         foreach (var child in GetChildren())
             if (child is MeshInstance3D m) m.QueueFree();
 
-        var mesher = new OctaMesher(_octa, _materials);
-        var chunked = mesher.BuildChunked(ChunkSize);
-        foreach (var chunk in chunked.Chunks) CreateNode(chunk.Origin, chunk.Mesh);
+        if (prebuilt != null)
+        {
+            foreach (var chunk in prebuilt.Chunks) CreateNode(chunk.Origin, chunk.Mesh);
+        }
+        else
+        {
+            var mesher = new OctaMesher(_octa, _materials);
+            var chunked = mesher.BuildChunked(ChunkSize);
+            foreach (var chunk in chunked.Chunks) CreateNode(chunk.Origin, chunk.Mesh);
+        }
         RecomputeTriangleCount();
     }
     /// <summary>

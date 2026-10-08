@@ -102,6 +102,34 @@ public sealed class OgzMap
         return new Octa(worldscale, Header.WorldSize, WorldRoot, CountAllocNodes(WorldRoot));
     }
 
+    /// <summary>
+    /// Independent deep copy: the octree is cloned (see <see cref="Octa.Clone"/>)
+    /// and every metadata list is copied, so a clone can be mutated without
+    /// touching the original. Used to hand out a fresh world from a cached parse
+    /// without re-reading and re-parsing the OGZ file.
+    /// </summary>
+    public OgzMap Clone()
+    {
+        var header = Header;
+        return new OgzMap
+        {
+            Header = new OgzHeader
+            {
+                Magic = header.Magic, Version = header.Version, HeaderSize = header.HeaderSize,
+                WorldSize = header.WorldSize, NumEnts = header.NumEnts, NumPvs = header.NumPvs,
+                Lightmaps = header.Lightmaps, BlendMap = header.BlendMap, NumVars = header.NumVars,
+                NumVSlots = header.NumVSlots,
+            },
+            Vars = new List<OgzVar>(Vars),
+            GameIdent = GameIdent,
+            ExtraEntInfoSize = ExtraEntInfoSize,
+            TexMru = new List<ushort>(TexMru),
+            Entities = new List<OgzEntity>(Entities),
+            VSlots = new List<OgzVSlot>(VSlots),
+            WorldRoot = Octa.CloneCubes(WorldRoot),
+        };
+    }
+
     private static int CountAllocNodes(Cube[] cubes)
     {
         int count = 1; // worldio.cpp newcubes() allocated this cube[8] block
