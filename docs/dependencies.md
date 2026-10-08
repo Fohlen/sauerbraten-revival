@@ -46,7 +46,7 @@ brew install assimp uv sdl2 sdl2_image sdl2_mixer
 | --- | --- | --- |
 | `SAUER_REF` | Tests, viewer, import tools, refharness | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
 | `GODOT` | `run-tests.sh` | `/Applications/Godot_mono.app/Contents/MacOS/Godot` |
-| `SAUER_TRACE` / `SAUER_METADATA` | Instrumented reference client | unset (features inert) |
+| `SAUER_TRACE` / `SAUER_METADATA` / `SAUER_METADATA_EXIT` | Instrumented reference client | unset (features inert) |
 
 ## Recreating an ad-hoc analysis environment
 

@@ -141,7 +141,11 @@ writes the JSON there; otherwise the patch is completely inert. See
 how to build the patched client.
 
 This patch is applied once to a copy of the original source, the modified client
-is run on each map, and the JSON output is committed to the repository.
+is run on each map, and the JSON output is committed to the repository. The
+whole map set is exported in one shot by
+[`tools/metadata-catalogue/export-all-maps.sh`](../tools/metadata-catalogue/README.md),
+which loops the client over every `*.ogz` and writes one JSON entry per map into
+[`metadata-catalogue/`](../metadata-catalogue/README.md).
 
 **No ongoing maintenance** — the original game is frozen; we generate metadata
 once for all maps we want to import.
