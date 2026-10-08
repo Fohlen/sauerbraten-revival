@@ -37,7 +37,7 @@
  COMMAND(altsound, "si");
 --- a/engine/worldio.cpp
 +++ b/engine/worldio.cpp
-@@ -1272,7 +1272,11 @@
+@@ -1272,6 +1272,14 @@
      if(maptitle[0] && strcmp(maptitle, "Untitled Map by Unknown")) conoutf(CON_ECHO, "%s", maptitle);
  
      startmap(cname ? cname : mname);
@@ -45,11 +45,14 @@
 +
 +#ifndef STANDALONE
 +    exportmapmetadata(game::getclientmap());
++
++    // Batch tooling: exit as soon as the metadata for this map has been
++    // written, so a driver can loop over every map without a display target.
++    if(getenv("SAUER_METADATA_EXIT")) { extern void quit(); quit(); }
 +#endif
 +
      return true;
  }
- 
 --- a/Makefile
 +++ b/Makefile
 @@ -98,6 +98,7 @@
@@ -60,9 +63,19 @@
  	engine/menus.o \
  	engine/movie.o \
  	engine/normal.o	\
+@@ -181,5 +181,9 @@
+ 
+ $(CLIENT_OBJS): CXXFLAGS += $(CLIENT_INCLUDES)
++# metadata.cpp inspects raw float bit patterns to keep Infinity/NaN out of the
++# exported JSON; -ffast-math (via -ffinite-math-only) would fold that check
++# away, so compile just this file with the finiteness assumption disabled.
++engine/metadata.o: CXXFLAGS += -fno-finite-math-only
+ $(filter shared/%,$(CLIENT_OBJS)): $(filter shared/%,$(CLIENT_PCH))
+ 
+ $(SERVER_OBJS): CXXFLAGS += $(SERVER_INCLUDES)
 --- a/engine/metadata.cpp
 +++ b/engine/metadata.cpp
-@@ -0,0 +1,324 @@
+@@ -0,0 +1,339 @@
 +// metadata.cpp: one-time OGZ import metadata export (sauerbraten-revival)
 +//
 +// This file is added by a patch to Sauerbraten SVN r6889 and is not part of the
@@ -99,6 +112,18 @@
 +    fputc('"', f);
 +}
 +
++// JSON has no Infinity/NaN: emit null for any non-finite value (e.g. a vslot
++// with an infinite scroll, used to mean "no scroll"). Checked on the raw bit
++// pattern; this file is compiled with -fno-finite-math-only (see Makefile) so
++// the check is not folded away under the engine's -ffast-math.
++static void jsonfloat(FILE *f, float v)
++{
++    unsigned int bits;
++    memcpy(&bits, &v, sizeof(bits));
++    if((bits & 0x7F800000u) != 0x7F800000u) fprintf(f, "%g", v); // exponent all-ones = inf/nan
++    else fputs("null", f);
++}
++
 +static void jsonparams(FILE *f, const vector<SlotShaderParam> &params)
 +{
 +    fputc('[', f);
@@ -107,7 +132,9 @@
 +        const SlotShaderParam &p = params[i];
 +        if(i) fputc(',', f);
 +        fputs("{\"name\":", f); jsonstring(f, p.name);
-+        fprintf(f, ",\"val\":[%g,%g,%g,%g]}", p.val[0], p.val[1], p.val[2], p.val[3]);
++        fputs(",\"val\":[", f);
++        loopk(4) { if(k) fputc(',', f); jsonfloat(f, p.val[k]); }
++        fputs("]}", f);
 +    }
 +    fputc(']', f);
 +}
@@ -329,13 +356,14 @@
 +        if(!firstvslot) fputs(",\n", f);
 +        firstvslot = false;
 +        fprintf(f, "{\"index\":%d,\"slot\":%d", v.index, v.slot ? v.slot->index : -1);
-+        fprintf(f, ",\"scale\":%g,\"rotation\":%d", v.scale, v.rotation);
++        fputs(",\"scale\":", f); jsonfloat(f, v.scale);
++        fprintf(f, ",\"rotation\":%d", v.rotation);
 +        fprintf(f, ",\"offset\":[%d,%d]", v.offset.x, v.offset.y);
-+        fprintf(f, ",\"scroll\":[%g,%g]", v.scroll.x, v.scroll.y);
++        fputs(",\"scroll\":[", f); jsonfloat(f, v.scroll.x); fputc(',', f); jsonfloat(f, v.scroll.y); fputc(']', f);
 +        fprintf(f, ",\"layer\":%d", v.layer);
-+        fprintf(f, ",\"alpha\":[%g,%g]", v.alphafront, v.alphaback);
-+        fprintf(f, ",\"color\":[%g,%g,%g]", v.colorscale.x, v.colorscale.y, v.colorscale.z);
-+        fprintf(f, ",\"glow\":[%g,%g,%g]", v.glowcolor.x, v.glowcolor.y, v.glowcolor.z);
++        fputs(",\"alpha\":[", f); jsonfloat(f, v.alphafront); fputc(',', f); jsonfloat(f, v.alphaback); fputc(']', f);
++        fputs(",\"color\":[", f); jsonfloat(f, v.colorscale.x); fputc(',', f); jsonfloat(f, v.colorscale.y); fputc(',', f); jsonfloat(f, v.colorscale.z); fputc(']', f);
++        fputs(",\"glow\":[", f); jsonfloat(f, v.glowcolor.x); fputc(',', f); jsonfloat(f, v.glowcolor.y); fputc(',', f); jsonfloat(f, v.glowcolor.z); fputc(']', f);
 +        fputs(",\"params\":", f);
 +        jsonparams(f, v.params);
 +        fputc('}', f);
@@ -362,7 +390,7 @@
 +        if(i) fputs(",\n", f);
 +        fprintf(f, "{\"index\":%d,\"type\":", i);
 +        jsonstring(f, entities::entname(e.type));
-+        fprintf(f, ",\"position\":[%g,%g,%g]", e.o.x, e.o.y, e.o.z);
++        fputs(",\"position\":[", f); jsonfloat(f, e.o.x); fputc(',', f); jsonfloat(f, e.o.y); fputc(',', f); jsonfloat(f, e.o.z); fputc(']', f);
 +        fprintf(f, ",\"attr1\":%d,\"attr2\":%d,\"attr3\":%d,\"attr4\":%d,\"attr5\":%d",
 +                e.attr1, e.attr2, e.attr3, e.attr4, e.attr5);
 +        fputc('}', f);
