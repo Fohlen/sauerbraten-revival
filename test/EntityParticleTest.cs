@@ -65,6 +65,7 @@ public class EntityParticleTest : GoTestBase
             if (entity.Attr1 == 0) TestAssert.True(node != null, "fire+smoke renders as particles");
             if (entity.Attr1 is 3 or 4) TestAssert.True(node == null, $"effect {entity.Attr1} needs a custom renderer");
             if (node != null) { rendered++; node.Free(); }
+            emitter.Free();
         }
         TestAssert.Equal(8, rendered, "only fire+smoke renders on church51");
     }

@@ -64,6 +64,9 @@ public static class ParticleRenderer
                 break;
 
             default:
+                // No billboard representation: drop the empty holder we built
+                // before discovering the effect needs a custom renderer.
+                root.Free();
                 return null; // custom renderer needed
         }
         return root;
