@@ -73,9 +73,9 @@ Remaining:
       - [x] **Geometry + entities**: `OgzConverter` writes `world.res` + `Level.tscn` from
             a parsed `.ogz` (asserted by `test/MapFormatTest.cs`, church51 round-trips
             exactly). Metadata-driven material manifest emission is still pending.
-- [ ] envmap / monsters / mode entities. See
+- [x] envmap / monsters / mode entities — all represented (import only). See
       [ogz-import.md § Entity porting status](ogz-import.md#entity-porting-status)
-      for the concrete work items:
+      for the concrete work items (runtime behaviour remains unported):
       - [x] `ET_ENVMAP` (4) → `EnvMapProbe` (`ReflectionProbe`). `EnvMapBuilder`
             resolves `attr1` radius (0 → 128, clamp 0..10000), `attr2` cubemap size
             (4..9, capped by `envmapsize` 7), `attr3` blur (1..2). Asserted by
@@ -89,10 +89,13 @@ Remaining:
             converts `flags/{neutral,red,blue}` and `base/{neutral,red,blue}`.
             Asserted by `test/EntityModeTest.cs` on **bt_falls** (5 base, 2 flag)
             and **lost** (57 box, 114 barrel, 11 platform, 13 elevator).
-      - [ ] Monsters (`MONSTER`, 21): spawn markers + `entradius` facing arrows
-            first; the actual AI/physics (`monster.cpp`, `movable.cpp`) is game
-            logic, not import, and lands with Modes/Combat. Models not yet
-            converted.
+      - [x] Monsters (`MONSTER`, 21): `MonsterBuilder` maps them to `Monster`
+            nodes (`attr1` yaw, `attr2` type, `attr3` tag), resolving the ported
+            `monstertypes` table (`MonsterTypes`) and the `bscale` body box, plus
+            the `entradius` facing arrow. The nine monster models now convert.
+            Asserted by `test/EntityMonsterTest.cs` on **crnsp1** (220, all 9
+            types) and **lost** (235). The AI (`monster.cpp`, `ai.cpp`,
+            `waypoint.cpp`) is game logic and lands with Modes/Combat.
 - [ ] `bounce()` physics for `ENT_BOUNCE` movables — needed before box/barrel/
       platform behaviour can work (see roadmap item 3).
 - [ ] Lightmap import / rebake (post-MVP).

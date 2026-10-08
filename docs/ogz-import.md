@@ -250,13 +250,15 @@ Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later
 | ET_TELEDEST | 20 | TeleDest (trigger node) | ✅ `TriggerBuilder` (representation) |
 | ET_JUMPPAD | 23 | JumpPad (trigger node) | ✅ `TriggerBuilder` (representation) |
 | Items | 8–18 | Item nodes | ✅ `ItemBuilder` (models converted) |
+| Monsters | 21 | Monster nodes | ✅ `MonsterBuilder` (9 models converted) |
 | Mode entities | 22, 24–30 | mode nodes | ✅ `ModeEntityBuilder` (flag/base/box/barrel/platform/elevator/respawnpoint/carrot) |
 
 ### Entity porting status
 
 Ported: lights + spotlights, envmaps, playerstarts, mapmodels, triggers, items,
-particles, sounds and the mode entities. The remainder is being done **one slice
-at a time, each verified** (the `docs/features.md` roadmap mirrors this):
+particles, sounds, monsters and the mode entities. Every engine + fpsgame entity
+type is now represented; the slices were done **one at a time, each verified** (the
+`docs/features.md` roadmap mirrors this):
 
 1. **Triggers** ✅ — `TriggerBuilder` represents `ET_TELEPORT` (`attr1` = destination tag,
    `attr2` = model: `>0` a mapmodel, `0` the built-in teleporter, `<0` invisible; `attr3` =
@@ -268,8 +270,11 @@ at a time, each verified** (the `docs/features.md` roadmap mirrors this):
    engine's built-in models. `tools/model-import/import_models.py` now also converts
    those (`health`/`boost`/`quad` md3, `ammo/*` obj, and `armor/*` which shares the
    parent `armor/tris.md3` with a per-colour skin), plus `teleporter`/`carrot`/`checkpoint`.
-3. **Particles** — `ET_PARTICLES` → `GPUParticles3D`, using the engine's particle
-   definitions (effect id in `attr1`).
+3. **Particles** ✅ — `ParticleBuilder` represents `ET_PARTICLES`; the billboard
+   effects (fire/smoke, steam, water, flame, snow, …) render as `GPUParticles3D`
+   via `ParticleRenderer`, using the engine's particle definitions (effect id in
+   `attr1`). The custom-renderer effects (fireball, tape, meter, lightning,
+   flares) are left as per-effect TODOs — see the Particles section below.
 4. **Sounds** ✅ — `SoundBuilder` maps `ET_SOUND` to `SoundEmitter`
    (`AudioStreamPlayer3D`): `attr1` indexes the catalogue's `sounds` (relative to
    `packages/sounds/`), `attr2` is the audible radius, `attr3` the full-volume radius.
@@ -291,14 +296,24 @@ at a time, each verified** (the `docs/features.md` roadmap mirrors this):
    `base/{neutral,red,blue}` (via `exec`-delegating cfgs). Verified on
    **bt_falls** (5 bases, 2 flags) and **lost** (57 box, 114 barrel, 11 platform,
    13 elevator, +respawnpoints). Representation only — see the gaps below.
+7. **Monsters** ✅ — `MonsterBuilder` maps `MONSTER` to `Monster` nodes:
+   `attr1` = yaw, `attr2` = monster type (index into `MonsterTypes.All`, the ported
+   `monstertypes` table), `attr3` = tag. Resolves the nine body models and the
+   `bscale`-scaled body box (radius/eyeheight/aboveeye), and draws the `entradius`
+   facing arrow. An out-of-range type falls back to type 0, matching the engine
+   warning. The model importer now converts the nine monster models. Verified on
+   **crnsp1** (220 monsters, all 9 types) and **lost** (235, types 0–5).
+   Representation only — the AI (`monster.cpp`/`ai.cpp`/`waypoint.cpp`) is game
+   logic and lands with Combat/Modes.
 
-Later: monsters.
+Every engine + fpsgame entity type is now **represented**. See the gaps below for
+the runtime behaviour that is still unported.
 
 #### Remaining gaps (detailed)
 
 Attribute semantics are the `fpsgame/game.h` comments +
-`entities::fixentity`/`entradius`/`entmodel`. The mode entities are **represented**;
-their runtime still needs game logic.
+`entities::fixentity`/`entradius`/`entmodel`. Every entity type is **represented**;
+what remains is runtime game logic, not import.
 
 **`ET_ENVMAP` (4) — reflection/cubemap probe** ✅ done, see item 5 above. The
 remaining fidelity gap is the material side: engine `SHADER_ENVMAP` surfaces (and
@@ -328,23 +343,24 @@ remaining fidelity gap is the material side: engine `SHADER_ENVMAP` surfaces (an
   boxes/barrels can't move correctly. The mode logic itself (`ctf.h`,
   `capture.h`, `movable.cpp`) lands with Combat/Modes (roadmap items 5–6).
 
-**Monsters (`MONSTER`, 21)**
+**Monsters (`MONSTER`, 21)** ✅ represented, see item 7 above.
 
 - Attributes: `attr1` = yaw, `attr2` = monstertype (`0–8`), `attr3` = tag.
-  Nine models under `packages/models/` (`ogro`, `monster/rhino`, `monster/rat`,
-  `monster/slith`, `monster/bauul`, `monster/hellpig`, `monster/knight`,
-  `monster/goblin`, `monster/spider`) — none are in the model-import manifest yet.
-- Import slice = spawn marker + facing arrow + model. **AI and combat
-  (`monster.cpp`, `ai.cpp`, `waypoint.cpp`) are game logic**, not import; they land
-  with Combat/Modes, not here.
+  `MonsterTypes.All` is a direct port of the engine's `monstertypes` table
+  (gun/speed/health/freq/lag/rate/pain/loyalty/bscale/weight/name/model);
+  `MonsterBuilder` applies the `bscale` body scaling (`radius *= bscale/10`,
+  `eyeheight = 8·bscale/10`, `aboveeye = 7·bscale/10`).
+- **Still needed for behaviour:** the AI and combat (`monster.cpp`, `ai.cpp`,
+  `waypoint.cpp`) are game logic, not import — they land with Combat/Modes.
+  The view-weapon models (`*/vwep`) are not yet converted by the importer.
 
-**Model import work** (`tools/model-import/`): ✅ `flags/` (md2) and `base/` (md3,
-`red`/`blue`/`neutral` via `exec`-delegating cfgs) now convert, alongside
-item/teleporter/checkpoint/carrot. The nine monster models
+**Model import work** (`tools/model-import/`): ✅ `flags/` (md2), `base/` (md3,
+`red`/`blue`/`neutral` via `exec`-delegating cfgs) and the nine monster models
 (`ogro`, `monster/rhino`, `monster/rat`, `monster/slith`, `monster/bauul`,
-`monster/hellpig`, `monster/knight`, `monster/goblin`, `monster/spider`) remain
-unconverted, and so do mapmodels only referenced by box/barrel/platform/elevator
-maps (resolved per-map through the catalogue as usual).
+`monster/hellpig`, `monster/knight`, `monster/goblin`, `monster/spider`) now
+convert, alongside item/teleporter/checkpoint/carrot. Monster view-weapons
+(`*/vwep`) remain unconverted, as do mapmodels only referenced by
+box/barrel/platform/elevator maps (resolved per-map through the catalogue).
 
 ### Edit-mode entity markers
 
@@ -353,8 +369,9 @@ In edit mode Cube2 spawns a blue `PART_EDIT` splash at every entity
 (`World/Entities/EntityMarker.cs`, texture `packages/particles/base.png`, colour
 `0x3232FF`), plus a small facing arrow for directional entities. Markers are added
 for **playerstarts**, **triggers** (`teleport`/`teledest`/`jumppad`), **items**,
-**particles**, **sounds** and the **mode entities** (with a facing arrow for
-`flag`/`respawnpoint`/`box`/`barrel`/`platform`/`elevator`, matching `entradius`).
+**particles**, **sounds**, **monsters** and the **mode entities** (with a facing
+arrow for `monster`/`flag`/`respawnpoint`/`box`/`barrel`/`platform`/`elevator`,
+matching `entradius`).
 They are **not** added to **mapmodels** (they render their real model),
 **lights** or **envmaps** (their probe has its own extent). The whole layer is in the
 `entity_markers` group so a future game/edit-mode split can hide it via
@@ -402,7 +419,7 @@ The pipeline is split into offline tools, all reading the read-only reference du
 
 | Tool | Output | Purpose |
 | --- | --- |
-| `tools/model-import/import_models.py` | `assets/models/*.glb` + `models.json` | Converts mapmodels and built-in item/teleporter/flag/base models to glTF with **assimp**, applies per-model skins/bumps, and writes the model manifest. Handles parent-folder geometry fallback (e.g. `armor/*` sharing `armor/tris.md3`, `base/*` resolving `../base.md3` via `exec`-delegating cfgs) and the engine's `mdlscale/4`. |
+| `tools/model-import/import_models.py` | `assets/models/*.glb` + `models.json` | Converts mapmodels and built-in item/teleporter/flag/base/monster models to glTF with **assimp**, applies per-model skins/bumps, and writes the model manifest. Handles parent-folder geometry fallback (e.g. `armor/*` sharing `armor/tris.md3`, `base/*` resolving `../base.md3` via `exec`-delegating cfgs) and the engine's `mdlscale/4`. |
 | `tools/texture-import/import_textures.py` | `assets/textures/**` | Copies every texture a map references (slot textures, model skins/bumps, and the engine defaults for water/lava/particles) into the project, preserving relative paths. |
 | `tools/refharness/build_instrumented.sh` | `metadata-catalogue/<map>.json` | Builds the patched reference client that exports the metadata (see above). |
 
