@@ -182,7 +182,11 @@ that underpins this entire section.
             `RotateSelection` (`mprotate`); asserted by
             `test/SelectionTransformTest.cs`.
 - [ ] Texturing, blending, entity placement.
-- [ ] Selection, copy/paste, fill, remip.
+- [x] Selection, copy/paste, fill, remip — `Selection`/`Block3` (`World/Commands/`),
+      `BlockCopy`/`PasteBlock`/`Fill`/`DeleteCube`/`Remip`/`RemipAll`
+      (`World/OctaEdit.cs`); asserted by `test/SelectionTest.cs`,
+      `test/OctaOpsTest.cs`, `test/RemipTest.cs`. Still pending: the edit binds
+      and `delta_do` dispatch that drive them interactively (tracked above).
 - [x] Save/load in our format (M5): `WorldSnapshot` + map directory (`world.res`,
       `history.res`, `Level.tscn`) + compaction + archive hash; `OgzConverter`;
       `F2` save / `F3` load binds in `EditorController`. See
