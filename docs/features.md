@@ -40,9 +40,6 @@ Done:
 - [x] Skybox: cubemap `skybox` mapvar → `SkyBuilder` + `shader_type sky`.
 - [x] Texture pipeline: `ITextureSource` seam + `tools/texture-import/` + runtime dump fallback.
 - [x] Material surfaces (water/lava/glass) — `MaterialMesher` + `MaterialTextures`.
-
-Remaining:
-
 - [x] `Resource`-based world save/load (compact binary format) — `WorldSnapshot`
       (canonical octree + entity blob, versioned, content-hashed) wrapped in Godot
       `WorldResource`/`HistoryResource`, plus the map-directory layout + compaction +
@@ -53,6 +50,9 @@ Remaining:
       (`WorldChunkRenderer`, `OctaMesher.BuildChunk`, `OctaFaceWalker.WalkRegion`;
       `test/IncrementalMeshTest.cs`). Default chunk 128, budget 4/frame — see
       [rendering.md](rendering.md#chunking-strategy) for the measured tradeoff.
+
+Remaining:
+
 - [ ] LOD via `ArrayMesh.add_lod()`.
 - [ ] Deferred: specular maps, alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), blend shader.
 
@@ -98,11 +98,11 @@ Done:
       `test/WaterPhysicsTest.cs`. **Crouch does not exist in Cube 2 r6889** (no
       crouch key, fixed player height) and is therefore not a port item.
 - [x] Close the last ~0.2%: deformed-cube slope/step-up landing timing (fixed via the `-ffast-math` step-up fold + event-free recording; the 3/7001 residual are `PHYS_STEP_UP` **label-only** flips on a 45° slope contour with zero position/velocity error).
+- [x] Water, spectator-float physics states (crouch is not a Cube 2 feature —
+      no crouch key and a fixed player volume; nothing to port).
 
 Remaining:
 
-- [x] Water, spectator-float physics states (crouch is not a Cube 2 feature —
-      no crouch key and a fixed player volume; nothing to port).
 - [ ] `bounce()` for `ENT_BOUNCE` movers (boxes/platforms) — lands with movable
       entities, not the player.
 
