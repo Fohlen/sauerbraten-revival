@@ -7,7 +7,7 @@ using SauerbratenRevival.World.Physics;
 namespace SauerbratenRevival.Tests;
 
 /// <summary>Verifies the live <see cref="MapPlayer"/> against the ported octree physics.</summary>
-public class MapPlayerTest : TestClass
+public class MapPlayerTest : GoTestBase
 {
     public MapPlayerTest(Node testScene) : base(testScene) { }
 

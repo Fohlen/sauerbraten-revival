@@ -19,7 +19,7 @@ namespace SauerbratenRevival.Tests;
 /// External events (teleports, jump pads) resync from the trace instead of
 /// diverging; unlogged impulses (an impossible one-step +vz) are a fallback.
 /// </summary>
-public class A3ReplayTest : TestClass
+public class A3ReplayTest : GoTestBase
 {
     public A3ReplayTest(Node testScene) : base(testScene) { }
 

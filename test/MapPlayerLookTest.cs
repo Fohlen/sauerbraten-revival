@@ -9,7 +9,7 @@ namespace SauerbratenRevival.Tests;
 /// Locks the mouse-look sign convention: moving the cursor up/right must look
 /// up/right, on screen. Guards against the up=down / left=right inversion.
 /// </summary>
-public class MapPlayerLookTest : TestClass
+public class MapPlayerLookTest : GoTestBase
 {
     public MapPlayerLookTest(Node testScene) : base(testScene) { }
 

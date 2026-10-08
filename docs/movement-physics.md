@@ -244,6 +244,15 @@ Still to do / known deviations:
   `test/WaterPhysicsTest.cs`).
 - Water gun sway / jump / land / water sounds are wired through the
   `OctaPhysics.PhysTrigger` seam but not yet emitted by the game layer.
+- **`bounce()`** (`physics.cpp:1402`/`:1796`, `ENT_BOUNCE` — boxes, barrels,
+  platforms, `droptofloor`) is **ported** (`OctaPhysics.Bounce` overloads,
+  `InterpPos`, the `collide(..., playercol)` overload with its `PlCollide` seam,
+  and the `game::bounced` callback). It is **not yet wired**: no movable runtime
+  drives it and the player/monster collision cache (`plcollide`) is a stub, so
+  `collideplayer` is always null. Asserted against the editor octree by
+  `test/BouncePhysicsTest.cs` (reflection × elasticity, gravity, water damping,
+  settle); a golden differential would need a bounce extension to the refharness,
+  whose collision is a flat-floor stand-in.
 - **Crouch is not a thing in Cube 2 / Sauerbraten r6889** — there is no crouch
   key and no variable player height in the original `src/`. The player volume is
   fixed (`radius 4.1`, `eyeheight 14`, `aboveeye 1`). Nothing to port.

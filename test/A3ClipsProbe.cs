@@ -13,7 +13,7 @@ namespace SauerbratenRevival.Tests;
 /// Diffs our collision visibility mask / classifyface / neighbourcube / genclipplanes
 /// against the engine's SAUER_TRACE.clips dump. Temporary diagnostic.
 /// </summary>
-public class A3ClipsProbe : TestClass
+public class A3ClipsProbe : GoTestBase
 {
     public A3ClipsProbe(Node testScene) : base(testScene) { }
 

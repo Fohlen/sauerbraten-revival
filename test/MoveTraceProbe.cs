@@ -15,7 +15,7 @@ namespace SauerbratenRevival.Tests;
 /// reference's SAUER_MOVETRACE dump (tools/refharness/patches/a2e-move-trace.patch).
 /// Used to chase the remaining step/slide residual. See docs/movement-verification.md.
 /// </summary>
-public class MoveTraceProbe : TestClass
+public class MoveTraceProbe : GoTestBase
 {
     public MoveTraceProbe(Node testScene) : base(testScene) { }
 

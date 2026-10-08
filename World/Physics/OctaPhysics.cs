@@ -72,6 +72,12 @@ public sealed class PhysEnt
     /// (0 = MAT_AIR). The velocity damping on entering water keys off this.</summary>
     public int InWater;
 
+    // ents.h:77 interpolation state used by bounce()/moveplayer() (newpos/deltapos).
+    /// <summary>nets.h: the authoritative position at the start of the frame's physics steps.</summary>
+    public Vector3 NewPos;
+    /// <summary>nets.h: the interpolated offset between <see cref="O"/> and <see cref="NewPos"/>.</summary>
+    public Vector3 DeltaPos;
+
     // ents.h:60 CS_* player states (only the two physics cares about are named here).
     public const int CsAlive = 0, CsDead = 1, CsSpawning = 2, CsLagged = 3, CsEditing = 4, CsSpectator = 5;
     /// <summary>ents.h:82 <c>state</c>; <see cref="CsEditing"/>/<see cref="CsSpectator"/> imply floating.</summary>
@@ -88,18 +94,39 @@ public sealed class OctaPhysics
     public Vector3 CollideWall;
     public int CollideInside;
 
+    /// <summary>engine <c>collideplayer</c>: the dynent the last collide() hit, or null.
+    /// Only set when a collide() is called with <c>playercol = true</c>. No dynent
+    /// cache is ported yet, so <see cref="CollidePlayer"/> stays null (see <see cref="PlCollide"/>).</summary>
+    public PhysEnt? CollidePlayer;
+
     // ---- octree collision -------------------------------------------------
 
     /// <summary>physics.cpp:1048 <c>collide</c>.</summary>
     public bool Collide(PhysEnt d, Vector3 dir, float cutoff = 0.0f)
+        => Collide(d, dir, cutoff, false, false);
+
+    /// <summary>physics.cpp:1048 <c>collide</c> (full form: <c>playercol</c> +
+    /// <c>insideplayercol</c>). Player collision is a seam — see <see cref="PlCollide"/>.</summary>
+    public bool Collide(PhysEnt d, Vector3 dir, float cutoff, bool playercol, bool insideplayercol)
     {
         CollideInside = 0;
+        CollidePlayer = null;
         CollideWall = Vector3.Zero;
         var bo = new Vector3I((int)(d.O.X - d.Radius), (int)(d.O.Y - d.Radius), (int)(d.O.Z - d.EyeHeight));
         var bs = new Vector3I((int)(d.O.X + d.Radius), (int)(d.O.Y + d.Radius), (int)(d.O.Z + d.AboveEye));
         bs += Vector3I.One; // guard space (physics.cpp:1055)
-        return OctaCollide(d, dir, cutoff, bo, bs, _octa.WorldRoot, Vector3I.Zero, _octa.WorldSize >> 1);
+        bool hit = OctaCollide(d, dir, cutoff, bo, bs, _octa.WorldRoot, Vector3I.Zero, _octa.WorldSize >> 1);
+        return hit || (playercol && PlCollide(d, dir, insideplayercol));
     }
+
+    /// <summary>
+    /// physics.cpp:676 <c>plcollide</c> — collide with a player/monster/movable.
+    /// The engine iterates the dynent cache; none is ported yet, so this is a void
+    /// seam (always false, leaving <see cref="CollidePlayer"/> null). It exists so
+    /// <c>collide(..., playercol: true)</c> and <see cref="Bounce"/> match the engine
+    /// control flow. Wire the movable/AI dynent cache here when it lands.
+    /// </summary>
+    private bool PlCollide(PhysEnt d, Vector3 dir, bool insideplayercol) => false;
 
     /// <summary>physics.cpp:1014 <c>octacollide</c> (the readable recursive form).</summary>
     private bool OctaCollide(PhysEnt d, Vector3 dir, float cutoff, Vector3I bo, Vector3I bs, Cube[] c, Vector3I cor, int size)
@@ -527,7 +554,9 @@ public sealed class OctaPhysics
         Vector3 obstacle = Vector3.Zero;
         d.O += dir;
         if (MoveTrace != null) MT($"move in o={d.O} dir={dir} ps={d.PhysState} floor={d.Floor}");
-        if (Collide(d, dir))
+        // physics.cpp:1347 — AI/inanimate entities also test a zero-direction collide
+        // (a starting-inside-geometry guard); the player does not.
+        if (Collide(d, dir) || ((d.Type == Phys.EntAi || d.Type == Phys.EntInanimate) && Collide(d, Vector3.Zero, 0.0f, false, false)))
         {
             obstacle = CollideWall;
             if (MoveTrace != null) MT($"  collide hit obstacle={obstacle} ps={d.PhysState}");
@@ -581,6 +610,100 @@ public sealed class OctaPhysics
         else Falling(d, ref dir, floor);
         if (MoveTrace != null) MT($"move out collided={collided} found={found} ps={d.PhysState} vel={d.Vel} floor={d.Floor}");
         return !collided;
+    }
+
+    // ---- bounce (ENT_BOUNCE physics) ------------------------------------
+
+    /// <summary>game::bounced seam — called with the reflect surface on each bounce
+    /// (fpsgame/weapon.cpp:222 plays a sound for the projectile cases). Null in
+    /// production; wired by the game layer later.</summary>
+    public static System.Action<PhysEnt, Vector3>? Bounced;
+
+    /// <summary>physics.cpp:1796 <c>bounce</c> driver: steps <paramref name="physsteps"/> + 1
+    /// fixed substeps from the accumulated <see cref="PhysEnt.NewPos"/>, writing the
+    /// result back and refreshing interpolation. Returns true if a player was hit.
+    /// The engine reads the global <c>physsteps</c>/<c>physframetime</c>; they are
+    /// passed in so the port stays free of the render-time scheduler.</summary>
+    public bool Bounce(PhysEnt d, float elasticity, float waterfric, float grav, int physsteps, int physframetime)
+    {
+        if (physsteps <= 0)
+        {
+            InterpPos(d, 0, 0, physframetime);
+            return false;
+        }
+
+        d.O = d.NewPos;
+        bool hitplayer = false;
+        for (int i = 0; i < physsteps - 1; i++)
+            if (Bounce(d, physframetime / 1000.0f, elasticity, waterfric, grav)) hitplayer = true;
+        d.DeltaPos = d.O;
+        if (Bounce(d, physframetime / 1000.0f, elasticity, waterfric, grav)) hitplayer = true;
+        d.NewPos = d.O;
+        d.DeltaPos -= d.NewPos;
+        InterpPos(d, 0, 0, physframetime, enabled: false);
+        return hitplayer;
+    }
+
+    /// <summary>physics.cpp:1764 <c>interppos</c>. <paramref name="lastphysframe"/> and
+    /// <paramref name="lastmillis"/> are passed in (the engine reads globals); with the
+    /// defaults (<c>diff &lt;= 0</c>) this is just <c>o = newpos</c>, matching a settled
+    /// frame. <paramref name="enabled"/> maps to <c>physinterp</c>.</summary>
+    public static void InterpPos(PhysEnt pl, int lastphysframe, int lastmillis, int physframetime, bool enabled = true)
+    {
+        pl.O = pl.NewPos;
+
+        int diff = lastphysframe - lastmillis;
+        if (diff <= 0 || !enabled) return;
+
+        Vector3 deltapos = pl.DeltaPos;
+        deltapos *= Mathf.Min(diff, physframetime) / (float)physframetime;
+        pl.O += deltapos;
+    }
+
+    /// <summary>physics.cpp:1402 <c>bounce</c> — one substep of ENT_BOUNCE physics:
+    /// gravity, then per sub-collision reflect the velocity off the surface scaled by
+    /// <paramref name="elasticity"/>. Returns true if a player was hit.</summary>
+    public bool Bounce(PhysEnt d, float secs, float elasticity, float waterfric, float grav)
+    {
+        // make sure bouncers don't start inside geometry
+        if (d.PhysState != Phys.PhysBounce && Collide(d, Vector3.Zero, 0.0f, false, false)) return true;
+        int mat = _octa.LookupMaterial(new Vector3(d.O.X, d.O.Y, d.O.Z + (d.AboveEye - d.EyeHeight) / 2));
+        bool water = Phys.IsLiquid((ushort)(mat & Phys.MatFVolume));
+        if (water)
+        {
+            d.Vel = d.Vel with { Z = d.Vel.Z - grav * Phys.Gravity / 16 * secs };
+            d.Vel *= Mathf.Max(1.0f - secs / waterfric, 0.0f);
+        }
+        else d.Vel = d.Vel with { Z = d.Vel.Z - grav * Phys.Gravity * secs };
+        Vector3 old = d.O;
+        for (int i = 0; i < 2; i++)
+        {
+            Vector3 dir = d.Vel * secs;
+            d.O += dir;
+            if (!Collide(d, dir, 0.0f, true, true))
+            {
+                if (CollideInside != 0)
+                {
+                    d.O = old;
+                    d.Vel *= -elasticity;
+                }
+                break;
+            }
+            else if (CollidePlayer != null) break;
+            d.O = old;
+            Bounced?.Invoke(d, CollideWall);
+            float c = CollideWall.Dot(d.Vel),
+                  k = 1.0f + (1.0f - elasticity) * c / d.Vel.Length();
+            d.Vel *= k;
+            d.Vel -= CollideWall * (elasticity * 2.0f * c);
+        }
+        if (d.PhysState != Phys.PhysBounce)
+        {
+            // make sure bouncers don't start inside geometry
+            if (d.O == old) return CollidePlayer == null;
+            d.PhysState = Phys.PhysBounce;
+        }
+        return CollidePlayer != null;
     }
 
     // ---- moveplayer ------------------------------------------------------

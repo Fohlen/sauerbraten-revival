@@ -10,7 +10,7 @@ using SauerbratenRevival.World.Physics;
 namespace SauerbratenRevival.Tests;
 
 /// <summary>Temporary diagnostic for the remaining genclipplanes nplanes diff.</summary>
-public class NPlanesProbe : TestClass
+public class NPlanesProbe : GoTestBase
 {
     public NPlanesProbe(Node testScene) : base(testScene) { }
 

@@ -97,8 +97,11 @@ Remaining:
             Asserted by `test/EntityMonsterTest.cs` on **crnsp1** (220, all 9
             types) and **lost** (235). The AI (`monster.cpp`, `ai.cpp`,
             `waypoint.cpp`) is game logic and lands with Modes/Combat.
-- [ ] `bounce()` physics for `ENT_BOUNCE` movables — needed before box/barrel/
-      platform behaviour can work (see roadmap item 3).
+- [x] `bounce()` physics for `ENT_BOUNCE` movables **ported** (`OctaPhysics.Bounce`,
+      the `collide(..., playercol)` overload, `interppos`, and the `game::bounced`
+      seam) — asserted by `test/BouncePhysicsTest.cs`. **Not yet wired**: the
+      movable runtime that drives it (box/barrel/platform, `movable.cpp`) and the
+      player/monster collision cache (`plcollide`) are step 2 — see roadmap item 3.
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
@@ -128,8 +131,9 @@ Done:
 
 Remaining:
 
-- [ ] `bounce()` for `ENT_BOUNCE` movers (boxes/platforms) — lands with movable
-      entities, not the player.
+- [x] `bounce()` for `ENT_BOUNCE` movers (boxes/platforms) — ported
+      (`OctaPhysics.Bounce`, asserted by `test/BouncePhysicsTest.cs`); the movable
+      runtime that drives it lands with the mode entities (step 2).
 
 ## 4. Editor MVP *(defining feature)*
 

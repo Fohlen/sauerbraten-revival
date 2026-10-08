@@ -9,7 +9,7 @@ using SauerbratenRevival.World.Physics;
 namespace SauerbratenRevival.Tests;
 
 /// <summary>Temporary diagnostic for the ClassifyFace divergence.</summary>
-public class MaskDiffProbe : TestClass
+public class MaskDiffProbe : GoTestBase
 {
     public MaskDiffProbe(Node testScene) : base(testScene) { }
 
