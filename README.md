@@ -39,6 +39,7 @@ Work proceeds in **stages**.
 | [features.md](docs/features.md) | Feature inventory and roadmap (MVP modes). |
 | [rendering.md](docs/rendering.md) | ArrayMesh + RenderingServer rendering strategy; collision decoupling; LOD. |
 | [ogz-import.md](docs/ogz-import.md) | One-time OGZ import pipeline; metadata export patch; native format. |
+| [lighting.md](docs/lighting.md) | Lightmap/layer/envmap model, import plan, and the one-shot full metadata export. |
 | [movement-physics.md](docs/movement-physics.md) | Reverse-engineered original movement/physics (SVN r6889), with source citations. |
 | [movement-verification.md](docs/movement-verification.md) | Plan A: how we prove movement fidelity against the original (A1–A4). |
 | [dependencies.md](docs/dependencies.md) | Required toolchain (Godot .NET, .NET SDK, Python, assimp, uv, SDL2, …) and why. |

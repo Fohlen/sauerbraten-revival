@@ -129,7 +129,7 @@ Remaining:
             (filterable), convert to `user://maps/<map>/`.
       - [ ] Remaining: no CLI/headless entry point yet (GUI only); lightmaps still
             deferred (see below).
-- [ ] Lightmap import / rebake (post-MVP).
+- [ ] Lightmap import / rebake (post-MVP) — see [lighting.md](lighting.md).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
 **New maps use our compact binary format only** — no OGZ at runtime.

@@ -237,6 +237,9 @@ Options for imported lightmaps:
 3. **Dynamic lighting only**: Skip lightmaps for MVP; use real-time lights.
 
 Recommendation: Start with (3) for MVP, add (1) or (2) for visual fidelity later.
+**Decided:** (1) — sample the original atlases with our own shader; `LightmapGI`
+is ruled out. Full design, coupling with layers/envmap, and the one-shot metadata
+export live in [lighting.md](lighting.md).
 
 ---
 

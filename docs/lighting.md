@@ -1,0 +1,461 @@
+# Lighting: Lightmaps, Layers & Envmap
+
+Reference and plan for reproducing Sauerbraten's world lighting. Everything here
+is grounded in SVN r6889 (`src/engine/lightmap.cpp`, `octarender.cpp`,
+`renderva.cpp`, `blend.cpp`, `physics.cpp`, `texture.cpp`, `data/glsl.cfg`) and in
+our current code (`World/Ogz/`, `World/Save/`, `World/Meshing/`,
+`World/Materials/`).
+
+Status: **not implemented**. Rendering currently uses approximated dynamic
+Godot lights via `World/Entities/LightBuilder.cs`. This document records the
+design so we can pick it back up without re-deriving it.
+
+Related: [rendering.md](rendering.md) (Godot rendering strategy),
+[ogz-import.md](ogz-import.md) (OGZ pipeline + metadata exporter),
+[features.md](features.md) (roadmap), [architecture.md](architecture.md) §staged
+fidelity.
+
+---
+
+## TL;DR / decision
+
+- **Never use Godot `LightmapGI`.** Our world is an `ArrayMesh` emitted by our own
+  mesher, not a Godot static scene; Sauerbraten lightmaps are *direct per-lumel
+  irradiance with no GI bounce*. Import the original atlases and sample them with
+  our own world shader.
+- **Three tiers:**
+  1. **T0 — dynamic lights (have).** `LightBuilder` approximation; playable.
+  2. **T1 — import baked lightmaps (cheap, high value).** Read the atlases + the
+     per-face/per-vertex lightmap link that the OGZ already carries; sample in a
+     custom shader. This is the "cheap insurance" slice.
+  3. **T2 — rebake, envmap sampling, blend-layer rendering (expensive, deferred).**
+     `calclight` is ~1,400 dense lines and needs `shadowray`; post-MVP.
+- **Layers and envmap are coupled to lightmaps** (shared vertex normals + a shared
+  per-surface element key). Treat them as one data-model milestone, not three.
+- **Export everything in one engine pass.** The all-maps metadata sweep costs
+  ~25 min, dominated by startup/load. Capture all resolved lighting/shader state
+  plus binary sidecars (lightmaps, blendmap, PVS, layer masks) so we never need a
+  second sweep.
+
+---
+
+## 1. The original model
+
+### 1.1 Lightmap atlases
+
+Baked irradiance is stored in shared **512×512 RGB(A) atlases**, one or more per
+map. `LightMap` (`engine/lightmap.h`):
+
+```
+LightMap { int type, bpp, tex, offsetx, offsety;
+           PackNode packroot; uint lightmaps, lumels;
+           int unlitx, unlity; uchar *data; }
+```
+
+Constants: `LM_MINW/LM_MINH 2`, `LM_MAXW/LM_MAXH 128` (per-surface lightmap
+dimensions), `LM_PACKW/LM_PACKH 512` (atlas page size).
+
+`type` (`lightmap.h`):
+
+| Bits | Meaning |
+| --- | --- |
+| `LM_TYPE = 0x0F` | `0` diffuse, `1` `LM_BUMPMAP0` (color), `2` `LM_BUMPMAP1` (direction) |
+| `LM_ALPHA = 1<<4` | atlas has an alpha channel (layer blend mask / alpha world) |
+
+`bpp` is 4 when `(type & LM_ALPHA) && (type & LM_TYPE) != LM_BUMPMAP1`, else 3.
+
+`unlitx/unlity` (optional, flag `0x80` in the file) point at a 1×1 texel holding
+the ambient/skylight value for that atlas — the fallback used by the `remapunlit`
+logic for unlit faces (`octarender.cpp:249`).
+
+### 1.2 Per-surface link
+
+The link from geometry to atlas is stored per face in `surfaceinfo` and per
+vertex in `vertinfo` (`engine/octa.h`):
+
+```
+vertinfo   { ushort x, y, z, u, v, norm; }
+surfaceinfo{ uchar lmid[2]; uchar verts, numverts; }
+```
+
+- `lmid[0]` = top-layer atlas; `lmid[1]` = bottom-layer atlas (for blended faces).
+- `lmid < LMID_RESERVED (6)` is a **reserved constant**: `LMID_AMBIENT=0`,
+  `LMID_AMBIENT1`, `LMID_BRIGHT`, `LMID_BRIGHT1`, `LMID_DARK`, `LMID_DARK1`.
+  A real atlas index is `lmid - LMID_RESERVED` into `lightmaps[]`.
+- `u/v` are 16-bit, normalized to the 512 atlas: texel = `u * 512 / 65536`, i.e.
+  Godot UV = `u / 65536.0`.
+- `norm` is an encoded smooth normal, present only when the shader is
+  `SHADER_NORMALSLMS` (bump lightmaps) or `SHADER_ENVMAP` (envmap reflection).
+- `numverts` carries layer flags: `LAYER_TOP (1<<5)`, `LAYER_BOTTOM (1<<6)`,
+  `LAYER_DUP (1<<7)`, `LAYER_BLEND = TOP|BOTTOM`; `MAXFACEVERTS = 15`.
+
+The mesh element key (`octarender.cpp:180`) is
+`sortkey(tex, lmid, dim, layer, envmap, alpha)`, and `addcubeverts`
+(`octarender.cpp:813`) computes `v.lm` from `vinfo[k].u/v` and writes the
+per-vertex normal + tangent frame.
+
+### 1.3 Runtime shader
+
+- Bind: `renderva.cpp:1063` binds `lightmaptexs[lmid]`; `:1073` binds
+  `lmid+1` (`lmdir`) for `LM_BUMPMAP0/1` pairs.
+- Diffuse world shader (`data/glsl.cfg` `stdworld`/`worldshader`):
+  `gl_FragColor = diffuse * lm;` where `lm = texture2D(lightmap, texcoord1)`.
+- Bump world shader: samples `lmcolor` + `lmdir`, then
+  `lmc.rgb = max(lmc.rgb * clamp(dot(lmlv, bump), 0, 1), ambient.xyz)`.
+- Envmap reflection: `textureCube(envmap, reflect)` where `reflect` derives from
+  the camera and the vertex normal, mixed in with `envscale`.
+
+Note the atlas stored in the file is per-`LightMap`; at runtime the engine may
+repack several into larger `lightmaptexs` (`batchlightmaps`/`roundlightmaptex`).
+That repack is an OpenGL texture-unit optimization we do **not** need to copy.
+
+### 1.4 Layers — the alpha channel *is* the blend mask
+
+This is the strongest coupling and the easiest thing to miss.
+
+- A face with a `vslot.layer` (and not `MAT_ALPHA`) generates a **second**
+  lightmap: `setupsurfaces` sets `w->type |= LM_ALPHA`, `bpp = 4`, and
+  `generatealpha()` (`lightmap.cpp:677`) fills the **alpha channel** by sampling
+  the blendmap (`lookupblendmap`, `blend.cpp`) and/or the slot's
+  `layermask`/`layermaskmode`/`layermaskscale`.
+- `finishlightmap` classifies the face from that alpha:
+  all-255 → `SURFACE_LIGHTMAP_TOP`, all-0 → `SURFACE_LIGHTMAP_BOTTOM`, mixed →
+  `SURFACE_LIGHTMAP_BLEND` (sets `LAYER_BLEND`; vertices are duplicated,
+  `LAYER_DUP`).
+- The blend shader reads it directly: `gl_FragColor.a =
+  texture2D(lightmap, texcoord0).a` (the `blendworld` variant in `data/glsl.cfg`).
+
+The blendmap (`engine/blend.cpp`) is an octree of 8-bit weights (`BM_SOLID`,
+`BM_BRANCH`, `BM_IMAGE` of 64×64, `BM_SCALE 1`), stored in the OGZ as a separate
+section (`hdr.blendmap`, `worldio.cpp:1238`). It is the *authoring* source; the
+lightmap alpha is its per-lumel bake.
+
+> Distinction: **layer** blending uses the lightmap alpha; `alphafront`/`alphaback`
+> (`MAT_ALPHA`) use the texture alpha. Both live in `sortkey.alpha`.
+
+### 1.5 Envmap
+
+There is no envmap bake. The cubemap is sampled live; the couplings are
+structural:
+
+- `SHADER_ENVMAP` forces the same per-vertex normal channel that
+  `SHADER_NORMALSLMS` needs (`lightmap.cpp:setupsurfaces`).
+- The envmap index is resolved per face by `closestenvmap(orient, co, size)`
+  (`texture.cpp:2801`, called at `octarender.cpp:1076`) and stored in
+  `elementset.envmap`.
+- Blended faces get a **separate** `envmap2` from the layer's shader
+  (`octarender.cpp:1077,1089`), so each layer can reflect a different probe.
+- Water/lava/glass `materialsurface`s resolve their own envmap
+  (`material.cpp:424`).
+
+`ET_ENVMAP` entities are already imported as Godot `ReflectionProbe`s
+(`World/Entities/EnvMapProbe.cs`, `EnvMapBuilder`; see
+[ogz-import.md § entity porting](ogz-import.md#entity-porting-status)), but the
+sampling side (`SHADER_ENVMAP`/`closestenvmap`) is open.
+
+### 1.6 Baking
+
+`calclight` (`lightmap.cpp`) is the expensive part, ~2,733 lines total:
+
+- `setupsurface` — 2D unwrap of arbitrary convex quads / split planes, `lpu`
+  from `lightprecision`/`lightlod`, lightmap dimension.
+- `generatelumel`/`generatelightmap` — point lights with radius falloff,
+  spotlight cones, sun, ambient, adaptive supersampling (`lmaa`),
+  `RAY_SHADOW` rays.
+- `calcskylight` — 17 fixed hemisphere rays against `skylightcolor`.
+- `finishlightmap` — ambient/bright collapse (`lighterror`), `blurlms`, alpha.
+- `addlight`/`findlights`, `alloclightmap`/`packlightmaps` — atlas packing
+  (`PackNode`).
+- `generatealpha` — blendmap + layermask bake (see §1.4).
+- `shadowray` (`physics.cpp:300`, cached form `:372`) + `genclipplanes` caching.
+- `lightcache` / `patchlight` — incremental rebake after edits.
+- `dumplms` (`lightmap.cpp:2722`) — dumps each atlas to
+  `lightmap_<map>_<i>.png`. **This is our ground-truth oracle.**
+
+---
+
+## 2. Godot mapping decision
+
+We emit an `ArrayMesh` ourselves; we do not build a Godot static-lightmap scene.
+Therefore:
+
+- Import the original atlases, sample with a custom `ShaderMaterial`.
+- Keep `LightBuilder` dynamic lights as the T0 approximation and as the fallback
+  for maps with `hdr.lightmaps == 0`.
+- Do **not** assume `StandardMaterial3D` for world surfaces long-term — lit
+  surfaces need a lightmap shader. Keep the manifest→material seam open.
+- Adopt the **full surface key** `(tex, lmid, layer, envmap, alpha)` in the mesher
+  now (only `tex` non-default today). Retrofitting it later is a mesher rewrite.
+- Keep vertex arrays extensible: room for `UV2` (lightmap) and a smooth normal /
+  per-vertex atlas index.
+
+---
+
+## 3. T1 — import plan
+
+### 3.1 OGZ reader (`World/Ogz/OgzReader.cs`)
+
+Already parsed: `surfaceinfo` (`Lmid0/Lmid1/NumVerts`, `LAYER_*`) and `vertinfo`
+including `U/V/Norm`. `OgzMap.Header.Lightmaps` is read. The reader stops **before**
+the atlas payload.
+
+Add, after the octree (mirror `worldio.cpp:1217–1233`):
+
+```csharp
+for (int i = 0; i < header.Lightmaps; i++) {
+    byte type = r.ReadByte();                 // bit 0x80 = unlit texel present
+    ushort unlitx = 0, unlity = 0;
+    if ((type & 0x80) != 0) { unlitx = r.ReadUInt16(); unlity = r.ReadUInt16(); }
+    int lmType = type & 0x0F;                 // 0 diffuse, 1 bump0, 2 bump1
+    int bpp = (type & 0x10) != 0 && lmType != 2 ? 4 : 3;
+    byte[] data = r.ReadBytes(bpp * 512 * 512);   // LM_PACKW * LM_PACKH
+    // -> LightMapData { Type, Bpp, UnlitX, UnlitY, Pixels }
+}
+```
+
+Ordering: lightmaps come **before** PVS and the blendmap in the stream
+(`worldio.cpp:1237–1238`). Version <32 maps use the legacy surfacecompat path
+plus `fixlightmapnormals`/`fixrotatedlightmaps`; the reader rejects them today, so
+T1 covers v32/33.
+
+### 3.2 Preserve the link in the native format (`World/Save/WorldSnapshot.cs`)
+
+**This is the substantive change.** `WorldSnapshot` currently documents "No render
+data — `CubeExt` … is derived … not stored" and `WriteCube` persists only
+faces/textures/material/merged/visible. But baked lightmaps are **not derivable**;
+`OgzConverter` discards `CubeExt` (which holds `lmid` + `vertinfo.u/v/norm`).
+
+Add an optional per-cube surface section:
+
+```csharp
+const byte FlagSurface = 1 << 4;   // baked lightmap / editor verts present
+// in WriteCube: if (c.Ext != null && HasLightmappedSurface(c.Ext)) flags |= FlagSurface;
+// then write CubeExt.Surfaces[6] + CubeExt.Verts[]
+```
+
+- Bump `FormatVersion` to 2.
+- Add the lightmap fields to `Hash()` (they are semantic map content).
+- Reserved `lmid` (0–5) and `LAYER_*` flags need explicit handling.
+
+### 3.3 Atlas assets (`World/Save/MapStore.cs`, `Level.tscn`)
+
+Write atlases alongside `world.res`:
+
+- **One `Texture2D` per atlas** (`lightmaps/lm_000.res`, …), or
+- **One `Texture2DArray`** (`lightmaps.res`) — preferred: one material per vslot,
+  per-vertex `CUSTOM0` = slice index, avoids surface explosion.
+
+If one texture per `LightMap`, `offsetx/offsety` are 0 (they only exist for the
+runtime repack). `WriteLevelScene` references the set; `MapStore.ContentHash` must
+hash it (currently hashes the `materials/` dir the same way).
+
+**Parity nuance:** include atlases + `lmid`/UV in the archive/content hash
+(Workshop identity). Decide explicitly whether atlas *pixels* enter the
+simulation/parity hash; `lmid`/UV should (semantic), pixels probably only in the
+directory hash.
+
+### 3.4 Mesher + material
+
+- `World/Meshing/ArrayMeshBuilder.cs` keys surfaces on `vslot` only and emits one
+  UV set. Extend the key to the full `sortkey` and add `Mesh.ArrayType.TexUV2`
+  from `VertInfo.U/V`.
+- `World/Materials/MaterialBuilder.cs` builds `StandardMaterial3D`; lit surfaces
+  need a custom world shader (`albedo * texture(lightmap, UV2)`, plus `lmdir`/
+  `lmcolor` + vertex normal for `LM_BUMPMAP0/1`).
+- Introduce the smooth-normal channel here — it serves both bump lightmaps and
+  envmap (`World/Meshing/OctaFaceWalker.cs`, `MeshFace.cs`, `OctaMesher.cs`).
+
+---
+
+## 4. Export everything in one pass
+
+The metadata sweep runs the original engine once per map (~25 min for the whole
+set); the cost is startup + `load_world`, not JSON size. Capture **all resolved
+state now** so we never re-run.
+
+The engine patch is `tools/refharness/patches/ogz-metadata.patch` (adds
+`engine/metadata.cpp` + an `exportmapmetadata()` call at the end of `load_world`).
+It runs after `startmap()`, so map `.cfg` overrides are resolved.
+
+### 4.1 Output shape
+
+Per map, one `exportmapmetadata()` call writes **two files**:
+
+- `metadata-catalogue/<map>.json` — small, diffable, resolved metadata.
+- `metadata-catalogue/<map>.bin` — binary sidecar with a length-prefixed TOC
+  (lightmaps, blendmap, PVS, layer masks). Derive the path from `SAUER_METADATA`
+  (replace extension) or `SAUER_METADATA_BIN`.
+- Add `"schemaVersion": 2` and sidecar section offsets to the JSON.
+
+### 4.2 Inventory
+
+**Already exported** (`metadata.cpp`): mapname/worldsize, geometry stats + FNV
+checksum + `textureFaces`, used `slots` (textures[type/path], shader name, params),
+used `vslots` (scale/rotation/offset/scroll/layer/alpha/color/glow/params),
+mapmodels, entities (type/pos/attr1-5), sounds. Keep used-only.
+
+**Add to `slots`** (resolved fields that are not in the OGZ):
+
+| Field | Source | Why |
+| --- | --- | --- |
+| `shaderType` | `s.shader->type` | `SHADER_NORMALSLMS`/`SHADER_ENVMAP`/`SHADER_ALPHA` — removes name→flags guesswork |
+| `smooth` | `s.smooth` | normal reconstruction / rebake |
+| `texmask` | `s.texmask` | which `TEX_*` the shader samples |
+| `layermask` | name/mode/scale + `ImageData` | layer blending (sidecar) |
+| `grass` | `s.autograss`/`s.grasstex` | grass |
+| all `sts` types | `s.sts[]` | confirm envmap/decal/spec/depth/alpha paths |
+
+**Add to `vslots`**: `linked`, `changed` (change mask = authoritative fields),
+resolved `layer` chain target.
+
+**New `shaders[]`**: name, `type`, defaultparams, detail/variant/fast/alt chain.
+
+**New `config`** (resolved globals):
+
+- Lighting: `ambient`, `skylight`, `sunlight`, `sunlightscale`, `sunlightyaw`,
+  `sunlightpitch`, `skytexturelight`, `lightprecision`, `lighterror`,
+  `bumperror`, `lightlod`, `lmshadows`, `lmaa`, `blurlms`, `blurskylight`,
+  `adaptivesample`, `edgetolerance`.
+- Sky/atmo: `skybox`, `skyboxcolour`, `cloudbox`, `cloudboxcolour`,
+  `cloudlayer`, `cloudcolour`, `fog`, `fogcolour`, `fogdomecolour`, `atmo*`,
+  `skytexture`.
+- Materials: `matwater`/`matlava`/`matglass`/`matnoclip` paths, `watercolour`,
+  `waterfallcolour`, `lavacolour`.
+- Meta: `maptitle`, `mapauthor`, `gameident`.
+
+**Entities** (optional): resolved `attached` (spotlight→light), model path,
+sound path, decoded attrs.
+
+### 4.3 Binary sidecar («never re-run»)
+
+| Section | Source | Notes |
+| --- | --- | --- |
+| Lightmaps | `lightmaps[]` (`lightmap.h`) | per: `type`, `bpp`, `unlitx/unlity`, raw `bpp*512*512`. Dump `lightmaps[]` (file form), not `lightmaptexs[]` |
+| Blendmap | `saveblendmap(stream*)` (`blend.cpp:843`) | only if not `BM_SOLID` |
+| PVS | `savepvs(stream*)` (`pvs.cpp:1263`) | only if `getnumviewcells() > 0` |
+| Layer masks | `slot->layermask` `ImageData` | dims + bpp + pixels, keyed by slot index |
+
+These are technically in the OGZ but we don't parse them yet; capturing them in
+the sidecar is the whole point of the one-shot export. They are also a second
+oracle for the OGZ reader.
+
+`engine.h` already includes `lightmap.h`/`texture.h`; `tools.h` provides
+`openfile()` and `stream::write`; `savepvs`/`saveblendmap` are `extern` in
+`engine.h:119/598`.
+
+### 4.4 Patch shape
+
+```cpp
+const char *jsonpath = getenv("SAUER_METADATA");
+static char binpath[MAX_QPATH];
+copystring(binpath, jsonpath);
+char *dot = strrchr(binpath, '.');
+if(dot) copystring(dot, ".bin"); else concatstring(binpath, ".bin");
+
+FILE *bf = fopen(binpath, "wb");
+uint32_t magic = 0x314D5342; fwrite(&magic, 4, 1, bf);   // "BSM1"
+uint32_t nlm = lightmaps.length(); fwrite(&nlm, 4, 1, bf);
+loopv(lightmaps) {
+    LightMap &lm = lightmaps[i];
+    uchar type = lm.type | (lm.unlitx>=0 ? 0x80 : 0);
+    fwrite(&type, 1, 1, bf);
+    if(lm.unlitx>=0){ ushort x=lm.unlitx,y=lm.unlity; fwrite(&x,2,1,bf); fwrite(&y,2,1,bf); }
+    fwrite(lm.data, 1, lm.bpp*LM_PACKW*LM_PACKH, bf);
+}
+if(blendmap.type != BM_SOLID) { stream *s = openfile(binpath, "ab"); saveblendmap(s); delete s; }
+if(getnumviewcells() > 0)     { stream *s = openfile(binpath, "ab"); savepvs(s);     delete s; }
+```
+
+Caveats:
+
+- Keep `metadata.cpp` compiled with `-fno-finite-math-only` (the `jsonfloat`
+  NaN/Inf guard; see the patch's Makefile hunk).
+- Do **not** PNG-encode every atlas in the sweep — write raw (PNG via `dumplms`
+  only for a small verification subset).
+- Add the TOC so the converter can skip/negotiate sections without a version break.
+- The driver script needs no change if `binpath` derives from `SAUER_METADATA`;
+  `SAUER_METADATA_EXIT` still applies.
+
+---
+
+## 5. T2 — rebake (deferred)
+
+Needed only once editing / new maps are the primary path (the classic maps come
+from T1). Scope:
+
+- Port the `lightmap.cpp` generation core (~1,400 lines): `setupsurface`,
+  `generatelumel`/`generatelightmap`/`finishlightmap`, `calcskylight`,
+  `findlights`/`addlight`, `alloclightmap`/`packlightmaps`.
+- Port `shadowray` + `ShadowRayCache` (`physics.cpp:300/372`) and
+  `genclipplanes` caching (`OctaRaycast`/`OctaClipping` are close).
+- Port `blend.cpp` + `generatealpha`/layermask for layers.
+- Replace the SDL worker/task system with .NET Tasks (not a fidelity issue).
+- Integrate with the command system: partial rebake after `WorldCommand` edits =
+  `lightcache`/`patchlight`; hook into `WorldChunkRenderer`'s dirty path.
+
+Estimate: a few weeks; one of the densest subsystems in the engine.
+
+---
+
+## 6. Verification
+
+- **A/B oracle:** run `dumplms` in the reference client, compare each
+  `lightmap_<map>_<i>.png` against the atlas bytes our importer reads.
+- Extend `test/MapFormatTest.cs` (currently
+  `OgzConverterRoundTripsChurch51Geometry` — geometry only) with
+  `lmid`/UV/normal round-trip assertions and a reserved-`lmid` + bump-pair case.
+- Keep the sidecar as an independent second source to cross-check the OGZ reader.
+
+---
+
+## 7. File map
+
+Original (`src/`):
+
+| File | Role |
+| --- | --- |
+| `engine/lightmap.cpp` | bake + alpha + `dumplms`; `lightmap.h` for structs |
+| `engine/octa.h` | `vertinfo`, `surfaceinfo`, `LAYER_*`, `LMID_*` |
+| `engine/octarender.cpp` | element key, `addcubeverts`, `closestenvmap`, `remapunlit` |
+| `engine/renderva.cpp` | binds `lightmaptexs[lmid]` / `lmid+1` |
+| `engine/blend.cpp` | blendmap octree + mask lookup |
+| `engine/physics.cpp` | `shadowray` + cache |
+| `engine/texture.cpp` | `closestenvmap`; `texture.h` for `Slot`/`VSlot`/`Shader` |
+| `engine/worldio.cpp` | atlas/blendmap/PVS load (`:1217`, `:1238`), save (`:975`) |
+| `data/glsl.cfg` | world shaders: diffuse×lightmap, `lmcolor`/`lmdir`, envmap, blend |
+
+Project:
+
+| File | Change |
+| --- | --- |
+| `World/Ogz/OgzReader.cs` | read atlas payload |
+| `World/Ogz/OgzMap.cs` | hold lightmaps |
+| `World/Save/WorldSnapshot.cs` | preserve `CubeExt`; v2; hash |
+| `World/Save/MapStore.cs` | atlas assets + content hash |
+| `World/Save/OgzConverter.cs` | emit atlases (and manifest) |
+| `World/Meshing/ArrayMeshBuilder.cs` | full key + `UV2` |
+| `World/Meshing/{OctaFaceWalker,MeshFace,OctaMesher}.cs` | normal channel |
+| `World/Materials/MaterialBuilder.cs` | lightmap shader vs `StandardMaterial3D` |
+| `World/Materials/MetadataCatalogue.cs` | parse new JSON fields |
+| `World/Entities/{LightBuilder,EnvMapProbe}.cs` | T0 fallback; envmap sampling |
+| `tools/refharness/patches/ogz-metadata.patch` | full one-shot export |
+
+---
+
+## 8. Sequencing / ROI
+
+1. **Now:** push the roadmap (editor MVP → combat → modes). Renderer fidelity
+   does not gate movement feel or most roadmap risk.
+2. **Pull T1 forward** to ride along with the first editor-driven mesher/format
+   change (~1.5–2.5 weeks): locks the vertex/surface contract, gives classic-map
+   fidelity, and provides an A/B against the original.
+3. **Layers:** the editor MVP's "blending" is coupled to the blendmap + lightmap
+   alpha. Paint-blind (blendmap only) is possible; visualize when T1/T2 lands.
+   Treat this as a known editor dependency, not a free deferral.
+4. **Envmap sampling:** ~1 week once the normal channel + full key exist; share it
+   between the world mesher and `MaterialMesher`.
+5. **T2 rebake:** after editor/new-map flow is primary, before community/polish.
+
+Cheap insurance while deferring: keep the full surface key and extensible vertex
+arrays, keep the format versioned, decide custom-atlas-sampling over `LightmapGI`,
+and run the one-shot full export so no data is ever lost.
