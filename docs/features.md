@@ -66,13 +66,6 @@ Done (lives in the dev viewer; not yet a standalone offline tool):
 - [x] Content importers: `tools/model-import/` (assimp → glTF + skins), `tools/texture-import/`.
 - [x] Entities: lights/spotlights, playerstarts, mapmodels, triggers (teleport/teledest/jumppad),
       items, particles (billboard effects), sounds, edit-mode markers.
-
-Remaining:
-
-- [ ] Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn`.
-      - [x] **Geometry + entities**: `OgzConverter` writes `world.res` + `Level.tscn` from
-            a parsed `.ogz` (asserted by `test/MapFormatTest.cs`, church51 round-trips
-            exactly). Metadata-driven material manifest emission is still pending.
 - [x] envmap / monsters / mode entities — all represented (import only). See
       [ogz-import.md § Entity porting status](ogz-import.md#entity-porting-status)
       for the concrete work items (runtime behaviour remains unported):
@@ -118,6 +111,13 @@ Remaining:
       stream, not a revived SP-only rigid-body subsystem. The mode entities stay
       as **representation** (models + gizmos), which is correct. Revisited only if
       we ship the SP campaign, and then via commands.
+
+Remaining:
+
+- [ ] Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn`.
+      - [x] **Geometry + entities**: `OgzConverter` writes `world.res` + `Level.tscn` from
+            a parsed `.ogz` (asserted by `test/MapFormatTest.cs`, church51 round-trips
+            exactly). Metadata-driven material manifest emission is still pending.
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
