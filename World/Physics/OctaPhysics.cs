@@ -50,6 +50,8 @@ public sealed class PhysEnt
     public float Radius = 4.1f;                  // ents.h:91
     public float EyeHeight = 14.0f;
     public float AboveEye = 1.0f;
+    public float XRadius = 4.1f;                 // ents.h:92 (ellipse collision pair)
+    public float YRadius = 4.1f;
     public float Zmargin = 0.0f;
     public int PhysState = Phys.PhysFall;
     public int Type = Phys.EntPlayer;
@@ -88,7 +90,11 @@ public sealed class PhysEnt
 public sealed class OctaPhysics
 {
     private readonly Octa _octa;
-    public OctaPhysics(Octa octa) { _octa = octa; }
+    public OctaPhysics(Octa octa)
+    {
+        _octa = octa;
+        for (int i = 0; i < DynEntCacheSize; i++) _dynEntCache[i] = new DynEntCacheEntry();
+    }
 
     // collision outputs (engine globals collidewall / collideinside)
     public Vector3 CollideWall;
@@ -121,12 +127,201 @@ public sealed class OctaPhysics
 
     /// <summary>
     /// physics.cpp:676 <c>plcollide</c> — collide with a player/monster/movable.
-    /// The engine iterates the dynent cache; none is ported yet, so this is a void
-    /// seam (always false, leaving <see cref="CollidePlayer"/> null). It exists so
-    /// <c>collide(..., playercol: true)</c> and <see cref="Bounce"/> match the engine
-    /// control flow. Wire the movable/AI dynent cache here when it lands.
+    /// Iterates the dynent cache (see <see cref="UpdateDynentCache"/>) and tests each
+    /// candidate with <see cref="EllipseCollide"/> for the default COLLIDE_ELLIPSE
+    /// pair. <c>game::dynentcollide</c> is a seam (null in production).
     /// </summary>
-    private bool PlCollide(PhysEnt d, Vector3 dir, bool insideplayercol) => false;
+    private bool PlCollide(PhysEnt d, Vector3 dir, bool insideplayercol)
+    {
+        if (d.Type == Phys.EntCamera || d.State != PhysEnt.CsAlive) return false;
+        int lastinside = CollideInside;
+        PhysEnt? insideplayer = null;
+        LoopDynentCache(d.O, d.Radius, (x, y) =>
+        {
+            foreach (var o in CheckDynentCache(x, y))
+            {
+                if (ReferenceEquals(o, d) || Reject(d.O, o.O, d.Radius + o.Radius)) continue;
+                if (PlCollide1(d, dir, o))
+                {
+                    CollidePlayer = o;
+                    DynEntCollide?.Invoke(d, o, CollideWall);
+                    return true;
+                }
+                if (CollideInside > lastinside)
+                {
+                    lastinside = CollideInside;
+                    insideplayer = o;
+                }
+            }
+            return false;
+        });
+        if (CollidePlayer != null) return true;
+        if (insideplayer != null && insideplayercol)
+        {
+            CollidePlayer = insideplayer;
+            DynEntCollide?.Invoke(d, insideplayer, Vector3.Zero);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>physics.cpp:661 dispatch for one pair; only the COLLIDE_ELLIPSE pair is ported.</summary>
+    private bool PlCollide1(PhysEnt d, Vector3 dir, PhysEnt o)
+    {
+        switch (d.CollideType)
+        {
+            case Phys.CollideEllipse:
+            case Phys.CollideEllipsePrecise:
+                // Ellipse-vs-OBB and ellipse-vs-ellipse both fall back to the cylinder test
+                // in the engine; only COLLIDE_OBB needs the mpr box path (not ported).
+                if (o.CollideType == Phys.CollideObb) return false;
+                return EllipseCollide(d, dir, o.O, Vector3.Zero, o.Yaw, o.XRadius, o.YRadius, o.AboveEye, o.EyeHeight);
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>physics.cpp:535 <c>ellipsecollide</c> (COLLIDE_ELLIPSE player pair, both capsules).</summary>
+    public bool EllipseCollide(PhysEnt d, Vector3 dir, Vector3 o, Vector3 center, float yaw, float xr, float yr, float hi, float lo)
+    {
+        float below = (o.Z + center.Z - lo) - (d.O.Z + d.AboveEye),
+              above = (d.O.Z - d.EyeHeight) - (o.Z + center.Z + hi);
+        if (below >= 0 || above >= 0) return false;
+        Vector3 yo = center;
+        yo = RotateAroundZ(yo, yaw * (Mathf.Pi / 180f));
+        yo += o;
+        float x = yo.X - d.O.X, y = yo.Y - d.O.Y;
+        float angle = Mathf.Atan2(y, x), dangle = angle - (d.Yaw + 90) * (Mathf.Pi / 180f), eangle = angle - (yaw + 90) * (Mathf.Pi / 180f);
+        float dx = d.XRadius * Mathf.Cos(dangle), dy = d.YRadius * Mathf.Sin(dangle);
+        float ex = xr * Mathf.Cos(eangle), ey = yr * Mathf.Sin(eangle);
+        float dist = Mathf.Sqrt(x * x + y * y) - Mathf.Sqrt(dx * dx + dy * dy) - Mathf.Sqrt(ex * ex + ey * ey);
+        if (dist < 0)
+        {
+            if (dist > (d.O.Z < yo.Z ? below : above) && (dir == Vector3.Zero || x * dir.X + y * dir.Y > 0))
+            {
+                CollideWall = new Vector3(-x, -y, 0);
+                if (CollideWall != Vector3.Zero) CollideWall = CollideWall.Normalized();
+                return true;
+            }
+            if (d.O.Z < yo.Z)
+            {
+                if (dir == Vector3.Zero || (dir.Z > 0 && (d.Type >= Phys.EntInanimate || below >= d.Zmargin - (d.EyeHeight + d.AboveEye) / 4.0f)))
+                {
+                    CollideWall = new Vector3(0, 0, -1);
+                    return true;
+                }
+            }
+            else if (dir == Vector3.Zero || (dir.Z < 0 && (d.Type >= Phys.EntInanimate || above >= d.Zmargin - (d.EyeHeight + d.AboveEye) / 3.0f)))
+            {
+                CollideWall = new Vector3(0, 0, 1);
+                return true;
+            }
+            CollideInside++;
+        }
+        return false;
+    }
+
+    /// <summary>geom.h <c>vec::rotate_around_z</c> (the engine's clockwise-around-Z form).</summary>
+    private static Vector3 RotateAroundZ(Vector3 v, float radians)
+    {
+        float c = Mathf.Cos(radians), s = Mathf.Sin(radians);
+        return new Vector3(c * v.X - s * v.Y, s * v.X + c * v.Y, v.Z);
+    }
+
+    /// <summary>geom.h <c>vec::reject</c> — <c>|v-o| >= radius</c> means no possible overlap.</summary>
+    private static bool Reject(Vector3 v, Vector3 o, float radius) => v.DistanceSquaredTo(o) > radius * radius;
+
+    // ---- dynent cache (physics.cpp:587) ----------------------------------
+
+    /// <summary>engine <c>VARF(dynentsize, 4, 7, 12)</c>.</summary>
+    public int DynEntSize = 7;
+
+    private const int DynEntCacheSize = 1024;
+    private sealed class DynEntCacheEntry
+    {
+        public int X = int.MinValue, Y = int.MinValue;
+        public uint Frame;
+        public readonly System.Collections.Generic.List<PhysEnt> DynEnts = new();
+    }
+    private readonly DynEntCacheEntry[] _dynEntCache = new DynEntCacheEntry[DynEntCacheSize];
+    private uint _dynEntFrame;
+
+    /// <summary>The alive dynents in the world (players, monsters, movables). The game
+    /// layer registers them here; the engine iterates <c>game::iterdynents</c>.</summary>
+    public readonly System.Collections.Generic.List<PhysEnt> DynEnts = new();
+
+    /// <summary>game::dynentcollide seam — called when a collide() hits a dynent.
+    /// Null in production; used by the game/weapon layer later.</summary>
+    public static System.Action<PhysEnt, PhysEnt, Vector3>? DynEntCollide;
+
+    /// <summary>physics.cpp:591 <c>cleardynentcache</c>.</summary>
+    public void ClearDynentCache()
+    {
+        _dynEntFrame++;
+        if (_dynEntFrame == 0 || _dynEntFrame == 1)
+            for (int i = 0; i < DynEntCacheSize; i++) _dynEntCache[i].Frame = 0;
+        if (_dynEntFrame == 0) _dynEntFrame = 1;
+    }
+
+    private static int DynEntHash(int x, int y)
+    {
+        int k = x ^ y;
+        return (((k << 5) + (k >> 5)) & (DynEntCacheSize - 1));
+    }
+
+    /// <summary>physics.cpp:596 <c>checkdynentcache</c> (building the bucket if stale).</summary>
+    public System.Collections.Generic.List<PhysEnt> CheckDynentCache(int x, int y)
+    {
+        var dec = _dynEntCache[DynEntHash(x, y)];
+        if (dec.X == x && dec.Y == y && dec.Frame == _dynEntFrame) return dec.DynEnts;
+        dec.X = x; dec.Y = y; dec.Frame = _dynEntFrame;
+        dec.DynEnts.Clear();
+        int dsize = 1 << DynEntSize, dx = x << DynEntSize, dy = y << DynEntSize;
+        foreach (var d in DynEnts)
+        {
+            if (d.State != PhysEnt.CsAlive ||
+                d.O.X + d.Radius <= dx || d.O.X - d.Radius >= dx + dsize ||
+                d.O.Y + d.Radius <= dy || d.O.Y - d.Radius >= dy + dsize) continue;
+            dec.DynEnts.Add(d);
+        }
+        return dec.DynEnts;
+    }
+
+    /// <summary>physics.cpp:616 <c>updatedynentcache</c> — add a dynent to every bucket it overlaps.</summary>
+    public void UpdateDynentCache(PhysEnt d)
+    {
+        LoopDynentCache(d.O, d.Radius, (x, y) =>
+        {
+            var dec = _dynEntCache[DynEntHash(x, y)];
+            if (dec.X != x || dec.Y != y || dec.Frame != _dynEntFrame || dec.DynEnts.Contains(d)) return false;
+            dec.DynEnts.Add(d);
+            return false;
+        });
+    }
+
+    /// <summary>physics.cpp:625 <c>overlapsdynent</c> — is any dynent within <paramref name="radius"/> of <paramref name="o"/>?</summary>
+    public bool OverlapsDynent(Vector3 o, float radius)
+    {
+        bool found = false;
+        LoopDynentCache(o, radius, (x, y) =>
+        {
+            foreach (var d in CheckDynentCache(x, y))
+                if (o.DistanceTo(d.O) - d.Radius < radius) { found = true; return true; }
+            return false;
+        });
+        return found;
+    }
+
+    /// <summary>physics.cpp:617 <c>loopdynentcache</c> — iterate the buckets overlapping a circle.
+    /// <paramref name="body"/> returns true to stop early.</summary>
+    private void LoopDynentCache(Vector3 o, float radius, System.Func<int, int, bool> body)
+    {
+        int curx, endx, cury, endy;
+        bool stop = false;
+        for (curx = Mathf.Max((int)(o.X - radius), 0) >> DynEntSize, endx = Mathf.Min((int)(o.X + radius), _octa.WorldSize - 1) >> DynEntSize; curx <= endx && !stop; curx++)
+            for (cury = Mathf.Max((int)(o.Y - radius), 0) >> DynEntSize, endy = Mathf.Min((int)(o.Y + radius), _octa.WorldSize - 1) >> DynEntSize; cury <= endy; cury++)
+                if (body(curx, cury)) { stop = true; break; }
+    }
 
     /// <summary>physics.cpp:1014 <c>octacollide</c> (the readable recursive form).</summary>
     private bool OctaCollide(PhysEnt d, Vector3 dir, float cutoff, Vector3I bo, Vector3I bs, Cube[] c, Vector3I cor, int size)

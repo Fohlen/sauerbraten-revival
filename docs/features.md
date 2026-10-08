@@ -97,11 +97,16 @@ Remaining:
             Asserted by `test/EntityMonsterTest.cs` on **crnsp1** (220, all 9
             types) and **lost** (235). The AI (`monster.cpp`, `ai.cpp`,
             `waypoint.cpp`) is game logic and lands with Modes/Combat.
-- [x] `bounce()` physics for `ENT_BOUNCE` movables **ported** (`OctaPhysics.Bounce`,
-      the `collide(..., playercol)` overload, `interppos`, and the `game::bounced`
-      seam) — asserted by `test/BouncePhysicsTest.cs`. **Not yet wired**: the
-      movable runtime that drives it (box/barrel/platform, `movable.cpp`) and the
-      player/monster collision cache (`plcollide`) are step 2 — see roadmap item 3.
+- [x] `bounce()` physics for `ENT_BOUNCE` (grenades/debris/gibs — `weapon.cpp`
+      `bouncer`) **ported and wired**: `OctaPhysics.Bounce` (both forms),
+      `interppos`, the `collide(..., playercol)` overload, the dynent cache,
+      `plcollide`/`ellipsecollide`, and the `game::bounced`/`dynentcollide` seams.
+      The runtime node is `World/Entities/BounceBody.cs`. Asserted by
+      `test/BouncePhysicsTest.cs` and `test/BounceBodyTest.cs`. Note: boxes/
+      barrels/platforms are **not** `ENT_BOUNCE` — they are `ENT_INANIMATE` and use
+      `moveplayer`/`moveplatform` (`movable.cpp`), still to do.
+- [ ] `movable` runtime (`movable.cpp`): box/barrel/platform/elevator physics via
+      `moveplayer`/`moveplatform`, with the platform-passenger collision DAG.
 - [ ] Lightmap import / rebake (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
@@ -131,9 +136,11 @@ Done:
 
 Remaining:
 
-- [x] `bounce()` for `ENT_BOUNCE` movers (boxes/platforms) — ported
-      (`OctaPhysics.Bounce`, asserted by `test/BouncePhysicsTest.cs`); the movable
-      runtime that drives it lands with the mode entities (step 2).
+- [x] `bounce()` for `ENT_BOUNCE` bodies (grenades/debris/gibs) — ported and
+      wired (`OctaPhysics.Bounce`, `BounceBody`, the dynent cache + `plcollide`;
+      asserted by `test/BouncePhysicsTest.cs` / `test/BounceBodyTest.cs`).
+- [ ] Movable physics (box/barrel/platform/elevator) — `ENT_INANIMATE`, uses
+      `moveplayer`/`moveplatform`, not `bounce()`.
 
 ## 4. Editor MVP *(defining feature)*
 
