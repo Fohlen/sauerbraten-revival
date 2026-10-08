@@ -187,6 +187,17 @@ earlier 12k trace (~step 5000). This confirms the movement model (jump, gravity,
 collision, pads) is faithfully regenerated from inputs; only unmodelled external
 impulses break it.
 
+**The 3/7001 `session-clean` physstate differences are label-only.** All three sit on
+the same 45° slope (`floor=(0.447,0,0.894)`) at a contour crossing, with **o err
+0.0000 and vel err 0.0000** — the trajectory is bit-identical. Two are a single-step
+`4→5→4` flip; the third a one-step `5`. `PHYS_STEP_UP` is set inside `trystepup()`
+and persists because `landing()` leaves `STEP_UP`/`STEP_DOWN` untouched, so whether
+the port enters it on a given 5 ms grid is a **discrete `trystepup()` success/`cansmooth`
+boolean** that flips when an *intermediate* candidate point (`old + smoothdir`)
+differs by ~1e-6 — a sub-ULP sensitivity, not a trajectory error. Closing it would
+require bit-exact reproduction of `trystepup()`'s candidate-point collision tests
+(matching the compiler's `-ffast-math` on every intermediate). Not a fidelity bug.
+
 **Seed-offset caveat.** The replay seeds from **row 0's post-step state** and then
 applies row 1's inputs, so it is one physics step ahead of a from-scratch run. On
 `session-clean.csv` (no events) the reference replay is bit-stable run-to-run, but

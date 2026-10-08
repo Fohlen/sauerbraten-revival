@@ -79,13 +79,14 @@ Done:
 - [x] **A1** reference harness (`tools/refharness/`), **A2** trace capture (`SAUER_TRACE`), **A4** determinism gate.
 - [x] Velocity model validated: **100% flat-floor**, **97.3% free-air** exact matches.
 - [x] Port `move`/`collide`/`trystepup`/`trystepdown` + clipping/visibility machinery (`World/Physics/`).
-- [x] **A3** input-replay differential on real geometry: ~99.8% (session2 pos 99.9%, session3 ~99.8%).
+- [x] **A3** input-replay differential on real geometry: **`session-clean.csv` 100.0% velocity, 100.0% falling, 0.0149 u max position error** (7001 steps, event-free movement).
 - [x] External events (teleports, jump pads, death/respawn) resynced; fixed 200 Hz `moveres` substeps.
+- [x] Deterministic reference replay (`SAUER_REPLAY`, self-terminating) + reference `move()` trace (`SAUER_MOVETRACE`).
 - [x] Live player on the ported physics (`MapPlayer.cs`; timing/input layers 3–4 ported).
 
 Remaining:
 
-- [ ] Close the last ~0.2%: deformed-cube slope/step-up landing timing.
+- [x] Close the last ~0.2%: deformed-cube slope/step-up landing timing (fixed via the `-ffast-math` step-up fold + event-free recording; the 3/7001 residual are `PHYS_STEP_UP` **label-only** flips on a 45° slope contour with zero position/velocity error).
 - [ ] Water, crouch, spectator-float physics states.
 
 ## 4. Editor MVP *(defining feature)*
