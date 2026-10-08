@@ -37,6 +37,7 @@ public static class MonsterBuilder
             }
 
             var model = models?.Get(info.ModelName);
+            var vwep = info.ViewWeapon != null ? models?.Get(info.ViewWeapon) : null;
 
             // bscale scales the body box (monster constructor).
             float scale = info.BScale / 10.0f;
@@ -68,6 +69,23 @@ public static class MonsterBuilder
             EntityFacing.ApplyYaw(node, e.Attr1);
             // entradius draws a facing arrow for MONSTER (size 4), like the mode entities.
             EntityMarker.Add(node, textures, arrow: true);
+
+            // The view-weapon hangs off the body's tag_weapon bone in the engine
+            // (monster.cpp rendermonsters). Hanging it under the body node is the
+            // import-time representation; the exact bone offset is a render concern.
+            if (vwep != null || info.ViewWeapon != null)
+            {
+                node.AddChild(new MonsterViewWeapon
+                {
+                    Name = "ViewWeapon",
+                    ModelPath = info.ViewWeapon,
+                    GlbPath = vwep?.GlbPath,
+                    GlbOsPath = vwep?.GlbOsPath,
+                    ModelScale = vwep?.Scale ?? 1.0f,
+                    ModelTranslation = vwep?.Translation ?? Vector3.Zero,
+                    SkinMaterial = ModelSkin.Build(vwep, textures, skinCache),
+                });
+            }
 
             root.AddChild(node);
         }

@@ -301,6 +301,9 @@ def main() -> int:
         # monsters (monster.cpp monstertypes)
         "ogro", "monster/rhino", "monster/rat", "monster/slith", "monster/bauul",
         "monster/hellpig", "monster/knight", "monster/goblin", "monster/spider",
+        # monster view-weapons (monstertypes vwepname; attached to the tag_weapon bone)
+        "ogro/vwep", "monster/rat/vwep", "monster/slith/vwep", "monster/bauul/vwep",
+        "monster/knight/vwep", "monster/goblin/vwep",
     ]
     entries = [{"index": -1, "path": name} for name in builtins]
     seen = {e["path"] for e in entries}

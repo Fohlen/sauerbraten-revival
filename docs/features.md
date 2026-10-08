@@ -92,7 +92,8 @@ Remaining:
       - [x] Monsters (`MONSTER`, 21): `MonsterBuilder` maps them to `Monster`
             nodes (`attr1` yaw, `attr2` type, `attr3` tag), resolving the ported
             `monstertypes` table (`MonsterTypes`) and the `bscale` body box, plus
-            the `entradius` facing arrow. The nine monster models now convert.
+            the `entradius` facing arrow. The nine monster models and their view
+            weapons now convert.
             Asserted by `test/EntityMonsterTest.cs` on **crnsp1** (220, all 9
             types) and **lost** (235). The AI (`monster.cpp`, `ai.cpp`,
             `waypoint.cpp`) is game logic and lands with Modes/Combat.

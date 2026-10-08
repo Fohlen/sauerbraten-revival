@@ -301,7 +301,8 @@ type is now represented; the slices were done **one at a time, each verified** (
    `monstertypes` table), `attr3` = tag. Resolves the nine body models and the
    `bscale`-scaled body box (radius/eyeheight/aboveeye), and draws the `entradius`
    facing arrow. An out-of-range type falls back to type 0, matching the engine
-   warning. The model importer now converts the nine monster models. Verified on
+   warning. The model importer now converts the nine monster models and their view
+   weapons. Verified on
    **crnsp1** (220 monsters, all 9 types) and **lost** (235, types 0–5).
    Representation only — the AI (`monster.cpp`/`ai.cpp`/`waypoint.cpp`) is game
    logic and lands with Combat/Modes.
@@ -347,20 +348,21 @@ remaining fidelity gap is the material side: engine `SHADER_ENVMAP` surfaces (an
 
 - Attributes: `attr1` = yaw, `attr2` = monstertype (`0–8`), `attr3` = tag.
   `MonsterTypes.All` is a direct port of the engine's `monstertypes` table
-  (gun/speed/health/freq/lag/rate/pain/loyalty/bscale/weight/name/model);
+  (gun/speed/health/freq/lag/rate/pain/loyalty/bscale/weight/name/model/vwep);
   `MonsterBuilder` applies the `bscale` body scaling (`radius *= bscale/10`,
-  `eyeheight = 8·bscale/10`, `aboveeye = 7·bscale/10`).
+  `eyeheight = 8·bscale/10`, `aboveeye = 7·bscale/10`). Where a type has a view
+  weapon, a `MonsterViewWeapon` child node is attached (the engine hangs it off
+  the body's `tag_weapon` bone).
 - **Still needed for behaviour:** the AI and combat (`monster.cpp`, `ai.cpp`,
-  `waypoint.cpp`) are game logic, not import — they land with Combat/Modes.
-  The view-weapon models (`*/vwep`) are not yet converted by the importer.
+  `waypoint.cpp`) are game logic, not import — they land with Combat/Modes, as
+  does the runtime vwep bone attachment/animation.
 
 **Model import work** (`tools/model-import/`): ✅ `flags/` (md2), `base/` (md3,
-`red`/`blue`/`neutral` via `exec`-delegating cfgs) and the nine monster models
-(`ogro`, `monster/rhino`, `monster/rat`, `monster/slith`, `monster/bauul`,
-`monster/hellpig`, `monster/knight`, `monster/goblin`, `monster/spider`) now
-convert, alongside item/teleporter/checkpoint/carrot. Monster view-weapons
-(`*/vwep`) remain unconverted, as do mapmodels only referenced by
-box/barrel/platform/elevator maps (resolved per-map through the catalogue).
+`red`/`blue`/`neutral` via `exec`-delegating cfgs), the nine monster models and
+the six monster view-weapons now convert, alongside
+item/teleporter/checkpoint/carrot. The only remaining unconverted built-ins are
+mapmodels referenced solely by box/barrel/platform/elevator maps (resolved
+per-map through the catalogue as usual).
 
 ### Edit-mode entity markers
 
@@ -419,7 +421,7 @@ The pipeline is split into offline tools, all reading the read-only reference du
 
 | Tool | Output | Purpose |
 | --- | --- |
-| `tools/model-import/import_models.py` | `assets/models/*.glb` + `models.json` | Converts mapmodels and built-in item/teleporter/flag/base/monster models to glTF with **assimp**, applies per-model skins/bumps, and writes the model manifest. Handles parent-folder geometry fallback (e.g. `armor/*` sharing `armor/tris.md3`, `base/*` resolving `../base.md3` via `exec`-delegating cfgs) and the engine's `mdlscale/4`. |
+| `tools/model-import/import_models.py` | `assets/models/*.glb` + `models.json` | Converts mapmodels and built-in item/teleporter/flag/base/monster (+view-weapon) models to glTF with **assimp**, applies per-model skins/bumps, and writes the model manifest. Handles parent-folder geometry fallback (e.g. `armor/*` sharing `armor/tris.md3`, `base/*` resolving `../base.md3` via `exec`-delegating cfgs) and the engine's `mdlscale/4`. |
 | `tools/texture-import/import_textures.py` | `assets/textures/**` | Copies every texture a map references (slot textures, model skins/bumps, and the engine defaults for water/lava/particles) into the project, preserving relative paths. |
 | `tools/refharness/build_instrumented.sh` | `metadata-catalogue/<map>.json` | Builds the patched reference client that exports the metadata (see above). |
 
