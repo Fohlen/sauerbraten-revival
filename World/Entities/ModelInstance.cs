@@ -3,6 +3,9 @@ using Godot;
 
 namespace SauerbratenRevival.World.Entities;
 
+/// <summary>Mirror axis for an imported model (import-frame handedness correction).</summary>
+public enum PlayerModelMirrorAxis { None, X, Y, Z }
+
 /// <summary>
 /// Loads an assimp-converted glTF: prefers Godot's imported Resource (renders in
 /// the editor too), falls back to parsing the file from disk, applies the Cube2
@@ -24,18 +27,15 @@ public partial class ModelInstance : Node3D
 
     /// <summary>
     /// Extra rotation (degrees) applied to the loaded geometry. Used to bring an
-    /// imported model's up-axis into the Z-up world frame — glTF is Y-up, so a
-    /// Y-up model needs (0, 0, 90) or similar here.
+    /// imported model's up-axis into the Z-up world frame.
     /// </summary>
     public Vector3 ModelRotationDegrees { get; set; }
 
     /// <summary>
-    /// Normalise the loaded geometry so it is centred on the origin horizontally and
-    /// its lowest point sits at the node origin (the feet). Imported MD5 bodies are
-    /// off-centre and centred vertically, so without this they sink through the floor
-    /// and sit to one side.
+    /// Per-axis mirror factor (±1) applied to the loaded geometry, for correcting an
+    /// import's handedness. Defaults to no mirror.
     /// </summary>
-    public bool GroundAtFeet { get; set; }
+    public Vector3 ModelMirror { get; set; } = Vector3.One;
 
     /// <summary>Skin/normal material, applied to the loaded model.</summary>
     public Material? SkinMaterial { get; set; }
@@ -89,7 +89,7 @@ public partial class ModelInstance : Node3D
         var holder = new Node3D
         {
             Name = "Model",
-            Scale = Vector3.One * ModelScale,
+            Scale = new Vector3(ModelScale * ModelMirror.X, ModelScale * ModelMirror.Y, ModelScale * ModelMirror.Z),
             Position = ModelTranslation,
             RotationDegrees = ModelRotationDegrees,
         };
@@ -98,49 +98,7 @@ public partial class ModelInstance : Node3D
 
         AddChild(holder);
         if (SkinMaterial != null) ApplyMaterial(holder, SkinMaterial);
-        if (GroundAtFeet) GroundHolder(holder);
         return true;
-    }
-
-    /// <summary>
-    /// Normalise the loaded geometry's vertical placement: shift the holder so the
-    /// lowest mesh vertex sits at the node origin. Imported MD5 bodies are centred on
-    /// their origin vertically, so without this half the model sinks through the floor.
-    /// The shift is along the holder's parent local <b>Y</b> — the model body frame's up
-    /// axis (converted models are Y-up). No live tree is required.
-    /// </summary>
-    private static void GroundHolder(Node3D holder)
-    {
-        bool has = false;
-        var min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
-        var max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
-        CollectBounds(holder, holder.Transform, ref has, ref min, ref max);
-        if (has && min.Y < 0f) holder.Position += new Vector3(0f, -min.Y, 0f);
-    }
-
-    /// <summary>
-    /// Walk <paramref name="node"/>, carrying <paramref name="toHolderParent"/> — the
-    /// transform from <paramref name="node"/>'s local space into the holder's parent
-    /// frame — and accumulate the mesh-corner bounds.
-    /// </summary>
-    private static void CollectBounds(Node node, Transform3D toHolderParent, ref bool has, ref Vector3 min, ref Vector3 max)
-    {
-        if (node is MeshInstance3D { Mesh: not null } mesh)
-        {
-            var a = mesh.GetAabb();
-            for (int i = 0; i < 8; i++)
-            {
-                Vector3 p = toHolderParent * a.GetEndpoint(i);
-                min = new Vector3(Mathf.Min(min.X, p.X), Mathf.Min(min.Y, p.Y), Mathf.Min(min.Z, p.Z));
-                max = new Vector3(Mathf.Max(max.X, p.X), Mathf.Max(max.Y, p.Y), Mathf.Max(max.Z, p.Z));
-                has = true;
-            }
-        }
-        foreach (var child in node.GetChildren())
-        {
-            var childXform = child is Node3D c3 ? toHolderParent * c3.Transform : toHolderParent;
-            CollectBounds(child, childXform, ref has, ref min, ref max);
-        }
     }
 
     private static int CopyMeshes(Node source, Node3D target)

@@ -28,14 +28,18 @@ public partial class PlayerModel : ModelInstance
     /// <summary>
     /// Point this node at a player model's variant for <paramref name="team"/> and load
     /// it, using the world's converted-model catalogue and texture source. Safe to call
-    /// before or after the node enters the tree.
+    /// before or after the node enters the tree. <paramref name="rotationDegrees"/> and
+    /// <paramref name="mirror"/> correct the imported model's frame.
     /// </summary>
     public void Configure(
         ModelCatalog? models,
         ITextureSource? textures,
         int modelIndex,
         int team,
-        Dictionary<string, Material>? skinCache = null)
+        Dictionary<string, Material>? skinCache = null,
+        Vector3? rotationDegrees = null,
+        PlayerModelMirrorAxis mirror = PlayerModelMirrorAxis.None,
+        Vector3? offset = null)
     {
         ModelIndex = modelIndex;
         Team = team;
@@ -45,14 +49,20 @@ public partial class PlayerModel : ModelInstance
         GlbPath = info?.GlbPath;
         GlbOsPath = info?.GlbOsPath;
         ModelScale = info?.Scale ?? 1.0f;
-        ModelTranslation = info?.Translation ?? Vector3.Zero;
-        // Converted models are Y-up; the player body frame's up axis is also local Y
-        // (the engine renders the body facing along the view with world up), so no axis
-        // correction is needed. Facing is the player yaw.
-        ModelRotationDegrees = Vector3.Zero;
-        // Plant the lowest point at the feet so the body stands on the floor instead of
-        // sinking through it (the imported origin is at mid-height).
-        GroundAtFeet = true;
+        // The catalog's mdltrans plus a manual nudge, in the holder's local (model)
+        // frame — used to plant the feet exactly on the floor.
+        ModelTranslation = (info?.Translation ?? Vector3.Zero) + (offset ?? Vector3.Zero);
+        // assimp exports the MD5 body in the source frame; the player body frame's up
+        // axis is local Y, which is exactly the converted model's height axis, so no
+        // axis correction is needed. Facing is the player yaw.
+        ModelRotationDegrees = rotationDegrees ?? Vector3.Zero;
+        ModelMirror = mirror switch
+        {
+            PlayerModelMirrorAxis.X => new Vector3(-1f, 1f, 1f),
+            PlayerModelMirrorAxis.Y => new Vector3(1f, -1f, 1f),
+            PlayerModelMirrorAxis.Z => new Vector3(1f, 1f, -1f),
+            _ => Vector3.One,
+        };
         SkinMaterial = ModelSkin.Build(info, textures, skinCache ?? new Dictionary<string, Material>());
 
         if (IsInsideTree()) Reload();
