@@ -14,12 +14,20 @@ and a canonical FNV-1a checksum).
 
 | File | Notes |
 | --- | --- |
-| `church51.json` | 334 entities; the A2 trace fixture (`session1.csv`) was captured here. |
+| `church51.json` | 334 entities; the default viewer map and the A2 trace fixture. |
 | `bt_falls.json` | 373 entities: 167 mapmodels, 5 `ET_SOUND`, water surfaces; skybox `meister/uzze`. |
+| `earthstation.json` | 1503 entities, 38 `ET_ENVMAP` probes (envmap tests). |
+| `lost.json` | 1723 entities (mode-entity tests). |
+| `crnsp1.json` | 8192-unit map (chunk/mesh tests). |
 
-The catalogue currently holds **one entry per map**: all 335 `*.ogz` in the
-reference dump's `packages/base/`. The exporter only emits what the map actually
-uses (geometry-referenced textures, entity-referenced mapmodels and sounds). See
+Only the maps the **tests** exercise are committed. A full catalogue is one
+`tools/ogztool/export-all-maps.sh` run away (see below); we deliberately do not
+carry 335 entries, because the exporter is still gaining fields and stale
+entries (old `geometry` checksums) are noise. Add a map here only when a test
+needs it.
+
+The exporter only emits what the map actually uses (geometry-referenced
+textures, entity-referenced mapmodels and sounds). See
 [`docs/ogz-import.md`](../docs/ogz-import.md).
 
 ## Regenerating
