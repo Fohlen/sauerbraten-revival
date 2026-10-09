@@ -60,6 +60,25 @@ public sealed class OgzVSlot
     public Vector3 ColorScale = Vector3.One;
 }
 
+/// <summary>worldio.cpp: one <c>LightMap</c> as stored in the OGZ (engine/lightmap.h).</summary>
+public sealed class OgzLightMap
+{
+    /// <summary>Raw type byte: low nibble <c>LM_TYPE</c> (0 diffuse, 1 bump0, 2 bump1), bit 0x10 <c>LM_ALPHA</c>, bit 0x80 unlit-texel present.</summary>
+    public int Type;
+
+    /// <summary>Bytes per pixel: 4 when <c>(type &amp; LM_ALPHA) &amp;&amp; (type &amp; LM_TYPE) != LM_BUMPMAP1</c>, else 3.</summary>
+    public int Bpp;
+
+    /// <summary>Whether the 0x80 flag was set (a 1x1 unlit/ambient texel exists at <see cref="UnlitX"/>,<see cref="UnlitY"/>).</summary>
+    public bool HasUnlit;
+
+    /// <summary>Atlas coordinates of the unlit texel (valid only when <see cref="HasUnlit"/>).</summary>
+    public ushort UnlitX, UnlitY;
+
+    /// <summary>Raw atlas pixels, <c>Bpp * 512 * 512</c> bytes, in file order (not flipped).</summary>
+    public byte[] Pixels = Array.Empty<byte>();
+}
+
 /// <summary>
 /// The parsed contents of an OGZ map. <see cref="WorldRoot"/> is the runtime
 /// octree (the reader builds <see cref="Cube"/>/<see cref="CubeExt"/> directly),
@@ -75,6 +94,9 @@ public sealed class OgzMap
     public List<OgzEntity> Entities = new();
     public List<OgzVSlot> VSlots = new();
     public Cube[] WorldRoot = Array.Empty<Cube>();
+
+    /// <summary>Baked lightmap atlases, one per <c>hdr.lightmaps</c> (empty when the map is unlit).</summary>
+    public List<OgzLightMap> Lightmaps = new();
 
     /// <summary>Look up a string map variable (e.g. <c>skybox</c>).</summary>
     public string? GetVarString(string name)
@@ -127,6 +149,9 @@ public sealed class OgzMap
             Entities = new List<OgzEntity>(Entities),
             VSlots = new List<OgzVSlot>(VSlots),
             WorldRoot = Octa.CloneCubes(WorldRoot),
+            // Atlas pixels are immutable after load; a shallow list copy is enough
+            // (the OgzLightMap objects are never mutated).
+            Lightmaps = new List<OgzLightMap>(Lightmaps),
         };
     }
 

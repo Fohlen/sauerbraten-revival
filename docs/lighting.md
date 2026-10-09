@@ -200,28 +200,31 @@ Therefore:
 
 ### 3.1 OGZ reader (`World/Ogz/OgzReader.cs`)
 
-Already parsed: `surfaceinfo` (`Lmid0/Lmid1/NumVerts`, `LAYER_*`) and `vertinfo`
-including `U/V/Norm`. `OgzMap.Header.Lightmaps` is read. The reader stops **before**
-the atlas payload.
-
-Add, after the octree (mirror `worldio.cpp:1217–1233`):
+**Done.** The reader parses `surfaceinfo` (`Lmid0/Lmid1/NumVerts`, `LAYER_*`),
+`vertinfo` (`U/V/Norm`), and — after the octree — the atlas payload into
+`OgzMap.Lightmaps` (`List<OgzLightMap>`):
 
 ```csharp
 for (int i = 0; i < header.Lightmaps; i++) {
-    byte type = r.ReadByte();                 // bit 0x80 = unlit texel present
-    ushort unlitx = 0, unlity = 0;
+    byte type = r.ReadByte();                 // 0x80 unlit texel, 0x10 LM_ALPHA, low nibble LM_TYPE
     if ((type & 0x80) != 0) { unlitx = r.ReadUInt16(); unlity = r.ReadUInt16(); }
     int lmType = type & 0x0F;                 // 0 diffuse, 1 bump0, 2 bump1
-    int bpp = (type & 0x10) != 0 && lmType != 2 ? 4 : 3;
-    byte[] data = r.ReadBytes(bpp * 512 * 512);   // LM_PACKW * LM_PACKH
-    // -> LightMapData { Type, Bpp, UnlitX, UnlitY, Pixels }
+    lm.Bpp = (type & 0x10) != 0 && lmType != 2 ? 4 : 3;
+    lm.Pixels = r.ReadBytes(bpp * 512 * 512); // LM_PACKW * LM_PACKH, unflipped
 }
 ```
 
-Ordering: lightmaps come **before** PVS and the blendmap in the stream
-(`worldio.cpp:1237–1238`). Version <32 maps use the legacy surfacecompat path
-plus `fixlightmapnormals`/`fixrotatedlightmaps`; the reader rejects them today, so
-T1 covers v32/33.
+**Verified byte-for-byte** against the engine's own `dumplms` output
+(`test/golden/lightmaps/`, git-LFS) by `test/OgzLightmapTest.cs` — an independent
+oracle, not our own code. The fixture `frag-lab` covers RGB and RGBA (`LM_ALPHA`)
+atlases. The stored buffer is **not** flipped; `dumplms` flips only when dumping.
+
+Ordering: lightmaps come **before** PVS and the blendmap (`worldio.cpp:1237–1238`) —
+still unparsed, and read on demand. v32/33 only (v<32 rejected; see
+[dependencies on conversion](ogz-import.md#old-format-maps-pre-v32)).
+
+Remaining T1 work: the per-face link (already in `CubeExt`/`VertInfo`) and the
+mesher/shader side (§3.3–3.4).
 
 ### 3.2 Preserve the link in the native format (`World/Save/WorldSnapshot.cs`)
 

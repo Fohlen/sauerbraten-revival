@@ -73,6 +73,7 @@ public sealed class OgzReader
         self.ReadEntities(map);
         self.ReadVSlots(map);
         map.WorldRoot = self.ReadChildren(new[] { 0, 0, 0 }, map.Header.WorldSize >> 1);
+        self.ReadLightmaps(map);
         return map;
     }
 
@@ -202,6 +203,41 @@ public sealed class OgzReader
 
             map.VSlots.Add(vs);
             remaining--;
+        }
+    }
+
+    // ---- lightmaps (worldio.cpp load_world, after the octree) ----
+
+    /// <summary>
+    /// Read the baked lightmap atlases. They follow the octree and precede the
+    /// PVS and blendmap sections (worldio.cpp:1219). Each atlas is:
+    ///   type byte (0x80 = a 1x1 unlit/ambient texel follows, 0x10 = LM_ALPHA,
+    ///   low nibble = LM_TYPE: 0 diffuse, 1 bump0, 2 bump1)
+    ///   [unlitx, unlity] (ushort, only when 0x80)
+    ///   bpp * 512 * 512 raw pixels, where bpp = 4 iff (LM_ALPHA &amp;&amp; type != BUMPMAP1).
+    /// The pixel buffer is stored unflipped; the engine only flips it when dumping
+    /// with dumplms(). See test/OgzLightmapTest.cs for the byte-exact oracle.
+    /// </summary>
+    private void ReadLightmaps(OgzMap map)
+    {
+        const int PackW = 512, PackH = 512;
+        for (int i = 0; i < map.Header.Lightmaps; i++)
+        {
+            int type = _r.ReadByte();
+            var lm = new OgzLightMap
+            {
+                Type = type,
+                HasUnlit = (type & 0x80) != 0,
+            };
+            if (lm.HasUnlit)
+            {
+                lm.UnlitX = _r.ReadUInt16();
+                lm.UnlitY = _r.ReadUInt16();
+            }
+            int lmType = type & 0x0F;
+            lm.Bpp = (type & 0x10) != 0 && lmType != 2 ? 4 : 3; // LM_ALPHA && LM_TYPE != LM_BUMPMAP1
+            lm.Pixels = ReadExact(_r, lm.Bpp * PackW * PackH);
+            map.Lightmaps.Add(lm);
         }
     }
 
