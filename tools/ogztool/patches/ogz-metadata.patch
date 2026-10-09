@@ -74,8 +74,8 @@
  
  $(SERVER_OBJS): CXXFLAGS += $(SERVER_INCLUDES)
 --- a/engine/metadata.cpp
-+++ b/engine/metadata.cpp
-@@ -0,0 +1,339 @@
++++ b/engine/metadata.cpp	2026-10-09 13:34:07
+@@ -0,0 +1,456 @@
 +// metadata.cpp: one-time OGZ import metadata export (sauerbraten-revival)
 +//
 +// This file is added by a patch to Sauerbraten SVN r6889 and is not part of the
@@ -153,6 +153,35 @@
 +        case TEX_ALPHA:   return "alpha";
 +        case TEX_ENVMAP:  return "envmap";
 +        default:          return "unknown";
++    }
++}
++
++static const char *shadertypename(int type)
++{
++    if(type & SHADER_INVALID) return "invalid";
++    if(type & SHADER_DEFERRED) return "deferred";
++    if(type & SHADER_NORMALSLMS) return "normalslms";
++    if(type & SHADER_ENVMAP) return "envmap";
++    if(type & SHADER_OPTION) return "option";
++    return "default";
++}
++
++// Resolved config globals (mapvars / cvars). Values come from the engine's
++// ident table *after* the map cfg has been exec'd, so they reflect per-map
++// overrides — not the compiled-in defaults. Emit nothing when the name is
++// unknown, so a missing var never breaks the JSON.
++static void jsonconfigident(FILE *f, const char *name, bool &first)
++{
++    ident *id = getident(name);
++    if(!id || (id->type != ID_VAR && id->type != ID_FVAR && id->type != ID_SVAR)) return;
++    if(!first) fputs(",\n", f);
++    first = false;
++    fputs("\"", f); fputs(name, f); fputs("\":", f);
++    switch(id->type)
++    {
++        case ID_VAR:  fprintf(f, "%d", *id->storage.i); break;
++        case ID_FVAR: jsonfloat(f, *id->storage.f); break;
++        case ID_SVAR: jsonstring(f, id->storage.s ? *id->storage.s : NULL); break;
 +    }
 +}
 +
@@ -300,6 +329,15 @@
 +    int nummapsounds = 0;
 +    while(mapsoundname(nummapsounds)) nummapsounds++;
 +
++    // Distinct shaders the used slots reference, plus their variant/detail chain
++    // names, so the importer knows SHADER_NORMALSLMS/ENVMAP without name-guessing.
++    vector<Shader *> usedshaders;
++    loopv(vslots) if(usedvslots[i] && vslots[i]->slot && vslots[i]->slot->shader)
++    {
++        Shader *sh = vslots[i]->slot->shader;
++        if(usedshaders.find(sh) < 0) usedshaders.add(sh);
++    }
++
 +    fprintf(f, "{\n");
 +    fputs("\"mapname\":", f); jsonstring(f, mapname); fputs(",\n", f);
 +    fprintf(f, "\"worldsize\":%d,\n", worldsize);
@@ -341,6 +379,13 @@
 +        }
 +        fputs("],\"shader\":", f);
 +        jsonstring(f, s.shader ? s.shader->name : NULL);
++        fputs(",\"shaderType\":", f);
++        jsonstring(f, shadertypename(s.shader ? s.shader->type : SHADER_DEFAULT));
++        fprintf(f, ",\"smooth\":%d,\"texmask\":%u", s.smooth, (unsigned)s.texmask);
++        fputs(",\"grass\":", f); jsonstring(f, s.autograss);
++        fputs(",\"layermask\":{\"name\":", f); jsonstring(f, s.layermaskname);
++        fprintf(f, ",\"mode\":%d,\"scale\":", s.layermaskmode); jsonfloat(f, s.layermaskscale);
++        fputc('}', f);
 +        fputs(",\"params\":", f);
 +        jsonparams(f, s.params);
 +        fputc('}', f);
@@ -356,6 +401,7 @@
 +        if(!firstvslot) fputs(",\n", f);
 +        firstvslot = false;
 +        fprintf(f, "{\"index\":%d,\"slot\":%d", v.index, v.slot ? v.slot->index : -1);
++        fprintf(f, ",\"linked\":%s,\"changed\":%d", v.linked ? "true" : "false", v.changed);
 +        fputs(",\"scale\":", f); jsonfloat(f, v.scale);
 +        fprintf(f, ",\"rotation\":%d", v.rotation);
 +        fprintf(f, ",\"offset\":[%d,%d]", v.offset.x, v.offset.y);
@@ -366,6 +412,34 @@
 +        fputs(",\"glow\":[", f); jsonfloat(f, v.glowcolor.x); fputc(',', f); jsonfloat(f, v.glowcolor.y); fputc(',', f); jsonfloat(f, v.glowcolor.z); fputc(']', f);
 +        fputs(",\"params\":", f);
 +        jsonparams(f, v.params);
++        fputc('}', f);
++    }
++    fputs("\n],\n", f);
++
++    fputs("\"shaders\":[\n", f);
++    loopv(usedshaders)
++    {
++        Shader *sh = usedshaders[i];
++        if(i) fputs(",\n", f);
++        fputs("{\"name\":", f); jsonstring(f, sh->name);
++        fputs(",\"type\":", f); jsonstring(f, shadertypename(sh->type));
++        fputs(",\"defaultparams\":", f);
++        // Shader::defaultparams is vector<SlotShaderParamState>; adapt to the
++        // same {"name","val"} shape jsonparams emits for Slot params.
++        fputc('[', f);
++        loopvj(sh->defaultparams)
++        {
++            const SlotShaderParamState &p = sh->defaultparams[j];
++            if(j) fputc(',', f);
++            fputs("{\"name\":", f); jsonstring(f, p.name);
++            fputs(",\"val\":[", f);
++            loopk(4) { if(k) fputc(',', f); jsonfloat(f, p.val[k]); }
++            fputs("]}", f);
++        }
++        fputc(']', f);
++        fputs(",\"detail\":", f); jsonstring(f, sh->detailshader ? sh->detailshader->name : NULL);
++        fputs(",\"variant\":", f); jsonstring(f, sh->variantshader ? sh->variantshader->name : NULL);
++        fputs(",\"alt\":", f); jsonstring(f, sh->altshader ? sh->altshader->name : NULL);
 +        fputc('}', f);
 +    }
 +    fputs("\n],\n", f);
@@ -396,6 +470,49 @@
 +        fputc('}', f);
 +    }
 +    fputs("\n],\n", f);
++
++    fputs("\"config\":{\n", f);
++    {
++        bool firstcfg = true;
++        // Lighting
++        jsonconfigident(f, "ambient", firstcfg);
++        jsonconfigident(f, "skylight", firstcfg);
++        jsonconfigident(f, "sunlight", firstcfg);
++        jsonconfigident(f, "sunlightscale", firstcfg);
++        jsonconfigident(f, "sunlightyaw", firstcfg);
++        jsonconfigident(f, "sunlightpitch", firstcfg);
++        jsonconfigident(f, "skytexturelight", firstcfg);
++        jsonconfigident(f, "lightprecision", firstcfg);
++        jsonconfigident(f, "lighterror", firstcfg);
++        jsonconfigident(f, "bumperror", firstcfg);
++        jsonconfigident(f, "lightlod", firstcfg);
++        jsonconfigident(f, "lmshadows", firstcfg);
++        jsonconfigident(f, "lmaa", firstcfg);
++        jsonconfigident(f, "blurlms", firstcfg);
++        jsonconfigident(f, "blurskylight", firstcfg);
++        jsonconfigident(f, "adaptivesample", firstcfg);
++        jsonconfigident(f, "edgetolerance", firstcfg);
++        // Sky / atmosphere
++        jsonconfigident(f, "skybox", firstcfg);
++        jsonconfigident(f, "skyboxcolour", firstcfg);
++        jsonconfigident(f, "cloudbox", firstcfg);
++        jsonconfigident(f, "cloudboxcolour", firstcfg);
++        jsonconfigident(f, "cloudlayer", firstcfg);
++        jsonconfigident(f, "cloudcolour", firstcfg);
++        jsonconfigident(f, "fog", firstcfg);
++        jsonconfigident(f, "fogcolour", firstcfg);
++        jsonconfigident(f, "fogdomecolour", firstcfg);
++        // Materials (colours are cvars; the matwater/matlava/matglass/matnoclip
++        // *textures* are slot commands, not idents — derive those from the slot
++        // registry, not here).
++        jsonconfigident(f, "watercolour", firstcfg);
++        jsonconfigident(f, "waterfallcolour", firstcfg);
++        jsonconfigident(f, "lavacolour", firstcfg);
++        // Meta
++        jsonconfigident(f, "maptitle", firstcfg);
++        (void)firstcfg;
++    }
++    fputs("\n},\n", f);
 +
 +    fputs("\"sounds\":[\n", f);
 +    bool firstsound = true;

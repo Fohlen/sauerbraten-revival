@@ -152,9 +152,12 @@ Remaining:
             exactly). Metadata-driven material manifest emission is still pending.
       - [ ] CLI/headless front end for `OgzConverter` (the GUI wizard exists;
             [ogz-import.md § Converter GUI](ogz-import.md#converter-gui)).
-- [ ] **One-shot full metadata export** — capture all resolved engine state in the
-      single ~25-min sweep (resolved shaders/slots/vslots/config + binary sidecar
-      for lightmaps, blendmap, PVS, layer masks). Design:
+- [~] **One-shot full metadata export** — capture all resolved engine state in the
+      single ~25-min sweep (resolved shaders/slots/vslots/config) as **JSON only**;
+      no binary sidecar (lightmaps/blendmap/PVS are already in the OGZ). The
+      exporter is **extended and validated** (`shaderType`/`smooth`/`texmask`/grass,
+      `shaders[]`, `config`, vslot `linked`/`changed`); re-exporting the whole
+      catalogue still pending. Design:
       [lighting.md § Export everything in one pass](lighting.md#4-export-everything-in-one-pass).
 - [ ] **Lightmap import** (T1; opportunistic — piggyback on the editor mesher/
       format change, not a dedicated phase; [lighting.md](lighting.md)) — read the

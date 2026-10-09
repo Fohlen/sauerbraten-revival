@@ -32,10 +32,15 @@ fidelity.
      `calclight` is ~1,400 dense lines and needs `shadowray`; post-MVP.
 - **Layers and envmap are coupled to lightmaps** (shared vertex normals + a shared
   per-surface element key). Treat them as one data-model milestone, not three.
-- **Export everything in one engine pass.** The all-maps metadata sweep costs
-  ~25 min, dominated by startup/load. Capture all resolved lighting/shader state
-  plus binary sidecars (lightmaps, blendmap, PVS, layer masks) so we never need a
-  second sweep.
+- **No binary sidecar.** The lightmaps, blendmap and PVS are all *inside the OGZ*
+  (`save_world`/`load_world`, `worldio.cpp`); duplicating them into a `.bin` is a
+  second source of truth for no gain. Read them from the map. The only
+  engine-required export is the **JSON catalogue**, which carries what the OGZ
+  cannot: resolved texture/vslot/mapmodel/sound paths and shader/config state
+  (the OGZ stores indices). See §4.
+- **Export the resolved metadata in one engine pass.** The all-maps JSON sweep
+  costs ~25 min, dominated by startup/load. Capture the resolved
+  lighting/shader/config state so we never need a second sweep.
 
 ---
 
@@ -279,102 +284,97 @@ It runs after `startmap()`, so map `.cfg` overrides are resolved.
 
 ### 4.1 Output shape
 
-Per map, one `exportmapmetadata()` call writes **two files**:
+Per map, one `exportmapmetadata()` call writes **one file**:
 
 - `metadata-catalogue/<map>.json` — small, diffable, resolved metadata.
-- `metadata-catalogue/<map>.bin` — binary sidecar with a length-prefixed TOC
-  (lightmaps, blendmap, PVS, layer masks). Derive the path from `SAUER_METADATA`
-  (replace extension) or `SAUER_METADATA_BIN`.
-- Add `"schemaVersion": 2` and sidecar section offsets to the JSON.
+
+There is **no binary sidecar.** Lightmaps, blendmap and PVS are already inside the
+OGZ (`worldio.cpp` writes them in `save_world`, reads them in `load_world`); a
+second copy would duplicate map data and create a second source of truth. Parse
+them from the map when needed (extend `World/Ogz/OgzReader.cs`), not from a
+sidecar. The JSON is the only engine-required export, because it carries what the
+OGZ structurally cannot: resolved *indices → asset paths* (the map stores only
+slot/vslot/mapmodel/sound indices, which need the engine's exec'd configs to
+resolve) plus resolved shader/config state.
 
 ### 4.2 Inventory
 
-**Already exported** (`metadata.cpp`): mapname/worldsize, geometry stats + FNV
-checksum + `textureFaces`, used `slots` (textures[type/path], shader name, params),
-used `vslots` (scale/rotation/offset/scroll/layer/alpha/color/glow/params),
-mapmodels, entities (type/pos/attr1-5), sounds. Keep used-only.
+**Exported** (`metadata.cpp`): mapname/worldsize, geometry stats + FNV
+checksum + `textureFaces`, used `slots`, used `vslots`, used `shaders`, mapmodels,
+entities, resolved `config`, sounds. Keep used-only. Validated on `earthstation`
+(1414 vslots, 98 `normalslms` + 1 `envmap` slots, 8 shaders, 30 config fields) and
+`abbey`/`bt_falls` (grass, smooth).
 
-**Add to `slots`** (resolved fields that are not in the OGZ):
+`slots` fields: `index`, `textures` (type/path), `shader`, `shaderType`,
+`smooth`, `texmask`, `grass`, `layermask` (`name`/`mode`/`scale`), `params`.
 
-| Field | Source | Why |
-| --- | --- | --- |
-| `shaderType` | `s.shader->type` | `SHADER_NORMALSLMS`/`SHADER_ENVMAP`/`SHADER_ALPHA` — removes name→flags guesswork |
-| `smooth` | `s.smooth` | normal reconstruction / rebake |
-| `texmask` | `s.texmask` | which `TEX_*` the shader samples |
-| `layermask` | name/mode/scale + `ImageData` | layer blending (sidecar) |
-| `grass` | `s.autograss`/`s.grasstex` | grass |
-| all `sts` types | `s.sts[]` | confirm envmap/decal/spec/depth/alpha paths |
+| Field | Source | Why | Status |
+| --- | --- | --- | --- |
+| `shaderType` | `s.shader->type` | `normalslms`/`envmap`/`option`/`deferred`/`invalid` — removes name→flags guesswork | ✅ |
+| `smooth` | `s.smooth` | normal reconstruction / rebake | ✅ (bt_falls) |
+| `texmask` | `s.texmask` | which `TEX_*` the shader samples | ✅ |
+| `layermask` | `layermaskname`/`mode`/`scale` | layer blending (the baked alpha is in the lightmap pixels; this is the *authoring source* name) | ✅ (unset on all classic maps — no `.cfg` invokes it) |
+| `grass` | `s.autograss` | grass texture path | ✅ (abbey) |
+| all `sts` types | `s.sts[]` | decal/normal/glow/spec/depth/alpha/envmap paths | ✅ |
 
-**Add to `vslots`**: `linked`, `changed` (change mask = authoritative fields),
-resolved `layer` chain target.
+`vslots` fields: `index`, `slot`, **`linked`**, **`changed`** (change mask =
+authoritative fields), scale/rotation/offset/scroll/layer/alpha/color/glow/params.
 
-**New `shaders[]`**: name, `type`, defaultparams, detail/variant/fast/alt chain.
+**New `shaders[]`**: `name`, `type`, `defaultparams`, `detail`/`variant`/`alt` chain.
 
-**New `config`** (resolved globals):
+**New `config`** — resolved idents read via `getident()` after the map cfg exec'd
+(so per-map overrides are included). Read generically, so a missing name is
+simply omitted rather than breaking the JSON:
 
 - Lighting: `ambient`, `skylight`, `sunlight`, `sunlightscale`, `sunlightyaw`,
   `sunlightpitch`, `skytexturelight`, `lightprecision`, `lighterror`,
   `bumperror`, `lightlod`, `lmshadows`, `lmaa`, `blurlms`, `blurskylight`,
   `adaptivesample`, `edgetolerance`.
 - Sky/atmo: `skybox`, `skyboxcolour`, `cloudbox`, `cloudboxcolour`,
-  `cloudlayer`, `cloudcolour`, `fog`, `fogcolour`, `fogdomecolour`, `atmo*`,
-  `skytexture`.
-- Materials: `matwater`/`matlava`/`matglass`/`matnoclip` paths, `watercolour`,
-  `waterfallcolour`, `lavacolour`.
-- Meta: `maptitle`, `mapauthor`, `gameident`.
+  `cloudlayer`, `cloudcolour`, `fog`, `fogcolour`, `fogdomecolour`.
+- Materials (colours only): `watercolour`, `waterfallcolour`, `lavacolour`.
+- Meta: `maptitle`.
 
-**Entities** (optional): resolved `attached` (spotlight→light), model path,
-sound path, decoded attrs.
+> **Not** in `config`, deliberately: `matwater`/`matlava`/`matglass`/
+> `matnoclip` are material-texture *slot commands*, not idents — export them from
+the slot registry if needed, not via `getident()` (which correctly returns
+nothing). `mapauthor`/`atmo*` are not idents in r6889.
 
-### 4.3 Binary sidecar («never re-run»)
+**Entities** (optional, later): resolved `attached` (spotlight→light), model
+path, sound path, decoded attrs.
 
-| Section | Source | Notes |
+### 4.3 Why no binary sidecar
+
+The binary payload — lightmaps, blendmap, PVS — is **already in the OGZ**:
+
+| Data | Where in the map | Parser |
 | --- | --- | --- |
-| Lightmaps | `lightmaps[]` (`lightmap.h`) | per: `type`, `bpp`, `unlitx/unlity`, raw `bpp*512*512`. Dump `lightmaps[]` (file form), not `lightmaptexs[]` |
-| Blendmap | `saveblendmap(stream*)` (`blend.cpp:843`) | only if not `BM_SOLID` |
-| PVS | `savepvs(stream*)` (`pvs.cpp:1263`) | only if `getnumviewcells() > 0` |
-| Layer masks | `slot->layermask` `ImageData` | dims + bpp + pixels, keyed by slot index |
+| Lightmaps | after the octree, before PVS (`worldio.cpp:1219`) | `save_world` writes, `load_world` reads |
+| PVS | after the lightmaps (`worldio.cpp:1237`) | `savepvs` / `loadpvs` |
+| Blendmap | last section (`worldio.cpp:1238`) | `saveblendmap` / `loadblendmap` |
 
-These are technically in the OGZ but we don't parse them yet; capturing them in
-the sidecar is the whole point of the one-shot export. They are also a second
-oracle for the OGZ reader.
+So there is nothing to capture: the reference dump and `assets/packages/` already
+hold every byte, permanently. A `.bin` sidecar would (a) duplicate map data,
+(b) become a second source of truth that can drift from the map, and (c) add a
+format to version and hash for no capability gain.
 
-`engine.h` already includes `lightmap.h`/`texture.h`; `tools.h` provides
-`openfile()` and `stream::write`; `savepvs`/`saveblendmap` are `extern` in
-`engine.h:119/598`.
+`OgzReader` currently stops after the octree; the right fix for any consumer is
+to **extend the reader** to parse the PVS/blendmap/lightmap sections it needs.
+(T1 reads the lightmap payload this way — see §3.1.) The layer-mask *authoring*
+image is an ordinary texture asset in `packages/`, referenced by name in the JSON
+catalogue, not a sidecar blob.
 
 ### 4.4 Patch shape
 
-```cpp
-const char *jsonpath = getenv("SAUER_METADATA");
-static char binpath[MAX_QPATH];
-copystring(binpath, jsonpath);
-char *dot = strrchr(binpath, '.');
-if(dot) copystring(dot, ".bin"); else concatstring(binpath, ".bin");
+The engine patch stays small: `exportmapmetadata()` writes only the JSON.
 
-FILE *bf = fopen(binpath, "wb");
-uint32_t magic = 0x314D5342; fwrite(&magic, 4, 1, bf);   // "BSM1"
-uint32_t nlm = lightmaps.length(); fwrite(&nlm, 4, 1, bf);
-loopv(lightmaps) {
-    LightMap &lm = lightmaps[i];
-    uchar type = lm.type | (lm.unlitx>=0 ? 0x80 : 0);
-    fwrite(&type, 1, 1, bf);
-    if(lm.unlitx>=0){ ushort x=lm.unlitx,y=lm.unlity; fwrite(&x,2,1,bf); fwrite(&y,2,1,bf); }
-    fwrite(lm.data, 1, lm.bpp*LM_PACKW*LM_PACKH, bf);
-}
-if(blendmap.type != BM_SOLID) { stream *s = openfile(binpath, "ab"); saveblendmap(s); delete s; }
-if(getnumviewcells() > 0)     { stream *s = openfile(binpath, "ab"); savepvs(s);     delete s; }
-```
-
-Caveats:
-
+- `SAUER_METADATA` selects the output path; `SAUER_METADATA_EXIT` quits after.
 - Keep `metadata.cpp` compiled with `-fno-finite-math-only` (the `jsonfloat`
   NaN/Inf guard; see the patch's Makefile hunk).
-- Do **not** PNG-encode every atlas in the sweep — write raw (PNG via `dumplms`
-  only for a small verification subset).
-- Add the TOC so the converter can skip/negotiate sections without a version break.
-- The driver script needs no change if `binpath` derives from `SAUER_METADATA`;
-  `SAUER_METADATA_EXIT` still applies.
+- Add `"schemaVersion"` to the JSON so the importer can negotiate fields without
+  a version break.
+- Adding a field later is cheap and textual — if we miss one, re-run the exporter
+  for that map; there is no large binary to re-bake.
 
 ---
 
@@ -404,7 +404,8 @@ Estimate: a few weeks; one of the densest subsystems in the engine.
 - Extend `test/MapFormatTest.cs` (currently
   `OgzConverterRoundTripsChurch51Geometry` — geometry only) with
   `lmid`/UV/normal round-trip assertions and a reserved-`lmid` + bump-pair case.
-- Keep the sidecar as an independent second source to cross-check the OGZ reader.
+- The OGZ itself is the single source; `dumplms` is the independent oracle (it is
+  the engine's own dump of the same data, not a second export of ours).
 
 ---
 
@@ -428,8 +429,9 @@ Project:
 
 | File | Change |
 | --- | --- |
-| `World/Ogz/OgzReader.cs` | read atlas payload |
+| `World/Ogz/OgzReader.cs` | read atlas payload (then PVS/blendmap when a consumer needs them) |
 | `World/Ogz/OgzMap.cs` | hold lightmaps |
+| `World/Ogz/MapRoots.cs` | map path resolution (`assets/packages` → dump) |
 | `World/Save/WorldSnapshot.cs` | preserve `CubeExt`; v2; hash |
 | `World/Save/MapStore.cs` | atlas assets + content hash |
 | `World/Save/OgzConverter.cs` | emit atlases (and manifest) |
@@ -438,7 +440,7 @@ Project:
 | `World/Materials/MaterialBuilder.cs` | lightmap shader vs `StandardMaterial3D` |
 | `World/Materials/MetadataCatalogue.cs` | parse new JSON fields |
 | `World/Entities/{LightBuilder,EnvMapProbe}.cs` | T0 fallback; envmap sampling |
-| `tools/ogztool/patches/ogz-metadata.patch` | full one-shot export |
+| `tools/ogztool/patches/ogz-metadata.patch` | resolved metadata JSON (no binary sidecar) |
 
 ---
 
