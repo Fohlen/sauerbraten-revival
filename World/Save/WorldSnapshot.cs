@@ -19,15 +19,21 @@ namespace SauerbratenRevival.World.Save;
 /// **Versioned**: a leading format version + world scale lets an older build
 /// recognise a newer file and refuse (or skip) rather than misread it (§7.3).
 ///
-/// **No render data.** <see cref="CubeExt"/> (per-face surfaces/vertices) is *derived*
-/// from the face/edge data and rebuilt by the mesher, so it is not stored (§7.2:
-/// chunks/entities are views, not authority). <c>Merged</c>/<c>Visible</c> are stored
+/// **Baked render data is stored (v2).** <see cref="CubeExt"/> (per-face
+/// <see cref="SurfaceInfo"/> + <see cref="VertInfo"/>) carries the baked-lightmap
+/// link — which atlas each face layer samples and the per-vertex atlas UV + smooth
+/// normal. That data is **not derivable** from the face/edge data, so it is
+/// persisted (docs/lighting.md §3.2): v1 dropped it, which silently lost the
+/// lightmap link on any native save. <c>Merged</c>/<c>Visible</c> are stored
 /// because <see cref="OctaEdit.Remip"/> consults them.
-/// </summary>
+///
+/// v2 adds the optional per-cube surface section. It is a **breaking** change
+/// (v1 files lack the section and would decode wrong), so the version guard
+/// rejects v1.
 public sealed class WorldSnapshot
 {
     /// <summary>Bump when the octree/blob layout changes incompatibly.</summary>
-    public const uint FormatVersion = 1;
+    public const uint FormatVersion = 2;
 
     // Magic so a truncated/mismatched blob is rejected early.
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("SRWS"); // SauerbratenReVival World Snapshot
@@ -37,6 +43,7 @@ public sealed class WorldSnapshot
     private const byte FlagMaterial = 1 << 1;
     private const byte FlagMerged = 1 << 2;
     private const byte FlagVisible = 1 << 3;
+    private const byte FlagSurface = 1 << 4;
 
     /// <summary>World scale (worldsize = 1 &lt;&lt; Scale).</summary>
     public int Scale;
@@ -136,6 +143,29 @@ public sealed class WorldSnapshot
                 MixByte((byte)c.Material); MixByte((byte)(c.Material >> 8));
                 MixByte(c.Merged);
                 MixByte(c.Visible);
+                // Baked-lightmap link. Only faces with geometry are mixed, matching
+                // the engine oracle (OgzGeometry / engine/metadata.cpp): the engine
+                // allocates empty cubeexts during render setup whose zero-vertex
+                // faces are not map content.
+                if (c.Ext != null)
+                {
+                    for (int f = 0; f < 6; f++)
+                    {
+                        var surf = c.Ext.Surfaces[f];
+                        int total = surf.TotalVerts();
+                        if (total == 0) continue;
+                        MixByte(surf.Lmid0);
+                        MixByte(surf.Lmid1);
+                        MixByte(surf.NumVerts);
+                        for (int k = 0; k < total; k++)
+                        {
+                            var v = c.Ext.Verts[surf.Verts + k];
+                            MixByte((byte)v.U); MixByte((byte)(v.U >> 8));
+                            MixByte((byte)v.V); MixByte((byte)(v.V >> 8));
+                            MixByte((byte)v.Norm); MixByte((byte)(v.Norm >> 8));
+                        }
+                    }
+                }
             }
         }
 
@@ -165,6 +195,7 @@ public sealed class WorldSnapshot
         if (c.Material != Octa.MAT_AIR) flags |= FlagMaterial;
         if (c.Merged != 0) flags |= FlagMerged;
         if (c.Visible != 0) flags |= FlagVisible;
+        if (c.Ext != null) flags |= FlagSurface;
         w.Write(flags);
 
         // Faces are always written (12 edge bytes); the common empty/solid cube is
@@ -176,6 +207,7 @@ public sealed class WorldSnapshot
         if ((flags & FlagMaterial) != 0) w.Write(c.Material);
         if ((flags & FlagMerged) != 0) w.Write(c.Merged);
         if ((flags & FlagVisible) != 0) w.Write(c.Visible);
+        if ((flags & FlagSurface) != 0) WriteSurfaces(w, c.Ext!);
 
         if ((flags & FlagChildren) != 0) WriteCubes(w, c.Children!);
     }
@@ -191,7 +223,58 @@ public sealed class WorldSnapshot
         if ((flags & FlagMaterial) != 0) c.Material = r.ReadUInt16();
         if ((flags & FlagMerged) != 0) c.Merged = r.ReadByte();
         if ((flags & FlagVisible) != 0) c.Visible = r.ReadByte();
+        if ((flags & FlagSurface) != 0) c.Ext = ReadSurfaces(r);
         if ((flags & FlagChildren) != 0) c.Children = ReadCubes(r);
         return c;
+    }
+
+    // ---- per-cube surface section (baked-lightmap link) ----
+
+    // 6 surfaceinfo records (lmid0, lmid1, verts, numverts) + a ushort vertex count
+    // + that many vertinfo records (x,y,z,u,v,norm). `maxverts`/`tjoints` are
+    // runtime caches (recomputed/derived), so they are not stored.
+    private static void WriteSurfaces(BinaryWriter w, CubeExt ext)
+    {
+        for (int f = 0; f < 6; f++)
+        {
+            var s = ext.Surfaces[f];
+            w.Write(s.Lmid0);
+            w.Write(s.Lmid1);
+            w.Write(s.Verts);
+            w.Write(s.NumVerts);
+        }
+        w.Write((ushort)ext.Verts.Length);
+        foreach (var v in ext.Verts)
+        {
+            w.Write(v.X); w.Write(v.Y); w.Write(v.Z);
+            w.Write(v.U); w.Write(v.V); w.Write(v.Norm);
+        }
+    }
+
+    private static CubeExt ReadSurfaces(BinaryReader r)
+    {
+        var ext = new CubeExt();
+        for (int f = 0; f < 6; f++)
+        {
+            ext.Surfaces[f] = new SurfaceInfo
+            {
+                Lmid0 = r.ReadByte(),
+                Lmid1 = r.ReadByte(),
+                Verts = r.ReadByte(),
+                NumVerts = r.ReadByte(),
+            };
+        }
+        int count = r.ReadUInt16();
+        var verts = new VertInfo[count];
+        for (int i = 0; i < count; i++)
+        {
+            verts[i] = new VertInfo
+            {
+                X = r.ReadUInt16(), Y = r.ReadUInt16(), Z = r.ReadUInt16(),
+                U = r.ReadUInt16(), V = r.ReadUInt16(), Norm = r.ReadUInt16(),
+            };
+        }
+        ext.Verts = verts;
+        return ext;
     }
 }

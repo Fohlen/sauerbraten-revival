@@ -111,6 +111,59 @@ public class WorldSnapshotTest : GoTestBase
         TestAssert.Equal((short)5, back.Entities[0].Attr5, "attr5");
     }
 
+    [Test]
+    public void Church51LightmapLinkSurvivesRoundTrip()
+    {
+        // The baked-lightmap link (CubeExt) is NOT derivable from faces/edges, so it
+        // must be persisted (v2). Assert it survives directly — presence, per-face
+        // lmid/numverts, and every vertex's u/v/norm — rather than only via the
+        // aggregate geometry checksum, so a regression is pinpointed.
+        var octa = TestData.ReadMap().ToOcta();
+        var back = WorldSnapshot.Decode(WorldSnapshot.Capture(octa).Encode()).ToOcta();
+
+        int extCubes = 0, faces = 0, verts = 0, diff = -1;
+        void Walk(Cube[] a, Cube[] b)
+        {
+            for (int i = 0; i < a.Length; i++)
+            {
+                if (a[i].Children != null)
+                {
+                    Walk(a[i].Children!, b[i].Children!);
+                    continue;
+                }
+                TestAssert.Equal(a[i].Ext != null, b[i].Ext != null, $"ext presence at cube {i}");
+                if (a[i].Ext == null) continue;
+                extCubes++;
+                for (int f = 0; f < 6; f++)
+                {
+                    var sa = a[i].Ext!.Surfaces[f];
+                    var sb = b[i].Ext!.Surfaces[f];
+                    TestAssert.Equal(sa.Lmid0, sb.Lmid0, $"face {f} lmid0");
+                    TestAssert.Equal(sa.Lmid1, sb.Lmid1, $"face {f} lmid1");
+                    TestAssert.Equal(sa.NumVerts, sb.NumVerts, $"face {f} numverts");
+                    TestAssert.Equal(sa.Verts, sb.Verts, $"face {f} verts offset");
+                    int total = sa.TotalVerts();
+                    if (total > 0) faces++;
+                    for (int k = 0; k < total; k++)
+                    {
+                        var va = a[i].Ext!.Verts[sa.Verts + k];
+                        var vb = b[i].Ext!.Verts[sb.Verts + k];
+                        if (diff < 0 && (va.X != vb.X || va.Y != vb.Y || va.Z != vb.Z ||
+                                         va.U != vb.U || va.V != vb.V || va.Norm != vb.Norm))
+                            diff = k;
+                        verts++;
+                    }
+                }
+            }
+        }
+        Walk(octa.WorldRoot, back.WorldRoot);
+
+        TestAssert.True(extCubes > 0, "church51 has cubes with surface data");
+        TestAssert.True(faces > 0, "church51 has faces with lightmap vertices");
+        TestAssert.True(verts > 0, "church51 has lightmap vertices");
+        TestAssert.Equal(-1, diff, "no vertex differs (x/y/z/u/v/norm)");
+    }
+
     // ---- real map fidelity (like the OGZ golden tests) ----
 
     [Test]

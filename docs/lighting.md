@@ -228,22 +228,23 @@ mesher/shader side (§3.3–3.4).
 
 ### 3.2 Preserve the link in the native format (`World/Save/WorldSnapshot.cs`)
 
-**This is the substantive change.** `WorldSnapshot` currently documents "No render
-data — `CubeExt` … is derived … not stored" and `WriteCube` persists only
-faces/textures/material/merged/visible. But baked lightmaps are **not derivable**;
-`OgzConverter` discards `CubeExt` (which holds `lmid` + `vertinfo.u/v/norm`).
+**Done (v2).** Baked lightmaps are **not derivable** from faces/edges, so
+`WorldSnapshot` now persists `CubeExt` — it previously documented "no render data"
+and dropped it, silently losing the lightmap link on any native save.
 
-Add an optional per-cube surface section:
+- `FormatVersion` is **2** (v1 lacked the section and is rejected).
+- New per-cube `FlagSurface` (bit 4); when set, the cube carries
+  `SurfaceInfo[6]` (lmid0/lmid1/verts/numverts) + a `ushort` vertex count +
+  `VertInfo[]` (x,y,z,u,v,norm). `maxverts`/`tjoints` are runtime caches and are
+  not stored.
+- `Hash()` mixes the link — `lmid0`/`lmid1`/`numverts` and each vertex's
+  `u`/`v`/`norm` — for faces with `TotalVerts() > 0`, matching
+  `OgzGeometry`/`engine/metadata.cpp` (the engine's empty-cubeext allocation is
+  not map content).
 
-```csharp
-const byte FlagSurface = 1 << 4;   // baked lightmap / editor verts present
-// in WriteCube: if (c.Ext != null && HasLightmappedSurface(c.Ext)) flags |= FlagSurface;
-// then write CubeExt.Surfaces[6] + CubeExt.Verts[]
-```
-
-- Bump `FormatVersion` to 2.
-- Add the lightmap fields to `Hash()` (they are semantic map content).
-- Reserved `lmid` (0–5) and `LAYER_*` flags need explicit handling.
+Verified by `WorldSnapshotTest`: `Church51RoundTripsExactly` (geometry-and-link
+checksum survives) and `Church51LightmapLinkSurvivesRoundTrip` (per-face
+presence, lmid/numverts, and every vertex's x/y/z/u/v/norm).
 
 ### 3.3 Atlas assets (`World/Save/MapStore.cs`, `Level.tscn`)
 
