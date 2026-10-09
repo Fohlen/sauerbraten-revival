@@ -29,7 +29,7 @@ public sealed class CatalogueVSlot
 }
 
 /// <summary>
-/// The engine-exported metadata catalogue (see tools/refharness/patches/ogz-metadata.patch):
+/// The engine-exported metadata catalogue (see tools/ogztool/patches/ogz-metadata.patch):
 /// resolved slot/vslot data for one map. Only what the map uses is present.
 /// </summary>
 public sealed class MetadataCatalogue

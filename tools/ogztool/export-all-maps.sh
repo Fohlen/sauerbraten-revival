@@ -5,12 +5,12 @@
 # once (SAUER_METADATA + SAUER_METADATA_EXIT) and writes
 # metadata-catalogue/<map>.json, giving the catalogue one entry per map.
 #
-# The client is built by tools/refharness/build_instrumented.sh; this script only
-# orchestrates the runs. It needs a display + OpenGL context (the reference client
-# is not headless), ~5 s per map.
+# The client is built by tools/ogztool/build.sh; this script only orchestrates the
+# runs. It needs a display + OpenGL context (the reference client is not headless),
+# ~5 s per map.
 #
 # Usage:
-#   tools/metadata-catalogue/export-all-maps.sh [options] [map ...]
+#   tools/ogztool/export-all-maps.sh [options] [map ...]
 #
 # Options:
 #   -n, --dry-run     list the maps that would be exported, then exit
@@ -22,7 +22,7 @@
 # Environment:
 #   SAUER_REF   reference dump root (default: ~/Downloads/sauerbraten-code-r6889)
 #   SAUER_HOME  throwaway client home (default: /tmp/sauer-meta-home)
-#   CLIENT      instrumented client (default: refharness/instrumented/build/sauer_client)
+#   CLIENT      ogz tooling client (default: tools/ogztool/out/sauer_client)
 #
 # With no map arguments every *.ogz under $SAUER_REF/packages is exported.
 # Map names may be given bare (`church51`) or package-qualified (`base/church51`).
@@ -32,7 +32,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 REF="${SAUER_REF:-$HOME/Downloads/sauerbraten-code-r6889}"
 HOME_DIR="${SAUER_HOME:-/tmp/sauer-meta-home}"
-CLIENT="${CLIENT:-$HERE/../refharness/instrumented/build/sauer_client}"
+CLIENT="${CLIENT:-$HERE/out/sauer_client}"
 OUT="$REPO/metadata-catalogue"
 
 DRY_RUN=0
@@ -56,7 +56,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -d "$REF/packages" ] || { echo "ERROR: reference dump not found at '$REF' (set SAUER_REF)" >&2; exit 1; }
-[ -x "$CLIENT" ]       || { echo "ERROR: instrumented client missing at '$CLIENT'; run tools/refharness/build_instrumented.sh" >&2; exit 1; }
+[ -x "$CLIENT" ]       || { echo "ERROR: ogz tooling client missing at '$CLIENT'; run tools/ogztool/build.sh" >&2; exit 1; }
 
 # Resolve the map list to package-qualified names (relative to packages/, no .ogz).
 discover() {

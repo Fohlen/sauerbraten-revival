@@ -57,7 +57,8 @@ Work proceeds in **stages**.
 | `metadata-catalogue/` | Engine-exported ground truth for imported maps |
 | `tools/model-import/` | Converts original models to glTF + a manifest (git-ignored `assets/models/`) |
 | `tools/texture-import/` | Imports original textures to Godot Resources (git-ignored `assets/textures/`) |
-| `tools/refharness/` | A1 harness, A2 instrumented client, and [reference patches](tools/refharness/patches/README.md) |
+| `tools/refharness/` | A1/A2 movement harness, instrumented client, and [reference patches](tools/refharness/patches/README.md) |
+| `tools/ogztool/` | OGZ [import pipeline](tools/ogztool/README.md): metadata export + pre-v32 → v33 conversion |
 | `SauerbratenRevival.csproj` | C# project (Godot .NET) |
 
 ## Running the game
@@ -156,5 +157,6 @@ kept as the pristine zip archive
 `/Users/fohlen/Downloads/sauerbraten-code-r6889.zip` (extracted alongside it for
 use). It is not part of this repo and is **never modified** — patches are applied
 to a copy at build time. See
-[`tools/refharness/patches/README.md`](tools/refharness/patches/README.md) for the
-apply/rollback workflow.
+[`tools/refharness/patches/README.md`](tools/refharness/patches/README.md)
+(movement harness) and [`tools/ogztool/README.md`](tools/ogztool/README.md)
+(OGZ import pipeline) for the apply/rollback workflow.

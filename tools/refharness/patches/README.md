@@ -24,12 +24,15 @@ The archive's internal prefix is `sauerbraten-code-r6889/`.
 | `a2d-weapon-events.patch` | `src/fpsgame/{weapon.cpp,game.h}` | Logs weapon recoil (`kick`) and impact push (`hitpush`, also covers being shot) to `*.events`, so A3 can resync at rocket jumps. Applied **after** `a2c-input-replay.patch`; inert unless `SAUER_TRACE` is set. |
 | `a2e-move-trace.patch` | `src/engine/physics.cpp` | Adds `SAUER_MOVETRACE=<path>`: dumps the local player's per-substep `move()`/`trystepup()` decision chain (`collide` wall, stepup branch, `findfloor`, smoothdir/scale, clipplane hits) for diffing against the port's `OctaPhysics.MoveTrace`. Applied **after** `a2c-input-replay.patch`; inert unless `SAUER_MOVETRACE` is set. |
 | `macos-arm64.patch` | `src/Makefile` | Native arm64 build against Homebrew SDL2 (the Makefile otherwise forces x86_64, which can't run here without Rosetta). |
-| `ogz-metadata.patch` | `src/engine/{engine.h,sound.cpp,worldio.cpp,metadata.cpp}`, `src/Makefile` | Adds the `SAUER_METADATA` map-metadata exporter via a new `engine/metadata.cpp`: on map load it writes resolved slots/vslots/mapmodels/entities/sounds as JSON, filtered to what the map actually uses (geometry-referenced slots/vslots, entity-referenced mapmodels/sounds). Setting `SAUER_METADATA_EXIT` additionally quits the client right after the export, so a driver can batch every map. `metadata.o` is compiled with `-fno-finite-math-only` so non-finite vslot values are serialised as `null` rather than the invalid JSON `inf`. Inert unless `SAUER_METADATA` is set. |
+
+> The OGZ metadata/conversion patches (`ogz-metadata*.patch`) and the metadata
+> batch driver live in [`tools/ogztool`](../ogztool), a separate tool with its own
+> patch set and build — they are unrelated to the movement harness. The
+> `macos-arm64.patch` above is intentionally duplicated there so each tool builds
+> standalone.
 
 All patches are `-p1` and are meant to be applied **from within `src/`** (paths
-are `engine/physics.cpp`, `Makefile`). Most touch different files;
-`macos-arm64.patch` and `ogz-metadata.patch` both edit `Makefile` in disjoint
-regions, so any order works. They are made against **r6889 exactly**; a
+are `engine/physics.cpp`, `Makefile`). They are made against **r6889 exactly**; a
 different revision may need them regenerated.
 
 ## Apply (preferred: copy-based, dump untouched)
@@ -52,45 +55,12 @@ DST=/tmp/sauer-src
 rm -rf "$DST" && cp -R "$SRC" "$DST" && cd "$DST"
 patch -p1 < /path/to/repo/tools/refharness/patches/a2-trace.patch
 patch -p1 < /path/to/repo/tools/refharness/patches/macos-arm64.patch
-patch -p1 < /path/to/repo/tools/refharness/patches/ogz-metadata.patch
 make
 ```
 
-## Running the metadata export
-
-The single client built above carries all patches. `SAUER_TRACE` enables the A2
-movement log (see [`../README.md`](../README.md)), and `SAUER_METADATA`
-enables the metadata export below; both are inert when unset.
-
-`ogz-metadata.patch` is inert unless `SAUER_METADATA` is set to an output file
-path. Build the patched client, then load a map (from the in-game menu, or with
-`-l<map>` / the console `map` command); the JSON is written when the map finishes
-loading. Set `SAUER_METADATA_EXIT` to make the client quit immediately after the
-export instead of staying open. The client must run from the reference dump root
-so it can find `data/`, `packages/` and the map `.cfg`:
-
-```sh
-tools/refharness/build_instrumented.sh   # builds the patched client
-
-cd /Users/fohlen/Downloads/sauerbraten-code-r6889
-SAUER_METADATA=/tmp/church51.json SAUER_METADATA_EXIT=1 \
-  /Users/fohlen/GodotProjects/sauerbraten-revival/tools/refharness/instrumented/build/sauer_client \
-  -q/tmp/sauer-meta-home -lbase/church51
-
-python3 -m json.tool /tmp/church51.json | head
-```
-
-To export **every** map, use the batch driver
-[`tools/metadata-catalogue/export-all-maps.sh`](../../metadata-catalogue/README.md),
-which loops the client over all `*.ogz` and writes one JSON per map into
-[`metadata-catalogue/`](../../../metadata-catalogue).
-
-`-lbase/church51` loads `packages/base/church51.ogz`; `-q` points the client at a
-throwaway home dir so it does not touch `~/.sauerbraten`. Running the client
-needs a display and a working OpenGL context (it will not run headless).
-
-The output is consumed by the offline importer; see
-[`docs/ogz-import.md`](../../../docs/ogz-import.md).
+The client built here carries the A1/A2 movement tooling only. For the OGZ
+metadata export and old-map conversion, build [`tools/ogztool`](../ogztool)
+instead (a separate patch set and build dir).
 
 ## Roll back
 
@@ -107,7 +77,6 @@ The output is consumed by the offline importer; see
    cd /Users/fohlen/Downloads/sauerbraten-code-r6889/src
    patch -R -p1 < /path/to/repo/tools/refharness/patches/a2-trace.patch
    patch -R -p1 < /path/to/repo/tools/refharness/patches/macos-arm64.patch
-   patch -R -p1 < /path/to/repo/tools/refharness/patches/ogz-metadata.patch
    ```
 
 3. **Nuclear reset from the zip** — restore just the patched files:
@@ -117,12 +86,9 @@ The output is consumed by the offline importer; see
    unzip -o sauerbraten-code-r6889.zip \
      "sauerbraten-code-r6889/src/engine/physics.cpp" \
      "sauerbraten-code-r6889/src/engine/engine.h" \
-     "sauerbraten-code-r6889/src/engine/sound.cpp" \
      "sauerbraten-code-r6889/src/engine/worldio.cpp" \
      "sauerbraten-code-r6889/src/Makefile" \
      -d /Users/fohlen/Downloads
-   # ogz-metadata.patch also adds a new file; remove it explicitly:
-   rm -f /Users/fohlen/Downloads/sauerbraten-code-r6889/src/engine/metadata.cpp
    ```
 
    …or re-extract the whole thing (≈1 GB):

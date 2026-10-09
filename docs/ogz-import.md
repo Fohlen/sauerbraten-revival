@@ -126,7 +126,7 @@ A small patch to the original Sauerbraten client that, on map load, writes:
 ```
 
 The concrete implementation is
-[`tools/refharness/patches/ogz-metadata.patch`](../tools/refharness/patches/ogz-metadata.patch).
+[`tools/ogztool/patches/ogz-metadata.patch`](../tools/ogztool/patches/ogz-metadata.patch).
 It adds `engine/metadata.cpp` and an `exportmapmetadata()` call at the end of
 `load_world()`, after the map config has been executed — so slot, mapmodel and
 sound indices are fully resolved. It emits **only** what the map actually uses:
@@ -137,18 +137,30 @@ engine's `slots` and `mapmodels` tables are global registries populated by every
 exec'd `package.cfg` / `default_map_models.cfg`, not by the map. When the
 `SAUER_METADATA` environment variable points at an output file, loading a map
 writes the JSON there; otherwise the patch is completely inert. See
-[`tools/refharness/patches/README.md`](../tools/refharness/patches/README.md) for
-how to build the patched client.
+[`tools/ogztool/README.md`](../tools/ogztool/README.md) for how to build the
+patched client.
 
 This patch is applied once to a copy of the original source, the modified client
 is run on each map, and the JSON output is committed to the repository. The
 whole map set is exported in one shot by
-[`tools/metadata-catalogue/export-all-maps.sh`](../tools/metadata-catalogue/README.md),
+[`tools/ogztool/export-all-maps.sh`](../tools/ogztool/README.md),
 which loops the client over every `*.ogz` and writes one JSON entry per map into
 [`metadata-catalogue/`](../metadata-catalogue/README.md).
 
 **No ongoing maintenance** — the original game is frozen; we generate metadata
 once for all maps we want to import.
+
+### Old-format maps (pre-v32)
+
+The importer targets **v32+**; the legacy `surfacecompat` format is deliberately
+not ported. The 58 maps in the reference dump that predate v32 are normalised
+offline by the same tool: [`tools/ogztool/convert-all-maps.sh`](../tools/ogztool/README.md)
+loads each old map, **recalculates** its lighting (regenerating the modern
+`surfaceinfo`/`vertinfo` link and a fresh, self-consistent atlas set), and
+re-saves it as v33 into `assets/converted/`. The reference engine owns the whole legacy
+decode ladder, so no such code lives in the revival runtime. The other 277 maps
+are already v32+, including the 9 v32 maps (v32→v33 differs only in the cube
+material field width: byte → ushort).
 
 ---
 

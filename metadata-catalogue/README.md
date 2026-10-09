@@ -2,7 +2,7 @@
 
 Ground-truth metadata for the maps we import into Sauerbraten Revival, exported
 from the **original** Sauerbraten client (patched with
-[`tools/refharness/patches/ogz-metadata.patch`](../tools/refharness/patches/ogz-metadata.patch)).
+[`tools/ogztool/patches/ogz-metadata.patch`](../tools/ogztool/patches/ogz-metadata.patch)).
 
 Only the **JSON** is committed. The legacy `.ogz` files are large binary game
 assets and stay in the read-only reference dump; the OGZ reader tests read them
@@ -24,25 +24,25 @@ uses (geometry-referenced textures, entity-referenced mapmodels and sounds). See
 
 ## Regenerating
 
-The batch exporter runs the instrumented client once per map and writes the JSON
+The batch exporter runs the ogz tooling client once per map and writes the JSON
 directly here. Build the client once, then:
 
 ```sh
-tools/refharness/build_instrumented.sh          # once
-tools/metadata-catalogue/export-all-maps.sh      # all maps not yet exported
-tools/metadata-catalogue/export-all-maps.sh -f church51 bt_falls  # refresh some
+tools/ogztool/build.sh                       # once
+tools/ogztool/export-all-maps.sh             # all maps not yet exported
+tools/ogztool/export-all-maps.sh -f church51 bt_falls  # refresh some
 ```
 
 Existing entries are skipped unless `--force` is passed. See
-[`tools/metadata-catalogue/README.md`](../tools/metadata-catalogue/README.md) for
-options and environment.
+[`tools/ogztool/README.md`](../tools/ogztool/README.md) for options and
+environment.
 
 ### Regenerating one entry by hand
 
 ```sh
 cd /path/to/sauerbraten-code-r6889
 SAUER_METADATA=/tmp/church51.json SAUER_METADATA_EXIT=1 \
-  /abs/path/to/tools/refharness/instrumented/build/sauer_client \
+  /abs/path/to/tools/ogztool/out/sauer_client \
   -q/tmp/sauer-meta-home -lbase/church51
 
 cp /tmp/church51.json /abs/path/to/metadata-catalogue/church51.json

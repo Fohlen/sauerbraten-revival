@@ -20,7 +20,7 @@ public sealed class OgzGeometryStats
 /// Computes the same geometry summary the <c>ogz-metadata.patch</c> exporter
 /// writes, so a parsed map can be asserted against the engine's ground truth.
 /// The checksum is FNV-1a/64 over the canonical cube fields; see
-/// tools/refharness/patches/ogz-metadata.patch (engine/metadata.cpp).
+/// tools/ogztool/patches/ogz-metadata.patch (engine/metadata.cpp).
 /// </summary>
 public static class OgzGeometry
 {

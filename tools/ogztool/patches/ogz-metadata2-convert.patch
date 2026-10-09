@@ -1,0 +1,29 @@
+--- a/engine/worldio.cpp
++++ b/engine/worldio.cpp
+@@ -1275,6 +1275,26 @@
+ 
+ #ifndef STANDALONE
+     exportmapmetadata(game::getclientmap());
++
++    // One-time offline conversion (sauerbraten-revival): load an old-format map,
++    // RECALCULATE its lighting (regenerating the modern surfaceinfo/vertinfo link
++    // and a fresh atlas set from the loaded geometry), and re-save it at the
++    // current MAPVERSION. This is how pre-v32 maps are normalised to v33: the
++    // reference engine already owns the whole legacy decode ladder, so the
++    // revival runtime only reads v32+ instead of porting `convertoldsurfaces`.
++    //
++    // calclight() is mandatory, not optional: it is the step that produces a
++    // self-consistent surface<->atlas pairing. Saving a converted map without it
++    // would emit stale/garbage lightmap links.
++    if(getenv("SAUER_CONVERT_SAVE"))
++    {
++        extern void calclight(int *quality);
++        extern bool save_world(const char *mname, bool nolms);
++        int quality = 0; // setlightmapquality(0): keep the loaded light settings
++        calclight(&quality);
++        save_world(game::getclientmap(), false);
++        conoutf(CON_ECHO, "converted and saved map %s", game::getclientmap());
++    }
+ 
+     // Batch tooling: exit as soon as the metadata for this map has been
+     // written, so a driver can loop over every map without a display target.

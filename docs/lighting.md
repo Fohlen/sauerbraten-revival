@@ -273,7 +273,7 @@ The metadata sweep runs the original engine once per map (~25 min for the whole
 set); the cost is startup + `load_world`, not JSON size. Capture **all resolved
 state now** so we never re-run.
 
-The engine patch is `tools/refharness/patches/ogz-metadata.patch` (adds
+The engine patch is `tools/ogztool/patches/ogz-metadata.patch` (adds
 `engine/metadata.cpp` + an `exportmapmetadata()` call at the end of `load_world`).
 It runs after `startmap()`, so map `.cfg` overrides are resolved.
 
@@ -438,7 +438,7 @@ Project:
 | `World/Materials/MaterialBuilder.cs` | lightmap shader vs `StandardMaterial3D` |
 | `World/Materials/MetadataCatalogue.cs` | parse new JSON fields |
 | `World/Entities/{LightBuilder,EnvMapProbe}.cs` | T0 fallback; envmap sampling |
-| `tools/refharness/patches/ogz-metadata.patch` | full one-shot export |
+| `tools/ogztool/patches/ogz-metadata.patch` | full one-shot export |
 
 ---
 

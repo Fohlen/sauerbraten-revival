@@ -24,7 +24,8 @@ Run tests with `./run-tests.sh` (builds, then Godot `--headless --run-tests`).
 
 ## Reference engine (optional — only to regenerate traces/metadata)
 
-Only needed to run the A1/A2 harness or the `SAUER_METADATA` exporter; the game
+Only needed to run the A1/A2 harness (`tools/refharness`) or the OGZ tooling
+(`tools/ogztool`, the `SAUER_METADATA` exporter and old-map converter); the game
 and its tests otherwise read the committed `metadata-catalogue/` and the
 read-only dump.
 
@@ -32,21 +33,24 @@ read-only dump.
 | --- | --- |
 | **C++ toolchain** (`clang`, `make`) | Builds the patched reference client. |
 | **SDL2**, **SDL2_image**, **SDL2_mixer** | Reference client libraries (Homebrew: `sdl2-compat`, `sdl2_image`, `sdl2_mixer`). |
-| **patch** | Applies `tools/refharness/patches/*.patch` to a copy of the source. |
+| **patch** | Applies `tools/*/patches/*.patch` to a copy of the source. |
 | **unzip** | Restores the pristine reference source from the zip. |
 
 ```sh
 brew install assimp uv sdl2 sdl2_image sdl2_mixer
-# then: tools/refharness/build_instrumented.sh
+# then, as needed:
+tools/refharness/build_instrumented.sh   # A1/A2 movement tooling
+tools/ogztool/build.sh                    # OGZ metadata + old-map conversion
 ```
 
 ## Environment variables
 
 | Variable | Used by | Default |
 | --- | --- | --- |
-| `SAUER_REF` | Tests, viewer, import tools, refharness | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
+| `SAUER_REF` | Tests, viewer, import tools, refharness, ogztool | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
 | `GODOT` | `run-tests.sh` | `/Applications/Godot_mono.app/Contents/MacOS/Godot` |
-| `SAUER_TRACE` / `SAUER_METADATA` / `SAUER_METADATA_EXIT` | Instrumented reference client | unset (features inert) |
+| `SAUER_TRACE` | A1/A2 instrumented reference client (refharness) | unset (features inert) |
+| `SAUER_METADATA` / `SAUER_METADATA_EXIT` / `SAUER_CONVERT_SAVE` | OGZ tooling client (ogztool) | unset (features inert) |
 
 ## Recreating an ad-hoc analysis environment
 

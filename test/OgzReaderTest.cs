@@ -10,7 +10,7 @@ namespace SauerbratenRevival.Tests;
 /// <summary>
 /// Parses a real map from the metadata catalogue and asserts the reader against
 /// the engine's exported ground truth. The catalogue is produced by
-/// tools/refharness/patches/ogz-metadata.patch.
+/// tools/ogztool/patches/ogz-metadata.patch.
 /// </summary>
 public class OgzReaderTest : GoTestBase
 {
