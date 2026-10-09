@@ -42,6 +42,28 @@ public partial class MapPlayer : Node3D
     /// <summary>Spawn eye offset above the spawn point's feet (ents.h <c>eyeheight</c>).</summary>
     public const float EyeHeight = 14.0f;
 
+    /// <summary>
+    /// Third-person camera distance behind the eye (engine <c>thirdpersondistance</c>, rendergl.cpp).
+    /// <c>0</c> disables the offset.
+    /// </summary>
+    [Export] public float ThirdPersonDistance { get; set; } = 0.0f;
+
+    /// <summary>
+    /// Third-person vertical offset (engine <c>thirdpersonup</c>, rendergl.cpp). Negative
+    /// looks down at the player; <c>0</c> keeps the eye height while pulling the camera in.
+    /// </summary>
+    [Export] public float ThirdPersonUp { get; set; } = 0.0f;
+
+    /// <summary>True while the camera is detached from the player's eye (engine <c>isthirdperson()</c>).</summary>
+    public bool ThirdPerson { get; private set; }
+
+    /// <summary>Toggle the detached third-person camera (engine <c>thirdperson</c> bind).</summary>
+    public void ToggleThirdPerson()
+    {
+        ThirdPerson = !ThirdPerson;
+        SyncCamera();
+    }
+
     /// <summary>The simulated entity (Sauerbraten Z-up). Read by tests/diagnostics.</summary>
     public PhysEnt Entity { get; } = new();
 
@@ -146,6 +168,9 @@ public partial class MapPlayer : Node3D
         // Movement.ModifyVelocity).
         if (Input.IsActionJustPressed("spectate")) ToggleFloat();
 
+        // Toggle the detached third-person camera (engine `thirdperson`, rendergl.cpp).
+        if (Input.IsActionJustPressed("third_person")) ToggleThirdPerson();
+
         Advance(delta);
     }
 
@@ -182,6 +207,36 @@ public partial class MapPlayer : Node3D
 
     /// <summary>True while the player is in the spectator/edit floating state.</summary>
     public bool Floating => Entity.State == PhysEnt.CsEditing || Entity.State == PhysEnt.CsSpectator;
+
+    /// <summary>
+    /// Place the nested <c>Camera3D</c> for the current view mode. In first person it sits
+    /// at the eye (the node origin); in third person it is offset <b>backwards</b> along the
+    /// view direction and <b>up</b> from the eye, matching the engine's detached camera
+    /// (rendergl.cpp <c>recomputecamera</c>: <c>camera1->o += -dir*dist + up*up</c>). This is
+    /// a pure camera offset — the player node stays at the eye and physics is untouched.
+    /// </summary>
+    private void SyncCamera()
+    {
+        if (GetNodeOrNull<Camera3D>("Camera3D") is not { } cam) return;
+
+        // Hide the placeholder body while looking through it (first person) so it does
+        // not clip the near plane; show it once the camera is pulled back.
+        if (GetNodeOrNull<MeshInstance3D>("Body") is { } body) body.Visible = ThirdPerson;
+
+        if (!ThirdPerson)
+        {
+            cam.Position = Vector3.Zero;
+            return;
+        }
+
+        // Backwards = opposite the look direction. The player node's basis already
+        // faces the view (see SyncTransform), so +Z is backwards and the camera keeps
+        // an identity local rotation to look the same way it does in first person.
+        Vector3 back = Basis.Z;
+        Vector3 up = new(0, 0, 1); // Sauerbraten world is Z-up
+        cam.Position = back * ThirdPersonDistance + up * ThirdPersonUp;
+        cam.Basis = Basis.Identity;
+    }
 
     /// <summary>Set the view angles directly (tests/diagnostics).</summary>
     public void SetView(float yawDegrees, float pitchDegrees)
@@ -231,5 +286,6 @@ public partial class MapPlayer : Node3D
         Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, Pitch, 1, 0);
         if (forward.LengthSquared() > 1e-6f)
             Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1));
+        SyncCamera();
     }
 }

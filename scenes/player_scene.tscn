@@ -28,6 +28,7 @@ environment = SubResource("Environment_env")
 
 [node name="Player" type="Node3D" parent="."]
 script = ExtResource("2_player")
+ThirdPersonDistance = 20.0
 
 [node name="Body" type="MeshInstance3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)

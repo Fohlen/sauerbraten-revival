@@ -294,6 +294,11 @@ Remaining:
 
 ## 5. Combat & spawns
 
+- [~] Player model + view — third-person camera first (inspect models).
+      - [x] Third-person camera toggle (`MapPlayer`, `third_person` bind, engine
+            `thirdpersondistance`/`thirdpersonup`; `test/MapPlayerTest.cs`).
+      - [ ] Load the player body models (`mrfixit` and friends) and render them.
+      - [ ] First-person view model (hudguns).
 - [ ] Hitscan weapons (insta rifle; effic loadout).
 - [ ] Flags and capture logic (CTF).
 - [ ] Scoring, respawns, spawn selection.

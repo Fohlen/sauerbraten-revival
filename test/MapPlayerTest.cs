@@ -187,4 +187,35 @@ public class MapPlayerTest : GoTestBase
         world.QueueFree();
         TestAssert.True((actual - expectedGodot).Length() < 1e-3f, "camera forward matches vecfromyawpitch");
     }
+
+    [Test]
+    public void ThirdPersonCameraSitsBehindAndAboveEye()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        player.SetView(0f, 0f);
+
+        var camera = new Camera3D { Name = "Camera3D" };
+        player.AddChild(camera);
+        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0) }; // MapWorld Z-up -> Y-up
+        world.AddChild(player);
+        TestScene.AddChild(world); // a live tree lets the node transforms resolve
+
+        // First person: camera at the eye, body hidden.
+        TestAssert.Equal(Vector3.Zero, camera.Position, "first-person camera at eye");
+
+        // Third person: pull back 20 units along -forward (behind) and up 10 (engine
+        // thirdpersondistance=20 / thirdpersonup). At yaw 0 forward is +Y (Sauer), so
+        // the local offset in the Z-up player frame is (0, -20, 10).
+        player.ThirdPersonDistance = 20f;
+        player.ThirdPersonUp = 10f;
+        player.ToggleThirdPerson();
+        player.SetView(0f, 0f); // re-sync the camera
+
+        Vector3 off = camera.Position;
+        GD.Print($"[player] third-person offset={off}");
+        world.QueueFree();
+        TestAssert.True(Mathf.Abs(off.X) < 1e-3f && Mathf.Abs(off.Y + 20f) < 1e-3f && Mathf.Abs(off.Z - 10f) < 1e-3f,
+            $"camera behind (-Y) and above (+Z) the eye (got {off})");
+    }
 }
