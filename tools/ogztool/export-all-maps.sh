@@ -20,13 +20,15 @@
 #   -n, --dry-run     list the maps that would be exported, then exit
 #   -f, --force       re-export maps whose JSON already exists
 #   -l, --limit N     export at most N maps this run (batch size; 0 = all)
+#   -m, --test-maps   export only the maps the test suite uses (see TEST_MAPS)
 #   -t SECONDS        per-map timeout (default 120)
 #   -o DIR            output directory (default <repo>/metadata-catalogue)
 #   -h, --help        show this help
 #
 # Runs are resumable: every map whose JSON already exists is skipped, so run
 # the script repeatedly with -l to export in batches without blocking the
-# machine for the full ~30 min sweep.
+# machine for the full ~30 min sweep. Use -m/--test-maps to refresh only the
+# handful of maps the test suite reads (the ones kept committed here).
 #
 # Environment:
 #   SAUER_REF   reference dump root (default: ~/Downloads/sauerbraten-code-r6889)
@@ -45,12 +47,18 @@ CLIENT="${CLIENT:-$HERE/out/sauer_client}"
 OUT="$REPO/metadata-catalogue"
 CONVERTED="$REPO/assets/packages"
 
+# The maps the test suite reads via TestData (test/*.cs). Only these are kept
+# committed in metadata-catalogue/ (see its README); a full catalogue is a plain
+# `export-all-maps.sh` run. Keep this list in sync with the tests that call
+# TestData.ReadMap("<map>") / TestData.CataloguePathFor("<map>").
+TEST_MAPS=(church51 bt_falls crnsp1 earthstation lost)
+
 DRY_RUN=0
 FORCE=0
 TIMEOUT=120
 LIMIT=0
 
-usage() { sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 MAPS=()
 while [ $# -gt 0 ]; do
@@ -58,6 +66,7 @@ while [ $# -gt 0 ]; do
         -n|--dry-run) DRY_RUN=1 ;;
         -f|--force)   FORCE=1 ;;
         -l|--limit)   LIMIT="$2"; shift ;;
+        -m|--test-maps) MAPS+=("${TEST_MAPS[@]}") ;;
         -t)           TIMEOUT="$2"; shift ;;
         -o)           OUT="$2"; shift ;;
         -h|--help)    usage 0 ;;

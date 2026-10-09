@@ -62,6 +62,13 @@ tools/ogztool/export-all-maps.sh -l 50      # export the next 50, then return
 # ... re-run until "nothing to do" ...
 ```
 
+**Refresh only the test set.** The committed catalogue holds just the maps the
+tests read (`-m/--test-maps`):
+
+```sh
+tools/ogztool/export-all-maps.sh -m -f       # re-export those 5 maps
+```
+
 **Converted maps win.** If `assets/packages/<map>.ogz` exists, the exporter stages
 it into the client's home so the JSON is produced from the *converted* map, not
 the dump copy. This is required for correctness, not a nicety: `calclight` remips

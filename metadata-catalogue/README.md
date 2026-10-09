@@ -37,10 +37,12 @@ directly here. Build the client once, then:
 
 ```sh
 tools/ogztool/build.sh                       # once
-tools/ogztool/export-all-maps.sh             # all maps not yet exported
-tools/ogztool/export-all-maps.sh -f church51 bt_falls  # refresh some
+tools/ogztool/export-all-maps.sh -m -f       # refresh the committed test set
+tools/ogztool/export-all-maps.sh -f church51 bt_falls  # refresh specific maps
+tools/ogztool/export-all-maps.sh             # full catalogue (~30 min, batched)
 ```
 
+`-m/--test-maps` exports exactly the maps listed above (the ones tests read).
 Existing entries are skipped unless `--force` is passed. See
 [`tools/ogztool/README.md`](../tools/ogztool/README.md) for options and
 environment.
