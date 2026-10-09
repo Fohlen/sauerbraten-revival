@@ -33,10 +33,13 @@ public static class MeshFace
                             Vector2 uv2_0 = default, Vector2 uv2_1 = default,
                             Vector2 uv2_2 = default, Vector2 uv2_3 = default)
     {
-        Vector3 axis = AxisNormal(orient);
-        Vector3 cross = (p1 - p0).Cross(p2 - p0);
-        Vector3 normal = cross.LengthSquared() < 1e-9f ? axis : cross.Normalized();
-        if (normal.Dot(axis) < 0) normal = -normal; // outward, regardless of input order
+        // The engine never derives a face normal from the polygon's corners; for a
+        // face with no stored/envmap normal it uses the flat axis normal
+        // (octarender.cpp: bvec(128,128,255) == the +axis normal). Using the
+        // geometric cross-product instead makes each face's normal tilt slightly
+        // (and differ from its coplanar neighbours when the corners are off-plane),
+        // which shimmers at grazing angles as the per-face coverage changes.
+        Vector3 normal = AxisNormal(orient);
 
         builder.AddQuad(key, p0, p1, p2, p3, uv0, uv1, uv2, uv3, normal,
             Reverse(p0, p1, p2, normal), Reverse(p0, p2, p3, normal),

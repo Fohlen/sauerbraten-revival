@@ -49,11 +49,11 @@ public class OctaMeshTest : GoTestBase
 
         // Regression baseline for the current geometry-only mesher; update when the
         // mesher gains fidelity (visibletris, merges, sky, material surfaces, ...).
-        // 232 surfaces (was 121 before lightmap keying): surfaces are grouped by
-        // (texture, lmid), so a material that samples several atlases splits into
-        // one surface per atlas. Triangle count is unchanged.
-        TestAssert.Equal(232, surfaces, "surface count baseline");
-        TestAssert.Equal(686392L, triangles, "triangle count baseline");
+        // 229 surfaces (was 232): surfaces are grouped by (texture, lmid), and the
+        // engine-faithful face cull (touchingface + all-solid edges, see
+        // FaceVisible) now hides back-to-back coplanar faces it previously kept.
+        TestAssert.Equal(229, surfaces, "surface count baseline");
+        TestAssert.Equal(619448L, triangles, "triangle count baseline");
     }
 
     [Test]

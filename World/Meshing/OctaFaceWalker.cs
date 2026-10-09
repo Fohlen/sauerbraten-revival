@@ -1,5 +1,6 @@
 using System;
 using Godot;
+using SauerbratenRevival.World.Physics;
 
 namespace SauerbratenRevival.World.Meshing;
 
@@ -100,10 +101,12 @@ public static class OctaFaceWalker
     }
 
     /// <summary>
-    /// Conservative cull: hide a face only when its neighbour is a solid cube (or,
-    /// with <paramref name="hideSameMaterial"/>, the same material volume) at least
-    /// as large as this face. Anything finer or empty is drawn, which can overdraw
-    /// but never leaves a hole.
+    /// Conservative cull: hide a face when its neighbour occludes it. A neighbour
+    /// entirely solid, or solid across the shared face (engine
+    /// <c>visibletris</c> - "touchingface" with all-solid edges), hides the face,
+    /// as does (with <paramref name="hideSameMaterial"/>) the same material volume.
+    /// The neighbour leaf must be at least as large as this face; anything finer or
+    /// empty is drawn, which can overdraw but never leaves a hole.
     /// </summary>
     public static bool FaceVisible(Octa octa, Cube c, int orient, Vector3I co, int size, bool hideSameMaterial)
     {
@@ -119,7 +122,14 @@ public static class OctaFaceWalker
 
         var nb = octa.LeafCube(centre, out int nsize);
         if (nb == null) return true;
-        if (nb.IsEntirelySolid() && nsize >= size) return false;
+        // octa.cpp visibletris: occluded when entirely solid, OR when the neighbour
+        // is solid across the shared face (touchingface + all-solid edges) even if
+        // not wholly solid. Omitting the second clause draws coplanar faces the
+        // engine culls.
+        int opp = orient ^ 1;
+        if (nsize >= size &&
+            (nb.IsEntirelySolid() || (nb.TouchingFace(opp) && OctaVisible.FaceEdges(nb, opp) == Octa.F_SOLID)))
+            return false;
         if (hideSameMaterial && (nb.Material & Octa.MATF_VOLUME) == (c.Material & Octa.MATF_VOLUME) && nsize >= size)
             return false;
         return true;
