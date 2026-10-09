@@ -49,8 +49,17 @@ texture/vslot/mapmodel/entity/sound data the importer needs).
 
 ```sh
 tools/ogztool/build.sh
-tools/ogztool/export-all-maps.sh            # all maps
+tools/ogztool/export-all-maps.sh            # all maps (~30 min)
 tools/ogztool/export-all-maps.sh church51   # one map
+```
+
+**Batched & resumable.** A full sweep pins the machine for ~30 min. Pass
+`-l/--limit N` to export at most N maps per run; maps whose JSON already exists
+are skipped, so re-running continues where you left off:
+
+```sh
+tools/ogztool/export-all-maps.sh -l 50      # export the next 50, then return
+# ... re-run until "nothing to do" ...
 ```
 
 **Converted maps win.** If `assets/packages/<map>.ogz` exists, the exporter stages

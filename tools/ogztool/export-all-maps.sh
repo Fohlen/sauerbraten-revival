@@ -19,9 +19,14 @@
 # Options:
 #   -n, --dry-run     list the maps that would be exported, then exit
 #   -f, --force       re-export maps whose JSON already exists
+#   -l, --limit N     export at most N maps this run (batch size; 0 = all)
 #   -t SECONDS        per-map timeout (default 120)
 #   -o DIR            output directory (default <repo>/metadata-catalogue)
 #   -h, --help        show this help
+#
+# Runs are resumable: every map whose JSON already exists is skipped, so run
+# the script repeatedly with -l to export in batches without blocking the
+# machine for the full ~30 min sweep.
 #
 # Environment:
 #   SAUER_REF   reference dump root (default: ~/Downloads/sauerbraten-code-r6889)
@@ -43,14 +48,16 @@ CONVERTED="$REPO/assets/packages"
 DRY_RUN=0
 FORCE=0
 TIMEOUT=120
+LIMIT=0
 
-usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 MAPS=()
 while [ $# -gt 0 ]; do
     case "$1" in
         -n|--dry-run) DRY_RUN=1 ;;
         -f|--force)   FORCE=1 ;;
+        -l|--limit)   LIMIT="$2"; shift ;;
         -t)           TIMEOUT="$2"; shift ;;
         -o)           OUT="$2"; shift ;;
         -h|--help)    usage 0 ;;
@@ -59,6 +66,8 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+case "$LIMIT" in ''|*[!0-9]*) echo "ERROR: --limit must be a non-negative integer" >&2; exit 1;; esac
 
 [ -d "$REF/packages" ] || { echo "ERROR: reference dump not found at '$REF' (set SAUER_REF)" >&2; exit 1; }
 [ -x "$CLIENT" ]       || { echo "ERROR: ogz tooling client missing at '$CLIENT'; run tools/ogztool/build.sh" >&2; exit 1; }
@@ -100,7 +109,14 @@ done
 echo "reference: $REF"
 echo "client:    $CLIENT"
 echo "output:    $OUT"
-echo "maps:      ${#ALL[@]} total, ${#TODO[@]} to export, $SKIPPED up-to-date"
+
+# Trim to the batch size (after skipping up-to-date maps, so -l counts real work).
+REMAINING=${#TODO[@]}
+if [ "$LIMIT" -gt 0 ] && [ "${#TODO[@]}" -gt "$LIMIT" ]; then
+    TODO=("${TODO[@]:0:$LIMIT}")
+fi
+
+echo "maps:      ${#ALL[@]} total, ${#TODO[@]} to export this run, $SKIPPED up-to-date, $((REMAINING - ${#TODO[@]})) left for later"
 
 if [ "$DRY_RUN" -eq 1 ]; then
     [ "${#TODO[@]}" -gt 0 ] && printf '%s\n' "${TODO[@]}"
@@ -159,7 +175,11 @@ for m in "${TODO[@]}"; do
 done
 
 echo
-echo "done: $OK exported, $FAIL failed, $SKIPPED skipped"
+echo "done: $OK exported, $FAIL failed, $SKIPPED skipped (already up-to-date)"
+if [ "$REMAINING" -gt "$OK" ] 2>/dev/null; then
+    LEFT=$((REMAINING - OK))
+    [ "$LEFT" -gt 0 ] && echo "$LEFT maps remaining — re-run to continue"
+fi
 if [ "$FAIL" -gt 0 ]; then
     echo "failed maps:"
     printf '  %s\n' "${FAILED[@]}"
