@@ -84,7 +84,7 @@ public partial class MapWorld : Node3D
         Octa = octa;
 
         string mapName = Path.GetFileNameWithoutExtension(path);
-        ITextureSource textures = new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource(ReferenceRoot));
+        ITextureSource textures = new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource(MapRoots.ReferenceRoot));
         Textures = textures;
         var catalogue = MetadataCatalogue.TryLoadForMap(mapName);
         MaterialSet? materials = catalogue != null ? MaterialBuilder.Build(catalogue, textures) : null;
@@ -105,7 +105,7 @@ public partial class MapWorld : Node3D
         AddChild(TriggerBuilder.Build(map, catalogue, textures));
         AddChild(ItemBuilder.Build(map, modelCatalog, textures));
         AddChild(ParticleBuilder.Build(map, textures));
-        AddChild(SoundBuilder.Build(map, catalogue, ReferenceRoot));
+        AddChild(SoundBuilder.Build(map, catalogue, MapRoots.ReferenceRoot));
         var mapModels = MapModelBuilder.Build(map, catalogue, modelCatalog, textures);
         AddChild(mapModels);
         int loadedModels = 0, totalModels = 0;
@@ -161,12 +161,7 @@ public partial class MapWorld : Node3D
         GD.Print($"[world] {path}: chunks={chunked.Chunks.Count} triangles={chunked.TriangleCount}");
     }
 
-    private static string ReferenceRoot =>
-        System.Environment.GetEnvironmentVariable("SAUER_REF")
-        ?? "/Users/fohlen/Downloads/sauerbraten-code-r6889";
+    private static string DefaultPath() => MapRoots.Resolve("base/church51");
 
-    private static string DefaultPath() => Path.Combine(ReferenceRoot, "packages", "base", "church51.ogz");
-
-    private static string ResolvePath(string ogzPath) =>
-        Path.IsPathRooted(ogzPath) ? ogzPath : Path.Combine(ReferenceRoot, "packages", ogzPath);
+    private static string ResolvePath(string ogzPath) => MapRoots.Resolve(ogzPath);
 }

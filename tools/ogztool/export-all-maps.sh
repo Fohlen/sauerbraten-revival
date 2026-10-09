@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Export OGZ metadata for EVERY map in the reference dump.
 #
-# For each packages/<pkg>/<map>.ogz this runs the instrumented reference client
-# once (SAUER_METADATA + SAUER_METADATA_EXIT) and writes
+# For each packages/<pkg>/<map>.ogz this runs the ogz tooling client once
+# (SAUER_METADATA + SAUER_METADATA_EXIT) and writes
 # metadata-catalogue/<map>.json, giving the catalogue one entry per map.
+#
+# Converted maps win: if assets/packages/<map>.ogz exists (see
+# convert-all-maps.sh), it is staged into the client's home and exported instead
+# of the dump copy, so the JSON describes the exact map the importer later reads.
 #
 # The client is built by tools/ogztool/build.sh; this script only orchestrates the
 # runs. It needs a display + OpenGL context (the reference client is not headless),
@@ -34,6 +38,7 @@ REF="${SAUER_REF:-$HOME/Downloads/sauerbraten-code-r6889}"
 HOME_DIR="${SAUER_HOME:-/tmp/sauer-meta-home}"
 CLIENT="${CLIENT:-$HERE/out/sauer_client}"
 OUT="$REPO/metadata-catalogue"
+CONVERTED="$REPO/assets/packages"
 
 DRY_RUN=0
 FORCE=0
@@ -104,6 +109,14 @@ fi
 [ "${#TODO[@]}" -gt 0 ] || { echo "nothing to do"; exit 0; }
 
 # Export one map to <OUT>/<basename>.json. Returns non-zero on failure.
+#
+# IMPORTANT: the map may have a converted copy under assets/packages (produced by
+# convert-all-maps.sh). The client's findfile() checks its home dir before the
+# reference dump, so we stage the converted copy into the throwaway home — the
+# metadata MUST be exported from the SAME map the reader later loads. calclight
+# remips and regenerates surfaces, so a converted map's geometry differs from the
+# dump's; exporting from the dump would make the catalogue's geometry block
+# disagree with the map the importer reads.
 export_one() {
     local m="$1"
     local dst="$OUT/$(basename "$m").json"
@@ -111,6 +124,12 @@ export_one() {
     local log="${TMPDIR:-/tmp}/sauer-meta-$(echo "$m" | tr '/' '_').log"
 
     rm -f "$tmp"
+    rm -rf "$HOME_DIR/packages"
+    if [ -f "$CONVERTED/$m.ogz" ]; then
+        mkdir -p "$HOME_DIR/packages/$(dirname "$m")"
+        cp "$CONVERTED/$m.ogz" "$HOME_DIR/packages/$m.ogz"
+    fi
+
     if ( cd "$REF" && SAUER_METADATA="$tmp" SAUER_METADATA_EXIT=1 \
             timeout "$TIMEOUT" "$CLIENT" -q"$HOME_DIR" -l"$m" >"$log" 2>&1 ); then
         if [ -s "$tmp" ]; then

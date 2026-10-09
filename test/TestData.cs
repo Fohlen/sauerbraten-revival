@@ -11,18 +11,14 @@ namespace SauerbratenRevival.Tests;
 /// </summary>
 public static class TestData
 {
-    public static readonly string ReferenceRoot =
-        System.Environment.GetEnvironmentVariable("SAUER_REF")
-        ?? "/Users/fohlen/Downloads/sauerbraten-code-r6889";
+    public static readonly string ReferenceRoot = MapRoots.ReferenceRoot;
 
-    public static readonly string OgzPath =
-        Path.Combine(ReferenceRoot, "packages", "base", "church51.ogz");
+    public static readonly string OgzPath = MapRoots.Resolve("base/church51");
 
     public static readonly string CataloguePath =
         ProjectSettings.GlobalizePath("res://metadata-catalogue/church51.json");
 
-    public static string OgzPathFor(string map) =>
-        Path.Combine(ReferenceRoot, "packages", "base", map + ".ogz");
+    public static string OgzPathFor(string map) => MapRoots.Resolve(map);
 
     public static string CataloguePathFor(string map) =>
         ProjectSettings.GlobalizePath($"res://metadata-catalogue/{map}.json");
@@ -49,7 +45,7 @@ public static class TestData
     {
         if (!File.Exists(path))
             throw new FileNotFoundException(
-                $"OGZ test map not found at '{path}'. Set SAUER_REF to the reference dump root.", path);
+                $"OGZ test map not found at '{path}'. Run tools/ogztool/convert-all-maps.sh, or set SAUER_REF to the reference dump root.", path);
         return OgzReader.Read(path);
     }
 }

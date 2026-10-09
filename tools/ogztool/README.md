@@ -53,6 +53,14 @@ tools/ogztool/export-all-maps.sh            # all maps
 tools/ogztool/export-all-maps.sh church51   # one map
 ```
 
+**Converted maps win.** If `assets/packages/<map>.ogz` exists, the exporter stages
+it into the client's home so the JSON is produced from the *converted* map, not
+the dump copy. This is required for correctness, not a nicety: `calclight` remips
+and regenerates surfaces, so a converted map's geometry differs from the dump's,
+and the catalogue's `geometry` block (asserted by `test/OgzReaderTest.cs`) must
+describe the same map the reader loads. **Convert before exporting** — otherwise
+the catalogue and the loaded map disagree.
+
 ### 2. Convert old maps to v33
 
 Maps older than v32 use a structurally different, legacy on-disk format
@@ -68,8 +76,13 @@ tools/ogztool/convert-all-maps.sh --dry-run # list without running
 ```
 
 Output lands in `assets/packages/<pkg>/<map>.ogz` (git-ignored; `assets/` carries a
-`.gdignore` so Godot never scans the raw OGZ). Point the importer at
-`assets/packages/` first, then the reference dump.
+`.gdignore` so Godot never scans the raw OGZ). The importer (`MapRoots`) reads
+this tree first, then the reference dump.
+
+**Order matters.** Convert first, then [export](#1-export-import-metadata): the
+exporter must read the converted map so its `geometry` block matches what the
+reader loads (a converted map is remipped by `calclight`, so its surfaces/verts
+differ from the dump's).
 
 **Why `calclight` is mandatory.** `SAUER_CONVERT_SAVE` runs `calclight(0)` before
 saving. `calclight` is what regenerates the modern `surfaceinfo`/`vertinfo` link
