@@ -239,6 +239,11 @@ public partial class MapPlayer : Node3D
         // PlayerModel is loaded the placeholder is suppressed entirely.
         if (!HidePlaceholderBody && GetNodeOrNull<MeshInstance3D>("Body") is { } body) body.Visible = ThirdPerson;
 
+        // The engine only renders the local player's body when the camera is detached
+        // (`isthirdperson()`, render.cpp:343), so hide the real model in first person —
+        // otherwise the camera sits inside it.
+        if (PlayerModel is { } model) model.Visible = ThirdPerson;
+
         if (!ThirdPerson)
         {
             cam.Position = Vector3.Zero;

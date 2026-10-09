@@ -46,10 +46,13 @@ public partial class PlayerModel : ModelInstance
         GlbOsPath = info?.GlbOsPath;
         ModelScale = info?.Scale ?? 1.0f;
         ModelTranslation = info?.Translation ?? Vector3.Zero;
-        // glTF is Y-up; the player body lives in the Z-up octree world. +270 about X
-        // stands the imported +Y (height) up onto world +Z, right-side up (feet down).
-        // The 180 about Y and 180 about Z orient the front to face the view.
-        ModelRotationDegrees = new Vector3(270f, 180f, 180f);
+        // Converted models are Y-up; the player body frame's up axis is also local Y
+        // (the engine renders the body facing along the view with world up), so no axis
+        // correction is needed. Facing is the player yaw.
+        ModelRotationDegrees = Vector3.Zero;
+        // Plant the lowest point at the feet so the body stands on the floor instead of
+        // sinking through it (the imported origin is at mid-height).
+        GroundAtFeet = true;
         SkinMaterial = ModelSkin.Build(info, textures, skinCache ?? new Dictionary<string, Material>());
 
         if (IsInsideTree()) Reload();
