@@ -297,8 +297,14 @@ Remaining:
 - [~] Player model + view — third-person camera first (inspect models).
       - [x] Third-person camera toggle (`MapPlayer`, `third_person` bind, engine
             `thirdpersondistance`/`thirdpersonup`; `test/MapPlayerTest.cs`).
-      - [ ] Load the player body models (`mrfixit` and friends) and render them.
+      - [x] **MD5 import** (`tools/model-import/import_models.py`): skeletal player
+            bodies (`mrfixit`, `snoutx10k`, `ogro2`, `inky`, `captaincannon`) and
+            their `hudguns`. New manifest fields `skeleton`, per-part `skins`
+            (`md5skin`), `tags` (`md5tag`), de-duplicated `anims` (`md5anim`); fixed
+            `<dds>`/`<mad:...>` tag stripping and variant-dir skin resolution.
+      - [ ] Load the player body models into the scene (they convert today).
       - [ ] First-person view model (hudguns).
+      - [ ] Attach the `.md5anim` clips (recorded in the manifest, not yet played).
 - [ ] Hitscan weapons (insta rifle; effic loadout).
 - [ ] Flags and capture logic (CTF).
 - [ ] Scoring, respawns, spawn selection.
