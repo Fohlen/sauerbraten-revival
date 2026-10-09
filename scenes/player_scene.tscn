@@ -22,6 +22,8 @@ script = ExtResource("1_viewer")
 OgzPath = "base/church51.ogz"
 FrameCamera = false
 SpawnPlayer = true
+PlayerModelIndex = 0
+PlayerTeam = 1
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_env")

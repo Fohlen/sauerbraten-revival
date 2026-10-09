@@ -204,9 +204,10 @@ public class MapPlayerTest : GoTestBase
         // First person: camera at the eye, body hidden.
         TestAssert.Equal(Vector3.Zero, camera.Position, "first-person camera at eye");
 
-        // Third person: pull back 20 units along -forward (behind) and up 10 (engine
-        // thirdpersondistance=20 / thirdpersonup). At yaw 0 forward is +Y (Sauer), so
-        // the local offset in the Z-up player frame is (0, -20, 10).
+        // Third person: the camera shares the player's view orientation (identity local
+        // rotation). In the player's local Z-up frame, local -Z is forward, local +Y is
+        // world up. So the camera sits at (0, up, +distance): pulled back +Z and raised
+        // +Y. (engine thirdpersondistance=20 / thirdpersonup=10)
         player.ThirdPersonDistance = 20f;
         player.ThirdPersonUp = 10f;
         player.ToggleThirdPerson();
@@ -215,7 +216,7 @@ public class MapPlayerTest : GoTestBase
         Vector3 off = camera.Position;
         GD.Print($"[player] third-person offset={off}");
         world.QueueFree();
-        TestAssert.True(Mathf.Abs(off.X) < 1e-3f && Mathf.Abs(off.Y + 20f) < 1e-3f && Mathf.Abs(off.Z - 10f) < 1e-3f,
-            $"camera behind (-Y) and above (+Z) the eye (got {off})");
+        TestAssert.True(Mathf.Abs(off.X) < 1e-3f && Mathf.Abs(off.Y - 10f) < 1e-3f && Mathf.Abs(off.Z - 20f) < 1e-3f,
+            $"camera raised (+Y local up) and behind (+Z local back) the eye (got {off})");
     }
 }

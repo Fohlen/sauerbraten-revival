@@ -39,6 +39,9 @@ public partial class MapWorld : Node3D
     /// <summary>The texture source used while building (for later sky/material use).</summary>
     public ITextureSource? Textures { get; private set; }
 
+    /// <summary>The converted-model catalogue (glTF paths + Cube2 parameters), if present.</summary>
+    public ModelCatalog? Models { get; private set; }
+
     /// <summary>AABB of the geometry in Sauerbraten (Z-up, local) space.</summary>
     public Aabb Bounds { get; private set; }
 
@@ -96,6 +99,7 @@ public partial class MapWorld : Node3D
         const string modelsResDir = "res://assets/models";
         string modelsDir = ProjectSettings.GlobalizePath(modelsResDir);
         var modelCatalog = ModelCatalog.Load(Path.Combine(modelsDir, "models.json"), modelsDir, modelsResDir);
+        Models = modelCatalog;
 
         AddChild(LightBuilder.Build(map));
         AddChild(EnvMapBuilder.Build(map));

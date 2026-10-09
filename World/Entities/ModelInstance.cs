@@ -22,6 +22,13 @@ public partial class ModelInstance : Node3D
     [Export] public float ModelScale { get; set; } = 1.0f;
     [Export] public Vector3 ModelTranslation { get; set; }
 
+    /// <summary>
+    /// Extra rotation (degrees) applied to the loaded geometry. Used to bring an
+    /// imported model's up-axis into the Z-up world frame — glTF is Y-up, so a
+    /// Y-up model needs (0, 0, 90) or similar here.
+    /// </summary>
+    public Vector3 ModelRotationDegrees { get; set; }
+
     /// <summary>Skin/normal material, applied to the loaded model.</summary>
     public Material? SkinMaterial { get; set; }
 
@@ -34,6 +41,23 @@ public partial class ModelInstance : Node3D
         bool haveOs = !string.IsNullOrEmpty(GlbOsPath) && File.Exists(GlbOsPath);
         if (!haveRes && !haveOs) return;
 
+        if (TryLoadModel()) ModelLoaded = true;
+        else GD.PushWarning($"[model] failed to load '{GlbPath ?? GlbOsPath}'");
+    }
+
+    /// <summary>
+    /// (Re)load the configured glTF, replacing any previously loaded geometry.
+    /// <see cref="_Ready"/> calls this once; callers that set the path fields after
+    /// the node is already in the tree (e.g. <see cref="PlayerModel"/>) can invoke it
+    /// again to swap models at runtime.
+    /// </summary>
+    public void Reload()
+    {
+        if (GetNodeOrNull("Model") is { } previous) previous.Free();
+        ModelLoaded = false;
+        bool haveRes = !string.IsNullOrEmpty(GlbPath) && ResourceLoader.Exists(GlbPath);
+        bool haveOs = !string.IsNullOrEmpty(GlbOsPath) && File.Exists(GlbOsPath);
+        if (!haveRes && !haveOs) return;
         if (TryLoadModel()) ModelLoaded = true;
         else GD.PushWarning($"[model] failed to load '{GlbPath ?? GlbOsPath}'");
     }
@@ -59,6 +83,7 @@ public partial class ModelInstance : Node3D
             Name = "Model",
             Scale = Vector3.One * ModelScale,
             Position = ModelTranslation,
+            RotationDegrees = ModelRotationDegrees,
         };
         if (CopyMeshes(scene, holder) == 0) return false;
         scene.Free(); // meshes are shared resources; drop the temporary glTF scene

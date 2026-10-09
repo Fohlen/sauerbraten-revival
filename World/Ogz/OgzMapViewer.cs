@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 
 namespace SauerbratenRevival.World.Ogz;
@@ -35,6 +36,12 @@ public partial class OgzMapViewer : Node3D
 
     /// <summary>Attach the direct-child <see cref="MapPlayer"/> to the world's octree and place it at a spawn point.</summary>
     [Export] public bool SpawnPlayer { get; set; } = false;
+
+    /// <summary>Player model table index to load (render.cpp <c>playermodel</c> 0..4); negative keeps the placeholder body.</summary>
+    [Export] public int PlayerModelIndex { get; set; } = -1;
+
+    /// <summary>Team skin for the player model (0 = FFA, 1 = blue, 2 = red).</summary>
+    [Export] public int PlayerTeam { get; set; } = 0;
 
     /// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
     public MapWorld? World { get; private set; }
@@ -81,7 +88,28 @@ public partial class OgzMapViewer : Node3D
 
         (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
         player.Setup(World.Octa!, feet, yaw);
+        AttachPlayerModel(player);
         GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw}");
+    }
+
+    /// <summary>
+    /// Attach a converted body model to the player (engine <c>playermodels</c>, see
+    /// render.cpp). Leaving <see cref="PlayerModelIndex"/> negative keeps the scene's
+    /// placeholder body. The model is parented under the world as a <b>sibling</b> of
+    /// the player so <see cref="MapPlayer.SyncBodyModel"/> can keep it upright at the
+    /// feet, independent of the camera view pitch.
+    /// </summary>
+    private void AttachPlayerModel(MapPlayer player)
+    {
+        if (PlayerModelIndex < 0) return;
+
+        var body = new PlayerModel { Name = "PlayerModel" };
+        World!.AddChild(body);
+        player.PlayerModel = body;
+        player.HidePlaceholderBody = true;
+        body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam);
+        player.SyncBodyModelNow();
+        GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded}");
     }
 
     private (Vector3 Feet, float Yaw) FindSpawn(OgzMap map)

@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Physics;
 
 namespace SauerbratenRevival.World.Ogz;
@@ -56,6 +57,20 @@ public partial class MapPlayer : Node3D
 
     /// <summary>True while the camera is detached from the player's eye (engine <c>isthirdperson()</c>).</summary>
     public bool ThirdPerson { get; private set; }
+
+    /// <summary>
+    /// When true, the placeholder <c>Body</c> capsule is never shown — the scene
+    /// supplies a real <see cref="PlayerModel"/> instead (set by the viewer when it
+    /// loads a converted body model).
+    /// </summary>
+    public bool HidePlaceholderBody { get; set; }
+
+    /// <summary>
+    /// The visible body model, if any. It must be a <b>sibling</b> of this node (a child
+    /// of the same Z-up world node), so that it can be placed at the feet and kept
+    /// upright independently of the camera's view pitch.
+    /// </summary>
+    public PlayerModel? PlayerModel { get; set; }
 
     /// <summary>Toggle the detached third-person camera (engine <c>thirdperson</c> bind).</summary>
     public void ToggleThirdPerson()
@@ -220,8 +235,9 @@ public partial class MapPlayer : Node3D
         if (GetNodeOrNull<Camera3D>("Camera3D") is not { } cam) return;
 
         // Hide the placeholder body while looking through it (first person) so it does
-        // not clip the near plane; show it once the camera is pulled back.
-        if (GetNodeOrNull<MeshInstance3D>("Body") is { } body) body.Visible = ThirdPerson;
+        // not clip the near plane; show it once the camera is pulled back. When a real
+        // PlayerModel is loaded the placeholder is suppressed entirely.
+        if (!HidePlaceholderBody && GetNodeOrNull<MeshInstance3D>("Body") is { } body) body.Visible = ThirdPerson;
 
         if (!ThirdPerson)
         {
@@ -229,12 +245,12 @@ public partial class MapPlayer : Node3D
             return;
         }
 
-        // Backwards = opposite the look direction. The player node's basis already
-        // faces the view (see SyncTransform), so +Z is backwards and the camera keeps
-        // an identity local rotation to look the same way it does in first person.
-        Vector3 back = Basis.Z;
-        Vector3 up = new(0, 0, 1); // Sauerbraten world is Z-up
-        cam.Position = back * ThirdPersonDistance + up * ThirdPersonUp;
+        // The camera is a child with an identity local rotation, so it shares the
+        // player's view orientation: its local -Z is forward (Godot cameras look down
+        // -Z) and its local +Y is up. Pull back along local +Z and raise along local +Y.
+        // (The player's local frame is Z-up in Sauerbraten terms: local +Y is the
+        // world "up" axis.)
+        cam.Position = new Vector3(0, ThirdPersonUp, ThirdPersonDistance);
         cam.Basis = Basis.Identity;
     }
 
@@ -279,6 +295,9 @@ public partial class MapPlayer : Node3D
         while (Entity.Yaw >= 360f) Entity.Yaw -= 360f;
     }
 
+    /// <summary>(Re)place the body model now (e.g. right after attaching one).</summary>
+    public void SyncBodyModelNow() => SyncBodyModel();
+
     /// <summary>Copy the simulated entity into the node transform (Sauerbraten Z-up).</summary>
     private void SyncTransform()
     {
@@ -287,5 +306,25 @@ public partial class MapPlayer : Node3D
         if (forward.LengthSquared() > 1e-6f)
             Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1));
         SyncCamera();
+        SyncBodyModel();
+    }
+
+    /// <summary>
+    /// Place the visible <see cref="PlayerModel"/> at the player's <b>feet</b> and
+    /// orient it by yaw only, upright — the engine renders the body model at
+    /// <c>d->feetpos()</c> with <c>yaw+90</c> and ignores the view pitch
+    /// (rendermodel.cpp <c>renderclient</c>). This node stays at the eye, so the model
+    /// is offset down by the eye height. The model is a <b>sibling</b> in the same Z-up
+    /// world node, so local coordinates match this node's own <c>Position</c>/<c>Basis</c>.
+    /// </summary>
+    private void SyncBodyModel()
+    {
+        if (PlayerModel is not { } model) return;
+        if (!model.IsInsideTree()) return;
+        // Same Z-up frame as this node's Position (= Entity.O, the eye).
+        model.Position = Entity.O with { Z = Entity.O.Z - EyeHeight };
+        Vector3 facing = Movement.VecFromYawPitch(Entity.Yaw + 90f, 0f, 1, 0);
+        if (facing.LengthSquared() > 1e-6f)
+            model.Basis = Basis.LookingAt(facing, new Vector3(0, 0, 1));
     }
 }
