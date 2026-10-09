@@ -265,14 +265,30 @@ directory hash.
 
 ### 3.4 Mesher + material
 
-- `World/Meshing/ArrayMeshBuilder.cs` keys surfaces on `vslot` only and emits one
-  UV set. Extend the key to the full `sortkey` and add `Mesh.ArrayType.TexUV2`
-  from `VertInfo.U/V`.
-- `World/Materials/MaterialBuilder.cs` builds `StandardMaterial3D`; lit surfaces
-  need a custom world shader (`albedo * texture(lightmap, UV2)`, plus `lmdir`/
-  `lmcolor` + vertex normal for `LM_BUMPMAP0/1`).
-- Introduce the smooth-normal channel here — it serves both bump lightmaps and
-  envmap (`World/Meshing/OctaFaceWalker.cs`, `MeshFace.cs`, `OctaMesher.cs`).
+**Done (plumbing).**
+
+- `ArrayMeshBuilder` now keys surfaces on **`SurfaceKey(Texture, Lmid)`**
+  (the engine's `sortkey(tex, lmid, ...)`) and emits `Mesh.ArrayType.TexUV2`
+  when a surface is built with atlas coordinates.
+- `OctaMesher` emits, for a face with a `CubeExt` link: corners from
+  `Ext.Verts[k]` in **stored order** (the engine's render order — `octarender.cpp`
+  builds `pos[k]` from `verts[k].getxyz()` with no convexity reorder) and
+  `UV2 = u/65536, v/65536`. Unlit faces keep the `genfaceverts`+convexity path
+  (no UV2). `MaterialMesher` emits `SurfaceKey.Unlit`.
+- `MeshFace.Quad` takes the `SurfaceKey` + optional UV2; `MaterialSet` resolves a
+  material per `SurfaceKey` (lightmap override, else the vslot material).
+- `World/Materials/lightmap.gdshader`: `ALBEDO = albedo * texture(lightmap, UV2)`
+  (the original `gl_FragColor = diffuse * lm`), with `use_lightmap` for the unlit
+  fallback. `MaterialBuilder.BuildLightmapMaterial(albedo, atlas, tint)` binds it.
+
+Verified by `OctaLightmapMeshTest` (UV2 present; every emitted UV2 is a stored
+atlas coordinate; an isolated face's geometry equals its `Ext.Verts`) and
+`LightmapMaterialTest` (shader loads; atlas/albedo bound).
+
+**Remaining (separate branch):** build the atlas `Texture2D`s from
+`OgzMap.Lightmaps` and call `MaterialSet.AddLightmapped` per `(vslot, lmid)` so the
+imported lighting data actually appears. Smooth-normal channel / bump
+(`LM_BUMPMAP0/1`) and envmap (`SHADER_ENVMAP`) are still open.
 
 ---
 

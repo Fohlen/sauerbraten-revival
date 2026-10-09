@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Materials;
 
 namespace SauerbratenRevival.World.Meshing;
 
@@ -64,7 +65,7 @@ public static class MaterialMesher
         Vector2 uv2 = PlanarUv(p2, cAxis, rAxis);
         Vector2 uv3 = PlanarUv(p3, cAxis, rAxis);
 
-        MeshFace.Quad(builder, 0, face.Orient, p0, p1, p2, p3, uv0, uv1, uv2, uv3);
+        MeshFace.Quad(builder, SurfaceKey.Unlit(0), face.Orient, p0, p1, p2, p3, uv0, uv1, uv2, uv3);
     }
 
     private static Vector2 PlanarUv(Vector3 p, int cAxis, int rAxis)
