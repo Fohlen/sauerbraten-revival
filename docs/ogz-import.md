@@ -157,7 +157,7 @@ not ported. The 58 maps in the reference dump that predate v32 are normalised
 offline by the same tool: [`tools/ogztool/convert-all-maps.sh`](../tools/ogztool/README.md)
 loads each old map, **recalculates** its lighting (regenerating the modern
 `surfaceinfo`/`vertinfo` link and a fresh, self-consistent atlas set), and
-re-saves it as v33 into `assets/converted/`. The reference engine owns the whole legacy
+re-saves it as v33 into `assets/packages/`. The reference engine owns the whole legacy
 decode ladder, so no such code lives in the revival runtime. The other 277 maps
 are already v32+, including the 9 v32 maps (v32→v33 differs only in the cube
 material field width: byte → ushort).

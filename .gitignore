@@ -21,7 +21,7 @@ tools/refharness/instrumented/build/
 tools/ogztool/out/
 
 # normalized v33 maps produced by tools/ogztool/convert-all-maps.sh
-assets/converted/
+assets/packages/
 
 # octree ground-truth probe binary
 tools/octaprobe/octaprobe

@@ -67,9 +67,9 @@ tools/ogztool/convert-all-maps.sh campo     # one map
 tools/ogztool/convert-all-maps.sh --dry-run # list without running
 ```
 
-Output lands in `assets/converted/<map>.ogz` (git-ignored; the `base/` package is
-always the same, so it is flattened away). Point the importer at `assets/converted/`
-first, then the reference dump.
+Output lands in `assets/packages/<pkg>/<map>.ogz` (git-ignored; `assets/` carries a
+`.gdignore` so Godot never scans the raw OGZ). Point the importer at
+`assets/packages/` first, then the reference dump.
 
 **Why `calclight` is mandatory.** `SAUER_CONVERT_SAVE` runs `calclight(0)` before
 saving. `calclight` is what regenerates the modern `surfaceinfo`/`vertinfo` link

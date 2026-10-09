@@ -11,9 +11,9 @@
 # lightmap links.
 #
 # Writes go to a scratch home (findfile() prefers $homedir), so the read-only
-# reference dump is NEVER modified. Output layout flattens the (always-`base`)
-# package directory under assets/:
-#   assets/converted/<map>.ogz
+# reference dump is NEVER modified. Output mirrors the source package layout
+# under assets/ (which carries a .gdignore so Godot never scans the raw OGZ):
+#   assets/packages/<pkg>/<map>.ogz
 #
 # The client is built by tools/ogztool/build.sh; this script only orchestrates
 # the runs. It needs a display + OpenGL context (the reference client is not
@@ -27,7 +27,7 @@
 #   -f, --force       re-convert maps whose output already exists
 #   -a, --all         convert every map regardless of version (v33 included)
 #   -t SECONDS        per-map timeout (default 600; recalc is the slow part)
-#   -o DIR            output directory (default <repo>/assets/converted)
+#   -o DIR            output root (default <repo>/assets/packages)
 #   -h, --help        show this help
 #
 # Environment:
@@ -44,7 +44,7 @@ REPO="$(cd "$HERE/../.." && pwd)"
 REF="${SAUER_REF:-$HOME/Downloads/sauerbraten-code-r6889}"
 HOME_DIR="${SAUER_HOME:-/tmp/sauer-conv-home}"
 CLIENT="${CLIENT:-$HERE/out/sauer_client}"
-OUT="$REPO/assets/converted"
+OUT="$REPO/assets/packages"
 
 DRY_RUN=0
 FORCE=0
@@ -104,6 +104,11 @@ discover() {
 
 mkdir -p "$OUT"
 
+# Godot must not import the raw .ogz files as resources; .gdignore makes the
+# asset importer skip this whole subtree. Written once, here, so the tree is
+# self-describing even on a fresh checkout.
+if [ ! -f "$REPO/assets/.gdignore" ]; then printf '' > "$REPO/assets/.gdignore"; fi
+
 TODO=()
 SKIPPED_STALE=0
 SKIPPED_DONE=0
@@ -136,7 +141,8 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 [ "${#TODO[@]}" -gt 0 ] || { echo "nothing to do"; exit 0; }
 
-# Convert one map into <OUT>/<map>.ogz. Returns non-zero on failure.
+# Convert one map into <OUT>/<pkg>/<map>.ogz (the path already carries the
+# package because $m is package-qualified). Returns non-zero on failure.
 convert_one() {
     local m="$1"
     local dst="$OUT/$m.ogz"
@@ -148,7 +154,7 @@ convert_one() {
     if ( cd "$REF" && SAUER_CONVERT_SAVE=1 SAUER_METADATA_EXIT=1 \
             timeout "$TIMEOUT" "$CLIENT" -q"$HOME_DIR" -l"$m" >"$log" 2>&1 ); then
         if [ -s "$HOME_DIR/packages/$m.ogz" ]; then
-            mkdir -p "$OUT"
+            mkdir -p "$(dirname "$dst")"
             mv "$HOME_DIR/packages/$m.ogz" "$dst"
             # Verify the output really is the current format.
             local outver
