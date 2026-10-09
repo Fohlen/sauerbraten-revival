@@ -57,8 +57,27 @@ public static class OgzGeometry
             {
                 for (int j = 0; j < 6; j++)
                 {
-                    int totalVerts = c.Ext.Surfaces[j].TotalVerts();
-                    if (totalVerts > 0) stats.Surfaces++;
+                    var surf = c.Ext.Surfaces[j];
+                    int totalVerts = surf.TotalVerts();
+                    if (totalVerts > 0)
+                    {
+                        stats.Surfaces++;
+                        // Baked-lightmap link, hashed exactly as engine/metadata.cpp:
+                        // both lmid layers, the raw numverts byte, and each vertex's
+                        // atlas UV + smooth normal. Only faces with geometry are
+                        // hashed; the engine allocates empty cubeexts during render
+                        // setup whose zero-vertex faces are not in the file.
+                        HashByte(stats, surf.Lmid0);
+                        HashByte(stats, surf.Lmid1);
+                        HashByte(stats, surf.NumVerts);
+                        for (int k = 0; k < totalVerts; k++)
+                        {
+                            var vert = c.Ext.Verts[surf.Verts + k];
+                            HashUShort(stats, vert.U);
+                            HashUShort(stats, vert.V);
+                            HashUShort(stats, vert.Norm);
+                        }
+                    }
                     stats.Verts += totalVerts;
                 }
             }

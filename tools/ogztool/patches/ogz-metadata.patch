@@ -74,8 +74,8 @@
  
  $(SERVER_OBJS): CXXFLAGS += $(SERVER_INCLUDES)
 --- a/engine/metadata.cpp
-+++ b/engine/metadata.cpp	2026-10-09 13:34:07
-@@ -0,0 +1,456 @@
++++ b/engine/metadata.cpp	2026-10-09 14:10:33
+@@ -0,0 +1,475 @@
 +// metadata.cpp: one-time OGZ import metadata export (sauerbraten-revival)
 +//
 +// This file is added by a patch to Sauerbraten SVN r6889 and is not part of the
@@ -238,8 +238,27 @@
 +                // Not gated on surf.used(): initlights() may have set lmids on faces
 +                // that carry no geometry, whereas totalverts() is exactly the vertex
 +                // count reconstructed from the file.
-+                int totalverts = c[i].ext->surfaces[j].totalverts();
-+                if(totalverts > 0) surfaces++;
++                const surfaceinfo &surf = c[i].ext->surfaces[j];
++                int totalverts = surf.totalverts();
++                if(totalverts > 0)
++                {
++                    surfaces++;
++                    // Baked-lightmap link (semantic map content): which atlas each
++                    // layer samples and the per-vertex atlas UV + smooth normal.
++                    // Only faces with geometry are hashed: `allchanged()` allocates
++                    // empty cubeexts during render setup, whose zero-vertex faces
++                    // are not part of the file and must not enter the oracle.
++                    hashbyte64(hash, surf.lmid[0]);
++                    hashbyte64(hash, surf.lmid[1]);
++                    hashbyte64(hash, surf.numverts);
++                    const vertinfo *v = c[i].ext->verts() + surf.verts;
++                    loopk(totalverts)
++                    {
++                        hashushort64(hash, v[k].u);
++                        hashushort64(hash, v[k].v);
++                        hashushort64(hash, v[k].norm);
++                    }
++                }
 +                verts += totalverts;
 +            }
 +            hashbyte64(hash, type);
