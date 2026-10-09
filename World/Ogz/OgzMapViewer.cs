@@ -43,27 +43,10 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Team skin for the player model (0 = FFA, 1 = blue, 2 = red).</summary>
     [Export] public int PlayerTeam { get; set; } = 0;
 
-    /// <summary>
-    /// Extra rotation (degrees) applied to the imported player body so it stands
-    /// upright in the Z-up octree frame. Tune in the inspector while inspecting.
-    /// </summary>
-    [Export] public Vector3 PlayerModelRotation { get; set; } = new(-90f, 0f, 0f);
-
-    /// <summary>Mirror the player body on an axis (import-frame handedness fix).</summary>
-    [Export] public PlayerModelMirrorAxis PlayerModelMirror { get; set; } = PlayerModelMirrorAxis.None;
-
-    /// <summary>Manual offset (model-frame units) applied to the player body's placement.</summary>
-    [Export] public Vector3 PlayerModelOffset { get; set; } = Vector3.Zero;
-
     /// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
     public MapWorld? World { get; private set; }
 
     private bool _built;
-    private MapPlayer? _player;
-    private PlayerModel? _playerModel;
-    private Vector3 _appliedModelRotation = new(float.NaN, float.NaN, float.NaN);
-    private PlayerModelMirrorAxis _appliedModelMirror = (PlayerModelMirrorAxis)(-1);
-    private Vector3 _appliedModelOffset = new(float.NaN, float.NaN, float.NaN);
 #if TOOLS
     private Camera3D? _frameCamera;
     private Vector3 _frameTarget;
@@ -83,30 +66,6 @@ public partial class OgzMapViewer : Node3D
         AddSun();
         if (SpawnPlayer) AttachPlayer();
         if (FrameCamera) FrameSceneCamera(World.Centre, World.Radius);
-    }
-
-    /// <summary>
-    /// Runtime inspector tuning aid: when <see cref="PlayerModelRotation"/> or
-    /// <see cref="PlayerModelMirror"/> change, reload the body so the new values apply
-    /// immediately while inspecting the model.
-    /// </summary>
-    public override void _Process(double delta)
-    {
-        if (_playerModel == null) return;
-        if (PlayerModelRotation == _appliedModelRotation && PlayerModelMirror == _appliedModelMirror
-            && PlayerModelOffset == _appliedModelOffset) return;
-        _playerModel.Configure(World!.Models, World.Textures, PlayerModelIndex, PlayerTeam,
-            rotationDegrees: PlayerModelRotation, mirror: PlayerModelMirror, offset: PlayerModelOffset);
-        _player?.SyncBodyModelNow();
-        RememberModelTuning();
-        GD.Print($"[viewer] player model reloaded: rot={PlayerModelRotation} mirror={PlayerModelMirror} offset={PlayerModelOffset}");
-    }
-
-    private void RememberModelTuning()
-    {
-        _appliedModelRotation = PlayerModelRotation;
-        _appliedModelMirror = PlayerModelMirror;
-        _appliedModelOffset = PlayerModelOffset;
     }
 
     /// <summary>
@@ -148,12 +107,8 @@ public partial class OgzMapViewer : Node3D
         World!.AddChild(body);
         player.PlayerModel = body;
         player.HidePlaceholderBody = true;
-        body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam,
-            rotationDegrees: PlayerModelRotation, mirror: PlayerModelMirror, offset: PlayerModelOffset);
+        body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam);
         player.SyncBodyModelNow();
-        _player = player;
-        _playerModel = body;
-        RememberModelTuning();
         GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded}");
     }
 

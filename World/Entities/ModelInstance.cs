@@ -3,9 +3,6 @@ using Godot;
 
 namespace SauerbratenRevival.World.Entities;
 
-/// <summary>Mirror axis for an imported model (import-frame handedness correction).</summary>
-public enum PlayerModelMirrorAxis { None, X, Y, Z }
-
 /// <summary>
 /// Loads an assimp-converted glTF: prefers Godot's imported Resource (renders in
 /// the editor too), falls back to parsing the file from disk, applies the Cube2
@@ -30,12 +27,6 @@ public partial class ModelInstance : Node3D
     /// imported model's up-axis into the Z-up world frame.
     /// </summary>
     public Vector3 ModelRotationDegrees { get; set; }
-
-    /// <summary>
-    /// Per-axis mirror factor (±1) applied to the loaded geometry, for correcting an
-    /// import's handedness. Defaults to no mirror.
-    /// </summary>
-    public Vector3 ModelMirror { get; set; } = Vector3.One;
 
     /// <summary>Skin/normal material, applied to the loaded model.</summary>
     public Material? SkinMaterial { get; set; }
@@ -89,7 +80,7 @@ public partial class ModelInstance : Node3D
         var holder = new Node3D
         {
             Name = "Model",
-            Scale = new Vector3(ModelScale * ModelMirror.X, ModelScale * ModelMirror.Y, ModelScale * ModelMirror.Z),
+            Scale = Vector3.One * ModelScale,
             Position = ModelTranslation,
             RotationDegrees = ModelRotationDegrees,
         };

@@ -36,10 +36,7 @@ public partial class PlayerModel : ModelInstance
         ITextureSource? textures,
         int modelIndex,
         int team,
-        Dictionary<string, Material>? skinCache = null,
-        Vector3? rotationDegrees = null,
-        PlayerModelMirrorAxis mirror = PlayerModelMirrorAxis.None,
-        Vector3? offset = null)
+        Dictionary<string, Material>? skinCache = null)
     {
         ModelIndex = modelIndex;
         Team = team;
@@ -49,20 +46,15 @@ public partial class PlayerModel : ModelInstance
         GlbPath = info?.GlbPath;
         GlbOsPath = info?.GlbOsPath;
         ModelScale = info?.Scale ?? 1.0f;
-        // The catalog's mdltrans plus a manual nudge, in the holder's local (model)
-        // frame — used to plant the feet exactly on the floor.
-        ModelTranslation = (info?.Translation ?? Vector3.Zero) + (offset ?? Vector3.Zero);
-        // assimp exports the MD5 body in the source frame; the player body frame's up
-        // axis is local Y, which is exactly the converted model's height axis, so no
-        // axis correction is needed. Facing is the player yaw.
-        ModelRotationDegrees = rotationDegrees ?? Vector3.Zero;
-        ModelMirror = mirror switch
-        {
-            PlayerModelMirrorAxis.X => new Vector3(-1f, 1f, 1f),
-            PlayerModelMirrorAxis.Y => new Vector3(1f, -1f, 1f),
-            PlayerModelMirrorAxis.Z => new Vector3(1f, 1f, -1f),
-            _ => Vector3.One,
-        };
+        // The catalog's mdltrans, plus a fixed nudge that plants the feet on the floor.
+        // Assimp's MD5 export puts the model origin at mid-height, so the body needs to
+        // be lifted by half its height: +10 in the model's local frame (before the -90
+        // about X below). The engine has no such offset — it relies on the MD5 loader's
+        // bind-pose handling, which assimp does not reproduce.
+        ModelTranslation = (info?.Translation ?? Vector3.Zero) + new Vector3(0f, 0f, 10f);
+        // Assimp exports the MD5 body Y-up; -90 about X stands it in the Z-up octree
+        // world. Facing is the player yaw (engine renders the body at yaw+90).
+        ModelRotationDegrees = new Vector3(-90f, 0f, 0f);
         SkinMaterial = ModelSkin.Build(info, textures, skinCache ?? new Dictionary<string, Material>());
 
         if (IsInsideTree()) Reload();
