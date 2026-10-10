@@ -328,7 +328,10 @@ Remaining:
             (`MapPlayer.SelectBodyAnim` — idle/forward/backward/left/right/jump,
             swim/sink, edit; `test/BodyAnimTest.cs`). Attack/hold/pain/dead land with
             weapons/combat.
-      - [ ] First-person view model (hudguns).
+      - [x] First-person hudgun display: imports the linked hand/weapon GLBs as a
+            camera-local model, maps Cube2's Z-up coordinates into Godot's camera
+            frame, and starts the idle clips. Placement is pending in-engine visual
+            review; weapon switching and attack animations come with combat.
       - [x] **Third-person view weapon** attached to the body's `Weapon` bone
             (render.cpp `renderplayer` / `vweps[]`). The seven `vwep/*` models now
             convert (`tools/model-import`, including `md5dir`-relative skin/bumpmap

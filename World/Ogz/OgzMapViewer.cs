@@ -27,174 +27,184 @@ namespace SauerbratenRevival.World.Ogz;
 [GlobalClass]
 public partial class OgzMapViewer : Node3D
 {
-    /// <summary>Override map to build. Absolute, or relative to the reference dump's <c>packages/</c> dir (e.g. <c>base/church51.ogz</c>); empty uses the default.</summary>
-    [Export] public string OgzPath { get; set; } = "";
-    [Export] public int ChunkSize { get; set; } = 512;
+	/// <summary>Override map to build. Absolute, or relative to the reference dump's <c>packages/</c> dir (e.g. <c>base/church51.ogz</c>); empty uses the default.</summary>
+	[Export] public string OgzPath { get; set; } = "";
+	[Export] public int ChunkSize { get; set; } = 512;
 
-    /// <summary>Place the direct-child <c>Camera3D</c> at a full-map overview once built.</summary>
-    [Export] public bool FrameCamera { get; set; } = true;
+	/// <summary>Place the direct-child <c>Camera3D</c> at a full-map overview once built.</summary>
+	[Export] public bool FrameCamera { get; set; } = true;
 
-    /// <summary>Attach the direct-child <see cref="MapPlayer"/> to the world's octree and place it at a spawn point.</summary>
-    [Export] public bool SpawnPlayer { get; set; } = false;
+	/// <summary>Attach the direct-child <see cref="MapPlayer"/> to the world's octree and place it at a spawn point.</summary>
+	[Export] public bool SpawnPlayer { get; set; } = false;
 
-    /// <summary>Player model table index to load (render.cpp <c>playermodel</c> 0..4); negative keeps the placeholder body.</summary>
-    [Export] public int PlayerModelIndex { get; set; } = -1;
+	/// <summary>Player model table index to load (render.cpp <c>playermodel</c> 0..4); negative keeps the placeholder body.</summary>
+	[Export] public int PlayerModelIndex { get; set; } = -1;
 
-    /// <summary>Team skin for the player model (0 = FFA, 1 = blue, 2 = red).</summary>
-    [Export] public int PlayerTeam { get; set; } = 0;
+	/// <summary>Team skin for the player model (0 = FFA, 1 = blue, 2 = red).</summary>
+	[Export] public int PlayerTeam { get; set; } = 0;
 
-    /// <summary>
-    /// Third-person view weapon to attach to the player model's <c>Weapon</c> bone
-    /// (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>). Empty attaches none. This is
-    /// a live property: changing it from the remote inspector swaps the weapon on the
-    /// spawned <see cref="PlayerModel"/> immediately.
-    /// </summary>
-    [Export]
-    public string ViewWeapon
-    {
-        get => _viewWeapon;
-        set
-        {
-            _viewWeapon = value ?? "";
-            _playerModel?.SetViewWeapon(string.IsNullOrEmpty(_viewWeapon) ? null : _viewWeapon);
-        }
-    }
+	/// <summary>
+	/// Third-person view weapon to attach to the player model's <c>Weapon</c> bone
+	/// (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>). Empty attaches none. This is
+	/// a live property: changing it from the remote inspector swaps the weapon on the
+	/// spawned <see cref="PlayerModel"/> immediately.
+	/// </summary>
+	[Export]
+	public string ViewWeapon
+	{
+		get => _viewWeapon;
+		set
+		{
+			_viewWeapon = value ?? "";
+			_playerModel?.SetViewWeapon(string.IsNullOrEmpty(_viewWeapon) ? null : _viewWeapon);
+		}
+	}
 
-    private string _viewWeapon = "";
-    private PlayerModel? _playerModel;
+	/// <summary>Gun model used for the local first-person hudgun (e.g. "rifle").</summary>
+	[Export] public string Hudgun { get; set; } = "rifle";
 
-    /// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
-    public MapWorld? World { get; private set; }
+	private string _viewWeapon = "";
+	private PlayerModel? _playerModel;
 
-    private bool _built;
+	/// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
+	public MapWorld? World { get; private set; }
+
+	private bool _built;
 #if TOOLS
-    private Camera3D? _frameCamera;
-    private Vector3 _frameTarget;
+	private Camera3D? _frameCamera;
+	private Vector3 _frameTarget;
 #endif
 
-    public override void _Ready()
-    {
-        if (_built) return;
-        _built = true;
+	public override void _Ready()
+	{
+		if (_built) return;
+		_built = true;
 
-        World = new MapWorld { Name = "MapWorld", OgzPath = OgzPath, ChunkSize = ChunkSize };
-        AddChild(World);
-        World.Build();
-        if (!World.Built) return; // missing map, error already pushed
+		World = new MapWorld { Name = "MapWorld", OgzPath = OgzPath, ChunkSize = ChunkSize };
+		AddChild(World);
+		World.Build();
+		if (!World.Built) return; // missing map, error already pushed
 
-        ApplySky(World.Map!, World.Textures!);
-        AddSun();
-        if (SpawnPlayer) AttachPlayer();
-        if (FrameCamera) FrameSceneCamera(World.Centre, World.Radius);
-    }
+		ApplySky(World.Map!, World.Textures!);
+		AddSun();
+		if (SpawnPlayer) AttachPlayer();
+		if (FrameCamera) FrameSceneCamera(World.Centre, World.Radius);
+	}
 
-    /// <summary>
-    /// Move a scene-authored <see cref="MapPlayer"/> under the Z-up world node and
-    /// initialise it against the octree at the map's first <c>ET_PLAYERSTART</c>
-    /// (falling back to the map centre). Physics then owns its position/orientation.
-    /// </summary>
-    private void AttachPlayer()
-    {
-        MapPlayer? player = null;
-        foreach (var child in GetChildren())
-            if (child is MapPlayer p) { player = p; break; }
-        if (player == null)
-        {
-            GD.PushWarning($"[viewer] SpawnPlayer is set but no direct-child {nameof(MapPlayer)} node exists.");
-            return;
-        }
+	/// <summary>
+	/// Move a scene-authored <see cref="MapPlayer"/> under the Z-up world node and
+	/// initialise it against the octree at the map's first <c>ET_PLAYERSTART</c>
+	/// (falling back to the map centre). Physics then owns its position/orientation.
+	/// </summary>
+	private void AttachPlayer()
+	{
+		MapPlayer? player = null;
+		foreach (var child in GetChildren())
+			if (child is MapPlayer p) { player = p; break; }
+		if (player == null)
+		{
+			GD.PushWarning($"[viewer] SpawnPlayer is set but no direct-child {nameof(MapPlayer)} node exists.");
+			return;
+		}
 
-        player.Reparent(World!); // into the rotated Z-up world
+		player.Reparent(World!); // into the rotated Z-up world
 
-        (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
-        player.Setup(World.Octa!, feet, yaw);
-        AttachPlayerModel(player);
-        GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw}");
-    }
+		(Vector3 feet, float yaw) = FindSpawn(World!.Map!);
+		player.Setup(World.Octa!, feet, yaw);
+		AttachPlayerModel(player);
+		GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw}");
+	}
 
-    /// <summary>
-    /// Attach a converted body model to the player (engine <c>playermodels</c>, see
-    /// render.cpp). Leaving <see cref="PlayerModelIndex"/> negative keeps the scene's
-    /// placeholder body. The model is parented under the world as a <b>sibling</b> of
-    /// the player so <see cref="MapPlayer.SyncBodyModel"/> can keep it upright at the
-    /// feet, independent of the camera view pitch.
-    /// </summary>
-    private void AttachPlayerModel(MapPlayer player)
-    {
-        if (PlayerModelIndex < 0) return;
+	/// <summary>
+	/// Attach a converted body model to the player (engine <c>playermodels</c>, see
+	/// render.cpp). Leaving <see cref="PlayerModelIndex"/> negative keeps the scene's
+	/// placeholder body. The model is parented under the world as a <b>sibling</b> of
+	/// the player so <see cref="MapPlayer.SyncBodyModel"/> can keep it upright at the
+	/// feet, independent of the camera view pitch.
+	/// </summary>
+	private void AttachPlayerModel(MapPlayer player)
+	{
+		if (PlayerModelIndex < 0) return;
 
-        var body = new PlayerModel { Name = "PlayerModel" };
-        World!.AddChild(body);
-        player.PlayerModel = body;
-        player.HidePlaceholderBody = true;
-        _playerModel = body;
+		var body = new PlayerModel { Name = "PlayerModel" };
+		World!.AddChild(body);
+		player.PlayerModel = body;
+		player.HidePlaceholderBody = true;
+		_playerModel = body;
 
-        body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam,
-            viewWeapon: string.IsNullOrEmpty(_viewWeapon) ? null : _viewWeapon);
-        player.SyncBodyModelNow();
-        GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
-    }
+		body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam,
+			viewWeapon: string.IsNullOrEmpty(_viewWeapon) ? null : _viewWeapon);
+		player.SyncBodyModelNow();
+		var hudgun = new HudgunModel { Name = "Hudgun" };
+		hudgun.Configure(World.Models, World.Textures, PlayerModelIndex, Hudgun);
+		if (player.GetNodeOrNull<Camera3D>("Camera3D") is { } camera)
+		{
+			camera.AddChild(hudgun);
+			player.Hudgun = hudgun;
+		}
+		GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
+	}
 
-    private (Vector3 Feet, float Yaw) FindSpawn(OgzMap map)
-    {
-        foreach (var (_, e) in map.OfType(Entities.EntityType.PlayerStart))
-            return (e.Position, e.Attr1);
-        return (World!.Bounds.GetCenter(), 0f);
-    }
+	private (Vector3 Feet, float Yaw) FindSpawn(OgzMap map)
+	{
+		foreach (var (_, e) in map.OfType(Entities.EntityType.PlayerStart))
+			return (e.Position, e.Attr1);
+		return (World!.Bounds.GetCenter(), 0f);
+	}
 
-    private void ApplySky(OgzMap map, ITextureSource textures)
-    {
-        // Runtime only: don't dirty the edited scene's environment in the IDE.
-        if (Engine.IsEditorHint()) return;
-        var sky = SkyBuilder.Build(textures, map.GetVarString("skybox"));
-        if (sky == null) return;
-        var worldEnvironment = GetNodeOrNull<WorldEnvironment>("WorldEnvironment");
-        if (worldEnvironment == null) return;
-        worldEnvironment.Environment ??= new Godot.Environment();
-        worldEnvironment.Environment.Sky = sky;
-        worldEnvironment.Environment.BackgroundMode = Godot.Environment.BGMode.Sky;
-    }
+	private void ApplySky(OgzMap map, ITextureSource textures)
+	{
+		// Runtime only: don't dirty the edited scene's environment in the IDE.
+		if (Engine.IsEditorHint()) return;
+		var sky = SkyBuilder.Build(textures, map.GetVarString("skybox"));
+		if (sky == null) return;
+		var worldEnvironment = GetNodeOrNull<WorldEnvironment>("WorldEnvironment");
+		if (worldEnvironment == null) return;
+		worldEnvironment.Environment ??= new Godot.Environment();
+		worldEnvironment.Environment.Sky = sky;
+		worldEnvironment.Environment.BackgroundMode = Godot.Environment.BGMode.Sky;
+	}
 
-    private void AddSun()
-    {
-        AddChild(new DirectionalLight3D
-        {
-            Name = "Sun",
-            RotationDegrees = new Vector3(-50, -30, 0),
-            ShadowEnabled = true,
-        });
-    }
+	private void AddSun()
+	{
+		AddChild(new DirectionalLight3D
+		{
+			Name = "Sun",
+			RotationDegrees = new Vector3(-50, -30, 0),
+			ShadowEnabled = true,
+		});
+	}
 
-    private void FrameSceneCamera(Vector3 centre, float radius)
-    {
-        var camera = GetNodeOrNull<Camera3D>("Camera3D");
-        if (camera == null) return;
+	private void FrameSceneCamera(Vector3 centre, float radius)
+	{
+		var camera = GetNodeOrNull<Camera3D>("Camera3D");
+		if (camera == null) return;
 
-        camera.Position = centre + new Vector3(0, radius * 0.6f, radius * 1.3f);
-        camera.LookAt(centre, Vector3.Up);
-        if (!Engine.IsEditorHint()) camera.Current = true;
+		camera.Position = centre + new Vector3(0, radius * 0.6f, radius * 1.3f);
+		camera.LookAt(centre, Vector3.Up);
+		if (!Engine.IsEditorHint()) camera.Current = true;
 
 #if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            _frameCamera = camera;
-            _frameTarget = centre;
-            CallDeferred(nameof(FrameEditorViewport));
-        }
+		if (Engine.IsEditorHint())
+		{
+			_frameCamera = camera;
+			_frameTarget = centre;
+			CallDeferred(nameof(FrameEditorViewport));
+		}
 #endif
-    }
+	}
 
 #if TOOLS
-    private void FrameEditorViewport()
-    {
-        // Move the editor's 3D viewport camera onto the scene camera so the
-        // geometry is visible immediately when the scene is opened.
-        if (_frameCamera == null) return;
-        var viewport = EditorInterface.Singleton.GetEditorViewport3D(0);
-        var editorCamera = viewport?.GetCamera3D();
-        if (editorCamera == null) return;
-        editorCamera.GlobalPosition = _frameCamera.GlobalPosition;
-        editorCamera.LookAt(_frameTarget, Vector3.Up);
-    }
+	private void FrameEditorViewport()
+	{
+		// Move the editor's 3D viewport camera onto the scene camera so the
+		// geometry is visible immediately when the scene is opened.
+		if (_frameCamera == null) return;
+		var viewport = EditorInterface.Singleton.GetEditorViewport3D(0);
+		var editorCamera = viewport?.GetCamera3D();
+		if (editorCamera == null) return;
+		editorCamera.GlobalPosition = _frameCamera.GlobalPosition;
+		editorCamera.LookAt(_frameTarget, Vector3.Up);
+	}
 #endif
 }

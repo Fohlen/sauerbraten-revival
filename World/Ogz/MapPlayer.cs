@@ -72,6 +72,9 @@ public partial class MapPlayer : Node3D
     /// </summary>
     public PlayerModel? PlayerModel { get; set; }
 
+    /// <summary>The local player's first-person hands/weapon, hidden outside first person.</summary>
+    public HudgunModel? Hudgun { get; set; }
+
     /// <summary>Toggle the detached third-person camera (engine <c>thirdperson</c> bind).</summary>
     public void ToggleThirdPerson()
     {
@@ -292,6 +295,7 @@ public partial class MapPlayer : Node3D
         // (`isthirdperson()`, render.cpp:343), so hide the real model in first person —
         // otherwise the camera sits inside it.
         if (PlayerModel is { } model) model.Visible = ThirdPerson;
+        if (Hudgun is { } hudgun) hudgun.Visible = !ThirdPerson && !Floating;
 
         if (!ThirdPerson)
         {

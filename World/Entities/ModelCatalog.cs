@@ -55,6 +55,13 @@ public sealed class ModelInfo
 
     /// <summary>View-pitch corrections (<c>md5pitch</c>): per-bone, or part-wide when the bone is empty.</summary>
     public readonly List<PitchInfo> Pitches = new();
+
+    /// <summary>Linked submodels, as used by first-person hudguns.</summary>
+    public readonly List<ModelInfo> Parts = new();
+
+    /// <summary>For linked submodels, the parent part and attachment tag.</summary>
+    public int LinkParent = -1;
+    public string? LinkTag;
 }
 
 /// <summary>One MD5 animation part's bone mask (<c>md5animpart</c>).</summary>
@@ -105,85 +112,101 @@ public sealed class ModelCatalog
         var catalog = new ModelCatalog();
         foreach (var entry in models.EnumerateObject())
         {
-            var v = entry.Value;
-            var info = new ModelInfo { Name = entry.Name };
-
-            if (v.TryGetProperty("glb", out var glb) && glb.ValueKind == JsonValueKind.String)
-            {
-                string file = glb.GetString()!;
-                info.GlbPath = $"{glbResDir.TrimEnd('/')}/{file}";
-                info.GlbOsPath = Path.Combine(glbOsDir, file);
-            }
-            if (v.TryGetProperty("scale", out var scale)) info.Scale = (float)scale.GetDouble();
-            if (v.TryGetProperty("skin", out var skin) && skin.ValueKind == JsonValueKind.String)
-                info.Skin = skin.GetString();
-            if (v.TryGetProperty("bump", out var bump) && bump.ValueKind == JsonValueKind.String)
-                info.Bump = bump.GetString();
-            if (v.TryGetProperty("source", out var src) && src.ValueKind == JsonValueKind.String)
-                info.Source = src.GetString();
-            if (v.TryGetProperty("skeleton", out var skel) && skel.ValueKind == JsonValueKind.True)
-                info.Skeleton = true;
-            if (v.TryGetProperty("tags", out var tags) && tags.ValueKind == JsonValueKind.Array)
-                foreach (var t in tags.EnumerateArray())
-                    if (t.TryGetProperty("tag", out var tag) && tag.ValueKind == JsonValueKind.String &&
-                        t.TryGetProperty("bone", out var bone) && bone.ValueKind == JsonValueKind.String)
-                        info.Tags[tag.GetString()!] = bone.GetString()!;
-            if (v.TryGetProperty("anims", out var anims) && anims.ValueKind == JsonValueKind.Object)
-                foreach (var a in anims.EnumerateObject())
-                    if (a.Value.ValueKind == JsonValueKind.String)
-                        info.Anims[a.Name] = a.Value.GetString()!;
-            if (v.TryGetProperty("animSpeeds", out var speeds) && speeds.ValueKind == JsonValueKind.Object)
-                foreach (var s in speeds.EnumerateObject())
-                    if (s.Value.ValueKind == JsonValueKind.Number)
-                        info.AnimSpeeds[s.Name] = (float)s.Value.GetDouble();
-            if (v.TryGetProperty("animParts", out var parts) && parts.ValueKind == JsonValueKind.Array)
-                foreach (var p in parts.EnumerateArray())
+            var info = ReadInfo(entry.Name, entry.Value, glbOsDir, glbResDir);
+            if (entry.Value.TryGetProperty("parts", out var parts) && parts.ValueKind == JsonValueKind.Array)
+                foreach (var part in parts.EnumerateArray())
                 {
-                    var part = new AnimPartInfo();
-                    if (p.TryGetProperty("mask", out var mask) && mask.ValueKind == JsonValueKind.Array)
-                        foreach (var b in mask.EnumerateArray())
-                            if (b.ValueKind == JsonValueKind.String) part.Bones.Add(b.GetString()!);
-                    info.AnimParts.Add(part);
+                    var partInfo = ReadInfo(entry.Name, part, glbOsDir, glbResDir);
+                    if (part.TryGetProperty("link", out var link) && link.ValueKind == JsonValueKind.Object)
+                    {
+                        if (link.TryGetProperty("parent", out var parent) && parent.ValueKind == JsonValueKind.Number)
+                            partInfo.LinkParent = parent.GetInt32();
+                        if (link.TryGetProperty("tag", out var tag) && tag.ValueKind == JsonValueKind.String)
+                            partInfo.LinkTag = tag.GetString();
+                    }
+                    info.Parts.Add(partInfo);
                 }
-            if (v.TryGetProperty("partAnims", out var partAnims) && partAnims.ValueKind == JsonValueKind.Array)
-                foreach (var p in partAnims.EnumerateArray())
-                {
-                    var table = new Dictionary<string, PartAnimInfo>();
-                    if (p.ValueKind == JsonValueKind.Object)
-                        foreach (var clip in p.EnumerateObject())
-                        {
-                            var ci = new PartAnimInfo();
-                            if (clip.Value.TryGetProperty("file", out var file) && file.ValueKind == JsonValueKind.String)
-                                ci.File = file.GetString();
-                            if (clip.Value.TryGetProperty("fps", out var fps) && fps.ValueKind == JsonValueKind.Number)
-                                ci.Fps = (float)fps.GetDouble();
-                            if (clip.Value.TryGetProperty("priority", out var priority) && priority.ValueKind == JsonValueKind.Number)
-                                ci.Priority = priority.GetInt32();
-                            table[clip.Name] = ci;
-                        }
-                    info.PartAnims.Add(table);
-                }
-            if (v.TryGetProperty("pitch", out var pitches) && pitches.ValueKind == JsonValueKind.Array)
-                foreach (var p in pitches.EnumerateArray())
-                {
-                    var pi = new PitchInfo();
-                    if (p.TryGetProperty("bone", out var pitchBone) && pitchBone.ValueKind == JsonValueKind.String)
-                        pi.Bone = pitchBone.GetString()!;
-                    if (p.TryGetProperty("scale", out var pitchScale) && pitchScale.ValueKind == JsonValueKind.Number)
-                        pi.Scale = (float)pitchScale.GetDouble();
-                    if (p.TryGetProperty("offset", out var pitchOffset) && pitchOffset.ValueKind == JsonValueKind.Number)
-                        pi.Offset = (float)pitchOffset.GetDouble();
-                    if (p.TryGetProperty("min", out var pitchMin) && pitchMin.ValueKind == JsonValueKind.Number)
-                        pi.Min = (float)pitchMin.GetDouble();
-                    if (p.TryGetProperty("max", out var pitchMax) && pitchMax.ValueKind == JsonValueKind.Number)
-                        pi.Max = (float)pitchMax.GetDouble();
-                    info.Pitches.Add(pi);
-                }
-            if (v.TryGetProperty("trans", out var trans) && trans.ValueKind == JsonValueKind.Array && trans.GetArrayLength() == 3)
-                info.Translation = new Vector3((float)trans[0].GetDouble(), (float)trans[1].GetDouble(), (float)trans[2].GetDouble());
-
             catalog.Models[entry.Name] = info;
         }
         return catalog;
+    }
+
+    private static ModelInfo ReadInfo(string name, JsonElement v, string glbOsDir, string glbResDir)
+    {
+        var info = new ModelInfo { Name = name };
+        if (v.TryGetProperty("glb", out var glb) && glb.ValueKind == JsonValueKind.String)
+        {
+            string file = glb.GetString()!;
+            info.GlbPath = $"{glbResDir.TrimEnd('/')}/{file}";
+            info.GlbOsPath = Path.Combine(glbOsDir, file);
+        }
+        if (v.TryGetProperty("scale", out var scale)) info.Scale = (float)scale.GetDouble();
+        if (v.TryGetProperty("skin", out var skin) && skin.ValueKind == JsonValueKind.String)
+            info.Skin = skin.GetString();
+        if (v.TryGetProperty("bump", out var bump) && bump.ValueKind == JsonValueKind.String)
+            info.Bump = bump.GetString();
+        if (v.TryGetProperty("source", out var src) && src.ValueKind == JsonValueKind.String)
+            info.Source = src.GetString();
+        if (v.TryGetProperty("skeleton", out var skel) && skel.ValueKind == JsonValueKind.True)
+            info.Skeleton = true;
+        if (v.TryGetProperty("tags", out var tags) && tags.ValueKind == JsonValueKind.Array)
+            foreach (var t in tags.EnumerateArray())
+                if (t.TryGetProperty("tag", out var tag) && tag.ValueKind == JsonValueKind.String &&
+                    t.TryGetProperty("bone", out var bone) && bone.ValueKind == JsonValueKind.String)
+                    info.Tags[tag.GetString()!] = bone.GetString()!;
+        if (v.TryGetProperty("anims", out var anims) && anims.ValueKind == JsonValueKind.Object)
+            foreach (var a in anims.EnumerateObject())
+                if (a.Value.ValueKind == JsonValueKind.String)
+                    info.Anims[a.Name] = a.Value.GetString()!;
+        if (v.TryGetProperty("animSpeeds", out var speeds) && speeds.ValueKind == JsonValueKind.Object)
+            foreach (var s in speeds.EnumerateObject())
+                if (s.Value.ValueKind == JsonValueKind.Number)
+                    info.AnimSpeeds[s.Name] = (float)s.Value.GetDouble();
+        if (v.TryGetProperty("animParts", out var animParts) && animParts.ValueKind == JsonValueKind.Array)
+            foreach (var p in animParts.EnumerateArray())
+            {
+                var part = new AnimPartInfo();
+                if (p.TryGetProperty("mask", out var mask) && mask.ValueKind == JsonValueKind.Array)
+                    foreach (var b in mask.EnumerateArray())
+                        if (b.ValueKind == JsonValueKind.String) part.Bones.Add(b.GetString()!);
+                info.AnimParts.Add(part);
+            }
+        if (v.TryGetProperty("partAnims", out var partAnims) && partAnims.ValueKind == JsonValueKind.Array)
+            foreach (var p in partAnims.EnumerateArray())
+            {
+                var table = new Dictionary<string, PartAnimInfo>();
+                if (p.ValueKind == JsonValueKind.Object)
+                    foreach (var clip in p.EnumerateObject())
+                    {
+                        var ci = new PartAnimInfo();
+                        if (clip.Value.TryGetProperty("file", out var file) && file.ValueKind == JsonValueKind.String)
+                            ci.File = file.GetString();
+                        if (clip.Value.TryGetProperty("fps", out var fps) && fps.ValueKind == JsonValueKind.Number)
+                            ci.Fps = (float)fps.GetDouble();
+                        if (clip.Value.TryGetProperty("priority", out var priority) && priority.ValueKind == JsonValueKind.Number)
+                            ci.Priority = priority.GetInt32();
+                        table[clip.Name] = ci;
+                    }
+                info.PartAnims.Add(table);
+            }
+        if (v.TryGetProperty("pitch", out var pitches) && pitches.ValueKind == JsonValueKind.Array)
+            foreach (var p in pitches.EnumerateArray())
+            {
+                var pi = new PitchInfo();
+                if (p.TryGetProperty("bone", out var pitchBone) && pitchBone.ValueKind == JsonValueKind.String)
+                    pi.Bone = pitchBone.GetString()!;
+                if (p.TryGetProperty("scale", out var pitchScale) && pitchScale.ValueKind == JsonValueKind.Number)
+                    pi.Scale = (float)pitchScale.GetDouble();
+                if (p.TryGetProperty("offset", out var pitchOffset) && pitchOffset.ValueKind == JsonValueKind.Number)
+                    pi.Offset = (float)pitchOffset.GetDouble();
+                if (p.TryGetProperty("min", out var pitchMin) && pitchMin.ValueKind == JsonValueKind.Number)
+                    pi.Min = (float)pitchMin.GetDouble();
+                if (p.TryGetProperty("max", out var pitchMax) && pitchMax.ValueKind == JsonValueKind.Number)
+                    pi.Max = (float)pitchMax.GetDouble();
+                info.Pitches.Add(pi);
+            }
+        if (v.TryGetProperty("trans", out var trans) && trans.ValueKind == JsonValueKind.Array && trans.GetArrayLength() == 3)
+            info.Translation = new Vector3((float)trans[0].GetDouble(), (float)trans[1].GetDouble(), (float)trans[2].GetDouble());
+        return info;
     }
 }
