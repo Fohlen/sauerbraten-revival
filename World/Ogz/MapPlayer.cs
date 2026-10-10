@@ -193,12 +193,6 @@ public partial class MapPlayer : Node3D
     private string _bodyAnim = "";
 
     /// <summary>
-    /// Override the body animation playback fps for tuning against the original
-    /// (0 = use the engine's per-clip <c>anims.cfg</c> speeds). Editable live.
-    /// </summary>
-    [Export] public float AnimFpsOverride { get; set; } = 0f;
-
-    /// <summary>
     /// Play the body clip matching the current state, mirroring the engine's
     /// <c>renderclient</c> secondary-animation selection (rendermodel.cpp): water →
     /// swim/sink, in-air → jump, else forward/backward/left/right, else idle. The
@@ -213,8 +207,6 @@ public partial class MapPlayer : Node3D
             model.Play(name, loop: name != "jump");
             _bodyAnim = name;
         }
-        // Apply the live fps override (tuning aid) every frame; 0 = engine speeds.
-        model.SetFpsOverride(AnimFpsOverride);
     }
 
     /// <summary>Engine anim name for the current player state (see <see cref="UpdateBodyAnim"/>).</summary>

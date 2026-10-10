@@ -150,16 +150,6 @@ public partial class PlayerModel : ModelInstance
         return keys >= 2 && anim.Length > 0.0 ? (float)((keys - 1) / anim.Length) : 1f;
     }
 
-    /// <summary>
-    /// Override the playback fps for the current clip (tuning aid; 0 = use the engine
-    /// per-clip speeds). Lets us sample e.g. 10–300 fps against the original.
-    /// </summary>
-    public void SetFpsOverride(float fps)
-    {
-        if (_player == null || CurrentAnim == null) return;
-        _player.SpeedScale = fps > 0f ? fps / AuthoredFps(CurrentAnim) : SpeedScaleFor(CurrentAnim);
-    }
-
     /// <summary>Engine default when a clip specifies no fps (100 ms/frame).</summary>
     private const float DefaultAnimFps = 10f;
 }
