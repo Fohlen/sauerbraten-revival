@@ -53,6 +53,38 @@ public class PlayerViewWeaponTest : GoTestBase
     }
 
     [Test]
+    public void SwapsAndClearsWeaponAtRuntime()
+    {
+        var catalog = LoadCatalog();
+        if (catalog == null) { GD.Print("[vwep] no converted models; skipping"); return; }
+        if (catalog.Get("vwep/rifle") == null || catalog.Get("vwep/shotg") == null)
+        { GD.Print("[vwep] vwep models missing; skipping"); return; }
+
+        var holder = new Node3D();
+        TestScene.AddChild(holder);
+        var body = new PlayerModel { Name = "PlayerModel" };
+        holder.AddChild(body);
+        body.Configure(catalog, null, 0, 1, viewWeapon: "vwep/rifle");
+        if (!body.ModelLoaded) { GD.Print("[vwep] player body glb missing; skipping"); return; }
+
+        var first = body.ViewWeapon;
+        TestAssert.True(first != null, "initial weapon attached");
+
+        // SetViewWeapon is what the remote inspector's ViewWeapon property drives,
+        // so it must swap the rigid model without reloading the body.
+        body.SetViewWeapon("vwep/shotg");
+        TestAssert.Equal("vwep/shotg", body.ViewWeaponPath, "weapon path swapped");
+        TestAssert.True(body.ViewWeapon != null, "new weapon attached");
+        TestAssert.True(body.ViewWeapon != first, "weapon node replaced");
+        TestAssert.True(!GodotObject.IsInstanceValid(first), "old weapon node freed");
+
+        body.SetViewWeapon("");
+        TestAssert.True(body.ViewWeapon == null, "weapon cleared");
+        TestAssert.True(body.ViewWeaponPath == null, "weapon path cleared");
+        holder.QueueFree();
+    }
+
+    [Test]
     public void NoWeaponWhenUnset()
     {
         var catalog = LoadCatalog();

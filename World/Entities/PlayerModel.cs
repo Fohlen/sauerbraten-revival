@@ -39,12 +39,24 @@ public partial class PlayerModel : ModelInstance
     /// <summary>Engine model name of the attached view weapon (e.g. "vwep/rifle").</summary>
     public string? ViewWeaponPath { get; private set; }
 
+    private Vector3 _viewWeaponRotationDegrees = Vector3.Zero;
+
     /// <summary>
     /// Extra rotation applied to the attached view weapon. The weapon is rigid and
     /// follows the body's <c>Weapon</c> bone, so this is only for aligning the
     /// imported glb's up-axis with the body; tune against the reference render.
+    /// Exported so it can be nudged from the remote inspector (it re-attaches live).
     /// </summary>
-    public Vector3 ViewWeaponRotationDegrees { get; set; } = Vector3.Zero;
+    [Export]
+    public Vector3 ViewWeaponRotationDegrees
+    {
+        get => _viewWeaponRotationDegrees;
+        set
+        {
+            _viewWeaponRotationDegrees = value;
+            if (ViewWeapon != null && IsInstanceValid(ViewWeapon)) AttachViewWeapon();
+        }
+    }
 
     /// <summary>True once the baked glb supplied an <see cref="AnimationPlayer"/> with clips.</summary>
     public bool Animated => _player != null && _player.GetAnimationList().Length > 0;
@@ -112,6 +124,18 @@ public partial class PlayerModel : ModelInstance
         SkinMaterial = ModelSkin.Build(info, textures, skinCache ?? new Dictionary<string, Material>());
 
         if (IsInsideTree()) Reload();
+    }
+
+    /// <summary>
+    /// Attach, swap or clear the third-person view weapon at runtime without reloading
+    /// the body (engine <c>vweps[]</c>, render.cpp). <paramref name="viewWeapon"/> is an
+    /// engine model name such as <c>vwep/rifle</c>; null/empty detaches the current one.
+    /// Safe to call before the body has finished loading (the attach is retried on load).
+    /// </summary>
+    public void SetViewWeapon(string? viewWeapon)
+    {
+        _viewWeaponName = string.IsNullOrEmpty(viewWeapon) ? null : viewWeapon;
+        AttachViewWeapon();
     }
 
     public override void _Ready()

@@ -45,9 +45,23 @@ public partial class OgzMapViewer : Node3D
 
     /// <summary>
     /// Third-person view weapon to attach to the player model's <c>Weapon</c> bone
-    /// (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>). Empty attaches none.
+    /// (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>). Empty attaches none. This is
+    /// a live property: changing it from the remote inspector swaps the weapon on the
+    /// spawned <see cref="PlayerModel"/> immediately.
     /// </summary>
-    [Export] public string ViewWeapon { get; set; } = "";
+    [Export]
+    public string ViewWeapon
+    {
+        get => _viewWeapon;
+        set
+        {
+            _viewWeapon = value ?? "";
+            _playerModel?.SetViewWeapon(string.IsNullOrEmpty(_viewWeapon) ? null : _viewWeapon);
+        }
+    }
+
+    private string _viewWeapon = "";
+    private PlayerModel? _playerModel;
 
     /// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
     public MapWorld? World { get; private set; }
@@ -113,9 +127,10 @@ public partial class OgzMapViewer : Node3D
         World!.AddChild(body);
         player.PlayerModel = body;
         player.HidePlaceholderBody = true;
+        _playerModel = body;
 
         body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam,
-            viewWeapon: string.IsNullOrEmpty(ViewWeapon) ? null : ViewWeapon);
+            viewWeapon: string.IsNullOrEmpty(_viewWeapon) ? null : _viewWeapon);
         player.SyncBodyModelNow();
         GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
     }

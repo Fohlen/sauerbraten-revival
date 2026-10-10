@@ -325,8 +325,13 @@ Remaining:
             convert (`tools/model-import`, including `md5dir`-relative skin/bumpmap
             resolution), and `PlayerModel.Configure(..., viewWeapon:)` parents the
             rigid model under the body skeleton's `Weapon` attachment point
-            (`test/PlayerViewWeaponTest.cs`). Weapon selection and the
-            `hold N`/`attack N` anims land with the state machine below.
+            (`test/PlayerViewWeaponTest.cs`). `player_scene.tscn` attaches
+            `vwep/rifle` by default; `OgzMapViewer.ViewWeapon` is a live export
+            (backed by `PlayerModel.SetViewWeapon`), so the weapon can be swapped or
+            cleared from the remote debugger without reloading the body, and
+            `PlayerModel.ViewWeaponRotationDegrees` is exported to tune the attach.
+            The real weapon selection and the `hold N`/`attack N` anims land with the
+            state machine below.
 - [ ] Hitscan weapons (insta rifle; effic loadout).
 - [ ] Flags and capture logic (CTF).
 - [ ] Scoring, respawns, spawn selection.

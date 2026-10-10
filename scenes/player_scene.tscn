@@ -24,6 +24,7 @@ FrameCamera = false
 SpawnPlayer = true
 PlayerModelIndex = 0
 PlayerTeam = 1
+ViewWeapon = "vwep/rifle"
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=829647378]
 environment = SubResource("Environment_env")
@@ -31,7 +32,6 @@ environment = SubResource("Environment_env")
 [node name="Player" type="Node3D" parent="." unique_id=1909886904]
 script = ExtResource("2_player")
 ThirdPersonDistance = 20.0
-BodyYawOffset = 180.0
 
 [node name="Body" type="MeshInstance3D" parent="Player" unique_id=982418121]
 mesh = SubResource("CapsuleMesh_body")
