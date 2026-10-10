@@ -130,8 +130,14 @@ public static class OctaFaceWalker
         if (nsize >= size &&
             (nb.IsEntirelySolid() || (nb.TouchingFace(opp) && OctaVisible.FaceEdges(nb, opp) == Octa.F_SOLID)))
             return false;
-        if (hideSameMaterial && (nb.Material & Octa.MATF_VOLUME) == (c.Material & Octa.MATF_VOLUME) && nsize >= size)
-            return false;
+        ushort curVolume = (ushort)(c.Material & Octa.MATF_VOLUME);
+        ushort nbVolume = (ushort)(nb.Material & Octa.MATF_VOLUME);
+        if (hideSameMaterial && nsize >= size)
+        {
+            if ((nbVolume == curVolume) ||
+                (Octa.IsLiquid(curVolume) && nbVolume == Octa.MAT_GLASS))
+                return false;
+        }
         return true;
     }
 }

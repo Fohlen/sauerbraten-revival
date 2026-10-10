@@ -31,27 +31,31 @@ public class MaterialSurfaceTest : TestClass
     }
 
     [Test]
-    public void SkipsFullySolidMaterialFaces()
+    public void HidesWaterFacesAgainstGlassAndSolidNeighbours()
     {
-        var octa = TestData.ReadMap("bt_falls").ToOcta();
+        var glassOcta = new Octa(4);
+        var water = glassOcta.WorldRoot[0];
+        water.Material = Octa.MAT_WATER;
+        water.EmptyFaces();
 
-        int candidateFaces = 0;
-        int solidMaterialFaces = 0;
-        OctaFaceWalker.Walk(octa,
-            include: c => (c.Material & Octa.MATF_VOLUME) != Octa.MAT_AIR,
-            hideSameMaterial: true,
-            emit: face =>
-            {
-                candidateFaces++;
-                if (face.Cube.IsEntirelySolid()) solidMaterialFaces++;
-            });
+        var glass = glassOcta.WorldRoot[1];
+        glass.Material = Octa.MAT_GLASS;
+        glass.EmptyFaces();
 
-        var surfaces = MaterialMesher.Build(octa);
-        long surfaceTriangles = surfaces.Sum(s => MeshAssert.Triangles(s.Mesh));
+        TestAssert.True(!OctaFaceWalker.FaceVisible(glassOcta, water, 1, Vector3I.Zero, 8, true),
+            "water is hidden against an adjacent glass cube");
 
-        TestAssert.True(candidateFaces > 0, "bt_falls has material candidate faces");
-        TestAssert.True(solidMaterialFaces > 0, "bt_falls includes fully solid material cubes");
-        TestAssert.True(surfaceTriangles < candidateFaces,
-            $"material mesher should skip the solid waterfall faces ({surfaceTriangles} < {candidateFaces})");
+        var solidOcta = new Octa(4);
+        var solidWater = solidOcta.WorldRoot[0];
+        solidWater.Material = Octa.MAT_WATER;
+        solidWater.EmptyFaces();
+
+        var solid = solidOcta.WorldRoot[1];
+        solid.Material = Octa.MAT_AIR;
+        solid.SolidFaces();
+
+        TestAssert.True(!OctaFaceWalker.FaceVisible(solidOcta, solidWater, 1, Vector3I.Zero, 8, true),
+            "water is hidden against an adjacent solid cube");
     }
+
 }
