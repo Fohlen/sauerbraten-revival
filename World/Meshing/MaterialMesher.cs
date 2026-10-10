@@ -30,6 +30,7 @@ public static class MaterialMesher
             hideSameMaterial: true,
             emit: face =>
             {
+                if (face.Cube.IsEntirelySolid()) return;
                 ushort volume = (ushort)(face.Cube.Material & Octa.MATF_VOLUME);
                 // Water/lava hide their bottom face in-game (edit-only surface).
                 if (face.Orient == 4 && volume != Octa.MAT_GLASS) return;

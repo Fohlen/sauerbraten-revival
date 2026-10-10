@@ -52,7 +52,7 @@ public sealed class OctaMesher
         var min = chunkOrigin;
         var max = chunkOrigin + new Vector3I(chunkSize, chunkSize, chunkSize);
         OctaFaceWalker.WalkRegion(_octa, min, max,
-            include: c => !c.IsEmpty(),
+            include: c => !c.IsEmpty() && ((c.Material & Octa.MATF_VOLUME) == 0 || c.IsEntirelySolid()),
             hideSameMaterial: false,
             emit: face =>
             {
@@ -69,7 +69,7 @@ public sealed class OctaMesher
 
         var builders = new Dictionary<Vector3I, ArrayMeshBuilder>();
         OctaFaceWalker.Walk(_octa,
-            include: c => !c.IsEmpty(),
+            include: c => !c.IsEmpty() && ((c.Material & Octa.MATF_VOLUME) == 0 || c.IsEntirelySolid()),
             hideSameMaterial: false,
             emit: face =>
             {

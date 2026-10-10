@@ -29,4 +29,29 @@ public class MaterialSurfaceTest : TestClass
         GD.Print($"[material] bt_falls: {surfaces.Count} material meshes, {water} water, {triangles} triangles");
         TestAssert.True(triangles > 0, "material surfaces have geometry");
     }
+
+    [Test]
+    public void SkipsFullySolidMaterialFaces()
+    {
+        var octa = TestData.ReadMap("bt_falls").ToOcta();
+
+        int candidateFaces = 0;
+        int solidMaterialFaces = 0;
+        OctaFaceWalker.Walk(octa,
+            include: c => (c.Material & Octa.MATF_VOLUME) != Octa.MAT_AIR,
+            hideSameMaterial: true,
+            emit: face =>
+            {
+                candidateFaces++;
+                if (face.Cube.IsEntirelySolid()) solidMaterialFaces++;
+            });
+
+        var surfaces = MaterialMesher.Build(octa);
+        long surfaceTriangles = surfaces.Sum(s => MeshAssert.Triangles(s.Mesh));
+
+        TestAssert.True(candidateFaces > 0, "bt_falls has material candidate faces");
+        TestAssert.True(solidMaterialFaces > 0, "bt_falls includes fully solid material cubes");
+        TestAssert.True(surfaceTriangles < candidateFaces,
+            $"material mesher should skip the solid waterfall faces ({surfaceTriangles} < {candidateFaces})");
+    }
 }
