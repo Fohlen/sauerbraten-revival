@@ -103,7 +103,9 @@ public partial class PlayerModel : ModelInstance
         // player yaw (engine renders the body at yaw+90).
         ModelRotationDegrees = new Vector3(0f, -90f, 0f);
         KeepSkeleton = true;
-        // Engine playback speeds (anims.cfg fps) for the speed scale.
+        // Engine playback speeds (anims.cfg fps) for the speed scale. The manifest
+        // carries them when present; otherwise SpeedScaleFor falls back to the
+        // built-in md5 player table below.
         _animSpeeds.Clear();
         if (info != null)
             foreach (var (animName, fps) in info.AnimSpeeds) _animSpeeds[animName] = fps;
@@ -221,24 +223,55 @@ public partial class PlayerModel : ModelInstance
     /// <summary>
     /// Playback speed so the clip advances at the engine's <c>anims.cfg</c> fps
     /// (animmodel: <c>info.speed = 1000/fps</c> ms/frame; 0/absent = engine default,
-    /// 100 ms/frame = 10 fps). Godot's baked clip advances at the <c>.md5anim</c>'s
-    /// authored frameRate, so scale by engine-fps / authored-fps.
+    /// 100 ms/frame = 10 fps). The baked clip spans the <c>.md5anim</c>'s authored
+    /// 24 fps times (Godot's import may resample the keys but preserves the clip
+    /// duration), so scale by engine-fps / authored-fps.
     /// </summary>
     private float SpeedScaleFor(string name)
     {
-        float engineFps = _animSpeeds.TryGetValue(name, out var s) && s > 0f ? s : DefaultAnimFps;
-        return engineFps / AuthoredFps(name);
+        float engineFps = _animSpeeds.TryGetValue(name, out var s) && s > 0f
+            ? s
+            : EngineAnimFps.GetValueOrDefault(name, DefaultAnimFps);
+        return engineFps / AuthoredAnimFps;
     }
 
-    /// <summary>Frames per second baked into the clip (from its key count and length).</summary>
-    private float AuthoredFps(string name)
+    /// <summary>
+    /// Fallback per-clip engine playback fps for the md5 player models that share
+    /// <c>packages/models/mrfixit/anims.cfg</c> (mrfixit and snoutx10k; e.g. inky and
+    /// captaincannon have their own, different tables). The engine's md5anim loader
+    /// keeps the last definition of a clip, so these are the final values. Clips
+    /// absent here (idle, jump, edit, sink, the holds, unlisted attacks/deaths) use
+    /// <see cref="DefaultAnimFps"/>. Per-model speeds from the converted manifest
+    /// (<see cref="ModelInfo.AnimSpeeds"/>) take precedence when present.
+    /// </summary>
+    private static readonly Dictionary<string, float> EngineAnimFps = new()
     {
-        if (_player == null || !_player.HasAnimation(name)) return 1f;
-        var anim = _player.GetAnimation(name);
-        int keys = anim.GetTrackCount() > 0 ? anim.TrackGetKeyCount(0) : 0;
-        return keys >= 2 && anim.Length > 0.0 ? (float)((keys - 1) / anim.Length) : 1f;
-    }
+        ["forward"] = 125f,
+        ["backward"] = 160f,
+        ["left"] = 125f,
+        ["right"] = 125f,
+        ["swim"] = 20f,
+        ["attack 2"] = 25f,   // shotgun
+        ["attack 3"] = 110f,  // minigun
+        ["attack 4"] = 20f,   // rocket launcher
+        ["attack 5"] = 20f,   // rifle
+        ["attack 6"] = 25f,   // grenade launcher
+        ["win"] = 17.5f,
+        ["lose"] = 17.5f,
+        ["dying"] = 29f,
+        ["pain"] = 66f,
+        ["taunt"] = 40f,
+    };
 
     /// <summary>Engine default when a clip specifies no fps (100 ms/frame).</summary>
     private const float DefaultAnimFps = 10f;
+
+    /// <summary>
+    /// Authored frame rate of the source <c>.md5anim</c> clips (their header is
+    /// <c>frameRate 24</c>). Do <b>not</b> derive this from the imported
+    /// <see cref="AnimationPlayer"/>: Godot's scene importer resamples animations to
+    /// its own rate (30 fps by default, see <c>animation/fps</c> in the <c>.import</c>),
+    /// which changes the key count but not the clip duration.
+    /// </summary>
+    private const float AuthoredAnimFps = 24f;
 }

@@ -88,8 +88,15 @@ def parse_cfg(path: str) -> dict:
                 if params["bump"] is None:
                     params["bump"] = args[1]
             elif cmd == "md5anim" and len(args) >= 2:
-                # md5anim "name" "file.md5anim" [fps] [flags]
-                params["anims"].append({"name": args[0], "file": args[1]})
+                # md5anim "name" "file.md5anim" [fps] [flags]. The numeric value is the
+                # engine's skelmodel setanim speed (animmodel.h: 1000/fps ms per frame).
+                anim = {"name": args[0], "file": args[1]}
+                if len(args) >= 3:
+                    try:
+                        anim["fps"] = float(args[2])
+                    except ValueError:
+                        pass
+                params["anims"].append(anim)
             elif cmd == "md5tag" and len(args) >= 2:
                 # md5tag <bone> <tag>  (e.g. md5tag Weapon tag_weapon)
                 params["tags"].append({"bone": args[0], "tag": args[1]})
@@ -497,10 +504,19 @@ def main() -> int:
                     # e.g. snoutx10k uses mrfixit's), so try those too.
                     anim_dirs = [mesh_dir] + list(params.get("exec_dirs", []))
                     anims = {}
+                    anim_speeds = {}
                     for a in params["anims"]:
                         anims[a["name"]] = rel_to_packages(a["file"], packages, cfg_dir,
                                                            extra_dirs=anim_dirs)
+                        # Keep the last definition's speed (the engine's md5anim loader
+                        # overwrites by name); 0/absent means the engine default.
+                        if a.get("fps", 0.0) > 0.0:
+                            anim_speeds[a["name"]] = a["fps"]
+                        else:
+                            anim_speeds.pop(a["name"], None)
                     record["anims"] = anims
+                    if anim_speeds:
+                        record["animSpeeds"] = anim_speeds
 
             glb = os.path.join(args.out, sanitize(name) + ".glb")
             # Skeletal MD5: bake every clip into the glb so Godot's own importer can

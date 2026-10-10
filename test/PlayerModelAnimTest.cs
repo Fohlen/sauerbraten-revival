@@ -59,6 +59,45 @@ public class PlayerModelAnimTest : GoTestBase
         holder.QueueFree();
     }
 
+    /// <summary>
+    /// The baked clips span the <c>.md5anim</c>'s authored 24 fps times, so the
+    /// engine's anims.cfg speed (animmodel.h <c>info.speed = 1000/fps</c>) must be
+    /// applied as <c>engineFps / 24</c>: forward/left/right 125, backward 160,
+    /// swim 20, idle 10.
+    /// </summary>
+    [Test]
+    public void MovementClipsUseEngineFps()
+    {
+        string dir = ProjectSettings.GlobalizePath("res://assets/models");
+        var catalog = ModelCatalog.Load(Path.Combine(dir, "models.json"), dir, "res://assets/models");
+        var info = catalog?.Get("mrfixit/blue");
+        if (info == null) { GD.Print("[player-anim] mrfixit/blue missing; skipping"); return; }
+
+        var body = new PlayerModel { Name = "PlayerModel" };
+        var holder = new Node3D();
+        holder.AddChild(body);
+        TestScene.AddChild(holder);
+        body.Configure(catalog, null, 0, 1);
+        if (!body.Animated) { GD.Print("[player-anim] glb has no baked clips; skipping"); return; }
+
+        var player = Find<AnimationPlayer>(body)!;
+        const float authoredFps = 24f;
+        var cases = new[]
+        {
+            ("forward", 125f), ("left", 125f), ("right", 125f),
+            ("backward", 160f), ("swim", 20f), ("idle", 10f),
+        };
+        foreach (var (clip, engineFps) in cases)
+        {
+            if (!player.HasAnimation(clip)) continue;
+            body.Play(clip);
+            float expected = engineFps / authoredFps;
+            TestAssert.True(Mathf.Abs(player.SpeedScale - expected) < 1e-3f,
+                $"{clip}: SpeedScale {player.SpeedScale} != engine {engineFps}/{authoredFps} = {expected}");
+        }
+        holder.QueueFree();
+    }
+
     private static T? Find<T>(Node n) where T : Node
     {
         if (n is T t) return t;
