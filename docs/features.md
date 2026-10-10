@@ -304,14 +304,20 @@ Remaining:
             `<dds>`/`<mad:...>` tag stripping and variant-dir skin resolution.
       - [x] Load the player body model into the scene (`PlayerModel`; third-person,
             grounded; orientation verified).
-      - [x] **MD5 animation parse + `Animation`** (`World/Entities/Md5Anim.cs` +
+      - [x] **MD5 animation parse** (`World/Entities/Md5Anim.cs` +
             `Md5MeshBind.cs`, `Quat`/`Dq`): faithful port of the engine's
             `loadanim` frame compose, asserted against golden output from
-            `tools/animprobe` (`test/Md5AnimTest.cs`, `test/golden/anim/`). Built a
-            Godot `Animation` with per-bone position/rotation tracks.
+            `tools/animprobe` (`test/Md5AnimTest.cs`, `test/golden/anim/`).
+      - [~] Runtime anim wiring: `AnimationPlayer` on the body. **The current
+            approach is wrong and must be replaced** — driving the reconstructed
+            Godot `Skeleton3D` bones deforms the hands/feet because Godot's glTF
+            importer collapses bones (75 → 50) and reshapes the hierarchy. The
+            required node-based approach (animate glTF bone nodes, or bake animated
+            `.glb`s and let Godot's importer own it) is specified in
+            [character-animation.md](character-animation.md).
+      - [ ] Anim state machine mirroring `renderclient`
+            (idle/walk/jump/`hold N`/`attack N`/dead).
       - [ ] First-person view model (hudguns).
-      - [ ] Runtime anim wiring: `AnimationPlayer` on the body + a state machine
-            mirroring `renderclient` (idle/walk/jump/`hold N`/`attack N`/dead).
       - [ ] Attach the view weapon to the `Weapon` bone.
 - [ ] Hitscan weapons (insta rifle; effic loadout).
 - [ ] Flags and capture logic (CTF).

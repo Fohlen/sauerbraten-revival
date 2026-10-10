@@ -213,40 +213,41 @@ public sealed class Md5Anim
         new(d.Translation(), new Quaternion(d.Real.X, d.Real.Y, d.Real.Z, d.Real.W));
 
     /// <summary>
-    /// Convert the engine's parent-relative poses to Godot bone poses. The engine's
-    /// <c>frame[k]</c> is a <b>delta from the bind pose</b> (identity = bind), so each
-    /// target bone's pose is <c>rest[k] * delta[k]</c>. Godot's glTF importer collapses
-    /// bones with no skinning influence (75 engine bones → 50), so the delta is
-    /// accumulated to skeleton space and re-expressed against the target hierarchy
-    /// first.
+    /// Convert the engine's parent-relative deltas to Godot bone poses.
+    ///
+    /// The engine skins bind-space vertices with the accumulated delta
+    /// <c>bdata[k] = bdata[parent] * frame[k]</c> (identity rest = bind). Godot skins
+    /// with <c>globalPose[k] * globalRest[k]⁻¹</c>. Equating the two gives, per bone:
+    /// <c>pose[k] = globalRest[parent]⁻¹ * frame[k] * globalRest[k]</c>
+    /// (parent = the <b>target</b> hierarchy parent, so Godot's collapsed bones are
+    /// handled).
     /// </summary>
     /// <param name="enginePose">Per-bone parent-relative deltas (indexed by bind index).</param>
     /// <param name="bind">The mesh bind pose (engine parent links).</param>
     /// <param name="targetParent">For each bind bone, the bind index of its target
     /// hierarchy parent, or -1 for a target root (or unknown).</param>
-    /// <param name="rest">Per-bind-bone Godot rest transform (relative to the target
-    /// parent); a bound transform for bones the target skeleton lacks.</param>
-    public static BonePose[] ToGodotLocal(BonePose[] enginePose, Md5MeshBind bind, int[] targetParent, Transform3D[] rest)
+    /// <param name="globalRest">Per-bind-bone Godot <b>global</b> rest transform (skeleton space).</param>
+    public static BonePose[] ToGodotLocal(BonePose[] enginePose, Md5MeshBind bind, int[] targetParent, Transform3D[] globalRest)
     {
-        // Accumulate engine deltas to skeleton space.
-        var abs = new Transform3D[bind.BoneCount];
+        // Accumulate the engine's parent-relative deltas to skeleton space (bdata[k]),
+        // so a bone whose engine parent was collapsed by Godot's importer still gets its
+        // correct absolute delta.
+        var bdata = new Transform3D[bind.BoneCount];
         for (int k = 0; k < bind.BoneCount; k++)
         {
-            var local = new Transform3D(new Basis(enginePose[k].Rotation), enginePose[k].Position);
+            var frame = new Transform3D(new Basis(enginePose[k].Rotation), enginePose[k].Position);
             int p = bind.Bones[k].Parent;
-            abs[k] = p < 0 ? local : abs[p] * local;
+            bdata[k] = p < 0 ? frame : bdata[p] * frame;
         }
-        // Convert each target bone to its target-parent space, then apply its rest.
         var outp = new BonePose[bind.BoneCount];
         for (int k = 0; k < bind.BoneCount; k++)
         {
-            Transform3D delta = abs[k];
+            // globalPose[k] = bdata[k] * globalRest[k]  (equating engine/Godot skinning).
+            Transform3D globalPose = bdata[k] * globalRest[k];
             int tp = targetParent[k];
-            // acc[targetParent] must also be in skeleton space; abs[tp] is.
-            if (tp >= 0) delta = abs[tp].AffineInverse() * delta;
-            // Godot pose is relative to the target parent; compose the bone's rest so
-            // an identity delta reproduces the bind pose exactly.
-            Transform3D t = rest[k] * delta;
+            Transform3D t = tp >= 0
+                ? (bdata[tp] * globalRest[tp]).AffineInverse() * globalPose
+                : globalPose;
             outp[k] = new BonePose(t.Origin, t.Basis.GetRotationQuaternion());
         }
         return outp;
@@ -264,7 +265,7 @@ public sealed class Md5Anim
     /// <param name="skeletonPath">Node path to the target <see cref="Skeleton3D"/>.</param>
     /// <param name="boneName">Resolves a bind bone name to the target skeleton's bone name, or null to skip.</param>
     /// <param name="boneParentName">Resolves a target bone name to its parent bone name, or null for a root.</param>
-    /// <param name="boneRest">Resolves a target bone name to its Godot rest transform (parent-relative).</param>
+    /// <param name="boneRest">Resolves a target bone name to its Godot <b>global</b> rest transform (skeleton space).</param>
     /// <param name="fps">Playback rate for track length; defaults to the file's frameRate.</param>
     public Animation BuildAnimation(
         Md5MeshBind bind,
@@ -299,11 +300,11 @@ public sealed class Md5Anim
 
         var posTracks = new int[bind.BoneCount];
         var rotTracks = new int[bind.BoneCount];
-        var rest = new Transform3D[bind.BoneCount];
+        // Global (skeleton-space) rest per bind bone, used by ToGodotLocal.
+        var globalRest = new Transform3D[bind.BoneCount];
         for (int k = 0; k < bind.BoneCount; k++)
         {
-            rest[k] = target[k] != null ? (boneRest(target[k]!) ?? Transform3D.Identity) : Transform3D.Identity;
-            if (target[k] == null) { posTracks[k] = rotTracks[k] = -1; continue; }
+            globalRest[k] = target[k] != null ? (boneRest(target[k]!) ?? Transform3D.Identity) : Transform3D.Identity;            if (target[k] == null) { posTracks[k] = rotTracks[k] = -1; continue; }
             // Canonical Godot bone track: "<skeleton>:<bone_name>".
             var bonePath = new NodePath($"{skeletonPath}:{target[k]}");
             posTracks[k] = anim.AddTrack(Animation.TrackType.Position3D);
@@ -315,7 +316,7 @@ public sealed class Md5Anim
         for (int f = 0; f < NumFrames; f++)
         {
             float t = f / rate;
-            var poses = ToGodotLocal(Evaluate(f, bind), bind, targetParent, rest);
+            var poses = ToGodotLocal(Evaluate(f, bind), bind, targetParent, globalRest);
             for (int k = 0; k < bind.BoneCount; k++)
             {
                 if (target[k] == null) continue;

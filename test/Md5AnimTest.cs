@@ -43,17 +43,25 @@ public class Md5AnimTest : TestClass
 
         var bind = Md5MeshBind.Parse(meshPath)!;
         var a = Md5Anim.Parse(animPath, bind.Names)!;
-        // Resolve names to a synthetic 0..n-1 skeleton index order.
-        var index = new Dictionary<string, int>();
-        for (int i = 0; i < bind.Names.Count; i++) index[bind.Names[i]] = i;
+        // Name-based resolvers (Godot bone tracks use "<skeleton>:<bone name>").
+        var present = new HashSet<string>(bind.Names);
+        System.Func<string, string?> boneName = n => present.Contains(n) ? n : null;
+        System.Func<string, string?> boneParentName = n =>
+        {
+            int i = bind.Names.IndexOf(n);
+            if (i < 0 || bind.Bones[i].Parent < 0) return null;
+            return bind.Names[bind.Bones[i].Parent];
+        };
 
-        var anim = a.BuildAnimation(bind, "Skeleton3D", name => index.GetValueOrDefault(name, -1));
+        var anim = a.BuildAnimation(bind, "Skeleton3D", boneName, boneParentName, _ => Transform3D.Identity);
         TestAssert.Equal(bind.BoneCount * 2, anim.GetTrackCount(), "one position+rotation track per bone");
         TestAssert.True(anim.Length > 0f, "non-zero length");
-        var path = anim.TrackGetPath(0);
+        var path = anim.TrackGetPath(0).ToString();
         GD.Print($"[md5anim] animation length={anim.Length:F3}s track0={path} tracks={anim.GetTrackCount()}");
-        TestAssert.True(path.ToString().StartsWith("Skeleton3D:"), "track targets the skeleton node");
-        TestAssert.True(path.ToString().EndsWith("/position") || path.ToString().EndsWith("/rotation"), "bone track path");
+        TestAssert.True(path.StartsWith("Skeleton3D:"), "track targets the skeleton node");
+        // Canonical bone path: "<skeleton>:<bone_name>" (no /position or /rotation suffix).
+        TestAssert.True(!path.EndsWith("/position") && !path.EndsWith("/rotation"), "bone track uses the bone-name form");
+        TestAssert.True(path.Contains(':'), "track has a bone name after the colon");
     }
 
     private static void Compare(string model, string anim, int frame)

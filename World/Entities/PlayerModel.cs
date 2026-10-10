@@ -115,7 +115,7 @@ public partial class PlayerModel : ModelInstance
             return p >= 0 ? skeleton.GetBoneName(p) : null;
         };
         System.Func<string, Transform3D?> boneRest = n =>
-            byName.TryGetValue(n, out var i) ? skeleton.GetBoneRest(i) : null;
+            byName.TryGetValue(n, out var i) ? skeleton.GetBoneGlobalRest(i) : null;
 
         var player = new AnimationPlayer { Name = "AnimationPlayer" };
         AddChild(player);
