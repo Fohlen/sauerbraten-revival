@@ -320,7 +320,13 @@ Remaining:
             swim/sink, edit; `test/BodyAnimTest.cs`). Attack/hold/pain/dead land with
             weapons/combat.
       - [ ] First-person view model (hudguns).
-      - [ ] Attach the view weapon to the `Weapon` bone.
+      - [x] **Third-person view weapon** attached to the body's `Weapon` bone
+            (render.cpp `renderplayer` / `vweps[]`). The seven `vwep/*` models now
+            convert (`tools/model-import`, including `md5dir`-relative skin/bumpmap
+            resolution), and `PlayerModel.Configure(..., viewWeapon:)` parents the
+            rigid model under the body skeleton's `Weapon` attachment point
+            (`test/PlayerViewWeaponTest.cs`). Weapon selection and the
+            `hold N`/`attack N` anims land with the state machine below.
 - [ ] Hitscan weapons (insta rifle; effic loadout).
 - [ ] Flags and capture logic (CTF).
 - [ ] Scoring, respawns, spawn selection.

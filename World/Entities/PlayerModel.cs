@@ -33,29 +33,61 @@ public partial class PlayerModel : ModelInstance
     /// <summary>Animation currently playing, if any.</summary>
     public string? CurrentAnim { get; private set; }
 
+    /// <summary>The attached third-person view weapon, if any (see <see cref="Configure"/>).</summary>
+    public PlayerViewWeapon? ViewWeapon { get; private set; }
+
+    /// <summary>Engine model name of the attached view weapon (e.g. "vwep/rifle").</summary>
+    public string? ViewWeaponPath { get; private set; }
+
+    /// <summary>
+    /// Extra rotation applied to the attached view weapon. The weapon is rigid and
+    /// follows the body's <c>Weapon</c> bone, so this is only for aligning the
+    /// imported glb's up-axis with the body; tune against the reference render.
+    /// </summary>
+    public Vector3 ViewWeaponRotationDegrees { get; set; } = Vector3.Zero;
+
     /// <summary>True once the baked glb supplied an <see cref="AnimationPlayer"/> with clips.</summary>
     public bool Animated => _player != null && _player.GetAnimationList().Length > 0;
 
     private AnimationPlayer? _player;
     private readonly Dictionary<string, float> _animSpeeds = new();
 
+    // View-weapon attachment state, retained so a later Reload can re-attach.
+    private ModelCatalog? _models;
+    private ITextureSource? _textures;
+    private Dictionary<string, Material>? _skinCache;
+    private string? _viewWeaponName;
+    private string _weaponBone = "Weapon";
+
     /// <summary>
     /// Point this node at a player model's variant for <paramref name="team"/> and load
     /// it, using the world's converted-model catalogue and texture source. Safe to call
     /// before or after the node enters the tree.
     /// </summary>
+    /// <param name="viewWeapon">
+    /// Optional engine model name of the third-person view weapon to attach
+    /// (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>), or null to attach none.
+    /// </param>
     public void Configure(
         ModelCatalog? models,
         ITextureSource? textures,
         int modelIndex,
         int team,
-        Dictionary<string, Material>? skinCache = null)
+        Dictionary<string, Material>? skinCache = null,
+        string? viewWeapon = null)
     {
         ModelIndex = modelIndex;
         Team = team;
+        _models = models;
+        _textures = textures;
+        _skinCache = skinCache;
+        _viewWeaponName = viewWeapon;
         var info = models?.Get(Playermodels.Get(modelIndex).Body(team));
 
         ModelPath = Playermodels.Get(modelIndex).Body(team);
+        // The body's md5tag maps the engine attachment point onto the baked glb's
+        // bone name (mrfixit: tag_weapon -> Weapon).
+        _weaponBone = info?.Tags.GetValueOrDefault("tag_weapon") ?? "Weapon";
         GlbPath = info?.GlbPath;
         GlbOsPath = info?.GlbOsPath;
         ModelScale = info?.Scale ?? 1.0f;
@@ -104,8 +136,65 @@ public partial class PlayerModel : ModelInstance
         // The AnimationPlayer sits somewhere in the imported glTF subtree (below the
         // "Model" holder this node owns).
         _player = FindAnimationPlayer(this);
-        if (_player == null) return;
-        if (_player.HasAnimation("idle")) Play("idle");
+        if (_player != null && _player.HasAnimation("idle")) Play("idle");
+
+        // The view weapon is independent of the body's AnimationPlayer.
+        AttachViewWeapon();
+    }
+
+    /// <summary>
+    /// Parent a rigid view weapon under the body skeleton's <c>Weapon</c> bone
+    /// (render.cpp <c>modelattach("tag_weapon", vweps[gun])</c>). The weapon mesh is
+    /// in the same imported model space as the body, so it only inherits the body
+    /// holder's transform; its own <c>mdlscale</c>/<c>mdltrans</c> are divided by the
+    /// body scale because the body scale is applied at the shared holder (the engine
+    /// scales each model independently). Safe to call repeatedly — the previous weapon
+    /// is discarded first.
+    /// </summary>
+    private void AttachViewWeapon()
+    {
+        if (ViewWeapon != null && IsInstanceValid(ViewWeapon)) ViewWeapon.Free();
+        ViewWeapon = null;
+        ViewWeaponPath = null;
+
+        if (string.IsNullOrEmpty(_viewWeaponName)) return;
+        var info = _models?.Get(_viewWeaponName!);
+        if (info?.GlbPath == null && info?.GlbOsPath == null) return;
+
+        // The attachment point is the body's tag_weapon bone. Godot's glTF importer
+        // keeps skin joints on the Skeleton3D (resolve with a BoneAttachment3D) but
+        // imports a tag bone that has no skin weights — like `Weapon` — as a plain
+        // Node3D under the parent joint, so fall back to a node of that name.
+        Node3D? anchor = null;
+        if (Skeleton != null && Skeleton.FindBone(_weaponBone) >= 0)
+        {
+            var attachment = new BoneAttachment3D { Name = "WeaponBone" };
+            Skeleton.AddChild(attachment);
+            attachment.BoneName = _weaponBone;
+            anchor = attachment;
+        }
+        else if (FindChild(_weaponBone, recursive: true, owned: false) is Node3D node)
+        {
+            anchor = node;
+        }
+        if (anchor == null) return;
+
+        float bodyScale = Mathf.IsZeroApprox(ModelScale) ? 1.0f : ModelScale;
+        var weapon = new PlayerViewWeapon
+        {
+            Name = "ViewWeapon",
+            ModelPath = _viewWeaponName,
+            GlbPath = info.GlbPath,
+            GlbOsPath = info.GlbOsPath,
+            ModelScale = info.Scale / bodyScale,
+            ModelTranslation = info.Translation / bodyScale,
+            ModelRotationDegrees = ViewWeaponRotationDegrees,
+            KeepSkeleton = true,
+            SkinMaterial = ModelSkin.Build(info, _textures, _skinCache ?? new Dictionary<string, Material>()),
+        };
+        anchor.AddChild(weapon);
+        ViewWeapon = weapon;
+        ViewWeaponPath = _viewWeaponName;
     }
 
     private static AnimationPlayer? FindAnimationPlayer(Node? n)

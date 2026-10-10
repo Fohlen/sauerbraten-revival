@@ -383,11 +383,13 @@ remaining fidelity gap is the material side: engine `SHADER_ENVMAP` surfaces (an
   does the runtime vwep bone attachment/animation.
 
 **Model import work** (`tools/model-import/`): ✅ `flags/` (md2), `base/` (md3,
-`red`/`blue`/`neutral` via `exec`-delegating cfgs), the nine monster models and
-the six monster view-weapons now convert, alongside
-item/teleporter/checkpoint/carrot. The only remaining unconverted built-ins are
-mapmodels referenced solely by box/barrel/platform/elevator maps (resolved
-per-map through the catalogue as usual).
+`red`/`blue`/`neutral` via `exec`-delegating cfgs), the nine monster models,
+the six monster view-weapons and the seven player view-weapons (`vwep/*`) now
+convert, alongside item/teleporter/checkpoint/carrot. The player view weapons are
+run back through `md5dir` so their skins/bumpmaps resolve from `hudguns/<gun>`
+(they load their mesh from `vwep/<gun>` but their textures from the `md5dir`). The
+only remaining unconverted built-ins are mapmodels referenced solely by
+box/barrel/platform/elevator maps (resolved per-map through the catalogue as usual).
 
 ### Edit-mode entity markers
 
@@ -446,7 +448,7 @@ The pipeline is split into offline tools, all reading the read-only reference du
 
 | Tool | Output | Purpose |
 | --- | --- |
-| `tools/model-import/import_models.py` | `assets/models/*.glb` + `models.json` | Converts mapmodels and built-in item/teleporter/flag/base/monster (+view-weapon) and **player** models to glTF with **assimp**, applies per-model skins/bumps, and writes the model manifest. Flat models are single-skin; skeletal **MD5** models (`mrfixit`, `snoutx10k`, `ogro2`, `inky`, `captaincannon`, their `hudguns`) additionally emit `skeleton`, per-part `skins` (`md5skin`), `tags` (`md5tag`), and the de-duplicated `anims` name→`.md5anim` table (clips recorded, not yet attached). Handles parent-folder geometry fallback (e.g. `armor/*` sharing `armor/tris.md3`, `base/*` resolving `../base.md3` via `exec`-delegating cfgs, `snoutx10k/blue` resolving its mesh in the parent root), Cube2 `<dds>`/`<mad:...>` path tags, and the engine's `mdlscale/4`. |
+| `tools/model-import/import_models.py` | `assets/models/*.glb` + `models.json` | Converts mapmodels and built-in item/teleporter/flag/base/monster (+view-weapon), player and **player view-weapon** (`vwep/*`) models to glTF with **assimp**, applies per-model skins/bumps, and writes the model manifest. Flat models are single-skin; skeletal **MD5** models (`mrfixit`, `snoutx10k`, `ogro2`, `inky`, `captaincannon`, their `hudguns`, the `vwep/*`) additionally emit `skeleton`, per-part `skins` (`md5skin`), `tags` (`md5tag`), and the de-duplicated `anims` name→`.md5anim` table (clips recorded, not yet attached). Handles parent-folder geometry fallback (e.g. `armor/*` sharing `armor/tris.md3`, `base/*` resolving `../base.md3` via `exec`-delegating cfgs, `snoutx10k/blue` resolving its mesh in the parent root), `md5dir` skin/bumpmap resolution (`vwep/<gun>` textures live in `hudguns/<gun>`), Cube2 `<dds>`/`<mad:...>` path tags, and the engine's `mdlscale/4`. |
 | `tools/texture-import/import_textures.py` | `assets/textures/**` | Copies every texture a map references (slot textures, model skins/bumps, and the engine defaults for water/lava/particles) into the project, preserving relative paths. |
 | `tools/refharness/build_instrumented.sh` | `metadata-catalogue/<map>.json` | Builds the patched reference client that exports the metadata (see above). |
 

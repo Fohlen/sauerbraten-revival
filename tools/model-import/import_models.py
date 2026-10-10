@@ -36,6 +36,7 @@ def parse_cfg(path: str) -> dict:
     """Extract the model parameters we care about from a model .cfg."""
     params: dict = {"scale": 1.0, "trans": [0.0, 0.0, 0.0], "glow": None, "spec": None,
                     "skin": None, "bump": None, "source": None, "objdir": None,
+                    "md5dir": None,
                     "execs": [], "cfgs": [], "skins": [], "anims": [], "tags": []}
     if not os.path.isfile(path):
         return params
@@ -65,6 +66,11 @@ def parse_cfg(path: str) -> dict:
                 params["spec"] = int(args[0])
             elif cmd in ("objdir",) and args:
                 params["objdir"] = args[0]
+            elif cmd == "md5dir" and args:
+                # md5dir sets the skin/bumpmap base dir (modelcommands::setdir); it may
+                # differ from the mesh dir (e.g. vwep/shotg loads its mesh from vwep/
+                # but its textures from hudguns/shotg).
+                params["md5dir"] = args[0]
             elif cmd in ("objload", "md2load", "md3load", "md5load", "iqmload") and args:
                 params["source"] = args[0]
             elif cmd in ("objskin", "md3skin", "md5skin", "md2skin") and args:
@@ -120,7 +126,7 @@ def _execute_cfg(params: dict, models_root: str, packages_root: str) -> None:
         for key in ("source", "objdir"):
             if not params.get(key) and sub.get(key):
                 params[key] = sub[key]
-        for key in ("scale", "trans", "glow", "spec", "skin", "bump"):
+        for key in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir"):
             if params.get(key) in (None, 1.0, [0.0, 0.0, 0.0]) and sub.get(key) not in (None, 1.0, [0.0, 0.0, 0.0]):
                 params[key] = sub[key]
         # List-valued directives accumulate across the exec chain (md5.cfg execs
@@ -194,6 +200,9 @@ def _resolve_source(params: dict, models_root: str, name_dir: str) -> str | None
     parent = os.path.dirname(name_dir)
     if parent and parent != models_root:
         search_dirs.append(parent)
+    # md5dir may precede md5load in the cfg (modelcommands::setdir); fall back to it.
+    if params.get("md5dir"):
+        search_dirs.append(os.path.join(models_root, params["md5dir"]))
     search_dirs.extend(params.get("exec_dirs", []))
     for d in search_dirs:
         candidate = os.path.normpath(os.path.join(d, src))
@@ -211,7 +220,7 @@ def _merge_cfg_params(params: dict, base: str) -> None:
             if path in seen:
                 continue
             other = parse_cfg(path)
-            for k in ("scale", "trans", "glow", "spec", "skin", "bump"):
+            for k in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir"):
                 if params.get(k) in (None, 1.0, [0.0, 0.0, 0.0]) and other.get(k) not in (None, 1.0, [0.0, 0.0, 0.0]):
                     params[k] = other[k]
             for k in ("skins", "anims", "tags"):
@@ -226,14 +235,17 @@ def default_skin(model_dir: str) -> str | None:
     return None
 
 
-def resolve_skin(cfg_skin: str | None, cfg_dir: str, name_dir: str, mesh_dir: str | None = None) -> str | None:
+def resolve_skin(cfg_skin: str | None, cfg_dir: str, name_dir: str, mesh_dir: str | None = None,
+                 tex_dir: str | None = None) -> str | None:
     """Prefer a cfg skin, but fall back to skin.* in the model-name dir (armour).
 
     A variant cfg (e.g. ``mrfixit/blue``) declares skins that live in the model
     root (``mrfixit/``), so the source-mesh dir is tried before the cfg dir — this
     mirrors the engine resolving texture paths against the model's ``dir``.
+    ``tex_dir`` is the ``md5dir`` base (set by ``modelcommands::setdir``), which can
+    differ from the mesh dir (``vwep/<gun>`` loads its textures from ``hudguns/<gun>``).
     """
-    dirs = [d for d in (mesh_dir, cfg_dir, name_dir) if d]
+    dirs = [d for d in (tex_dir, mesh_dir, cfg_dir, name_dir) if d]
     candidates = []
     if cfg_skin:
         # Cube2 texture paths carry inline tags like <dds> or <mad:...> that must
@@ -418,6 +430,8 @@ def main() -> int:
         "captaincannon", "captaincannon/blue", "captaincannon/red",
         # first-person hands (render.cpp hudguns)
         "mrfixit/hudguns", "snoutx10k/hudguns", "inky/hudguns", "captaincannon/hudguns",
+        # third-person view weapons (render.cpp vweps; attached to the body's tag_weapon bone)
+        "vwep/fist", "vwep/shotg", "vwep/chaing", "vwep/rocket", "vwep/rifle", "vwep/gl", "vwep/pistol",
     ]
     entries = [{"index": -1, "path": name} for name in builtins]
     seen = {e["path"] for e in entries}
@@ -448,10 +462,15 @@ def main() -> int:
             # (variant cfgs like mrfixit/blue declare textures that live in the
             # model root), which is the directory of the resolved mesh.
             mesh_dir = os.path.dirname(source)
+            # Skin/bumpmap paths resolve against md5dir (modelcommands::setdir),
+            # which can differ from the mesh dir (vwep/<gun> textures live in
+            # hudguns/<gun>).
+            tex_dir = (os.path.join(models_root, params["md5dir"])
+                       if params.get("md5dir") else None)
             record["source"] = os.path.relpath(source, packages).replace(os.sep, "/")
-            skin = resolve_skin(params.get("skin"), cfg_dir, name_dir, mesh_dir)
-            record["skin"] = rel_to_packages(skin, packages, cfg_dir, extra_dirs=[mesh_dir])
-            record["bump"] = rel_to_packages(params.get("bump"), packages, cfg_dir, extra_dirs=[mesh_dir])
+            skin = resolve_skin(params.get("skin"), cfg_dir, name_dir, mesh_dir, tex_dir)
+            record["skin"] = rel_to_packages(skin, packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
+            record["bump"] = rel_to_packages(params.get("bump"), packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
 
             # MD5 (skelmodel) extras: per-part skins, the .md5anim table and the
             # named bone tags the engine attaches sub-models to. The single `skin`
@@ -461,8 +480,8 @@ def main() -> int:
                 record["skeleton"] = True
                 skins = []
                 for s in params.get("skins", []):
-                    diffuse = rel_to_packages(s.get("diffuse"), packages, cfg_dir, extra_dirs=[mesh_dir])
-                    mask = rel_to_packages(s.get("mask"), packages, cfg_dir, extra_dirs=[mesh_dir])
+                    diffuse = rel_to_packages(s.get("diffuse"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
+                    mask = rel_to_packages(s.get("mask"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
                     if diffuse:
                         skins.append({"part": s["part"], "diffuse": diffuse, "mask": mask})
                 if skins:

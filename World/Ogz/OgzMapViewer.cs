@@ -43,6 +43,12 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Team skin for the player model (0 = FFA, 1 = blue, 2 = red).</summary>
     [Export] public int PlayerTeam { get; set; } = 0;
 
+    /// <summary>
+    /// Third-person view weapon to attach to the player model's <c>Weapon</c> bone
+    /// (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>). Empty attaches none.
+    /// </summary>
+    [Export] public string ViewWeapon { get; set; } = "";
+
     /// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
     public MapWorld? World { get; private set; }
 
@@ -108,9 +114,10 @@ public partial class OgzMapViewer : Node3D
         player.PlayerModel = body;
         player.HidePlaceholderBody = true;
 
-        body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam);
+        body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam,
+            viewWeapon: string.IsNullOrEmpty(ViewWeapon) ? null : ViewWeapon);
         player.SyncBodyModelNow();
-        GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded} animated={body.Animated}");
+        GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
     }
 
     private (Vector3 Feet, float Yaw) FindSpawn(OgzMap map)

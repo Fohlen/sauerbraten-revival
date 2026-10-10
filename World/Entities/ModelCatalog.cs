@@ -32,6 +32,12 @@ public sealed class ModelInfo
 
     /// <summary>Animation name -> engine playback fps (anims.cfg); 0/absent = engine default.</summary>
     public readonly Dictionary<string, float> AnimSpeeds = new();
+
+    /// <summary>
+    /// Named bone tags from <c>md5tag</c> (e.g. <c>tag_weapon</c> -&gt; <c>Weapon</c>),
+    /// used to resolve the engine's attachment points onto the baked glb's bones.
+    /// </summary>
+    public readonly Dictionary<string, string> Tags = new();
 }
 
 /// <summary>
@@ -72,6 +78,11 @@ public sealed class ModelCatalog
                 info.Source = src.GetString();
             if (v.TryGetProperty("skeleton", out var skel) && skel.ValueKind == JsonValueKind.True)
                 info.Skeleton = true;
+            if (v.TryGetProperty("tags", out var tags) && tags.ValueKind == JsonValueKind.Array)
+                foreach (var t in tags.EnumerateArray())
+                    if (t.TryGetProperty("tag", out var tag) && tag.ValueKind == JsonValueKind.String &&
+                        t.TryGetProperty("bone", out var bone) && bone.ValueKind == JsonValueKind.String)
+                        info.Tags[tag.GetString()!] = bone.GetString()!;
             if (v.TryGetProperty("anims", out var anims) && anims.ValueKind == JsonValueKind.Object)
                 foreach (var a in anims.EnumerateObject())
                     if (a.Value.ValueKind == JsonValueKind.String)
