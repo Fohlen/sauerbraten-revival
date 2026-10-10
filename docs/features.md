@@ -315,8 +315,10 @@ Remaining:
             [character-animation.md](character-animation.md)). `PlayerModel.Play(name)`
             selects clips; idle runs by default. Body orientation verified in-engine
             (upright, facing correct).
-      - [ ] Anim state machine mirroring `renderclient`
-            (idle/walk/jump/`hold N`/`attack N`/dead).
+      - [~] Anim state machine mirroring `renderclient`: **movement done**
+            (`MapPlayer.SelectBodyAnim` — idle/forward/backward/left/right/jump,
+            swim/sink, edit; `test/BodyAnimTest.cs`). Attack/hold/pain/dead land with
+            weapons/combat.
       - [ ] First-person view model (hudguns).
       - [ ] Attach the view weapon to the `Weapon` bone.
 - [ ] Hitscan weapons (insta rifle; effic loadout).

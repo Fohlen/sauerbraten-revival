@@ -187,6 +187,63 @@ public partial class MapPlayer : Node3D
         if (Input.IsActionJustPressed("third_person")) ToggleThirdPerson();
 
         Advance(delta);
+        UpdateBodyAnim();
+    }
+
+    private string _bodyAnim = "";
+
+    /// <summary>
+    /// Override the body animation playback fps for tuning against the original
+    /// (0 = use the engine's per-clip <c>anims.cfg</c> speeds). Editable live.
+    /// </summary>
+    [Export] public float AnimFpsOverride { get; set; } = 0f;
+
+    /// <summary>
+    /// Play the body clip matching the current state, mirroring the engine's
+    /// <c>renderclient</c> secondary-animation selection (rendermodel.cpp): water →
+    /// swim/sink, in-air → jump, else forward/backward/left/right, else idle. The
+    /// attack/hold/pain clips (the engine's <i>primary</i> anim) come with weapons.
+    /// </summary>
+    private void UpdateBodyAnim()
+    {
+        if (PlayerModel is not { } model) return;
+        string name = SelectBodyAnim();
+        if (name != _bodyAnim)
+        {
+            model.Play(name, loop: name != "jump");
+            _bodyAnim = name;
+        }
+        // Apply the live fps override (tuning aid) every frame; 0 = engine speeds.
+        model.SetFpsOverride(AnimFpsOverride);
+    }
+
+    /// <summary>Engine anim name for the current player state (see <see cref="UpdateBodyAnim"/>).</summary>
+    public string SelectBodyAnim()
+    {
+        // CS_EDITING / CS_SPECTATOR float (renderclient → ANIM_EDIT).
+        if (Floating) return "edit";
+
+        bool moving = Entity.Move != 0 || Entity.Strafe != 0;
+
+        // In water at/below the falling state → swim (moving or rising) else sink.
+        if (Entity.InWater != 0 && Entity.PhysState <= Phys.PhysFall)
+            return moving || Entity.Vel.Z > 0 ? "swim" : "sink";
+
+        // Airborne for more than 100 ms → jump (renderclient: timeinair>100).
+        if (Entity.TimeInAir > 100) return "jump";
+
+        if (moving)
+        {
+            if (Entity.Move > 0) return "forward";
+            if (Entity.Strafe != 0)
+                // NOTE: engine plays the move-backward strafe with ANIM_REVERSE; we
+                // play it forward (reverse playback is a later refinement).
+                return Entity.Move < 0
+                    ? (Entity.Strafe > 0 ? "right" : "left")
+                    : (Entity.Strafe > 0 ? "left" : "right");
+            if (Entity.Move < 0) return "backward";
+        }
+        return "idle";
     }
 
     /// <summary>
@@ -308,6 +365,7 @@ public partial class MapPlayer : Node3D
     /// </summary>
     public void SyncBodyModelNow()
     {
+        _bodyAnim = ""; // force a re-select against the (possibly new) model
         SyncCamera();
         SyncBodyModel();
     }

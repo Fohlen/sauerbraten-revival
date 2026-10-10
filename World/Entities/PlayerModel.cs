@@ -37,6 +37,7 @@ public partial class PlayerModel : ModelInstance
     public bool Animated => _player != null && _player.GetAnimationList().Length > 0;
 
     private AnimationPlayer? _player;
+    private readonly Dictionary<string, float> _animSpeeds = new();
 
     /// <summary>
     /// Point this node at a player model's variant for <paramref name="team"/> and load
@@ -70,6 +71,10 @@ public partial class PlayerModel : ModelInstance
         // player yaw (engine renders the body at yaw+90).
         ModelRotationDegrees = new Vector3(0f, -90f, 0f);
         KeepSkeleton = true;
+        // Engine playback speeds (anims.cfg fps) for the speed scale.
+        _animSpeeds.Clear();
+        if (info != null)
+            foreach (var (animName, fps) in info.AnimSpeeds) _animSpeeds[animName] = fps;
         SkinMaterial = ModelSkin.Build(info, textures, skinCache ?? new Dictionary<string, Material>());
 
         if (IsInsideTree()) Reload();
@@ -119,7 +124,42 @@ public partial class PlayerModel : ModelInstance
         if (CurrentAnim == name && _player.IsPlaying()) return;
         var anim = _player.GetAnimation(name);
         anim.LoopMode = loop ? Animation.LoopModeEnum.Linear : Animation.LoopModeEnum.None;
+        _player.SpeedScale = SpeedScaleFor(name);
         _player.Play(name);
         CurrentAnim = name;
     }
+
+    /// <summary>
+    /// Playback speed so the clip advances at the engine's <c>anims.cfg</c> fps
+    /// (animmodel: <c>info.speed = 1000/fps</c> ms/frame; 0/absent = engine default,
+    /// 100 ms/frame = 10 fps). Godot's baked clip advances at the <c>.md5anim</c>'s
+    /// authored frameRate, so scale by engine-fps / authored-fps.
+    /// </summary>
+    private float SpeedScaleFor(string name)
+    {
+        float engineFps = _animSpeeds.TryGetValue(name, out var s) && s > 0f ? s : DefaultAnimFps;
+        return engineFps / AuthoredFps(name);
+    }
+
+    /// <summary>Frames per second baked into the clip (from its key count and length).</summary>
+    private float AuthoredFps(string name)
+    {
+        if (_player == null || !_player.HasAnimation(name)) return 1f;
+        var anim = _player.GetAnimation(name);
+        int keys = anim.GetTrackCount() > 0 ? anim.TrackGetKeyCount(0) : 0;
+        return keys >= 2 && anim.Length > 0.0 ? (float)((keys - 1) / anim.Length) : 1f;
+    }
+
+    /// <summary>
+    /// Override the playback fps for the current clip (tuning aid; 0 = use the engine
+    /// per-clip speeds). Lets us sample e.g. 10–300 fps against the original.
+    /// </summary>
+    public void SetFpsOverride(float fps)
+    {
+        if (_player == null || CurrentAnim == null) return;
+        _player.SpeedScale = fps > 0f ? fps / AuthoredFps(CurrentAnim) : SpeedScaleFor(CurrentAnim);
+    }
+
+    /// <summary>Engine default when a clip specifies no fps (100 ms/frame).</summary>
+    private const float DefaultAnimFps = 10f;
 }

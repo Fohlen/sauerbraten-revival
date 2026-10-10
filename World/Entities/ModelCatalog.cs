@@ -29,6 +29,9 @@ public sealed class ModelInfo
 
     /// <summary>Animation name -> reference-dump-relative <c>.md5anim</c> path (empty for static models).</summary>
     public readonly Dictionary<string, string> Anims = new();
+
+    /// <summary>Animation name -> engine playback fps (anims.cfg); 0/absent = engine default.</summary>
+    public readonly Dictionary<string, float> AnimSpeeds = new();
 }
 
 /// <summary>
@@ -73,6 +76,10 @@ public sealed class ModelCatalog
                 foreach (var a in anims.EnumerateObject())
                     if (a.Value.ValueKind == JsonValueKind.String)
                         info.Anims[a.Name] = a.Value.GetString()!;
+            if (v.TryGetProperty("animSpeeds", out var speeds) && speeds.ValueKind == JsonValueKind.Object)
+                foreach (var s in speeds.EnumerateObject())
+                    if (s.Value.ValueKind == JsonValueKind.Number)
+                        info.AnimSpeeds[s.Name] = (float)s.Value.GetDouble();
             if (v.TryGetProperty("trans", out var trans) && trans.ValueKind == JsonValueKind.Array && trans.GetArrayLength() == 3)
                 info.Translation = new Vector3((float)trans[0].GetDouble(), (float)trans[1].GetDouble(), (float)trans[2].GetDouble());
 
