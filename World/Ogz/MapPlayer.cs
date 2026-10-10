@@ -234,10 +234,10 @@ public partial class MapPlayer : Node3D
     {
         if (GetNodeOrNull<Camera3D>("Camera3D") is not { } cam) return;
 
-        // Hide the placeholder body while looking through it (first person) so it does
-        // not clip the near plane; show it once the camera is pulled back. When a real
-        // PlayerModel is loaded the placeholder is suppressed entirely.
-        if (!HidePlaceholderBody && GetNodeOrNull<MeshInstance3D>("Body") is { } body) body.Visible = ThirdPerson;
+        // The placeholder capsule is shown only in third person and only when no real
+        // PlayerModel is attached (`HidePlaceholderBody`); otherwise it is hidden
+        // entirely so it never renders for a frame on startup.
+        if (GetNodeOrNull<MeshInstance3D>("Body") is { } body) body.Visible = !HidePlaceholderBody && ThirdPerson;
 
         // The engine only renders the local player's body when the camera is detached
         // (`isthirdperson()`, render.cpp:343), so hide the real model in first person —
@@ -301,7 +301,16 @@ public partial class MapPlayer : Node3D
     }
 
     /// <summary>(Re)place the body model now (e.g. right after attaching one).</summary>
-    public void SyncBodyModelNow() => SyncBodyModel();
+    /// <summary>
+    /// (Re)place the body model now, and apply the current view mode (e.g. hide it in
+    /// first person) immediately — called right after a body is attached so it never
+    /// renders for a frame before <see cref="SyncCamera"/> first runs.
+    /// </summary>
+    public void SyncBodyModelNow()
+    {
+        SyncCamera();
+        SyncBodyModel();
+    }
 
     /// <summary>Copy the simulated entity into the node transform (Sauerbraten Z-up).</summary>
     private void SyncTransform()
