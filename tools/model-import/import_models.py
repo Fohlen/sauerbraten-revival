@@ -333,6 +333,46 @@ def strip_glb_materials(path: str) -> None:
         f.write(struct.pack("<III", 0x46546C67, 2, 12 + len(body)) + body)
 
 
+def bake_animated_glb(assimp: str, mesh_source: str, anims: dict, packages_root: str, out_glb: str) -> bool:
+    """Bake all of a model's ``.md5anim`` clips into one glTF via assimp + merge.
+
+    assimp's MD5 importer loads exactly one sibling ``<meshbase>.md5anim`` per export,
+    so we export once per clip (with the clip copied to that name) and merge the
+    results with :mod:`gltf_anim_merge`. Godot then imports the single glb with an
+    ``AnimationPlayer`` holding every clip, and animates the skeleton itself — which
+    is why this is used instead of mapping the engine poses onto Godot's skeleton
+    (see docs/character-animation.md).
+    """
+    import tempfile
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gltf_anim_merge
+
+    if not anims:
+        return False
+    base = os.path.splitext(os.path.basename(mesh_source))[0]
+    with tempfile.TemporaryDirectory() as tmp:
+        mesh_copy = os.path.join(tmp, base + ".md5mesh")
+        shutil.copyfile(mesh_source, mesh_copy)
+        clip_glbs = []
+        for clip, rel in anims.items():
+            anim_os = os.path.join(packages_root, rel)
+            if not os.path.isfile(anim_os):
+                print(f"WARN  {base}: missing clip {rel}", file=sys.stderr)
+                continue
+            shutil.copyfile(anim_os, os.path.join(tmp, base + ".md5anim"))
+            clip_glb = os.path.join(tmp, f"clip_{sanitize(clip)}.glb")
+            proc = subprocess.run([assimp, "export", mesh_copy, clip_glb], capture_output=True, text=True)
+            if proc.returncode != 0 or not os.path.isfile(clip_glb):
+                print(f"WARN  {base}: assimp failed for clip '{clip}'", file=sys.stderr)
+                continue
+            clip_glbs.append((clip, clip_glb))
+        if not clip_glbs:
+            return False
+        gltf_anim_merge.merge_animations(clip_glbs, out_glb)
+    strip_glb_materials(out_glb)
+    return True
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("catalogue")
@@ -434,20 +474,34 @@ def main() -> int:
                     # animations more than once (alternate fps/flags); the engine keeps
                     # the last definition, so do the same (dict insertion order preserves
                     # the first-seen order, the value is overwritten to the last).
+                    # Anim files may live in an exec'd dir (md5dir / shared anims.cfg,
+                    # e.g. snoutx10k uses mrfixit's), so try those too.
+                    anim_dirs = [mesh_dir] + list(params.get("exec_dirs", []))
                     anims = {}
                     for a in params["anims"]:
                         anims[a["name"]] = rel_to_packages(a["file"], packages, cfg_dir,
-                                                           extra_dirs=[mesh_dir])
+                                                           extra_dirs=anim_dirs)
                     record["anims"] = anims
 
             glb = os.path.join(args.out, sanitize(name) + ".glb")
-            proc = subprocess.run([args.assimp, "export", source, glb], capture_output=True, text=True)
-            if proc.returncode == 0 and os.path.isfile(glb):
-                strip_glb_materials(glb)
+            # Skeletal MD5: bake every clip into the glb so Godot's own importer can
+            # play them (assimp drops separately-named .md5anim files otherwise; see
+            # docs/character-animation.md).
+            baked = False
+            if ext == ".md5mesh" and record.get("anims"):
+                baked = bake_animated_glb(args.assimp, source, record["anims"], packages, glb)
+            if not baked:
+                proc = subprocess.run([args.assimp, "export", source, glb], capture_output=True, text=True)
+                if proc.returncode == 0 and os.path.isfile(glb):
+                    strip_glb_materials(glb)
+                else:
+                    print(f"FAIL  {name}: assimp failed\n{proc.stdout}\n{proc.stderr}", file=sys.stderr)
+                    glb = None
+            if glb and os.path.isfile(glb):
                 record["glb"] = os.path.basename(glb)
-                print(f"OK    {name} -> {os.path.basename(glb)} (scale={record['scale']})")
-            else:
-                print(f"FAIL  {name}: assimp failed\n{proc.stdout}\n{proc.stderr}", file=sys.stderr)
+                record["animated"] = baked
+                print(f"OK    {name} -> {os.path.basename(glb)} (scale={record['scale']}"
+                      + (", animated" if baked else "") + ")")
         else:
             print(f"MISS  {name}: no source geometry")
         manifest["models"][name] = record
