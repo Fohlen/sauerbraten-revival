@@ -51,6 +51,35 @@ to water):
 Evidence from the experiment: bt_falls' material mesh went 996 → 335 faces (all
 horizontal — only the lake), church51's solid mesh 686392 → 622570 triangles.
 
+### 3. Residual shimmer inside liquid/glass volumes from per-cube material faces
+
+**Symptom.** After the obvious duplicate-draw fix, some shimmer remains at the
+interface between water/glass and solid cubes, and in the interior of the
+material volume itself. The surface is much closer to the reference, but the
+seams still show as faint “cubeish” flicker where a material face should have
+been hidden by the exact engine occlusion tests.
+
+**Cause.** The engine does not merely hide same-material faces or boundary faces
+at a solid neighbour. It also applies the exact per-face `visibleface()` /
+`classifyface()` / `occludesface()` occlusion path, which tests the polygon of
+both faces against each other and suppresses any face fully enclosed by the same
+volume or hidden by a neighbouring surface. Our material pass is still a
+conservative boundary mesh: it emits each surviving face as a standalone quad,
+without the engine's exact polygon clipping and per-face visibility tests, so a
+fully hidden voxel face can still leak as shimmering internal cubes.
+
+**Current status.** We have fixed the obvious duplicate-draw offset, but the
+remaining shimmer is the deeper “exact culling” bug. It should be solved by
+re-using the engine's `visibleface()` / `occludesface()` semantics (the
+`clipfacevecs`/`insideface` path) when deciding whether to emit a material
+surface, rather than the simplified same-material/solid-neighbour heuristic.
+
+**Likely fix direction.** Use the exact `OctaVisible` logic to reject material
+faces when they are occluded by a neighbour's face polygon or by a larger solid
+volume. This is required for both water-vs-glass and glass-vs-solid transitions,
+and for the interior case where one material cube's own hidden faces should never
+be emitted at all.
+
 ### 2. Waterfalls use a static texture instead of the waterfall shader
 
 The engine renders waterfalls with dedicated animated geometry and shaders
