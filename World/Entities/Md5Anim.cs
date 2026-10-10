@@ -159,10 +159,13 @@ public sealed class Md5Anim
     public readonly record struct BonePose(Vector3 Position, Quaternion Rotation);
 
     /// <summary>
-    /// Evaluate <paramref name="frame"/> into per-bone local poses (indexed by the
-    /// mesh bind index), reproducing the engine's <c>frame[]</c> dual-quat compose.
+    /// Evaluate <paramref name="frame"/> into per-bone <b>parent-relative</b> dual
+    /// quaternions (indexed by the mesh bind index), reproducing the engine's
+    /// <c>frame[]</c> compose. "Parent" here is the engine skeleton's parent; use
+    /// <see cref="ToGodotLocal"/> to re-express against a different (e.g. Godot) bone
+    /// hierarchy.
     /// </summary>
-    public BonePose[] Evaluate(int frame, Md5MeshBind bind)
+    private Dq[] EvaluateDq(int frame, Md5MeshBind bind)
     {
         var data = _frames[frame];
         var frameBones = new Dq[bind.BoneCount];
@@ -190,58 +193,132 @@ public sealed class Md5Anim
             dst = dst.FixAntipodal(bind.Bones[k].Base);
             frameBones[k] = dst;
         }
+        return frameBones;
+    }
 
+    /// <summary>
+    /// Evaluate <paramref name="frame"/> into per-bone parent-relative poses (engine
+    /// hierarchy), for diagnostics/golden comparison.
+    /// </summary>
+    public BonePose[] Evaluate(int frame, Md5MeshBind bind)
+    {
+        var frameBones = EvaluateDq(frame, bind);
         var poses = new BonePose[bind.BoneCount];
         for (int k = 0; k < bind.BoneCount; k++)
-        {
-            Dq d = frameBones[k];
-            Vector3 t = d.Translation();
-            poses[k] = new BonePose(t, new Quaternion(d.Real.X, d.Real.Y, d.Real.Z, d.Real.W));
-        }
+            poses[k] = ToPose(frameBones[k]);
         return poses;
+    }
+
+    private static BonePose ToPose(Dq d) =>
+        new(d.Translation(), new Quaternion(d.Real.X, d.Real.Y, d.Real.Z, d.Real.W));
+
+    /// <summary>
+    /// Convert the engine's parent-relative poses to Godot bone poses. The engine's
+    /// <c>frame[k]</c> is a <b>delta from the bind pose</b> (identity = bind), so each
+    /// target bone's pose is <c>rest[k] * delta[k]</c>. Godot's glTF importer collapses
+    /// bones with no skinning influence (75 engine bones → 50), so the delta is
+    /// accumulated to skeleton space and re-expressed against the target hierarchy
+    /// first.
+    /// </summary>
+    /// <param name="enginePose">Per-bone parent-relative deltas (indexed by bind index).</param>
+    /// <param name="bind">The mesh bind pose (engine parent links).</param>
+    /// <param name="targetParent">For each bind bone, the bind index of its target
+    /// hierarchy parent, or -1 for a target root (or unknown).</param>
+    /// <param name="rest">Per-bind-bone Godot rest transform (relative to the target
+    /// parent); a bound transform for bones the target skeleton lacks.</param>
+    public static BonePose[] ToGodotLocal(BonePose[] enginePose, Md5MeshBind bind, int[] targetParent, Transform3D[] rest)
+    {
+        // Accumulate engine deltas to skeleton space.
+        var abs = new Transform3D[bind.BoneCount];
+        for (int k = 0; k < bind.BoneCount; k++)
+        {
+            var local = new Transform3D(new Basis(enginePose[k].Rotation), enginePose[k].Position);
+            int p = bind.Bones[k].Parent;
+            abs[k] = p < 0 ? local : abs[p] * local;
+        }
+        // Convert each target bone to its target-parent space, then apply its rest.
+        var outp = new BonePose[bind.BoneCount];
+        for (int k = 0; k < bind.BoneCount; k++)
+        {
+            Transform3D delta = abs[k];
+            int tp = targetParent[k];
+            // acc[targetParent] must also be in skeleton space; abs[tp] is.
+            if (tp >= 0) delta = abs[tp].AffineInverse() * delta;
+            // Godot pose is relative to the target parent; compose the bone's rest so
+            // an identity delta reproduces the bind pose exactly.
+            Transform3D t = rest[k] * delta;
+            outp[k] = new BonePose(t.Origin, t.Basis.GetRotationQuaternion());
+        }
+        return outp;
     }
 
     /// <summary>
     /// Build a Godot <see cref="Animation"/> that drives a <see cref="Skeleton3D"/>'s
-    /// bone poses. Each engine <c>frame[k]</c> is the bone's transform relative to its
-    /// parent (the skeleton accumulates the parent chain), which is exactly what
-    /// Godot bone pose / <c>Skeleton3D:&lt;idx&gt;/position</c> tracks expect.
+    /// bone poses. Engine poses are converted to the target skeleton's own bone
+    /// hierarchy via <see cref="ToGodotLocal"/> (handles Godot's collapsed bones).
+    ///
+    /// Bone tracks use Godot's canonical form <c>"&lt;skeleton path&gt;:&lt;bone name&gt;"</c>
+    /// (see <see cref="Animation.TrackSetPath"/>), NOT <c>bones/&lt;idx&gt;/rotation</c>.
     /// </summary>
     /// <param name="bind">The mesh bind pose (bone names + parents).</param>
     /// <param name="skeletonPath">Node path to the target <see cref="Skeleton3D"/>.</param>
-    /// <param name="boneIndex">Resolves a bind bone name to the target skeleton's bone index (-1 to skip).</param>
+    /// <param name="boneName">Resolves a bind bone name to the target skeleton's bone name, or null to skip.</param>
+    /// <param name="boneParentName">Resolves a target bone name to its parent bone name, or null for a root.</param>
+    /// <param name="boneRest">Resolves a target bone name to its Godot rest transform (parent-relative).</param>
     /// <param name="fps">Playback rate for track length; defaults to the file's frameRate.</param>
     public Animation BuildAnimation(
         Md5MeshBind bind,
         NodePath skeletonPath,
-        System.Func<string, int> boneIndex,
+        System.Func<string, string?> boneName,
+        System.Func<string, string?> boneParentName,
+        System.Func<string, Transform3D?> boneRest,
         float fps = 0f)
     {
         float rate = fps > 0f ? fps : (FrameRate > 0f ? FrameRate : 24f);
         var anim = new Animation { Length = NumFrames > 1 ? (NumFrames - 1) / rate : 0f };
 
-        // Resolve each bind bone to the target skeleton index once.
-        var target = new int[bind.BoneCount];
-        for (int k = 0; k < bind.BoneCount; k++) target[k] = boneIndex(bind.Names[k]);
+        // Resolve each bind bone to the target skeleton's bone name once.
+        var target = new string?[bind.BoneCount];
+        for (int k = 0; k < bind.BoneCount; k++)
+        {
+            var n = boneName(bind.Names[k]);
+            target[k] = n;
+        }
+
+        // Target-hierarchy parent *expressed as a bind index* so ToGodotLocal can use it.
+        var byTargetName = new System.Collections.Generic.Dictionary<string, int>();
+        for (int k = 0; k < bind.BoneCount; k++)
+            if (target[k] != null) byTargetName[target[k]!] = k;
+        var targetParent = new int[bind.BoneCount];
+        for (int k = 0; k < bind.BoneCount; k++)
+        {
+            if (target[k] == null) { targetParent[k] = -1; continue; }
+            var tp = boneParentName(target[k]!);
+            targetParent[k] = tp != null && byTargetName.TryGetValue(tp, out var bi) ? bi : -1;
+        }
 
         var posTracks = new int[bind.BoneCount];
         var rotTracks = new int[bind.BoneCount];
+        var rest = new Transform3D[bind.BoneCount];
         for (int k = 0; k < bind.BoneCount; k++)
         {
-            if (target[k] < 0) { posTracks[k] = rotTracks[k] = -1; continue; }
+            rest[k] = target[k] != null ? (boneRest(target[k]!) ?? Transform3D.Identity) : Transform3D.Identity;
+            if (target[k] == null) { posTracks[k] = rotTracks[k] = -1; continue; }
+            // Canonical Godot bone track: "<skeleton>:<bone_name>".
+            var bonePath = new NodePath($"{skeletonPath}:{target[k]}");
             posTracks[k] = anim.AddTrack(Animation.TrackType.Position3D);
-            anim.TrackSetPath(posTracks[k], new NodePath($"{skeletonPath}:{target[k]}/position"));
+            anim.TrackSetPath(posTracks[k], bonePath);
             rotTracks[k] = anim.AddTrack(Animation.TrackType.Rotation3D);
-            anim.TrackSetPath(rotTracks[k], new NodePath($"{skeletonPath}:{target[k]}/rotation"));
+            anim.TrackSetPath(rotTracks[k], bonePath);
         }
 
         for (int f = 0; f < NumFrames; f++)
         {
             float t = f / rate;
-            var poses = Evaluate(f, bind);
+            var poses = ToGodotLocal(Evaluate(f, bind), bind, targetParent, rest);
             for (int k = 0; k < bind.BoneCount; k++)
             {
-                if (target[k] < 0) continue;
+                if (target[k] == null) continue;
                 anim.TrackInsertKey(posTracks[k], t, poses[k].Position);
                 anim.TrackInsertKey(rotTracks[k], t, poses[k].Rotation);
             }

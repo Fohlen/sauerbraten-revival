@@ -31,6 +31,16 @@ public partial class ModelInstance : Node3D
     /// <summary>Skin/normal material, applied to the loaded model.</summary>
     public Material? SkinMaterial { get; set; }
 
+    /// <summary>
+    /// Keep the imported scene's node hierarchy (skeleton, bone attachments, skinned
+    /// mesh) instead of flattening to bare meshes. Required for skeletal animation;
+    /// off for static models (mapmodels, items).
+    /// </summary>
+    public bool KeepSkeleton { get; set; }
+
+    /// <summary>The imported <c>Skeleton3D</c>, when <see cref="KeepSkeleton"/> is set.</summary>
+    public Skeleton3D? Skeleton { get; private set; }
+
     /// <summary>True once a converted glTF was loaded.</summary>
     public bool ModelLoaded { get; private set; }
 
@@ -50,7 +60,7 @@ public partial class ModelInstance : Node3D
     /// the node is already in the tree (e.g. <see cref="PlayerModel"/>) can invoke it
     /// again to swap models at runtime.
     /// </summary>
-    public void Reload()
+    public virtual void Reload()
     {
         if (GetNodeOrNull("Model") is { } previous) previous.Free();
         ModelLoaded = false;
@@ -84,12 +94,30 @@ public partial class ModelInstance : Node3D
             Position = ModelTranslation,
             RotationDegrees = ModelRotationDegrees,
         };
-        if (CopyMeshes(scene, holder) == 0) return false;
-        scene.Free(); // meshes are shared resources; drop the temporary glTF scene
+        if (KeepSkeleton)
+        {
+            // Keep the full glTF hierarchy so the Skeleton3D and skinned mesh survive.
+            scene.Name = "Imported";
+            holder.AddChild(scene);
+            Skeleton = FindSkeleton(scene);
+        }
+        else
+        {
+            if (CopyMeshes(scene, holder) == 0) { scene.Free(); return false; }
+            scene.Free(); // meshes are shared resources; drop the temporary glTF scene
+        }
 
         AddChild(holder);
         if (SkinMaterial != null) ApplyMaterial(holder, SkinMaterial);
         return true;
+    }
+
+    private static Skeleton3D? FindSkeleton(Node n)
+    {
+        if (n is Skeleton3D s) return s;
+        foreach (var c in n.GetChildren())
+            if (FindSkeleton(c) is { } found) return found;
+        return null;
     }
 
     private static int CopyMeshes(Node source, Node3D target)

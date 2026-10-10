@@ -107,9 +107,19 @@ public partial class OgzMapViewer : Node3D
         World!.AddChild(body);
         player.PlayerModel = body;
         player.HidePlaceholderBody = true;
+
+        // Resolve the source .md5mesh/.md5anim paths for skeletal animation.
+        var info = World.Models?.Get(Playermodels.Get(PlayerModelIndex).Body(PlayerTeam));
+        if (info?.Source != null)
+        {
+            string refRoot = MapRoots.ReferenceRoot;
+            string meshOs = System.IO.Path.Combine(refRoot, "packages", info.Source);
+            body.SetAnimSources(meshOs, info.Anims, refRoot);
+        }
+
         body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam);
         player.SyncBodyModelNow();
-        GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded}");
+        GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded} animated={body.Animated}");
     }
 
     private (Vector3 Feet, float Yaw) FindSpawn(OgzMap map)

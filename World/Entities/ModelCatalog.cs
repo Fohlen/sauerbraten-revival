@@ -20,6 +20,15 @@ public sealed class ModelInfo
     public Vector3 Translation;
     public string? Skin;
     public string? Bump;
+
+    /// <summary>Reference-dump-relative source geometry (e.g. <c>models/mrfixit/mrfixit.md5mesh</c>), or null.</summary>
+    public string? Source;
+
+    /// <summary>True for skeletal (MD5) models.</summary>
+    public bool Skeleton;
+
+    /// <summary>Animation name -> reference-dump-relative <c>.md5anim</c> path (empty for static models).</summary>
+    public readonly Dictionary<string, string> Anims = new();
 }
 
 /// <summary>
@@ -56,6 +65,14 @@ public sealed class ModelCatalog
                 info.Skin = skin.GetString();
             if (v.TryGetProperty("bump", out var bump) && bump.ValueKind == JsonValueKind.String)
                 info.Bump = bump.GetString();
+            if (v.TryGetProperty("source", out var src) && src.ValueKind == JsonValueKind.String)
+                info.Source = src.GetString();
+            if (v.TryGetProperty("skeleton", out var skel) && skel.ValueKind == JsonValueKind.True)
+                info.Skeleton = true;
+            if (v.TryGetProperty("anims", out var anims) && anims.ValueKind == JsonValueKind.Object)
+                foreach (var a in anims.EnumerateObject())
+                    if (a.Value.ValueKind == JsonValueKind.String)
+                        info.Anims[a.Name] = a.Value.GetString()!;
             if (v.TryGetProperty("trans", out var trans) && trans.ValueKind == JsonValueKind.Array && trans.GetArrayLength() == 3)
                 info.Translation = new Vector3((float)trans[0].GetDouble(), (float)trans[1].GetDouble(), (float)trans[2].GetDouble());
 
