@@ -40,6 +40,9 @@ read-only dump.
 brew install assimp uv sdl2 sdl2_image sdl2_mixer
 # then, as needed:
 tools/refharness/build_instrumented.sh   # A1/A2 movement tooling
+# The probes link only against the instrumented headers (build_instrumented.sh first):
+#   tools/octaprobe/build.sh              # octree ground truth
+tools/animprobe/build.sh                  # MD5 animation ground truth
 tools/ogztool/build.sh                    # OGZ metadata + old-map conversion
 ```
 

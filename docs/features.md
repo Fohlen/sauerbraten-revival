@@ -302,9 +302,17 @@ Remaining:
             their `hudguns`. New manifest fields `skeleton`, per-part `skins`
             (`md5skin`), `tags` (`md5tag`), de-duplicated `anims` (`md5anim`); fixed
             `<dds>`/`<mad:...>` tag stripping and variant-dir skin resolution.
-      - [ ] Load the player body models into the scene (they convert today).
+      - [x] Load the player body model into the scene (`PlayerModel`; third-person,
+            grounded; orientation verified).
+      - [x] **MD5 animation parse + `Animation`** (`World/Entities/Md5Anim.cs` +
+            `Md5MeshBind.cs`, `Quat`/`Dq`): faithful port of the engine's
+            `loadanim` frame compose, asserted against golden output from
+            `tools/animprobe` (`test/Md5AnimTest.cs`, `test/golden/anim/`). Built a
+            Godot `Animation` with per-bone position/rotation tracks.
       - [ ] First-person view model (hudguns).
-      - [ ] Attach the `.md5anim` clips (recorded in the manifest, not yet played).
+      - [ ] Runtime anim wiring: `AnimationPlayer` on the body + a state machine
+            mirroring `renderclient` (idle/walk/jump/`hold N`/`attack N`/dead).
+      - [ ] Attach the view weapon to the `Weapon` bone.
 - [ ] Hitscan weapons (insta rifle; effic loadout).
 - [ ] Flags and capture logic (CTF).
 - [ ] Scoring, respawns, spawn selection.
