@@ -1,8 +1,16 @@
 # Character animation (MD5 skies) — findings & required approach
 
-**Status: the current Godot approach is wrong and must be replaced.** This records
-what the original engine does, what we built, why it deforms, and how to do it
-differently. See the tracking items in [features.md](features.md) §5.
+**Status: implemented.** The player body now animates correctly. This records what
+why the obvious Godot approach failed and what we do instead. See the tracking
+items in [features.md](features.md) §5.
+
+> **Chosen approach (option 1):** bake every `.md5anim` clip into the model glb at
+> import time and let Godot's own importer own the skeleton + `AnimationPlayer`.
+> `tools/model-import/import_models.py` (`bake_animated_glb`) exports once per clip
+> (assimp loads a sibling `<meshbase>.md5anim`) and `gltf_anim_merge.py` merges them
+> into one glb. `PlayerModel` then just uses the baked `AnimationPlayer`. The rest of
+> this document explains why the "map engine poses onto Godot's skeleton" route was
+> abandoned.
 
 ---
 
@@ -128,18 +136,21 @@ wrong. The hands/feet are exactly those cases.
 
 ---
 
-## 3. Required approach (do it differently)
+## 3. Approach (implemented: option 1)
 
-Animate the **bone nodes**, not the reconstructed `Skeleton3D` bones — matching what
-Godot's glTF importer actually emits. Concrete options, in preference order:
+Animate the **bone nodes** the way Godot's glTF importer intends, by letting the
+glb carry the clips. Options, in preference order:
 
-1. **Bake animated `.glb`s offline and import them as Godot Resources.** Convert each
-   `.md5anim` clip into the `.glb` with assimp (its MD5 importer loads exactly one
-   sibling `<meshbase>.md5anim` per export — confirmed by experiment), then let
-   Godot's **importer** own the model: it preserves the full node hierarchy and
-   emits node-path animations that play correctly. Multiple clips means one glb per
-   clip (or a merge step). This is the least bespoke code and the most robust.
-   Caveat: this changes the importer (`tools/model-import`) and the manifest.
+1. **[CHOSEN] Bake animated `.glb`s offline and import them as Godot Resources.**
+   Convert each `.md5anim` clip into the `.glb` with assimp (its MD5 importer loads
+   exactly one sibling `<meshbase>.md5anim` per export), merge the per-clip exports
+   (`tools/model-import/gltf_anim_merge.py`), then let Godot's **importer** own the
+   model. It preserves the full node hierarchy and emits node-path animations that
+   play correctly. `PlayerModel` uses the baked `AnimationPlayer` directly.
+   - Body placement: `ModelRotationDegrees = (0,-90,0)` (upright), body yaw offset
+     `+180` (`MapPlayer.SyncBodyModel`, not the engine's `+90`), `+10` Z nudge.
+   - Cost: the merge currently duplicates the mesh per clip (~10-13 MB per player
+     glb). Optimise by appending only the animation bufferViews if it matters.
 2. **Block Godot from collapsing bones.** Investigate `GltfState.ImportAsSkeletonBones`
    and the glTF `skin` layout so the runtime load keeps the full 75-node hierarchy,
    then animate the **bone nodes** by path (the engine `frame[k]` maps directly to

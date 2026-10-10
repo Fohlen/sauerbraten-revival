@@ -308,13 +308,13 @@ Remaining:
             `Md5MeshBind.cs`, `Quat`/`Dq`): faithful port of the engine's
             `loadanim` frame compose, asserted against golden output from
             `tools/animprobe` (`test/Md5AnimTest.cs`, `test/golden/anim/`).
-      - [~] Runtime anim wiring: `AnimationPlayer` on the body. **The current
-            approach is wrong and must be replaced** — driving the reconstructed
-            Godot `Skeleton3D` bones deforms the hands/feet because Godot's glTF
-            importer collapses bones (75 → 50) and reshapes the hierarchy. The
-            required node-based approach (animate glTF bone nodes, or bake animated
-            `.glb`s and let Godot's importer own it) is specified in
-            [character-animation.md](character-animation.md).
+      - [x] Runtime anim wiring: the model glb is **baked with its `anims.cfg`
+            clip table** (`tools/model-import` assimp + merge), so Godot's own importer
+            produces the `AnimationPlayer` and animates the skeleton — no manual
+            engine-pose mapping (that deformed the mesh; see
+            [character-animation.md](character-animation.md)). `PlayerModel.Play(name)`
+            selects clips; idle runs by default. Body orientation verified in-engine
+            (upright, facing correct).
       - [ ] Anim state machine mirroring `renderclient`
             (idle/walk/jump/`hold N`/`attack N`/dead).
       - [ ] First-person view model (hudguns).

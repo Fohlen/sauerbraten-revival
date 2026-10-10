@@ -122,22 +122,19 @@ were the source of the waterfall confusion:
 
 ## Player/monster animation
 
-### 1. Driving Godot `Skeleton3D` bones from MD5 clips deforms the mesh
+### 1. [FIXED] Driving Godot `Skeleton3D` bones from MD5 clips deformed the mesh
 
-**Symptom.** The player body animates, but the **hands and right foot are visibly
-deformed** (stretched/broken), while the rest of the body looks correct.
+**Symptom.** The player body animated, but the **hands and right foot were visibly
+deformed**, while the rest of the body looked correct.
 
 **Cause.** The engine's MD5 skeleton has **75 bones**; Godot's glTF importer
 **collapses bones with no skinning influence** (`Root`, `Torso`, `SpineIK*`,
 `FingerNull*`, …) into a **50-bone `Skeleton3D`** and re-parents survivors. Our
-runtime load (`GltfDocument.GenerateScene`) additionally discards the bone *nodes*.
+runtime load (`GltfDocument.GenerateScene`) additionally discarded the bone *nodes*.
 The engine's per-bone `frame[k]` is parent-relative in the **engine** hierarchy, so
-no formula maps it exactly onto Godot's collapsed hierarchy — the hands/fingers
-(whose engine parent is a dropped `FingerNull`) and the right foot land wrong.
+no formula maps it exactly onto Godot's collapsed hierarchy.
 
-**Intended fix.** Stop driving reconstructed `Skeleton3D` bone poses. Animate the
-glTF **bone nodes** instead — either bake animated `.glb`s offline (assimp loads one
-sibling `<meshbase>.md5anim` per export) and let Godot's importer own the model, or
-keep the full node hierarchy and emit node-path tracks (as Godot's importer does).
-Full analysis, the exact engine math, and the reusable-verified pieces are in
-[character-animation.md](character-animation.md).
+**Fix.** Bake every clip into the model glb at import time and let Godot's importer
+own the skeleton + `AnimationPlayer` (see
+[character-animation.md](character-animation.md)); `PlayerModel` no longer maps
+engine poses. Verified in-engine: hands/feet correct.
