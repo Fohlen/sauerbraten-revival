@@ -299,9 +299,11 @@ Remaining:
             `thirdpersondistance`/`thirdpersonup`; `test/MapPlayerTest.cs`).
       - [x] **MD5 import** (`tools/model-import/import_models.py`): skeletal player
             bodies (`mrfixit`, `snoutx10k`, `ogro2`, `inky`, `captaincannon`) and
-            their `hudguns`. New manifest fields `skeleton`, per-part `skins`
-            (`md5skin`), `tags` (`md5tag`), de-duplicated `anims` (`md5anim`); fixed
-            `<dds>`/`<mad:...>` tag stripping and variant-dir skin resolution.
+            their first-person `hudguns` (hands + weapon meshes linked by `md5link`,
+            emitted as per-part GLBs). The manifest preserves per-part skins, tags,
+            clips, pitch corrections and link metadata; `md5adjust` corrections are
+            baked into clips. Fixed `<dds>`/`<mad:...>` tag stripping and variant-dir
+            skin resolution.
       - [x] **MD5 animation parts + pitch import** (`md5animpart`/`md5pitch`): the
             manifest now carries `animParts`/`partAnims` (per-part bone masks and clip
             tables with engine fps + selection priority) and `pitch`

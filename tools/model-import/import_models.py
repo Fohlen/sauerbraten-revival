@@ -46,7 +46,7 @@ def parse_cfg(path: str) -> dict:
                     "skin": None, "bump": None, "source": None, "objdir": None,
                     "md5dir": None,
                     "execs": [], "cfgs": [], "skins": [], "anims": [], "tags": [],
-                    "animparts": [], "pitches": []}
+                    "animparts": [], "pitches": [], "adjusts": [], "links": []}
     if not os.path.isfile(path):
         return params
     params["cfgs"].append(path)
@@ -142,6 +142,29 @@ def parse_cfg(path: str) -> dict:
             elif cmd == "md5tag" and len(args) >= 2:
                 # md5tag <bone> <tag>  (e.g. md5tag Weapon tag_weapon)
                 params["tags"].append({"bone": args[0], "tag": args[1]})
+            elif cmd == "md5adjust" and args:
+                # md5adjust <bone> <yaw> <pitch> <roll> [tx ty tz] (skelmodel.h setadjust).
+                # Rotates/translates a bone's bind+anim pose; the engine applies it per
+                # animation frame, so it is recorded here and composed offline.
+                adj = {"bone": args[0]}
+                for i, key in enumerate(("yaw", "pitch", "roll", "tx", "ty", "tz"), start=1):
+                    if len(args) > i:
+                        try:
+                            adj[key] = float(args[i])
+                        except ValueError:
+                            pass
+                params["adjusts"].append(adj)
+            elif cmd == "md5link" and len(args) >= 3:
+                # md5link <parent> <child> <tag> [x y z] (skelmodel.h setlink): attach
+                # the child mesh part to a tag on the parent part (hudguns link the
+                # weapon mesh to the hands' tag_bicep/tag_weapon).
+                link = {"parent": int(float(args[0])), "child": int(float(args[1])), "tag": args[2]}
+                if len(args) >= 6:
+                    try:
+                        link["translate"] = [float(args[3]), float(args[4]), float(args[5])]
+                    except ValueError:
+                        pass
+                params["links"].append(link)
     return params
 
 
@@ -189,7 +212,7 @@ def _execute_cfg(params: dict, models_root: str, packages_root: str) -> None:
             params["anims"].append(merged)
         params["animparts"].extend(sub.get("animparts", []))
         params.setdefault("pitches", []).extend(sub.get("pitches", []))
-        for key in ("skins", "tags"):
+        for key in ("skins", "tags", "adjusts", "links"):
             params.setdefault(key, []).extend(sub.get(key, []))
 
 
@@ -466,7 +489,196 @@ def build_anim_metadata(params: dict, packages: str, cfg_dir: str, mesh_dir: str
     return out
 
 
-def bake_animated_glb(assimp: str, mesh_source: str, anims: dict, packages_root: str, out_glb: str) -> bool:
+# ---- md5adjust: bake the engine's per-bone bind/animation corrections ----
+
+
+def _qmul(a: tuple, b: tuple) -> tuple:
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return (aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+            aw * bw - ax * bx - ay * by - az * bz)
+
+
+def _qaxis(axis: tuple, degrees: float) -> tuple:
+    import math
+    rad = math.radians(degrees)
+    s = math.sin(rad / 2.0)
+    return (s * axis[0], s * axis[1], s * axis[2], math.cos(rad / 2.0))
+
+
+def _qrotate(q: tuple, v: tuple) -> tuple:
+    x, y, z, w = q
+    vx, vy, vz = v
+    tx = 2.0 * (y * vz - z * vy)
+    ty = 2.0 * (z * vx - x * vz)
+    tz = 2.0 * (x * vy - y * vx)
+    return (vx + w * tx + (y * tz - z * ty),
+            vy + w * ty + (z * tx - x * tz),
+            vz + w * tz + (x * ty - y * tx))
+
+
+def _restorew(x: float, y: float, z: float) -> float:
+    import math
+    w = 1.0 - x * x - y * y - z * z
+    return 0.0 if w < 0.0 else -math.sqrt(w)
+
+
+def _floats(text: str) -> list[float]:
+    out = []
+    for tok in text.replace("(", " ").replace(")", " ").split():
+        try:
+            out.append(float(tok))
+        except ValueError:
+            pass
+    return out
+
+
+def _parse_md5anim(text: str) -> dict:
+    """Parse the pieces of an ``.md5anim`` we need to rewrite; values are kept in the
+    engine's *logical* (post sign-convention) space."""
+    lines = text.splitlines()
+    data = {"numFrames": 0, "numJoints": 0, "frameRate": 24.0,
+            "hierarchy": [], "bounds": [], "baseframe": [], "frames": []}
+    i = 0
+    while i < len(lines):
+        s = lines[i].strip()
+        if s.startswith("numFrames"):
+            data["numFrames"] = int(float(s.split()[1]))
+        elif s.startswith("numJoints"):
+            data["numJoints"] = int(float(s.split()[1]))
+        elif s.startswith("frameRate"):
+            data["frameRate"] = float(s.split()[1])
+        elif s.startswith("hierarchy"):
+            i += 1
+            while i < len(lines) and lines[i].strip() != "}":
+                m = re.match(r'"([^"]+)"\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)', lines[i].strip())
+                if m:
+                    data["hierarchy"].append((m.group(1), int(m.group(2)),
+                                              int(m.group(3)), int(m.group(4))))
+                i += 1
+        elif s.startswith("bounds"):
+            i += 1
+            while i < len(lines) and lines[i].strip() != "}":
+                data["bounds"].append(lines[i].strip())
+                i += 1
+        elif s.startswith("baseframe"):
+            i += 1
+            while i < len(lines) and lines[i].strip() != "}":
+                v = _floats(lines[i])
+                if len(v) >= 6:  # stored -> logical (negate y, qx, qz)
+                    data["baseframe"].append(((v[0], -v[1], v[2]),
+                                              (-v[3], v[4], -v[5], _restorew(-v[3], v[4], -v[5]))))
+                i += 1
+        elif s.startswith("frame "):
+            i += 1
+            frame_floats = []
+            while i < len(lines) and lines[i].strip() != "}":
+                frame_floats.extend(_floats(lines[i]))
+                i += 1
+            data["frames"].append(frame_floats)
+        i += 1
+    return data
+
+
+def _compose_frame(data: dict, frame_floats: list[float]) -> list[tuple]:
+    """Reconstruct each joint's parent-relative ``(pos, quat)`` for one frame."""
+    joints = []
+    for k, (_name, _parent, flags, start) in enumerate(data["hierarchy"]):
+        px, py, pz = data["baseframe"][k][0]
+        qx, qy, qz = data["baseframe"][k][1][:3]
+        # The engine's start index advances in flag order (bit0=x .. bit5=qz).
+        d = start
+        if flags & 1:
+            px = frame_floats[d]; d += 1
+        if flags & 2:
+            py = -frame_floats[d]; d += 1
+        if flags & 4:
+            pz = frame_floats[d]; d += 1
+        if flags & 8:
+            qx = -frame_floats[d]; d += 1
+        if flags & 16:
+            qy = frame_floats[d]; d += 1
+        if flags & 32:
+            qz = -frame_floats[d]; d += 1
+        qw = _restorew(qx, qy, qz)
+        joints.append(((px, py, pz), (qx, qy, qz, qw)))
+    return joints
+
+
+def apply_md5adjust(anim_text: str, adjusts: list[dict]) -> str:
+    """Bake the engine's ``md5adjust`` corrections into an ``.md5anim``.
+
+    The engine applies each adjustment to the *composed* joint (baseframe overridden
+    per frame) before subtracting the mesh bind (md5.h ``loadanim``): a yaw/pitch/roll
+    rotation about Z/-Y/-X plus a translation (divided by 4), in the joint's parent
+    frame. assimp has no such concept, so we apply it to every frame here. assimp
+    already reproduces the unadjusted clips, so transforming the clip input matches
+    the engine's rendered pose.
+    """
+    if not adjusts:
+        return anim_text
+    data = _parse_md5anim(anim_text)
+    name_to_index = {name: k for k, (name, *_rest) in enumerate(data["hierarchy"])}
+    adjust_by_index = {}
+    for adj in adjusts:
+        k = name_to_index.get(adj.get("bone"))
+        if k is not None:
+            adjust_by_index[k] = adj
+    if not adjust_by_index:
+        return anim_text
+
+    out_frames = []
+    for frame_floats in data["frames"]:
+        joints = _compose_frame(data, frame_floats)
+        for k, adj in adjust_by_index.items():
+            yaw, pitch, roll = adj.get("yaw", 0.0), adj.get("pitch", 0.0), adj.get("roll", 0.0)
+            a = _qmul(_qmul(_qaxis((-1.0, 0.0, 0.0), roll), _qaxis((0.0, -1.0, 0.0), pitch)),
+                      _qaxis((0.0, 0.0, 1.0), yaw))
+            pos, quat = joints[k]
+            pos = _qrotate(a, pos)
+            pos = (pos[0] + adj.get("tx", 0.0) / 4.0,
+                   pos[1] + adj.get("ty", 0.0) / 4.0,
+                   pos[2] + adj.get("tz", 0.0) / 4.0)
+            joints[k] = (pos, _qmul(a, quat))
+        out_frames.append(joints)
+
+    # Re-emit with every joint fully specified (flags 63), which keeps the byte layout
+    # simple and is valid MD5. Values are converted back to the stored sign convention.
+    out = ["MD5Version 10", 'commandline ""', "",
+           f"numFrames {len(out_frames)}", f"numJoints {len(data['hierarchy'])}",
+           f"frameRate {data['frameRate']:g}",
+           f"numAnimatedComponents {6 * len(data['hierarchy'])}", "", "hierarchy {"]
+    for k, (name, parent, _flags, _start) in enumerate(data["hierarchy"]):
+        out.append(f'\t"{name}"\t{parent} 63 {6 * k}\t//')
+    out += ["}", "", "bounds {"]
+    out += ["\t" + b for b in data["bounds"][:len(out_frames)]]
+    out += ["}", "", "baseframe {"]
+
+    def stored(joint):
+        (px, py, pz), (qx, qy, qz, qw) = joint
+        if qw > 0.0:
+            qx, qy, qz = -qx, -qy, -qz
+        return (px, -py, pz), (-qx, qy, -qz)
+
+    for k in range(len(data["hierarchy"])):
+        (sp, sq) = stored(data["baseframe"][k])
+        out.append(f"\t( {sp[0]:.6f} {sp[1]:.6f} {sp[2]:.6f} ) ( {sq[0]:.6f} {sq[1]:.6f} {sq[2]:.6f} )")
+    out.append("}")
+    out.append("")
+    for fi, joints in enumerate(out_frames):
+        out.append(f"frame {fi} {{")
+        for joint in joints:
+            sp, sq = stored(joint)
+            out.append(f"\t{sp[0]:.6f} {sp[1]:.6f} {sp[2]:.6f} {sq[0]:.6f} {sq[1]:.6f} {sq[2]:.6f}")
+        out.append("}")
+        out.append("")
+    return "\n".join(out) + "\n"
+
+
+def bake_animated_glb(assimp: str, mesh_source: str, anims: dict, packages_root: str,
+                      out_glb: str, adjusts: list[dict] | None = None) -> bool:
     """Bake all of a model's ``.md5anim`` clips into one glTF via assimp + merge.
 
     assimp's MD5 importer loads exactly one sibling ``<meshbase>.md5anim`` per export,
@@ -474,7 +686,8 @@ def bake_animated_glb(assimp: str, mesh_source: str, anims: dict, packages_root:
     results with :mod:`gltf_anim_merge`. Godot then imports the single glb with an
     ``AnimationPlayer`` holding every clip, and animates the skeleton itself — which
     is why this is used instead of mapping the engine poses onto Godot's skeleton
-    (see docs/character-animation.md).
+    (see docs/character-animation.md). ``adjusts`` (``md5adjust``) is baked into each
+    clip before export.
     """
     import tempfile
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -492,7 +705,14 @@ def bake_animated_glb(assimp: str, mesh_source: str, anims: dict, packages_root:
             if not os.path.isfile(anim_os):
                 print(f"WARN  {base}: missing clip {rel}", file=sys.stderr)
                 continue
-            shutil.copyfile(anim_os, os.path.join(tmp, base + ".md5anim"))
+            anim_target = os.path.join(tmp, base + ".md5anim")
+            if adjusts:
+                with open(anim_os, "r", encoding="utf-8", errors="replace") as f:
+                    transformed = apply_md5adjust(f.read(), adjusts)
+                with open(anim_target, "w", encoding="utf-8") as f:
+                    f.write(transformed)
+            else:
+                shutil.copyfile(anim_os, anim_target)
             clip_glb = os.path.join(tmp, f"clip_{sanitize(clip)}.glb")
             proc = subprocess.run([assimp, "export", mesh_copy, clip_glb], capture_output=True, text=True)
             if proc.returncode != 0 or not os.path.isfile(clip_glb):
@@ -504,6 +724,224 @@ def bake_animated_glb(assimp: str, mesh_source: str, anims: dict, packages_root:
         gltf_anim_merge.merge_animations(clip_glbs, out_glb)
     strip_glb_materials(out_glb)
     return True
+
+
+def parse_linked_parts(model_name: str, models_root: str, packages_root: str) -> tuple[list[dict], dict]:
+    """Parse a multi-part (``md5link``) model into its per-mesh parts, in cfg order.
+
+    Cube2's first-person ``hudguns`` are one engine model assembled from two MD5
+    meshes: the player's ``hands`` and the ``weapon``. The weapon part is attached
+    to a tag on the hands part with ``md5link <parent> <child> <tag>``. Every
+    ``md5skin``/``md5anim``/``md5tag``/``md5adjust`` applies to the most recently
+    ``md5load``-ed part (skelmodel.h reads ``parts.last()``), so this follows
+    ``exec`` inline and tracks a "current part" to preserve that ordering.
+
+    Returns ``(parts, model)``: ``parts`` carry the resolved source, per-part
+    skins/bump/anims/tags/adjusts; ``model`` carries the model-wide
+    ``scale``/``trans`` and the ``links`` list. Paths are ``packages/``-relative.
+    """
+    parts: list[dict] = []
+    model = {"scale": 1.0, "trans": [0.0, 0.0, 0.0], "links": [], "md5dir": None}
+    seen: set[str] = set()
+    name_dir = os.path.join(models_root, model_name)
+
+    def candidates(cfg_dir: str) -> list[str]:
+        dirs = []
+        if model.get("md5dir"):
+            dirs.append(os.path.join(models_root, model["md5dir"]))
+        dirs.append(cfg_dir)
+        dirs.append(name_dir)
+        return dirs
+
+    def resolve(raw: str | None, dirs: list[str]) -> str | None:
+        if not raw:
+            return None
+        clean = re.sub(r"<[^>]*>", "", raw)
+        if not clean:
+            return None
+        for d in dirs:
+            candidate = os.path.normpath(os.path.join(d, clean))
+            if os.path.isfile(candidate):
+                return os.path.relpath(candidate, packages_root).replace(os.sep, "/")
+        return None
+
+    def resolve_abs(raw: str | None, dirs: list[str]) -> str | None:
+        if not raw:
+            return None
+        clean = re.sub(r"<[^>]*>", "", raw)
+        if not clean:
+            return None
+        for d in dirs:
+            candidate = os.path.normpath(os.path.join(d, clean))
+            if os.path.isfile(candidate):
+                return candidate
+        return None
+
+    def float_at(args: list[str], i: int) -> float | None:
+        if len(args) <= i:
+            return None
+        try:
+            return float(args[i])
+        except ValueError:
+            return None
+
+    def process(cfg_path: str) -> None:
+        if cfg_path in seen or not os.path.isfile(cfg_path):
+            return
+        seen.add(cfg_path)
+        cfg_dir = os.path.dirname(cfg_path)
+        with open(cfg_path, "r", encoding="utf-8", errors="replace") as f:
+            for raw in f:
+                line = raw.split("//", 1)[0].strip()
+                if not line:
+                    continue
+                try:
+                    toks = shlex.split(line)
+                except ValueError:
+                    continue
+                if not toks:
+                    continue
+                cmd, args = toks[0], toks[1:]
+                if cmd == "exec" and args:
+                    target = args[0]
+                    if target.startswith("packages/"):
+                        path = os.path.join(packages_root, target[len("packages/"):])
+                    else:
+                        path = os.path.join(cfg_dir, target)
+                    process(os.path.normpath(path))
+                elif cmd == "md5dir" and args:
+                    model["md5dir"] = args[0]
+                elif cmd == "mdlscale" and args:
+                    model["scale"] = int(float(args[0])) / 100.0
+                elif cmd == "mdltrans" and len(args) >= 3:
+                    model["trans"] = [float(args[0]), float(args[1]), float(args[2])]
+                elif cmd == "md5load" and args:
+                    dirs = candidates(cfg_dir)
+                    source = resolve_abs(args[0], dirs)
+                    parts.append({
+                        "mesh": args[1] if len(args) > 1 else "",
+                        "source": source,
+                        "source_rel": resolve(args[0], dirs),
+                        "cfg_dir": cfg_dir,
+                        "md5dir": model.get("md5dir"),
+                        "skins": [], "bump": None, "anims": [],
+                        "tags": [], "adjusts": [], "pitches": [],
+                    })
+                elif parts and cmd == "md5skin" and len(args) >= 2:
+                    part = parts[-1]
+                    dirs = candidates(cfg_dir)
+                    part["skins"].append({
+                        "part": args[0],
+                        "diffuse": resolve(args[1], dirs),
+                        "mask": resolve(args[2], dirs) if len(args) >= 3 else None,
+                    })
+                elif parts and cmd == "md5bumpmap" and len(args) >= 2:
+                    parts[-1]["bump"] = resolve(args[1], candidates(cfg_dir))
+                elif parts and cmd == "md5anim" and len(args) >= 2:
+                    part = parts[-1]
+                    anim = {"name": args[0], "file": resolve(args[1], candidates(cfg_dir)),
+                            "part": 0}
+                    fps = float_at(args, 2)
+                    if fps:
+                        anim["fps"] = fps
+                    priority = float_at(args, 3)
+                    if priority:
+                        anim["priority"] = int(priority)
+                    part["anims"].append(anim)
+                elif parts and cmd == "md5tag" and len(args) >= 2:
+                    parts[-1]["tags"].append({"bone": args[0], "tag": args[1]})
+                elif parts and cmd == "md5adjust" and args:
+                    adj = {"bone": args[0]}
+                    for i, key in enumerate(("yaw", "pitch", "roll", "tx", "ty", "tz"), start=1):
+                        value = float_at(args, i)
+                        if value is not None:
+                            adj[key] = value
+                    parts[-1]["adjusts"].append(adj)
+                elif parts and cmd == "md5pitch" and args:
+                    pitch = {"bone": args[0]}
+                    for i, key in enumerate(("scale", "offset", "min", "max"), start=1):
+                        value = float_at(args, i)
+                        if value is not None:
+                            pitch[key] = value
+                    parts[-1]["pitches"].append(pitch)
+                elif cmd == "md5link" and len(args) >= 3:
+                    link = {"parent": int(float(args[0])), "child": int(float(args[1])), "tag": args[2]}
+                    if len(args) >= 6:
+                        link["translate"] = [float(args[3]), float(args[4]), float(args[5])]
+                    model["links"].append(link)
+
+    process(os.path.join(name_dir, "md5.cfg"))
+    return parts, model
+
+
+def build_linked_record(name: str, parts: list[dict], model: dict, packages: str,
+                        assimp: str, out_dir: str) -> dict | None:
+    """Export a linked multi-part model: one glb per part plus a ``link`` map."""
+    if len(parts) < 2 or not model.get("links"):
+        return None
+    # animmodel::loaded() does `scale /= 4`: Cube2 model units are 4x world units.
+    scale = model["scale"] / 4.0
+    record: dict = {"index": -1, "linked": True, "scale": scale,
+                    "trans": model["trans"], "parts": []}
+    for i, part in enumerate(parts):
+        source = part.get("source")
+        if not source or not os.path.isfile(source):
+            return None
+        # Pick the FFA skin as the flat fallback: the team variants are the ones
+        # whose filenames mention blue/red, so prefer the remaining entry.
+        skin = None
+        skins = [s for s in part["skins"] if s.get("diffuse")]
+        if skins:
+            plain = [s for s in skins if "blue" not in s["diffuse"].lower()
+                     and "red" not in s["diffuse"].lower()]
+            skin = (plain or skins)[-1]["diffuse"]
+        entry: dict = {
+            "source": part.get("source_rel"),
+            "scale": scale, "trans": model["trans"],
+            "skin": skin, "bump": part.get("bump"),
+        }
+        if skins:
+            entry["skins"] = skins
+        anims = {a["name"]: a["file"] for a in part["anims"] if a.get("file")}
+        speeds = {a["name"]: a["fps"] for a in part["anims"] if a.get("fps", 0.0) > 0.0}
+        if anims:
+            entry["anims"] = anims
+        if speeds:
+            entry["animSpeeds"] = speeds
+        if part.get("tags"):
+            entry["tags"] = part["tags"]
+        if part.get("adjusts"):
+            entry["adjusts"] = part["adjusts"]
+        if part.get("pitches"):
+            entry["pitch"] = part["pitches"]
+
+        glb = os.path.join(out_dir, sanitize(name) + f"_part{i}.glb")
+        baked = False
+        if anims:
+            baked = bake_animated_glb(assimp, source, anims, packages, glb,
+                                      adjusts=part.get("adjusts"))
+        if not baked:
+            proc = subprocess.run([assimp, "export", source, glb], capture_output=True, text=True)
+            if proc.returncode == 0 and os.path.isfile(glb):
+                strip_glb_materials(glb)
+            else:
+                print(f"FAIL  {name} part {i}: assimp failed\n{proc.stdout}\n{proc.stderr}", file=sys.stderr)
+                glb = None
+        if glb and os.path.isfile(glb):
+            entry["glb"] = os.path.basename(glb)
+            entry["animated"] = baked
+        else:
+            return None
+        record["parts"].append(entry)
+
+    for link in model.get("links", []):
+        parent, child = link["parent"], link["child"]
+        if 0 <= parent < len(record["parts"]) and 0 <= child < len(record["parts"]):
+            entry = {"parent": parent, "tag": link["tag"]}
+            if link.get("translate"):
+                entry["translate"] = link["translate"]
+            record["parts"][child]["link"] = entry
+    return record
 
 
 def main() -> int:
@@ -554,12 +992,28 @@ def main() -> int:
         # third-person view weapons (render.cpp vweps; attached to the body's tag_weapon bone)
         "vwep/fist", "vwep/shotg", "vwep/chaing", "vwep/rocket", "vwep/rifle", "vwep/gl", "vwep/pistol",
     ]
+    # First-person hudguns (render.cpp drawhudmodel): one linked hands+weapon model per
+    # playermodel/gun. ogro2 reuses mrfixit's hudguns, so only four bases are distinct.
+    gun_files = ("fist", "shotg", "chaing", "rocket", "rifle", "gl", "pistol")
+    hudgun_names = [f"{player}/hudguns/{gun}"
+                    for player in ("mrfixit", "snoutx10k", "inky", "captaincannon")
+                    for gun in gun_files]
     entries = [{"index": -1, "path": name} for name in builtins]
     seen = {e["path"] for e in entries}
     for entry in catalogue.get("mapmodels", []):
         if entry["path"] not in seen:
             entries.append(entry)
             seen.add(entry["path"])
+
+    for name in hudgun_names:
+        parts, model = parse_linked_parts(name, models_root, packages)
+        record = build_linked_record(name, parts, model, packages, args.assimp, args.out)
+        if record is None:
+            print(f"MISS  {name}: no linked parts")
+            manifest["models"][name] = {"index": -1, "linked": True, "parts": []}
+            continue
+        manifest["models"][name] = record
+        print(f"OK    {name} -> {len(record['parts'])} linked parts")
 
     for entry in entries:
         name = entry["path"]
