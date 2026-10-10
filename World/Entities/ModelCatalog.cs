@@ -38,6 +38,51 @@ public sealed class ModelInfo
     /// used to resolve the engine's attachment points onto the baked glb's bones.
     /// </summary>
     public readonly Dictionary<string, string> Tags = new();
+
+    /// <summary>
+    /// MD5 animation parts (<c>md5animpart</c>). Part 0 is implicit (the full-body
+    /// complement); entry <c>i</c> here describes part <c>i+1</c>'s bone mask. The
+    /// engine expands each named bone to its subtree, later parts overriding earlier
+    /// ones (skelmodel.h <c>applybonemask</c>).
+    /// </summary>
+    public readonly List<AnimPartInfo> AnimParts = new();
+
+    /// <summary>
+    /// Per-part clip tables (<c>md5anim</c>), index-aligned to part 0 + <see cref="AnimParts"/>.
+    /// Only present for models that declare <c>md5animpart</c>.
+    /// </summary>
+    public readonly List<Dictionary<string, PartAnimInfo>> PartAnims = new();
+
+    /// <summary>View-pitch corrections (<c>md5pitch</c>): per-bone, or part-wide when the bone is empty.</summary>
+    public readonly List<PitchInfo> Pitches = new();
+}
+
+/// <summary>One MD5 animation part's bone mask (<c>md5animpart</c>).</summary>
+public sealed class AnimPartInfo
+{
+    public readonly List<string> Bones = new();
+}
+
+/// <summary>One clip inside an animation part (<c>md5anim</c>): file + engine speed/priority.</summary>
+public sealed class PartAnimInfo
+{
+    public string? File;
+
+    /// <summary>Engine playback fps (skelmodel <c>setanim</c> speed); 0 = engine default (10 fps).</summary>
+    public float Fps;
+
+    /// <summary>Per-part selection priority (animmodel.h <c>calcanim</c>); higher wins.</summary>
+    public int Priority;
+}
+
+/// <summary>One <c>md5pitch</c> entry: bone view-pitch scale/offset with a clamp range.</summary>
+public sealed class PitchInfo
+{
+    public string Bone = "";
+    public float Scale;
+    public float Offset;
+    public float Min;
+    public float Max;
 }
 
 /// <summary>
@@ -91,6 +136,49 @@ public sealed class ModelCatalog
                 foreach (var s in speeds.EnumerateObject())
                     if (s.Value.ValueKind == JsonValueKind.Number)
                         info.AnimSpeeds[s.Name] = (float)s.Value.GetDouble();
+            if (v.TryGetProperty("animParts", out var parts) && parts.ValueKind == JsonValueKind.Array)
+                foreach (var p in parts.EnumerateArray())
+                {
+                    var part = new AnimPartInfo();
+                    if (p.TryGetProperty("mask", out var mask) && mask.ValueKind == JsonValueKind.Array)
+                        foreach (var b in mask.EnumerateArray())
+                            if (b.ValueKind == JsonValueKind.String) part.Bones.Add(b.GetString()!);
+                    info.AnimParts.Add(part);
+                }
+            if (v.TryGetProperty("partAnims", out var partAnims) && partAnims.ValueKind == JsonValueKind.Array)
+                foreach (var p in partAnims.EnumerateArray())
+                {
+                    var table = new Dictionary<string, PartAnimInfo>();
+                    if (p.ValueKind == JsonValueKind.Object)
+                        foreach (var clip in p.EnumerateObject())
+                        {
+                            var ci = new PartAnimInfo();
+                            if (clip.Value.TryGetProperty("file", out var file) && file.ValueKind == JsonValueKind.String)
+                                ci.File = file.GetString();
+                            if (clip.Value.TryGetProperty("fps", out var fps) && fps.ValueKind == JsonValueKind.Number)
+                                ci.Fps = (float)fps.GetDouble();
+                            if (clip.Value.TryGetProperty("priority", out var priority) && priority.ValueKind == JsonValueKind.Number)
+                                ci.Priority = priority.GetInt32();
+                            table[clip.Name] = ci;
+                        }
+                    info.PartAnims.Add(table);
+                }
+            if (v.TryGetProperty("pitch", out var pitches) && pitches.ValueKind == JsonValueKind.Array)
+                foreach (var p in pitches.EnumerateArray())
+                {
+                    var pi = new PitchInfo();
+                    if (p.TryGetProperty("bone", out var pitchBone) && pitchBone.ValueKind == JsonValueKind.String)
+                        pi.Bone = pitchBone.GetString()!;
+                    if (p.TryGetProperty("scale", out var pitchScale) && pitchScale.ValueKind == JsonValueKind.Number)
+                        pi.Scale = (float)pitchScale.GetDouble();
+                    if (p.TryGetProperty("offset", out var pitchOffset) && pitchOffset.ValueKind == JsonValueKind.Number)
+                        pi.Offset = (float)pitchOffset.GetDouble();
+                    if (p.TryGetProperty("min", out var pitchMin) && pitchMin.ValueKind == JsonValueKind.Number)
+                        pi.Min = (float)pitchMin.GetDouble();
+                    if (p.TryGetProperty("max", out var pitchMax) && pitchMax.ValueKind == JsonValueKind.Number)
+                        pi.Max = (float)pitchMax.GetDouble();
+                    info.Pitches.Add(pi);
+                }
             if (v.TryGetProperty("trans", out var trans) && trans.ValueKind == JsonValueKind.Array && trans.GetArrayLength() == 3)
                 info.Translation = new Vector3((float)trans[0].GetDouble(), (float)trans[1].GetDouble(), (float)trans[2].GetDouble());
 

@@ -302,6 +302,13 @@ Remaining:
             their `hudguns`. New manifest fields `skeleton`, per-part `skins`
             (`md5skin`), `tags` (`md5tag`), de-duplicated `anims` (`md5anim`); fixed
             `<dds>`/`<mad:...>` tag stripping and variant-dir skin resolution.
+      - [x] **MD5 animation parts + pitch import** (`md5animpart`/`md5pitch`): the
+            manifest now carries `animParts`/`partAnims` (per-part bone masks and clip
+            tables with engine fps + selection priority) and `pitch`
+            (`ModelCatalog`; `test/ModelCatalogPartsTest.cs` + Python
+            `tools/model-import/test_import_models.py`). The glb still bakes one
+            full-body clip per name, so the runtime composes the parts (walk-while-aim)
+            in the next step.
       - [x] Load the player body model into the scene (`PlayerModel`; third-person,
             grounded; orientation verified).
       - [x] **MD5 animation parse** (`World/Entities/Md5Anim.cs` +

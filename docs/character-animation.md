@@ -74,6 +74,36 @@ vertex positions and `bdata` is the pure delta (identity at rest).
 `renderclient` (`rendermodel.cpp`) places the body at `d->feetpos()` with
 `yaw = d->yaw + 90`, ignoring view pitch.
 
+### 1.5 Animation parts (`md5animpart`) and pitch (`md5pitch`)
+
+The skeleton is split into **animation parts** by `md5animpart <bone>...`
+(`skelmodel.h` `setanimpart`). Part 0 is the implicit full-body part; each
+`md5animpart` opens a new part whose mask is the named bone **plus its whole
+subtree** (`expandbonemask`). A bone belongs to the last part that claims it
+(`applybonemask`), and each part is animated independently: `interpbones` reads the
+frame of `as[partmask[bone]]` (`skelmodel.h:871`).
+
+For the player bodies this is what produces "walk while aiming": part 0 animates
+the legs, part 1 masks `Spine1` (the upper body). The clips are the **same files**
+in both parts, but their selection **priority** differs (`anims.cfg`
+`md5anim "name" "file" [fps] [priority]`): on part 0 movement wins
+(`forward` priority `1` beats `hold N` priority `-2`), on part 1 `hold N` wins
+(priority `0` beats movement priority `-1`). `animmodel.h` `calcanim` picks the
+higher-priority spec per part. Some models (inky, captaincannon) add a third part
+for wings/cape.
+
+`md5pitch <bone> <scale> <offset> <min> <max>` adds a view-pitch rotation to a
+named bone (`Spine1`/`Spine` and `Head` for the player bodies; an empty bone name
+sets the part-wide pitch used by the hudguns). It is applied after skinning the
+bone's pose (`interpbones`, `b := pitchscale*pitch + pitchoffset`, clamped).
+
+**Import status.** `tools/model-import/import_models.py` parses `md5animpart` and
+`md5pitch` and records them in the manifest as `animParts` (the bone masks),
+`partAnims` (the per-part clip table with fps + priority) and `pitch`
+(`World/Entities/ModelCatalog.cs` reads them). The glb itself stays one full clip
+per name (assimp has no mask concept), so the runtime still composes the parts at
+playback; applying them is the remaining step.
+
 ---
 
 ## 2. What we built in Godot, and why it is wrong

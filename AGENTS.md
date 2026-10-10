@@ -14,6 +14,7 @@ converted **once, offline**; the game **never** loads `.ogz` or CubeScript.
 | Why / scope / non-goals / tech stack | [docs/vision.md](docs/vision.md) |
 | Core technical decisions | [docs/architecture.md](docs/architecture.md) |
 | Movement/physics fidelity | [docs/movement-physics.md](docs/movement-physics.md), [docs/movement-verification.md](docs/movement-verification.md) |
+| [character-animation.md](docs/character-animation.md) | MD5 skeletal models: engine model, why the current Godot `Skeleton3D` approach deforms the mesh, and the required node-based approach. |
 | Editor + command system | [docs/editor-and-commands.md](docs/editor-and-commands.md) |
 | OGZ import / native format | [docs/ogz-import.md](docs/ogz-import.md) |
 | Rendering strategy | [docs/rendering.md](docs/rendering.md) |

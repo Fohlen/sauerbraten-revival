@@ -14,5 +14,7 @@ if [ ! -x "$GODOT" ]; then
 fi
 
 cd "$HERE"
+echo "== Python importer tests =="
+python3 -m unittest discover -s tools/model-import -p 'test_*.py'
 dotnet build SauerbratenRevival.csproj -c Debug --nologo
 exec "$GODOT" --headless --path . --run-tests --quit-on-finish

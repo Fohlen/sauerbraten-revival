@@ -13,6 +13,14 @@ map, and the de-duplicated ``anims`` (``md5anim`` name -> ``.md5anim`` path). Th
 skeleton itself is carried through by assimp; the separate ``.md5anim`` clips are
 recorded for a later commit to attach.
 
+MD5 models that split the skeleton into animation parts (``md5animpart``) — the
+player bodies use this to keep the arms on the weapon ``hold``/``attack`` clips
+while the legs play the movement clip — also carry ``animParts`` (the per-part
+bone masks) and ``partAnims`` (the per-part clip table, with each clip's engine
+fps and selection priority). ``md5pitch`` view-pitch corrections are recorded as
+``pitch``. The engine applies both at playback (skelmodel.h ``applybonemask`` /
+``calcpitchcorrects``), so the importer only has to preserve them.
+
 The reference dump is never modified; output goes to a build dir (git-ignored).
 
 Usage:
@@ -37,11 +45,16 @@ def parse_cfg(path: str) -> dict:
     params: dict = {"scale": 1.0, "trans": [0.0, 0.0, 0.0], "glow": None, "spec": None,
                     "skin": None, "bump": None, "source": None, "objdir": None,
                     "md5dir": None,
-                    "execs": [], "cfgs": [], "skins": [], "anims": [], "tags": []}
+                    "execs": [], "cfgs": [], "skins": [], "anims": [], "tags": [],
+                    "animparts": [], "pitches": []}
     if not os.path.isfile(path):
         return params
     params["cfgs"].append(path)
     cfg_dir = os.path.dirname(path)
+    # Animation parts (md5animpart): part 0 is the implicit full-body part; each
+    # md5animpart line opens a new part, and every md5anim after it belongs to
+    # that part until the next md5animpart (skelmodel.h setanimpart).
+    part = 0
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         for raw in f:
             line = raw.split("//", 1)[0].strip()
@@ -88,15 +101,44 @@ def parse_cfg(path: str) -> dict:
                 if params["bump"] is None:
                     params["bump"] = args[1]
             elif cmd == "md5anim" and len(args) >= 2:
-                # md5anim "name" "file.md5anim" [fps] [flags]. The numeric value is the
-                # engine's skelmodel setanim speed (animmodel.h: 1000/fps ms per frame).
-                anim = {"name": args[0], "file": args[1]}
+                # md5anim "name" "file.md5anim" [fps] [priority]. The third value is
+                # the engine's skelmodel setanim speed (animmodel.h: 1000/fps ms per
+                # frame); the fourth is the per-part selection priority (nothing /
+                # 0 means the engine default). The animation belongs to the current
+                # md5animpart.
+                anim = {"name": args[0], "file": args[1], "part": part}
                 if len(args) >= 3:
                     try:
                         anim["fps"] = float(args[2])
                     except ValueError:
                         pass
+                if len(args) >= 4:
+                    try:
+                        anim["priority"] = int(float(args[3]))
+                    except ValueError:
+                        pass
                 params["anims"].append(anim)
+            elif cmd == "md5animpart":
+                # md5animpart <bone> [<bone> ...]: the new part's bone mask. The
+                # engine expands each named bone to its whole subtree (skelmodel.h
+                # expandbonemask); later parts override earlier ones for shared bones.
+                # The list may arrive as one quoted string (setanimpart explodes it on
+                # whitespace) or as separate arguments; normalise both.
+                params["animparts"].append([b for arg in args for b in arg.split()])
+                part += 1
+            elif cmd == "md5pitch" and args:
+                # md5pitch <bone> <scale> <offset> <min> <max> (skelmodel.h setpitch).
+                # An empty bone name sets the part-wide pitch scale instead of a
+                # single bone's. Missing trailing values default to 0 (the engine's
+                # min/max then widen to +/-360*|scale|).
+                pitch = {"bone": args[0]}
+                for i, key in enumerate(("scale", "offset", "min", "max"), start=1):
+                    if len(args) > i:
+                        try:
+                            pitch[key] = float(args[i])
+                        except ValueError:
+                            pass
+                params["pitches"].append(pitch)
             elif cmd == "md5tag" and len(args) >= 2:
                 # md5tag <bone> <tag>  (e.g. md5tag Weapon tag_weapon)
                 params["tags"].append({"bone": args[0], "tag": args[1]})
@@ -137,8 +179,17 @@ def _execute_cfg(params: dict, models_root: str, packages_root: str) -> None:
             if params.get(key) in (None, 1.0, [0.0, 0.0, 0.0]) and sub.get(key) not in (None, 1.0, [0.0, 0.0, 0.0]):
                 params[key] = sub[key]
         # List-valued directives accumulate across the exec chain (md5.cfg execs
-        # anims.cfg, which holds the md5anim table).
-        for key in ("skins", "anims", "tags"):
+        # anims.cfg, which holds the md5anim table). An exec'd file numbers its own
+        # animation parts from 0, so shift its md5anim part indices past the parts
+        # the parent already declared before merging.
+        part_offset = len(params.setdefault("animparts", []))
+        for anim in sub.get("anims", []):
+            merged = dict(anim)
+            merged["part"] = merged.get("part", 0) + part_offset
+            params["anims"].append(merged)
+        params["animparts"].extend(sub.get("animparts", []))
+        params.setdefault("pitches", []).extend(sub.get("pitches", []))
+        for key in ("skins", "tags"):
             params.setdefault(key, []).extend(sub.get(key, []))
 
 
@@ -230,7 +281,14 @@ def _merge_cfg_params(params: dict, base: str) -> None:
             for k in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir"):
                 if params.get(k) in (None, 1.0, [0.0, 0.0, 0.0]) and other.get(k) not in (None, 1.0, [0.0, 0.0, 0.0]):
                     params[k] = other[k]
-            for k in ("skins", "anims", "tags"):
+            part_offset = len(params.setdefault("animparts", []))
+            for anim in other.get("anims", []):
+                merged = dict(anim)
+                merged["part"] = merged.get("part", 0) + part_offset
+                params.setdefault("anims", []).append(merged)
+            params["animparts"].extend(other.get("animparts", []))
+            params.setdefault("pitches", []).extend(other.get("pitches", []))
+            for k in ("skins", "tags"):
                 params.setdefault(k, []).extend(other.get(k, []))
 
 
@@ -350,6 +408,62 @@ def strip_glb_materials(path: str) -> None:
 
     with open(path, "wb") as f:
         f.write(struct.pack("<III", 0x46546C67, 2, 12 + len(body)) + body)
+
+
+def build_anim_metadata(params: dict, packages: str, cfg_dir: str, mesh_dir: str) -> dict:
+    """Build an MD5 model's manifest animation fields from parsed cfg params.
+
+    Returns the flat ``anims``/``animSpeeds`` table plus, when the model declares
+    ``md5animpart``, the ``animParts``/``partAnims`` per-part tables, and any
+    ``md5pitch`` correction as ``pitch``.
+    """
+    out: dict = {}
+    if params.get("anims"):
+        # Anim files may live in an exec'd dir (md5dir / shared anims.cfg, e.g.
+        # snoutx10k uses mrfixit's), so try those too.
+        anim_dirs = [mesh_dir] + list(params.get("exec_dirs", []))
+        anims = {}
+        anim_speeds = {}
+        n_parts = len(params.get("animparts", [])) + 1
+        part_anims = [dict() for _ in range(n_parts)]
+        for a in params["anims"]:
+            resolved = rel_to_packages(a["file"], packages, cfg_dir, extra_dirs=anim_dirs)
+            anims[a["name"]] = resolved
+            # Keep the last definition's speed (the engine's md5anim loader overwrites
+            # by name); 0/absent means the engine default.
+            if a.get("fps", 0.0) > 0.0:
+                anim_speeds[a["name"]] = a["fps"]
+            else:
+                anim_speeds.pop(a["name"], None)
+            part = a.get("part", 0)
+            if 0 <= part < n_parts:
+                clip = {"file": resolved}
+                if a.get("fps", 0.0) > 0.0:
+                    clip["fps"] = a["fps"]
+                if a.get("priority"):
+                    clip["priority"] = a["priority"]
+                part_anims[part][a["name"]] = clip
+        out["anims"] = anims
+        if anim_speeds:
+            out["animSpeeds"] = anim_speeds
+        # md5animpart: the explicit bone masks (part 0 is the implicit full-body
+        # complement) and the per-part clip table the runtime needs to reproduce
+        # calcanim()'s per-part selection.
+        if params.get("animparts"):
+            out["animParts"] = [{"mask": bones} for bones in params["animparts"]]
+            out["partAnims"] = part_anims
+    if params.get("pitches"):
+        # md5pitch: per-bone (or part-wide, empty bone) view-pitch correction that
+        # tracks the running pitch (skelmodel.h interpbones).
+        out["pitch"] = [
+            {"bone": p["bone"],
+             "scale": p.get("scale", 0.0),
+             "offset": p.get("offset", 0.0),
+             "min": p.get("min", 0.0),
+             "max": p.get("max", 0.0)}
+            for p in params["pitches"]
+        ]
+    return out
 
 
 def bake_animated_glb(assimp: str, mesh_source: str, anims: dict, packages_root: str, out_glb: str) -> bool:
@@ -495,28 +609,7 @@ def main() -> int:
                     record["skins"] = skins
                 if params.get("tags"):
                     record["tags"] = params["tags"]
-                if params.get("anims"):
-                    # De-duplicated name -> resolved .md5anim path. The cfgs list some
-                    # animations more than once (alternate fps/flags); the engine keeps
-                    # the last definition, so do the same (dict insertion order preserves
-                    # the first-seen order, the value is overwritten to the last).
-                    # Anim files may live in an exec'd dir (md5dir / shared anims.cfg,
-                    # e.g. snoutx10k uses mrfixit's), so try those too.
-                    anim_dirs = [mesh_dir] + list(params.get("exec_dirs", []))
-                    anims = {}
-                    anim_speeds = {}
-                    for a in params["anims"]:
-                        anims[a["name"]] = rel_to_packages(a["file"], packages, cfg_dir,
-                                                           extra_dirs=anim_dirs)
-                        # Keep the last definition's speed (the engine's md5anim loader
-                        # overwrites by name); 0/absent means the engine default.
-                        if a.get("fps", 0.0) > 0.0:
-                            anim_speeds[a["name"]] = a["fps"]
-                        else:
-                            anim_speeds.pop(a["name"], None)
-                    record["anims"] = anims
-                    if anim_speeds:
-                        record["animSpeeds"] = anim_speeds
+                record.update(build_anim_metadata(params, packages, cfg_dir, mesh_dir))
 
             glb = os.path.join(args.out, sanitize(name) + ".glb")
             # Skeletal MD5: bake every clip into the glb so Godot's own importer can
