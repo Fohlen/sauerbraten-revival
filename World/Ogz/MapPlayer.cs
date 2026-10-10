@@ -328,7 +328,9 @@ public partial class MapPlayer : Node3D
         if (!model.IsInsideTree()) return;
         // Same Z-up frame as this node's Position (= Entity.O, the eye).
         model.Position = Entity.O with { Z = Entity.O.Z - EyeHeight };
-        Vector3 facing = Movement.VecFromYawPitch(Entity.Yaw + 90f, 0f, 1, 0);
+        // The imported glb's forward differs from the engine's authored model, so the
+        // yaw offset is 180 (not the engine's +90); verified in-engine.
+        Vector3 facing = Movement.VecFromYawPitch(Entity.Yaw + 180f, 0f, 1, 0);
         if (facing.LengthSquared() > 1e-6f)
             model.Basis = Basis.LookingAt(facing, new Vector3(0, 0, 1));
     }

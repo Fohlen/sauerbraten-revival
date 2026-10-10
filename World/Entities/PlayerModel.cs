@@ -64,9 +64,11 @@ public partial class PlayerModel : ModelInstance
         // about X below). The engine has no such offset — it relies on the MD5 loader's
         // bind-pose handling, which assimp does not reproduce.
         ModelTranslation = (info?.Translation ?? Vector3.Zero) + new Vector3(0f, 0f, 10f);
-        // Assimp exports the MD5 body Y-up; -90 about X stands it in the Z-up octree
-        // world. Facing is the player yaw (engine renders the body at yaw+90).
-        ModelRotationDegrees = new Vector3(-90f, 0f, 0f);
+        // The baked glb carries assimp's glTF root matrix (Y-up→Z-up); the full
+        // node hierarchy is kept, so this correction stands the body upright in the
+        // Z-up octree world (verified against the flattened reference). Facing is the
+        // player yaw (engine renders the body at yaw+90).
+        ModelRotationDegrees = new Vector3(0f, -90f, 0f);
         KeepSkeleton = true;
         SkinMaterial = ModelSkin.Build(info, textures, skinCache ?? new Dictionary<string, Material>());
 
