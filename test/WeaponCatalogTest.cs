@@ -89,9 +89,9 @@ public class WeaponCatalogTest : GoTestBase
         {
             var w = WeaponCatalog.All[i];
             bool player = i <= (int)Gun.Pistol;
-            TestAssert.Equal(player, w.File != null, $"row {i} ({w.Name}) has a hudgun file");
+            TestAssert.Equal(player, w.HasModel, $"row {i} ({w.Name}) has a hudgun file");
         }
-        TestAssert.True(WeaponCatalog.Get(Gun.Barrel).Sound == null, "barrel has no attack sound");
+        TestAssert.Equal(GameSound.None, WeaponCatalog.Get(Gun.Barrel).Sound, "barrel has no attack sound");
     }
 
     [Test]

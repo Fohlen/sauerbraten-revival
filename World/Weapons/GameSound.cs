@@ -9,6 +9,9 @@ namespace SauerbratenRevival.World.Weapons;
 /// </summary>
 public enum GameSound
 {
+    /// <summary>No sound (engine <c>-1</c>; e.g. the barrel).</summary>
+    None = -1,
+
     Jump = 0,
     Land,
     Rifle,
