@@ -6,11 +6,16 @@ is grounded in SVN r6889 (`src/engine/lightmap.cpp`, `octarender.cpp`,
 our current code (`World/Ogz/`, `World/Save/`, `World/Meshing/`,
 `World/Materials/`).
 
-Status: **not implemented**. Rendering currently uses approximated dynamic
-Godot lights via `World/Entities/LightBuilder.cs`. This document records the
-design so we can pick it back up without re-deriving it.
+Status: **superseded for the runtime path** by [radiance-hints.md](radiance-hints.md)
+(the world is lit by an L1 SH probe volume, not imported per-surface lightmaps).
+This document is retained as the reference for the original engine's model and
+as the **inventory of what T1 added and what the removal plan in
+[radiance-hints.md §9](radiance-hints.md#9-t1--lightmapgdshader-removal-plan)
+removes**. It is not a plan to pick back up. Rendering currently uses approximated
+dynamic Godot lights via `World/Entities/LightBuilder.cs`.
 
-Related: [rendering.md](rendering.md) (Godot rendering strategy),
+Related: [radiance-hints.md](radiance-hints.md) (chosen lighting design),
+[rendering.md](rendering.md) (Godot rendering strategy),
 [ogz-import.md](ogz-import.md) (OGZ pipeline + metadata exporter),
 [features.md](features.md) (roadmap), [architecture.md](architecture.md) §staged
 fidelity.
@@ -18,6 +23,11 @@ fidelity.
 ---
 
 ## TL;DR / decision
+
+> **Superseded (2025):** the runtime decision is no longer T1/T2. Pre-baked
+> lightmaps are incompatible with real-time editing; see
+> [radiance-hints.md](radiance-hints.md). The tiers below are kept only to
+> document the original model and the T1 removal inventory.
 
 - **Never use Godot `LightmapGI`.** Our world is an `ArrayMesh` emitted by our own
   mesher, not a Godot static scene; Sauerbraten lightmaps are *direct per-lumel

@@ -37,11 +37,14 @@ Order reflects intent, not schedule.
 Explicitly **out of scope for the MVP**, to be picked up after the roadmap above.
 This list is the one place these are tracked; design lives in the linked docs.
 
-- **Lighting** ([lighting.md](lighting.md)) — **T1** import the original baked
-  lightmaps (cheap, high value). *Opportunistic*: schedule it to ride along with
-  the first editor-driven mesher/format change rather than as a dedicated phase.
-  **T2** rebake (`calclight`), envmap world sampling, blend-layer rendering —
-  strictly post-MVP.
+- **Lighting** ([radiance-hints.md](radiance-hints.md)) — **chosen:** a
+  world-space L1 SH probe volume ("radiance hints"): soft, diffuse-only, async
+  full bake + incremental region rebake on edit. The pre-baked path (T1 lightmap
+  import / `lightmap.gdshader`, T2 `calclight` rebake) is **dropped** as
+  incompatible with real-time editing. Removal plan:
+  [radiance-hints.md §9](radiance-hints.md#9-t1--lightmapgdshader-removal-plan).
+  Radiance hints are post-MVP but planned; envmap world sampling and
+  blend-layer rendering remain deferred.
 - **Renderer extras** ([rendering.md](rendering.md)) — LOD, specular maps,
   alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), exact `visibletris`,
   face merges, T-joints, grass, RenderingServer mesh streaming.
@@ -83,7 +86,8 @@ Remaining:
 - [ ] RenderingServer mesh streaming (bypass the scene tree; [rendering.md](rendering.md#renderingserver-usage-planned-optimisation)).
 - [ ] Exact `visibletris` culling, face merges, T-joints, grass.
 - [ ] **Post-MVP fidelity** (see [Post-MVP / deferred fidelity](#post-mvp--deferred-fidelity)):
-      lightmaps/layers/envmap ([lighting.md](lighting.md)), specular maps,
+      lighting ([radiance-hints.md](radiance-hints.md)), layers/envmap
+      ([lighting.md](lighting.md)), specular maps,
       alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), blend shader.
 
 ## 2. OGZ import pipeline
@@ -154,15 +158,16 @@ Remaining:
             [ogz-import.md § Converter GUI](ogz-import.md#converter-gui)).
 - [~] **One-shot full metadata export** — capture all resolved engine state in the
       single ~25-min sweep (resolved shaders/slots/vslots/config) as **JSON only**;
-      no binary sidecar (lightmaps/blendmap/PVS are already in the OGZ). The
+      no binary sidecar (blendmap/PVS are already in the OGZ; lighting is baked
+      at runtime — [radiance-hints.md](radiance-hints.md)). The
       exporter is **extended and validated** (`shaderType`/`smooth`/`texmask`/grass,
       `shaders[]`, `config`, vslot `linked`/`changed`); re-exporting the whole
       catalogue still pending. Design:
       [lighting.md § Export everything in one pass](lighting.md#4-export-everything-in-one-pass).
-- [ ] **Lightmap import** (T1; opportunistic — piggyback on the editor mesher/
-      format change, not a dedicated phase; [lighting.md](lighting.md)) — read the
-      embedded atlases, preserve the per-face lightmap link (`lmid`/`uv`/`norm`)
-      through our format, sample in a custom shader.
+- [~] ~~**Lightmap import** (T1)~~ — **dropped**; superseded by
+      [radiance-hints.md](radiance-hints.md). The T1 parsing/link artifacts
+      (`OgzLightMap`, `SurfaceKey`/UV2, `WorldSnapshot` `CubeExt` v2) still exist
+      and are slated for removal (radiance-hints.md §9).
 - [ ] Parse the **blendmap** and **PVS** sections (post-MVP; [lighting.md](lighting.md)).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
@@ -284,8 +289,9 @@ Remaining:
 
 - [ ] **M4e GUI**: texture/material pickers, entity placement, keybinds via
       `InputMap` ([editor-and-commands.md §10](editor-and-commands.md#10-implementation-order-milestones)).
-- [ ] Texturing, blending (the blendmap + lightmap-alpha pipeline is the layer
-      model — see [lighting.md § Layers](lighting.md#14-layers--the-alpha-channel-is-the-blend-mask)),
+- [ ] Texturing, blending (layers no longer ride the lightmap alpha — that
+      model is gone with T1; the blendmap must be sampled directly. See
+      [lighting.md § Layers](lighting.md#14-layers--the-alpha-channel-is-the-blend-mask)),
       entity placement.
 - [ ] **Prefabs, recipes, cross-map paste** (M8) — `ReplaceBlock` content
       resources, rotation, recipe API.

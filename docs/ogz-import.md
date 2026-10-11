@@ -50,7 +50,8 @@ The importer needs information from two sources:
 
 The `.ogz` file contains:
 - Octree structure (nodes, children, edges, faces).
-- Per-face surface info (texture index, lightmap ID, vertex info).
+- Per-face surface info (texture index, lightmap ID, vertex info — the lightmap
+  link is not consumed; see [radiance-hints.md §9](radiance-hints.md#9-t1--lightmapgdshader-removal-plan)).
 - Entity list (position, type, attributes).
 - Map header (worldsize, version, etc.).
 
@@ -169,8 +170,10 @@ material field width: byte → ushort).
 Implemented in [`World/Ogz/OgzReader.cs`](../World/Ogz/OgzReader.cs), a port of
 the load path in `worldio.cpp` (r6889, MAPVERSION 33). It parses the header,
 variables, gameident, extras, texture MRU, entities, vslots and the full octree
-(including the modern `surfaceinfo` vertex encoding). Lightmaps, PVS and the
-blend map are not parsed yet.
+(including the modern `surfaceinfo` vertex encoding). The lightmap atlas
+payload is currently parsed (T1) but is slated for removal
+([radiance-hints.md §9](radiance-hints.md#9-t1--lightmapgdshader-removal-plan));
+PVS and the blend map are not parsed yet.
 
 ```csharp
 OgzMap map = OgzReader.Read("church51.ogz");
@@ -226,7 +229,7 @@ New maps created in the editor use a **compact binary octree format** — not OG
 | Compression | gzip | Godot binary Resource (optionally compressed) |
 | Texture refs | indices → CubeScript | indices → material manifest |
 | Entities | inline, attr1-5 | command log → runtime projections |
-| Lightmaps | embedded | separate or baked via LightmapGI |
+| Lightmaps | embedded | **not imported** — lighting is baked from geometry + entities by the runtime probe volume ([radiance-hints.md](radiance-hints.md)) |
 | Versioning | implicit | explicit version field (world blob + command ops) |
 
 The native format is:
@@ -241,18 +244,18 @@ The native format is:
 
 ## Lightmap handling
 
-See [lighting.md](lighting.md) for the design.
+The engine bakes direct irradiance per lumel into embedded 512×512 atlases; that
+model is **not** used. It is bound to surface topology and is incompatible with
+real-time editing, so the T1 import path is dropped. The world is lit instead by
+a world-space L1 SH probe volume baked from the map's geometry and entities —
+see [radiance-hints.md](radiance-hints.md) (design) and
+[lighting.md](lighting.md) §1 (the original model, retained as the T1 removal
+inventory). `LightmapGI` is ruled out.
 
-Options for imported lightmaps:
-
-1. **Convert to baked textures**: Extract Sauer's packed lightmaps, assign to
-   faces as a secondary UV channel.
-2. **Rebake with LightmapGI**: Place lights from entity data, run Godot's bake.
-3. **Dynamic lighting only**: Skip lightmaps for MVP; use real-time lights.
-
-**Decided:** (1) — sample the original atlases with our own shader; `LightmapGI`
-is ruled out. Full design, coupling with layers/envmap, and the one-shot metadata
-export live in [lighting.md](lighting.md).
+The map's resolved lighting **config** (`ambient`, `skylight`, `sunlight`,
+`sunlightyaw`/`sunlightpitch`/`sunlightscale`, `skyboxcolour`) is still exported
+in the metadata JSON and is consumed by the radiance bake — see
+[radiance-hints.md §4](radiance-hints.md#4-bake-passes).
 
 ---
 

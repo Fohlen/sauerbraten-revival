@@ -38,7 +38,7 @@ This is the opposite of a custom GL renderer. We leverage Godot's mature pipelin
 | Mesh upload cost | Chunk updates require GPU upload; budget per-frame updates. |
 | No custom occlusion | Godot's GPU-based occlusion culling is different from Sauer's octree-based approach; likely comparable or better on modern GPUs. |
 | Material mapping | Sauer's `Slot`/`VSlot` system must map to Godot materials; one-time conversion work. |
-| Lightmap format | Sauer's packed lightmaps need conversion to Godot `LightmapGI` or baked textures. |
+| Lighting | Original Sauer lightmaps are **not** used; worlds are lit by a world-space L1 SH probe volume (radiance hints) — see [radiance-hints.md](radiance-hints.md). |
 | Blend/detail shaders | Multi-layer blending requires a custom shader; doable but not free. |
 | Memory overhead | Godot mesh structures are slightly larger than raw VBOs; negligible on modern systems. |
 
@@ -165,8 +165,8 @@ VSlot (variant):
 | Slot | `ShaderMaterial` or `StandardMaterial3D` |
 | VSlot variant | Material instance with overridden uniforms |
 | Texture layers | Albedo, normal, emission textures |
-| Blending | Custom shader with blend mask |
-| Lightmap | `LightmapGI` or baked texture channel |
+| Blending | Custom shader with blend mask (no longer sourced from a lightmap alpha — that model is dropped with T1) |
+| Lighting | World-space L1 SH probe volume (radiance hints), sampled by the world shader |
 
 The material manifest maps face indices → Godot materials. In the dev viewer this
 is resolved at load time from the committed `metadata-catalogue/<map>.json`
@@ -179,7 +179,9 @@ equivalent manifest into the native format at conversion time.
 
 1. **Approximate**: Base texture + tint, dynamic Godot lighting.
 2. **Blended**: Multi-layer material blending, per-face UVs.
-3. **Exact**: Original lightmaps, envmaps, decals, full surface model.
+3. **Exact**: Original envmaps, decals, full surface model. World lighting is a
+   world-space L1 SH probe volume (radiance hints), independent of surface
+   topology — see [radiance-hints.md](radiance-hints.md).
 
 The ArrayMesh approach supports all three stages — only the materials/shaders change.
 
@@ -216,7 +218,7 @@ This bypasses the scene tree for world geometry while still using Godot's render
 
 | Aspect | Faithfulness | Notes |
 | --- | --- | --- |
-| Visual appearance | ✓ | Same textures, can replicate lightmaps |
+| Visual appearance | ✓ | Same textures; soft diffuse-only radiance-hint lighting instead of baked lightmaps |
 | Movement feel | ✓ | Collision uses original octree code |
 | Performance | ✓+ | Modern GPU + LOD + culling = better |
 | Editor preview | ✓+ | TOOL support exceeds original |
@@ -264,6 +266,8 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   [ogz-import.md](ogz-import.md#entity-porting-status) — but nothing reads them),
   **specular maps** (packed/non-PBR), **alpha/transparency**
   (`alphafront`/`alphaback`, `LAYER_*`), blended layers, exact `visibletris`
-  culling, face merges, T-joints, grass and lightmaps. Tracked divergences live
-  in [known-bugs.md](known-bugs.md). See [lighting.md](lighting.md) for the
-  lightmap/layer/envmap model and import plan.
+  culling, face merges, T-joints and grass. World lighting is the L1 SH probe
+  volume ([radiance-hints.md](radiance-hints.md)); the baked-lightmap path is
+  dropped. Tracked divergences live in [known-bugs.md](known-bugs.md). See
+  [radiance-hints.md](radiance-hints.md) for lighting and
+  [lighting.md](lighting.md) for the original layer/envmap model.
