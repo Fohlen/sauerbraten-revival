@@ -44,7 +44,8 @@ void fragment() {
 
         vec3 norm = normalize(v_world_normal);
         // Note: when normal mapping is enabled in future passes, norm can be perturbed.
-        vec3 irr = max(sky_tint * c0 + c1 * norm, vec3(0.0));
+        float dir_term = dot(c1, norm);
+        vec3 irr = max(sky_tint * c0 + vec3(dir_term), vec3(0.0));
         vec3 out_col = base_col * irr;
 
         if (use_glow) {
