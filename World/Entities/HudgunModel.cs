@@ -40,6 +40,8 @@ public partial class HudgunModel : Node3D
     public bool ModelLoaded { get; private set; }
     public IReadOnlyList<ModelInstance> Parts => _parts;
 
+    private static readonly Basis BaseHudBasis = new(Vector3.Up, Mathf.Pi / 2f);
+
     /// <summary>
     /// Maps Cube 2 model translation axes to camera-local space:
     /// model forward (tx) -> camera forward (-Z),
@@ -133,7 +135,7 @@ public partial class HudgunModel : Node3D
         if (_info == null) return;
         Scale = Vector3.One * _info.Scale * HudgunScale;
         Position = CubeVectorToCamera(_info.Translation * _info.Scale) + HudgunOffset;
-        Basis = Basis.FromEuler(HudgunRotationDegrees * Mathf.Pi / 180f);
+        Basis = Basis.FromEuler(HudgunRotationDegrees * Mathf.Pi / 180f) * BaseHudBasis;
     }
 
     private static Node3D? FindAnchor(ModelInstance part, string bone)

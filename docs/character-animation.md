@@ -231,15 +231,14 @@ When MD5 meshes are imported to glTF via assimp (`tools/model-import/import_mode
 - MD5 right (+X) maps to glTF `+X` (Godot Camera Right).
 - MD5 up (+Z) maps to glTF `+Y` (Godot Camera Up).
 
-Because the glTF is already aligned with Godot's camera frame, the hudgun's camera-space basis is simply `Basis.Identity`.
+Because the MD5 model's authored rest pose faces along the model coordinate axes, aligning with the view direction requires the engine's 90° yaw rotation in camera space (`BaseHudBasis = new Basis(Vector3.Up, Mathf.Pi / 2f)`).
 
 For `mdltrans tx ty tz` (e.g. `1.0 -2.0 -0.3` for `mrfixit/hudguns/rifle` with scale 0.75):
 - Model forward `tx` moves along Camera Forward ($-Z$): $Z_{cam} = -tx \cdot scale$.
 - Model lateral `ty` moves along Camera Right ($+X$): $X_{cam} = ty \cdot scale$.
 - Model vertical `tz` moves along Camera Up ($+Y$): $Y_{cam} = tz \cdot scale$.
 
-Previously, `HudgunModel.cs` erroneously applied an extra 90° yaw rotation in camera space (`EngineHudYaw`), which negated and swapped axes (turning $X_{cam}$ into $+1.5$ off the right edge of the screen, and rotating the gun perpendicular to view). With the direct camera mapping `(ty, tz, -tx) * scale`, the hudgun sits naturally at `(-1.5, -0.225, -0.75)` without custom offsets.
-
 ### Linked multi-part models (hands + weapon)
 In models configured with `md5link` (e.g. `mrfixit/hudguns/rifle`), Part 0 (the hands) attaches Part 1 (the weapon mesh) beneath a tag bone on Part 0 (`tag_bicep` -> `Bicep.R`).
 Because assimp converts every MD5 mesh with `<MD5_Root>` applying a $-90^\circ$ rotation around X, Part 0's bone attachment is already in camera/glTF space. Attaching Part 1 directly under `HudgunLink_Bicep_R` without adjustment compounded Part 1's own `<MD5_Root>`, rotating the weapon mesh an additional $-90^\circ$ around X (pointing the weapon downward instead of forward). Counteracting the redundant root transform on linked child parts (`part.Basis = new Basis(Vector3.Right, Mathf.Pi / 2f)`) restores forward alignment between the hands and the weapon.
+
