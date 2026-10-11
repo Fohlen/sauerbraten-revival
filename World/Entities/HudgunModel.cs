@@ -12,12 +12,7 @@ namespace SauerbratenRevival.World.Entities;
 [GlobalClass]
 public partial class HudgunModel : Node3D
 {
-    private static readonly Basis CubeToCamera = new(Vector3.Right, -Mathf.Pi / 2f);
-    private static readonly Basis EngineHudYaw = new(Vector3.Back, Mathf.Pi / 2f);
-    private static readonly Basis BaseHudBasis =
-        CubeToCamera * EngineHudYaw * CubeToCamera.Inverse();
-
-    private Vector3 _hudgunOffset = new(-2.5f, -2.5f, -2f);
+    private Vector3 _hudgunOffset = Vector3.Zero;
     [Export]
     public Vector3 HudgunOffset
     {
@@ -33,7 +28,7 @@ public partial class HudgunModel : Node3D
         set { _hudgunScale = value; ApplyTransform(); }
     }
 
-    private Vector3 _hudgunRotationDegrees = new(90f, 0f, 0f);
+    private Vector3 _hudgunRotationDegrees = Vector3.Zero;
     [Export]
     public Vector3 HudgunRotationDegrees
     {
@@ -45,7 +40,14 @@ public partial class HudgunModel : Node3D
     public bool ModelLoaded { get; private set; }
     public IReadOnlyList<ModelInstance> Parts => _parts;
 
-    public static Vector3 CubeVectorToCamera(Vector3 vector) => CubeToCamera * vector;
+    /// <summary>
+    /// Maps Cube 2 model translation axes to camera-local space:
+    /// model forward (tx) -> camera forward (-Z),
+    /// model right (ty)   -> camera right (+X),
+    /// model up (tz)      -> camera up (+Y).
+    /// </summary>
+    public static Vector3 CubeVectorToCamera(Vector3 vector) =>
+        new(vector.Y, vector.Z, -vector.X);
 
     private readonly List<ModelInstance> _parts = new();
     private ModelInfo? _info;
@@ -112,6 +114,10 @@ public partial class HudgunModel : Node3D
                     return;
                 }
                 parent = anchor;
+                // Part 1 glTF has its own <MD5_Root> (-90 deg X rotation). Because it is
+                // parented beneath Part 0's already-transformed bone, invert that redundant
+                // rotation so the weapon aligns forward with the hand.
+                part.Basis = new Basis(Vector3.Right, Mathf.Pi / 2f);
             }
 
             parent.AddChild(part);
@@ -126,8 +132,8 @@ public partial class HudgunModel : Node3D
     {
         if (_info == null) return;
         Scale = Vector3.One * _info.Scale * HudgunScale;
-        Position = CubeVectorToCamera(EngineHudYaw * (_info.Translation * _info.Scale)) + HudgunOffset;
-        Basis = Basis.FromEuler(HudgunRotationDegrees * Mathf.Pi / 180f) * BaseHudBasis;
+        Position = CubeVectorToCamera(_info.Translation * _info.Scale) + HudgunOffset;
+        Basis = Basis.FromEuler(HudgunRotationDegrees * Mathf.Pi / 180f);
     }
 
     private static Node3D? FindAnchor(ModelInstance part, string bone)

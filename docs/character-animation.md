@@ -209,3 +209,37 @@ hierarchy is a lossy reshape, so it cannot be exact for all bones.
   GoDotTest harness; use a real running frame (windowed) to observe animation.
 - The one truly independent check, not yet done, is comparing Godot's **actual
   skinned vertex output** against the engine's `bdata`-transformed bind vertices.
+
+---
+
+## 5. First-person view model (hudgun) coordinate mapping
+
+In the original engine (`fpsgame/render.cpp` `drawhudmodel`), hudguns are rendered with:
+```c
+rendermodel(NULL, gunname, anim, sway, d->yaw + 90, d->pitch, MDL_LIGHT|MDL_HUD, ...);
+```
+Sauerbraten's camera view matrix applies `rotate_around_z(-d->yaw)` and `rotate_around_x(-d->pitch)`. In camera space, the player's yaw and pitch cancel out completely.
+
+In OpenGL / Sauerbraten camera coordinates:
+- The model forward axis (+X in Sauerbraten model coordinates) maps to Camera Forward (`-Z` in OpenGL / Godot camera space).
+- The model lateral axis (+Y in Sauerbraten model coordinates) maps to Camera Right (`+X` in OpenGL / Godot camera space).
+- The model vertical axis (+Z in Sauerbraten model coordinates) maps to Camera Up (`+Y` in OpenGL / Godot camera space).
+
+### The glTF orientation & translation
+When MD5 meshes are imported to glTF via assimp (`tools/model-import/import_models.py`), assimp introduces `<MD5_Root>` with a $-90^\circ$ rotation around X:
+- MD5 forward (+Y) maps to glTF `-Z` (Godot Camera Forward).
+- MD5 right (+X) maps to glTF `+X` (Godot Camera Right).
+- MD5 up (+Z) maps to glTF `+Y` (Godot Camera Up).
+
+Because the glTF is already aligned with Godot's camera frame, the hudgun's camera-space basis is simply `Basis.Identity`.
+
+For `mdltrans tx ty tz` (e.g. `1.0 -2.0 -0.3` for `mrfixit/hudguns/rifle` with scale 0.75):
+- Model forward `tx` moves along Camera Forward ($-Z$): $Z_{cam} = -tx \cdot scale$.
+- Model lateral `ty` moves along Camera Right ($+X$): $X_{cam} = ty \cdot scale$.
+- Model vertical `tz` moves along Camera Up ($+Y$): $Y_{cam} = tz \cdot scale$.
+
+Previously, `HudgunModel.cs` erroneously applied an extra 90° yaw rotation in camera space (`EngineHudYaw`), which negated and swapped axes (turning $X_{cam}$ into $+1.5$ off the right edge of the screen, and rotating the gun perpendicular to view). With the direct camera mapping `(ty, tz, -tx) * scale`, the hudgun sits naturally at `(-1.5, -0.225, -0.75)` without custom offsets.
+
+### Linked multi-part models (hands + weapon)
+In models configured with `md5link` (e.g. `mrfixit/hudguns/rifle`), Part 0 (the hands) attaches Part 1 (the weapon mesh) beneath a tag bone on Part 0 (`tag_bicep` -> `Bicep.R`).
+Because assimp converts every MD5 mesh with `<MD5_Root>` applying a $-90^\circ$ rotation around X, Part 0's bone attachment is already in camera/glTF space. Attaching Part 1 directly under `HudgunLink_Bicep_R` without adjustment compounded Part 1's own `<MD5_Root>`, rotating the weapon mesh an additional $-90^\circ$ around X (pointing the weapon downward instead of forward). Counteracting the redundant root transform on linked child parts (`part.Basis = new Basis(Vector3.Right, Mathf.Pi / 2f)`) restores forward alignment between the hands and the weapon.
