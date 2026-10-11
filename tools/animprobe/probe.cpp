@@ -121,6 +121,24 @@ static void stripetoken(const char *tok, char *out, size_t n)
     }
 }
 
+// VERBATIM copy of skelmodel.h `skeladjustment` (md5adjust). The tx/ty/tz /4 is
+// done by `setadjust` at command time; callers pass the already-divided vector.
+struct Padjust
+{
+    float yaw, pitch, roll;
+    vec translate;
+    Padjust() : yaw(0), pitch(0), roll(0), translate(0, 0, 0) {}
+    void adjust(dualquat &dq)
+    {
+        if(yaw) dq.mulorient(quat(vec(0, 0, 1), yaw*RAD));
+        if(pitch) dq.mulorient(quat(vec(0, -1, 0), pitch*RAD));
+        if(roll) dq.mulorient(quat(vec(-1, 0, 0), roll*RAD));
+        if(!translate.iszero()) dq.translate(translate);
+    }
+};
+static vector<Padjust> adjustments;
+static bool printAbsolute = false;
+
 // Port of md5::loadanim()'s parse + frame compose for one frame.
 static bool dumpFrame(const char *path, Mesh &mesh, int wantFrame)
 {
@@ -215,6 +233,7 @@ static bool dumpFrame(const char *path, Mesh &mesh, int wantFrame)
                 }
                 dualquat dq(j.orient, j.pos);
                 int k = h.bone;
+                if (adjustments.inrange(k)) adjustments[k].adjust(dq);
                 PBone &b = mesh.bones[k];
                 dq.mul(b.invbase);
                 dualquat &dst = frame[k];
@@ -232,6 +251,26 @@ static bool dumpFrame(const char *path, Mesh &mesh, int wantFrame)
                        wantFrame, i, mesh.names[i],
                        t.x, t.y, t.z, d.real.x, d.real.y, d.real.z, d.real.w);
             }
+            if (printAbsolute)
+            {
+                // skelmodel.h interpbones accumulation (bdata[k] = bdata[parent] * frame[k]);
+                // the posed joint in model space is then bdata[k] * base[k].
+                dualquat *bdata = new dualquat[mesh.numbones];
+                loopi(mesh.numbones)
+                {
+                    dualquat d = frame[i];
+                    d.normalize();
+                    if (mesh.bones[i].parent < 0) bdata[i] = d;
+                    else bdata[i].mul(bdata[mesh.bones[i].parent], d);
+                    dualquat pose; pose.mul(bdata[i], mesh.bones[i].base);
+                    quat rc = quat(pose.real); rc.invert();
+                    quat t; t.mul(pose.dual, rc); t.mul(2.0f);
+                    printf("ABS %d %d %s %.6f %.6f %.6f %.6f %.6f %.6f %.6f\n",
+                           wantFrame, i, mesh.names[i],
+                           t.x, t.y, t.z, pose.real.x, pose.real.y, pose.real.z, pose.real.w);
+                }
+                delete[] bdata;
+            }
             delete[] frame;
             done = true;
         }
@@ -243,6 +282,44 @@ static bool dumpFrame(const char *path, Mesh &mesh, int wantFrame)
 
 int main(int argc, char **argv)
 {
+    // Explicit mode: animprobe --mesh M.md5mesh --anim A.md5anim [--frame N]
+    //                         [--adjust BONE YAW PITCH ROLL TX TY TZ]...
+    // (tx/ty/tz as written in md5.cfg; divided by 4 like skelmodel.h setadjust).
+    if (argc > 1 && !strcmp(argv[1], "--mesh"))
+    {
+        const char *meshpath = NULL, *animpath = NULL;
+        printAbsolute = true;
+        int frame = 0;
+        struct Spec { const char *bone; float v[6]; };
+        vector<Spec> specs;
+        for (int i = 1; i < argc; i++)
+        {
+            if (!strcmp(argv[i], "--mesh") && i + 1 < argc) meshpath = argv[++i];
+            else if (!strcmp(argv[i], "--anim") && i + 1 < argc) animpath = argv[++i];
+            else if (!strcmp(argv[i], "--frame") && i + 1 < argc) frame = atoi(argv[++i]);
+            else if (!strcmp(argv[i], "--adjust") && i + 7 < argc)
+            {
+                Spec s; s.bone = argv[++i];
+                loopj(6) s.v[j] = (float)atof(argv[++i]);
+                specs.add(s);
+            }
+        }
+        Mesh mesh;
+        if (!meshpath || !animpath || !loadMeshJoints(meshpath, mesh)) { fprintf(stderr, "animprobe: mesh load failed\n"); return 1; }
+        loopv(specs)
+        {
+            int k = -1;
+            loopj(mesh.numbones) if (!strcmp(mesh.names[j], specs[i].bone)) { k = j; break; }
+            if (k < 0) { fprintf(stderr, "animprobe: no bone %s\n", specs[i].bone); return 1; }
+            while (!adjustments.inrange(k)) adjustments.add(Padjust());
+            Padjust &a = adjustments[k];
+            a.yaw = specs[i].v[0]; a.pitch = specs[i].v[1]; a.roll = specs[i].v[2];
+            a.translate = vec(specs[i].v[3]/4, specs[i].v[4]/4, specs[i].v[5]/4);
+        }
+        printf("# mesh=%s anim=%s frame=%d numJoints=%d adjusts=%d\n", meshpath, animpath, frame, mesh.numbones, specs.length());
+        return dumpFrame(animpath, mesh, frame) ? 0 : 1;
+    }
+
     const char *model = argc > 1 ? argv[1] : "mrfixit";
     const char *anim = argc > 2 ? argv[2] : "idle";
     int frame = argc > 3 ? atoi(argv[3]) : 0;

@@ -166,8 +166,10 @@ frame 0 {
             self._ANIM, [{"bone": "Root", "yaw": 90.0}])
         data = import_models._parse_md5anim(out)
         pos, quat = import_models._compose_frame(data, data["frames"][0])[0]
-        self.assertAlmostEqual(0.0, pos[0], places=5)
-        self.assertAlmostEqual(1.0, pos[1], places=5)
+        # In the engine (skelmodel.h skeladjustment::adjust), yaw/pitch/roll perform
+        # dualquat mulorient: rotating the joint's orientation without altering pos.
+        self.assertAlmostEqual(1.0, pos[0], places=5)
+        self.assertAlmostEqual(0.0, pos[1], places=5)
         self.assertAlmostEqual(0.0, pos[2], places=5)
         # A 90 degree yaw about Z is a pure Z rotation (x=y=0, z~=sin45).
         self.assertAlmostEqual(0.0, quat[0], places=5)

@@ -607,15 +607,39 @@ def _compose_frame(data: dict, frame_floats: list[float]) -> list[tuple]:
     return joints
 
 
+def _dq_from(q: tuple, p: tuple) -> tuple:
+    return (q, tuple(0.5 * v for v in _qmul((p[0], p[1], p[2], 0.0), q)))
+
+
+def _dq_mulorient(dq: tuple, q: tuple) -> tuple:
+    r, d = dq
+    return (_qmul(q, r), _qmul((-q[0], -q[1], -q[2], q[3]), d))
+
+
+def _dq_translate(dq: tuple, p: tuple) -> tuple:
+    r, d = dq
+    dx = d[0] + 0.5 * (p[0] * r[3] + p[1] * r[2] - p[2] * r[1])
+    dy = d[1] + 0.5 * (-p[0] * r[2] + p[1] * r[3] + p[2] * r[0])
+    dz = d[2] + 0.5 * (p[0] * r[1] - p[1] * r[0] + p[2] * r[3])
+    dw = d[3] - 0.5 * (p[0] * r[0] + p[1] * r[1] + p[2] * r[2])
+    return (r, (dx, dy, dz, dw))
+
+
+def _dq_extract(dq: tuple) -> tuple:
+    r, d = dq
+    t = _qmul(d, (-r[0], -r[1], -r[2], r[3]))
+    return (2.0 * t[0], 2.0 * t[1], 2.0 * t[2]), r
+
+
 def apply_md5adjust(anim_text: str, adjusts: list[dict]) -> str:
     """Bake the engine's ``md5adjust`` corrections into an ``.md5anim``.
 
     The engine applies each adjustment to the *composed* joint (baseframe overridden
-    per frame) before subtracting the mesh bind (md5.h ``loadanim``): a yaw/pitch/roll
-    rotation about Z/-Y/-X plus a translation (divided by 4), in the joint's parent
-    frame. assimp has no such concept, so we apply it to every frame here. assimp
-    already reproduces the unadjusted clips, so transforming the clip input matches
-    the engine's rendered pose.
+    per frame) before subtracting the mesh bind (md5.h ``loadanim``, skelmodel.h
+    ``skeladjustment::adjust``): yaw/pitch/roll rotations via ``mulorient`` about
+    Z/-Y/-X and translation (divided by 4) via dualquat ``translate``. assimp has no
+    such concept, so we apply the exact engine dualquat operations to every frame
+    here.
     """
     if not adjusts:
         return anim_text
@@ -633,15 +657,23 @@ def apply_md5adjust(anim_text: str, adjusts: list[dict]) -> str:
     for frame_floats in data["frames"]:
         joints = _compose_frame(data, frame_floats)
         for k, adj in adjust_by_index.items():
-            yaw, pitch, roll = adj.get("yaw", 0.0), adj.get("pitch", 0.0), adj.get("roll", 0.0)
-            a = _qmul(_qmul(_qaxis((-1.0, 0.0, 0.0), roll), _qaxis((0.0, -1.0, 0.0), pitch)),
-                      _qaxis((0.0, 0.0, 1.0), yaw))
             pos, quat = joints[k]
-            pos = _qrotate(a, pos)
-            pos = (pos[0] + adj.get("tx", 0.0) / 4.0,
-                   pos[1] + adj.get("ty", 0.0) / 4.0,
-                   pos[2] + adj.get("tz", 0.0) / 4.0)
-            joints[k] = (pos, _qmul(a, quat))
+            dq = _dq_from(quat, pos)
+            yaw = adj.get("yaw", 0.0)
+            pitch = adj.get("pitch", 0.0)
+            roll = adj.get("roll", 0.0)
+            if yaw:
+                dq = _dq_mulorient(dq, _qaxis((0.0, 0.0, 1.0), yaw))
+            if pitch:
+                dq = _dq_mulorient(dq, _qaxis((0.0, -1.0, 0.0), pitch))
+            if roll:
+                dq = _dq_mulorient(dq, _qaxis((-1.0, 0.0, 0.0), roll))
+            tx = adj.get("tx", 0.0)
+            ty = adj.get("ty", 0.0)
+            tz = adj.get("tz", 0.0)
+            if tx or ty or tz:
+                dq = _dq_translate(dq, (tx / 4.0, ty / 4.0, tz / 4.0))
+            joints[k] = _dq_extract(dq)
         out_frames.append(joints)
 
     # Re-emit with every joint fully specified (flags 63), which keeps the byte layout
