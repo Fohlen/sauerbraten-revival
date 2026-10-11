@@ -5,7 +5,7 @@ lit by a world-space volume of spherical-harmonic irradiance probes (the
 classic "radiance hints" representation), not by imported, per-surface baked
 lightmaps.
 
-Status: **Stage 0 measured; not implemented.** This doc supersedes the
+Status: **Stage 2 implemented (Stage 0, 1, 2 complete).** This doc supersedes the
 baked-lightmap plan in [lighting.md](lighting.md) as the chosen runtime path.
 [lighting.md](lighting.md) is retained as the reference for the original
 engine's model and as the *removal inventory* for T1 (see §9).
@@ -281,8 +281,8 @@ Conclusions:
 | Stage | Scope | Exit |
 | --- | --- | --- |
 | **0 ✅** | Measurement probe; geometry bounds; grid sizing | done (`test/RadianceBakeProbe.cs`, c824776) |
-| **1** | `RadianceVolume` (L1 SH bake: sky+sun), `Rgbah` 3D texture, `radiance.gdshader`, world material; dev viewer | visual A/B with the user |
-| **2** | Direct `ET_LIGHT`/`ET_SPOTLIGHT` into the volume; per-chunk light index | A/B; perf guard |
+| **1 ✅** | `RadianceVolume` (L1 SH bake: sky+sun), `Rgbah` 3D texture, `radiance.gdshader`, world material; dev viewer | done (`107dd14`, `20e540c`) |
+| **2 ✅** | Direct `ET_LIGHT`/`ET_SPOTLIGHT` into the volume; spatial light index (`LightSpatialIndex`) | done |
 | **3** | Single bounce + AO/sky visibility | A/B |
 | **4** | Incremental region rebake wired to the editor dirty path (renderer + `MapWorld`) | edit within frame budget |
 | **5** | Quality/perf knobs, fallback (no catalogue), retire T1 (§9), docs | full suite + Release numbers |

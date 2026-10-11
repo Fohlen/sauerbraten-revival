@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Chickensoft.GoDotTest;
 using Godot;
@@ -388,5 +389,69 @@ public class RadianceVolumeTest : GoTestBase
         }
 
         TestAssert.True(shaderMats > 0, "Materials are ShaderMaterials bound with radiance");
+    }
+
+    // =========================================================================
+    // Stage 2 Direct Entity Lights & Spatial Index Tests (§4.2)
+    // =========================================================================
+
+    [Test]
+    public void LightSpatialIndex_PrunesLightsOutsideCellInfluence()
+    {
+        var bounds = new Aabb(new Vector3(0, 0, 0), new Vector3(256, 256, 256));
+        var lights = new List<DirectLightSource>
+        {
+            // Light 0 in corner (0, 0, 0) with radius 50
+            new DirectLightSource(new Vector3(10, 10, 10), 50f, Colors.Red),
+            // Light 1 far away in opposite corner (200, 200, 200) with radius 30
+            new DirectLightSource(new Vector3(200, 200, 200), 30f, Colors.Blue),
+        };
+
+        var index = new LightSpatialIndex(bounds, lights, targetCellSize: 64f);
+        var queryResults = new List<DirectLightSource>();
+
+        // Query near Light 0
+        index.QueryLights(new Vector3(10, 10, 10), queryResults);
+        TestAssert.Equal(1, queryResults.Count, "Only light 0 in range");
+        TestAssert.Equal(Colors.Red, queryResults[0].Color, "Result is light 0");
+
+        // Query in middle (100, 100, 100) - neither light reaches
+        index.QueryLights(new Vector3(100, 100, 100), queryResults);
+        TestAssert.Equal(0, queryResults.Count, "No lights in middle cell");
+
+        // Query near Light 1
+        index.QueryLights(new Vector3(200, 200, 200), queryResults);
+        TestAssert.Equal(1, queryResults.Count, "Only light 1 in range");
+        TestAssert.Equal(Colors.Blue, queryResults[0].Color, "Result is light 1");
+    }
+
+    [Test]
+    public void RadianceVolume_BakeDirectLights_IlluminatesProbeFromNearbyLight()
+    {
+        var octa = new Octa(6);
+        octa.EmptyMap(6);
+
+        var volume = new RadianceVolume(new RadianceGrid(new Vector3(0, 0, 0), 64f, 4));
+        volume.SkyRays = 4;
+
+        // Map config with no sun and minimal ambient so direct light dominates
+        var config = new MapConfig
+        {
+            Ambient = 0,
+            Skylight = 0,
+            Sunlight = 0,
+        };
+
+        // Light placed at (32, 32, 50) with radius 40
+        var lights = new List<DirectLightSource>
+        {
+            new DirectLightSource(new Vector3(32, 32, 50), 40f, Colors.White)
+        };
+
+        volume.Bake(octa, config, lights);
+
+        // A probe close to the light should have high irradiance
+        var probeClose = volume.Grid.Sample(new Vector3(32, 45, -32));
+        TestAssert.True(probeClose.Dir.Length() > 0f || probeClose.Amb > 0f, "Close probe receives light energy");
     }
 }

@@ -128,6 +128,19 @@ public class RadianceGrid
 	}
 
 	/// <summary>
+	/// Map an AABB from Godot world coordinates to Sauerbraten coordinates.
+	/// </summary>
+	public static Aabb WorldBoundsToSauer(Aabb worldBounds)
+	{
+		Vector3 wMin = worldBounds.Position;
+		Vector3 wMax = worldBounds.End;
+		// Inverse: sauer.x = world.x, sauer.y = -world.z, sauer.z = world.y
+		Vector3 sMin = new(wMin.X, -wMax.Z, wMin.Y);
+		Vector3 sMax = new(wMax.X, -wMin.Z, wMax.Y);
+		return new Aabb(sMin, sMax - sMin);
+	}
+
+	/// <summary>
 	/// Center of the cell at (x, y, z) in Godot world coordinates.
 	/// </summary>
 	public Vector3 CellCenterWorld(int x, int y, int z) =>

@@ -94,12 +94,13 @@ public partial class MapWorld : Node3D
         Textures = textures;
         var catalogue = MetadataCatalogue.TryLoadForMap(mapName);
 
-        // Radiance hints volume: bake sky & sun pass (docs/radiance-hints.md §4.1)
+        // Radiance hints volume: bake sky, sun, and direct entity lights (docs/radiance-hints.md §4.1, §4.2)
         Lighting.RadianceVolume? radiance = null;
         if (catalogue != null)
         {
             var volume = Lighting.RadianceVolume.CreateForOcta(octa);
-            volume.BakeSkyAndSun(octa, catalogue.Config);
+            var directLights = Lighting.DirectLightSource.CollectFromMap(map);
+            volume.Bake(octa, catalogue.Config, directLights);
             radiance = volume;
             Radiance = volume;
         }

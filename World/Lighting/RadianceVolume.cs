@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Physics;
@@ -83,9 +84,10 @@ public class RadianceVolume
     }
 
     /// <summary>
-    /// Run the synchronous Sky + Sun bake pass over the entire volume.
+    /// Run the synchronous bake pass over the entire volume:
+    /// Sky + Sun pass (Stage 1) and Direct Entity Lights pass (Stage 2).
     /// </summary>
-    public void BakeSkyAndSun(Octa octa, MapConfig config)
+    public void Bake(Octa octa, MapConfig config, IReadOnlyList<DirectLightSource>? directLights = null)
     {
         // Decode lighting parameters from config
         Color ambientColor = DecodeColor(config.Ambient);
@@ -94,7 +96,6 @@ public class RadianceVolume
         float sunlightScale = config.SunlightScale;
 
         // Base ambient irradiance (minimum diffuse floor)
-        // Original engine: ambient is the base floor.
         float ambientRadiance = (ambientColor.R + ambientColor.G + ambientColor.B) / 3.0f;
 
         // Effective skylight radiance above ambient
@@ -123,6 +124,17 @@ public class RadianceVolume
             skyDirsWorld[i] = RadianceGrid.SauerToWorld(skyDirsSauer[i]);
         }
 
+        // Spatial index for direct lights (Stage 2)
+        LightSpatialIndex? spatialIndex = null;
+        if (directLights != null && directLights.Count > 0)
+        {
+            // Grid bounds in Sauerbraten coordinates
+            Aabb boundsSauer = RadianceGrid.WorldBoundsToSauer(Grid.Bounds);
+            spatialIndex = new LightSpatialIndex(boundsSauer, directLights);
+        }
+
+        var candidateLights = new List<DirectLightSource>();
+
         // Raycast max distance: extent * 1.5 reaches the world bounds
         float maxRayDist = Grid.Extent * 1.5f;
 
@@ -140,7 +152,7 @@ public class RadianceVolume
                     Vector3 centerSauer = Grid.CellCenterSauer(x, y, z);
                     var cellCoords = new Vector3I(Mathf.FloorToInt(centerSauer.X), Mathf.FloorToInt(centerSauer.Y), Mathf.FloorToInt(centerSauer.Z));
 
-                    // Skip probes inside solid geometry (§3)
+                    // Skip probes inside solid geometry (docs/radiance-hints.md §3)
                     Cube? leaf = octa.LeafCube(cellCoords);
                     if (leaf != null && leaf.IsEntirelySolid())
                         continue;
@@ -149,14 +161,11 @@ public class RadianceVolume
                     probe.AddAmbient(ambientRadiance);
 
                     // 1. Sky pass: cast hemisphere rays
-                    int unoccludedSkyRays = 0;
                     for (int r = 0; r < rayCount; r++)
                     {
                         float dist = OctaRaycast.RayCube(octa, centerSauer, skyDirsSauer[r], maxRayDist, 0, 0, out _);
                         if (dist >= maxRayDist * 0.999f)
                         {
-                            unoccludedSkyRays++;
-                            // Add directional sample from this hemisphere direction
                             // Radiance divided by rayCount for Monte Carlo estimate
                             probe.AddDirectional(skyDirsWorld[r], skyRadiance / rayCount);
                         }
@@ -168,8 +177,50 @@ public class RadianceVolume
                         float sunDist = OctaRaycast.RayCube(octa, centerSauer, sunDirSauer, maxRayDist, 0, 0, out _);
                         if (sunDist >= maxRayDist * 0.999f)
                         {
-                            // Sun is visible: accumulate sun directional radiance
                             probe.AddDirectional(sunDirWorld, sunRadiance);
+                        }
+                    }
+
+                    // 3. Direct entity lights pass (Stage 2)
+                    if (spatialIndex != null)
+                    {
+                        spatialIndex.QueryLights(centerSauer, candidateLights);
+                        for (int li = 0; li < candidateLights.Count; li++)
+                        {
+                            var light = candidateLights[li];
+                            Vector3 lightVec = light.Position - centerSauer;
+                            float dist = lightVec.Length();
+
+                            if (dist < 1e-4f || dist >= light.Radius)
+                                continue;
+
+                            Vector3 rayDir = lightVec / dist; // normalized direction toward light
+
+                            // Spotlight cone attenuation check
+                            float spotAtten = 1.0f;
+                            if (light.IsSpotlight)
+                            {
+                                // Vector from light to probe is -rayDir
+                                float cosAngle = (-rayDir).Dot(light.SpotDirection);
+                                if (cosAngle < light.SpotCosAngle)
+                                    continue;
+                                spotAtten = (cosAngle - light.SpotCosAngle) / (1.0f - light.SpotCosAngle);
+                            }
+
+                            // Linear distance attenuation matching Sauerbraten: intensity = 1 - dist / radius
+                            float intensity = (1.0f - dist / light.Radius) * spotAtten;
+                            if (intensity <= 0f)
+                                continue;
+
+                            // Cast shadow ray from probe to light
+                            float hitDist = OctaRaycast.RayCube(octa, centerSauer, rayDir, dist, 0, 0, out _);
+                            if (hitDist >= dist * 0.999f)
+                            {
+                                // Unoccluded: accumulate into probe in Godot world space
+                                Vector3 rayDirWorld = RadianceGrid.SauerToWorld(rayDir);
+                                float lightLum = (light.Color.R + light.Color.G + light.Color.B) / 3.0f;
+                                probe.AddDirectional(rayDirWorld, lightLum * intensity);
+                            }
                         }
                     }
                 }
@@ -182,4 +233,9 @@ public class RadianceVolume
         else
             Grid.UpdateTexture(Texture);
     }
+
+    /// <summary>
+    /// Backward-compatible alias for <see cref="Bake"/> without entity lights.
+    /// </summary>
+    public void BakeSkyAndSun(Octa octa, MapConfig config) => Bake(octa, config, null);
 }
