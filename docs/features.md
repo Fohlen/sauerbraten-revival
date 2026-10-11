@@ -344,7 +344,19 @@ Remaining:
             `PlayerModel.ViewWeaponRotationDegrees` is exported to tune the attach.
             The real weapon selection and the `hold N`/`attack N` anims land with the
             state machine below.
-- [ ] Hitscan weapons (insta rifle; effic loadout).
+- [~] Hitscan weapons (insta rifle; effic loadout).
+      - [x] **Weapon definitions** (`Gun`/`Guns`, `WeaponInfo`, `GameSound`,
+            `WeaponCatalog` + `resources/weapons/*.tres`), locked to the engine
+            `guns[]`/`vweps[]` tables by `test/WeaponCatalogTest.cs`.
+      - [x] **Per-player weapon state** (`PlayerState`, `World/Game/`): the weapon
+            half of `fpsstate` (`Ammo[NUMGUNS]`, `GunSelect`, `GunWait`) plus
+            `respawn()`/`spawnstate()` loadouts (insta, efficiency, ffa/coop edit)
+            and the `itemstats[]` base-ammo table. Modes are **data-first
+            `GameModeInfo` Resources** (`GameModeCatalog`, `resources/gamemodes/*.tres`)
+            keyed by a stable string id and carrying the engine `M_*` flags
+            (`ModeFlags`) — no engine index, so mods can add/override modes.
+            Asserted by `test/PlayerStateTest.cs`.
+      - [ ] Firing / hitscan raycast and hit resolution.
 - [ ] Flags and capture logic (CTF).
 - [ ] Scoring, respawns, spawn selection.
 - [ ] HUD.

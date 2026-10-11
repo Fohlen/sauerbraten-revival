@@ -95,6 +95,47 @@ public class WeaponCatalogTest : GoTestBase
     }
 
     [Test]
+    public void LoadsOneTresPerGun()
+    {
+        // Every default row has an authored resource the loader will pick up.
+        for (int i = 0; i < WeaponCatalog.Defaults.Length; i++)
+        {
+            string path = $"{WeaponCatalog.ResourceDir}/{WeaponCatalog.Defaults[i].Name}.tres";
+            TestAssert.True(ResourceLoader.Exists(path), $"resource exists: {path}");
+            TestAssert.True(ResourceLoader.Load<WeaponInfo>(path) != null, $"loads as WeaponInfo: {path}");
+        }
+    }
+
+    [Test]
+    public void LoadedResourcesMatchDefaults()
+    {
+        // Two representations exist (code defaults + authored .tres); this keeps
+        // them from drifting. The engine-row tests above lock the active catalogue.
+        var loaded = WeaponCatalog.Load();
+        TestAssert.Equal(WeaponCatalog.Defaults.Length, loaded.Length, "row count");
+        for (int i = 0; i < loaded.Length; i++)
+        {
+            var a = WeaponCatalog.Defaults[i];
+            var b = loaded[i];
+            TestAssert.Equal(a.Id, b.Id, $"row {i} Id");
+            TestAssert.Equal(a.Sound, b.Sound, $"row {i} Sound");
+            TestAssert.Equal(a.AttackDelay, b.AttackDelay, $"row {i} AttackDelay");
+            TestAssert.Equal(a.Damage, b.Damage, $"row {i} Damage");
+            TestAssert.Equal(a.Spread, b.Spread, $"row {i} Spread");
+            TestAssert.Equal(a.ProjSpeed, b.ProjSpeed, $"row {i} ProjSpeed");
+            TestAssert.Equal(a.KickAmount, b.KickAmount, $"row {i} KickAmount");
+            TestAssert.Equal(a.Range, b.Range, $"row {i} Range");
+            TestAssert.Equal(a.Rays, b.Rays, $"row {i} Rays");
+            TestAssert.Equal(a.HitPush, b.HitPush, $"row {i} HitPush");
+            TestAssert.Equal(a.ExpRad, b.ExpRad, $"row {i} ExpRad");
+            TestAssert.Equal(a.Ttl, b.Ttl, $"row {i} Ttl");
+            TestAssert.Equal(a.Name, b.Name, $"row {i} Name");
+            TestAssert.Equal(a.File, b.File, $"row {i} File");
+            TestAssert.Equal(a.Part, b.Part, $"row {i} Part");
+        }
+    }
+
+    [Test]
     public void VwepsMatchRenderTable()
     {
         string[] expected =
