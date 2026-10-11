@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_n8gy3"]
+
+[resource]
+script = ExtResource("1_n8gy3")
+Id = 8
+Sound = 48
+AttackDelay = 200
+Damage = 40
+ProjSpeed = 120
+KickAmount = 1
+Range = 1024
+Rays = 1
+HitPush = 80
+ExpRad = 40
+Name = "iceball"
+Part = 2

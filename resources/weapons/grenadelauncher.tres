@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_s0rgm"]
+
+[resource]
+script = ExtResource("1_s0rgm")
+Id = 5
+Sound = 25
+AttackDelay = 600
+Damage = 90
+ProjSpeed = 200
+KickAmount = 10
+Range = 1024
+Rays = 1
+HitPush = 250
+ExpRad = 45
+Ttl = 1500
+Name = "grenadelauncher"
+File = "gl"

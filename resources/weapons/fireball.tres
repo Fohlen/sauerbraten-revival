@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_8oe5f"]
+
+[resource]
+script = ExtResource("1_8oe5f")
+Id = 7
+Sound = 25
+AttackDelay = 200
+Damage = 20
+ProjSpeed = 200
+KickAmount = 1
+Range = 1024
+Rays = 1
+HitPush = 80
+ExpRad = 40
+Name = "fireball"
+Part = 1

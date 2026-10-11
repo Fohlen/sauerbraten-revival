@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_xvbdh"]
+
+[resource]
+script = ExtResource("1_xvbdh")
+Id = 3
+Sound = 6
+AttackDelay = 800
+Damage = 120
+ProjSpeed = 320
+KickAmount = 10
+Range = 1024
+Rays = 1
+HitPush = 160
+ExpRad = 40
+Name = "rocketlauncher"
+File = "rocket"

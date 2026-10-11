@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_30swf"]
+
+[resource]
+script = ExtResource("1_30swf")
+Id = 9
+Sound = 49
+AttackDelay = 200
+Damage = 30
+ProjSpeed = 640
+KickAmount = 1
+Range = 1024
+Rays = 1
+HitPush = 80
+ExpRad = 40
+Name = "slimeball"
+Part = 3

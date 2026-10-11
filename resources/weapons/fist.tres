@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_l2qhy"]
+
+[resource]
+script = ExtResource("1_l2qhy")
+Sound = 3
+AttackDelay = 250
+Damage = 50
+Range = 14
+Rays = 1
+HitPush = 80
+Name = "fist"
+File = "fist"

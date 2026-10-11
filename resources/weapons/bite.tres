@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_dj5u7"]
+
+[resource]
+script = ExtResource("1_dj5u7")
+Id = 10
+Sound = 47
+AttackDelay = 250
+Damage = 50
+KickAmount = 1
+Range = 12
+Rays = 1
+HitPush = 80
+Name = "bite"

@@ -1,10 +1,17 @@
+using Godot;
+
 namespace SauerbratenRevival.World.Weapons;
 
 /// <summary>
 /// The engine's <c>guns[NUMGUNS]</c> table (fpsgame/game.h, r6889), plus the
-/// third-person view-weapon names from render.cpp <c>vweps[]</c>. This is static
-/// definition data; the mode loadouts and firing logic that consume it land in
-/// later stages.
+/// third-person view-weapon names from render.cpp <c>vweps[]</c>. Static definition
+/// data; the mode loadouts and firing logic that consume it land in later stages.
+///
+/// The active catalogue (<see cref="All"/>) is loaded from one <c>.tres</c> per gun
+/// under <see cref="ResourceDir"/> — authored content, editable in the Godot
+/// inspector — and falls back per-weapon to the built-in <see cref="Defaults"/> when
+/// a file is missing or malformed. The two are kept in sync by
+/// <c>test/WeaponCatalogTest.cs</c>, which locks both to the engine table.
 /// </summary>
 public static class WeaponCatalog
 {
@@ -24,8 +31,14 @@ public static class WeaponCatalog
         "vwep/pistol", // GUN_PISTOL
     };
 
-    /// <summary>fpsgame/game.h <c>guns[]</c>, in engine order (index = <see cref="Gun"/>).</summary>
-    public static readonly WeaponInfo[] All =
+    /// <summary>Directory holding the authored per-gun <c>.tres</c> files (one per <see cref="Defaults"/> row).</summary>
+    public const string ResourceDir = "res://resources/weapons";
+
+    /// <summary>
+    /// Built-in defaults: the ported <c>guns[]</c> rows, in engine order (index =
+    /// <see cref="Gun"/>). Used as the fallback when a <c>.tres</c> is absent.
+    /// </summary>
+    public static readonly WeaponInfo[] Defaults =
     {
         // gun                sound                  delay  dmg  spread  spd  kick  range  rays  push  exprad  ttl   name                file      part
         new() { Id = Gun.Fist,            Sound = GameSound.Punch1,   AttackDelay = 250,  Damage = 50,  Spread = 0,   ProjSpeed = 0,   KickAmount = 0,  Range = 14,   Rays = 1,  HitPush = 80,  ExpRad = 0,  Ttl = 0,    Name = "fist",            File = "fist",   Part = 0 },
@@ -43,6 +56,15 @@ public static class WeaponCatalog
         new() { Id = Gun.Barrel,          Sound = GameSound.None,     AttackDelay = 0,    Damage = 120, Spread = 0,   ProjSpeed = 0,   KickAmount = 0,  Range = 0,    Rays = 1,  HitPush = 80,  ExpRad = 40, Ttl = 0,    Name = "barrel",          File = "",       Part = 0 },
     };
 
+    private static WeaponInfo[]? _all;
+
+    /// <summary>
+    /// The active catalogue: one <see cref="WeaponInfo"/> per gun, loaded from
+    /// <see cref="ResourceDir"/> (falling back to <see cref="Defaults"/>). Cached after
+    /// the first access; use <see cref="Override"/> to replace it (mods/tests).
+    /// </summary>
+    public static WeaponInfo[] All => _all ??= Load();
+
     /// <summary>The number of guns (engine <c>NUMGUNS</c>).</summary>
     public static int Count => All.Length;
 
@@ -51,6 +73,27 @@ public static class WeaponCatalog
 
     /// <summary>Look up a gun by engine id, or null when out of range.</summary>
     public static WeaponInfo? TryGet(int gun) => gun >= 0 && gun < All.Length ? All[gun] : null;
+
+    /// <summary>Replace the cached catalogue (test/mod seam).</summary>
+    public static void Override(WeaponInfo[] weapons) => _all = weapons;
+
+    /// <summary>
+    /// Load one <c>&lt;name&gt;.tres</c> per row from <paramref name="dir"/>, falling back
+    /// to <see cref="Defaults"/> for any file that is missing or does not deserialize to
+    /// a <see cref="WeaponInfo"/>. Pure function of the filesystem, so a mod can point at
+    /// its own directory.
+    /// </summary>
+    public static WeaponInfo[] Load(string dir = ResourceDir)
+    {
+        var result = new WeaponInfo[Defaults.Length];
+        for (int i = 0; i < Defaults.Length; i++)
+        {
+            string path = $"{dir.TrimEnd('/')}/{Defaults[i].Name}.tres";
+            var loaded = ResourceLoader.Exists(path) ? ResourceLoader.Load<WeaponInfo>(path) : null;
+            result[i] = loaded ?? Defaults[i];
+        }
+        return result;
+    }
 
     /// <summary>
     /// Third-person view-weapon model for a player gun (render.cpp <c>vweps[]</c>),

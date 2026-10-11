@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_1vsk4"]
+
+[resource]
+script = ExtResource("1_1vsk4")
+Id = 6
+Sound = 51
+AttackDelay = 500
+Damage = 35
+Spread = 50
+KickAmount = 7
+Range = 1024
+Rays = 1
+HitPush = 80
+Name = "pistol"
+File = "pistol"

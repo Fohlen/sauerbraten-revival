@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_v4xi8"]
+
+[resource]
+script = ExtResource("1_v4xi8")
+Id = 1
+Sound = 4
+AttackDelay = 1400
+Damage = 10
+Spread = 400
+KickAmount = 20
+Range = 1024
+Rays = 20
+HitPush = 80
+Name = "shotgun"
+File = "shotg"

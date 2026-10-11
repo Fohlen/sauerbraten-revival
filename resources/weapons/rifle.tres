@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_c0rnk"]
+
+[resource]
+script = ExtResource("1_c0rnk")
+Id = 4
+Sound = 2
+AttackDelay = 1500
+Damage = 100
+KickAmount = 30
+Range = 2048
+Rays = 1
+HitPush = 80
+Name = "rifle"
+File = "rifle"

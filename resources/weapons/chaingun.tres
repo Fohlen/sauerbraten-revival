@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WeaponInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Weapons/WeaponInfo.cs" id="1_sdc8d"]
+
+[resource]
+script = ExtResource("1_sdc8d")
+Id = 2
+Sound = 5
+AttackDelay = 100
+Damage = 30
+Spread = 100
+KickAmount = 7
+Range = 1024
+Rays = 1
+HitPush = 80
+Name = "chaingun"
+File = "chaing"
