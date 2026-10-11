@@ -155,6 +155,20 @@ for lookup when porting original behaviour. Apply/rollback workflow:
 (movement harness) and [`tools/ogztool/README.md`](tools/ogztool/README.md)
 (OGZ import pipeline).
 
+## Verifying against the original
+
+Prefer writing a **small, focused C++ probe** against the r6889 source over
+guessing from reading it. Build it in a scratch copy (never in the pristine
+tree), have it dump the exact values/behaviour you need, and turn that output
+into a golden fixture or a test assertion. `tools/octaprobe/` and
+`tools/rayprobe/` are existing examples of this pattern.
+
+Visual problems can't be validated by a probe or by self-inspection. When a
+change is about how something *looks*, do not churn alone guessing — **ask the
+user to collaborate in small steps**: make one small change, ask them to look at
+it and report back, then adjust. Keep each step minimal so feedback stays
+specific.
+
 ## Ground rules when changing code
 
 - **Original fidelity is the yardstick** for movement/collision/editor
