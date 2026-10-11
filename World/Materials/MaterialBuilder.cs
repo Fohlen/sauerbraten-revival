@@ -24,9 +24,14 @@ public static class MaterialBuilder
         (true, true, true),    // 7: flipped transpose
     };
 
-    public static MaterialSet Build(MetadataCatalogue catalogue, ITextureSource textures)
+    public static MaterialSet Build(
+        MetadataCatalogue catalogue,
+        ITextureSource textures,
+        Lighting.RadianceVolume? radiance = null)
     {
         var set = new MaterialSet();
+        Color skyTint = radiance != null ? Lighting.RadianceVolume.DecodeColor(catalogue.Config.SkyboxColour) : Colors.White;
+
         foreach (var vs in catalogue.VSlots.Values)
         {
             catalogue.Slots.TryGetValue(vs.Slot, out var slot);
@@ -34,26 +39,45 @@ public static class MaterialBuilder
             Texture2D? normal = slot?.NormalPath != null ? textures.Get(slot.NormalPath) : null;
             Texture2D? glow = slot?.GlowPath != null ? textures.Get(slot.GlowPath) : null;
             Vector2I texSize = slot?.DiffusePath != null ? textures.Size(slot.DiffusePath) : new Vector2I(64, 64);
+            var tint = new Color(vs.Color.X, vs.Color.Y, vs.Color.Z);
+            var glowColor = new Color(vs.Glow.X, vs.Glow.Y, vs.Glow.Z);
 
-            var material = new StandardMaterial3D
+            Material material;
+            if (radiance != null)
             {
-                AlbedoTexture = albedo,
-                AlbedoColor = new Color(vs.Color.X, vs.Color.Y, vs.Color.Z),
-                TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
-                CullMode = BaseMaterial3D.CullModeEnum.Back,
-            };
-
-            if (normal != null)
-            {
-                material.NormalEnabled = true;
-                material.NormalTexture = normal;
+                material = BuildRadianceMaterial(
+                    albedo,
+                    tint,
+                    normal,
+                    glow,
+                    glowColor,
+                    radiance.Texture,
+                    radiance.Grid.Origin,
+                    radiance.Grid.Extent,
+                    skyTint);
             }
-            if (glow != null)
+            else
             {
-                material.EmissionEnabled = true;
-                material.EmissionTexture = glow;
-                material.Emission = new Color(vs.Glow.X, vs.Glow.Y, vs.Glow.Z);
-                material.EmissionEnergyMultiplier = 1.0f;
+                var standard = new StandardMaterial3D
+                {
+                    AlbedoTexture = albedo,
+                    AlbedoColor = tint,
+                    TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
+                    CullMode = BaseMaterial3D.CullModeEnum.Back,
+                };
+                if (normal != null)
+                {
+                    standard.NormalEnabled = true;
+                    standard.NormalTexture = normal;
+                }
+                if (glow != null)
+                {
+                    standard.EmissionEnabled = true;
+                    standard.EmissionTexture = glow;
+                    standard.Emission = glowColor;
+                    standard.EmissionEnergyMultiplier = 1.0f;
+                }
+                material = standard;
             }
 
             var uv = new TexGen[3];
@@ -90,6 +114,56 @@ public static class MaterialBuilder
             t[tdim] = dim <= 1 ? -tk : tk;
         }
         return new TexGen(s, t);
+    }
+
+    /// <summary>Resource path of the world radiance hints shader (docs/radiance-hints.md §5).</summary>
+    public const string RadianceShaderPath = "res://World/Materials/radiance.gdshader";
+
+    /// <summary>
+    /// Build a radiance hints shader material for a vslot.
+    /// </summary>
+    public static ShaderMaterial BuildRadianceMaterial(
+        Texture2D? albedo,
+        Color tint,
+        Texture2D? normal = null,
+        Texture2D? glow = null,
+        Color? glowColor = null,
+        Texture3D? radianceTex = null,
+        Vector3? gridOrigin = null,
+        float gridExtent = 1f,
+        Color? skyTint = null)
+    {
+        var shader = ResourceLoader.Load<Shader>(RadianceShaderPath)
+            ?? throw new System.InvalidOperationException($"missing shader {RadianceShaderPath}");
+        var material = new ShaderMaterial { Shader = shader };
+        if (albedo != null) material.SetShaderParameter("albedo_tex", albedo);
+        material.SetShaderParameter("albedo_tint", new Vector3(tint.R, tint.G, tint.B));
+
+        if (normal != null)
+        {
+            material.SetShaderParameter("normal_tex", normal);
+            material.SetShaderParameter("use_normal", true);
+        }
+
+        if (glow != null)
+        {
+            material.SetShaderParameter("glow_tex", glow);
+            Color gc = glowColor ?? Colors.White;
+            material.SetShaderParameter("glow_tint", new Vector3(gc.R, gc.G, gc.B));
+            material.SetShaderParameter("use_glow", true);
+        }
+
+        if (radianceTex != null && gridOrigin.HasValue)
+        {
+            material.SetShaderParameter("radiance_tex", radianceTex);
+            material.SetShaderParameter("grid_origin", gridOrigin.Value);
+            material.SetShaderParameter("grid_extent", gridExtent);
+            Color st = skyTint ?? Colors.White;
+            material.SetShaderParameter("sky_tint", new Vector3(st.R, st.G, st.B));
+            material.SetShaderParameter("use_radiance", true);
+        }
+
+        return material;
     }
 
     /// <summary>Resource path of the world lightmap shader.</summary>

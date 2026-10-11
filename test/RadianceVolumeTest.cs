@@ -4,6 +4,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Lighting;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 
 namespace SauerbratenRevival.Tests;
@@ -283,5 +284,109 @@ public class RadianceVolumeTest : GoTestBase
         grid[0, 0, 0] = new RadianceProbe(new Vector3(5.0f, 5.0f, 5.0f), 10.0f);
         grid.UpdateTexture(tex);
         TestAssert.Equal(res, tex.GetWidth(), "Texture width preserved after update");
+    }
+
+    // =========================================================================
+    // RadianceVolume & Shader Tests (Stage 1)
+    // =========================================================================
+
+    [Test]
+    public void RadianceShader_LoadsSuccessfully()
+    {
+        var shader = ResourceLoader.Load<Shader>(MaterialBuilder.RadianceShaderPath);
+        TestAssert.True(shader != null, "radiance.gdshader loads");
+    }
+
+    [Test]
+    public void RadianceVolume_DecodeColor_HandlesPackedRgbAndGrayscale()
+    {
+        // 0xFF8040 -> R=1.0, G=0.502, B=0.251
+        Color c1 = RadianceVolume.DecodeColor(0xFF8040);
+        TestAssert.True(Mathf.Abs(c1.R - 1.0f) < 1e-2f, "Red decoded");
+        TestAssert.True(Mathf.Abs(c1.G - 0.502f) < 1e-2f, "Green decoded");
+        TestAssert.True(Mathf.Abs(c1.B - 0.251f) < 1e-2f, "Blue decoded");
+
+        // Engine grayscale byte convention: <= 255 expands to (c, c, c)
+        Color cGray = RadianceVolume.DecodeColor(128);
+        TestAssert.True(Mathf.Abs(cGray.R - (128f / 255f)) < 1e-3f, "Grayscale red");
+        TestAssert.True(Mathf.Abs(cGray.G - (128f / 255f)) < 1e-3f, "Grayscale green");
+        TestAssert.True(Mathf.Abs(cGray.B - (128f / 255f)) < 1e-3f, "Grayscale blue");
+    }
+
+    [Test]
+    public void RadianceVolume_CalculateSunlightDirSauer_MatchesSphericalYawPitch()
+    {
+        // Sunlight directly overhead: pitch = 90
+        Vector3 overhead = RadianceVolume.CalculateSunlightDirSauer(0, 90);
+        TestAssert.True(overhead.IsEqualApprox(new Vector3(0, 0, 1)), $"Overhead sun should be +Z, was {overhead}");
+
+        // Sunlight from yaw 0 (Sauerbraten +Y forward), pitch 0 (horizon)
+        // vec(yaw=0, pitch=0) = (-sin(0)*cos(0), cos(0)*cos(0), sin(0)) = (0, 1, 0)
+        Vector3 horizonNorth = RadianceVolume.CalculateSunlightDirSauer(0, 0);
+        TestAssert.True(horizonNorth.IsEqualApprox(new Vector3(0, 1, 0)), $"Yaw 0 pitch 0 should be +Y, was {horizonNorth}");
+
+        // Sunlight from yaw 90 (Sauerbraten -X), pitch 0
+        // vec(yaw=90, pitch=0) = (-sin(90), cos(90), 0) = (-1, 0, 0)
+        Vector3 horizonEast = RadianceVolume.CalculateSunlightDirSauer(90, 0);
+        TestAssert.True(horizonEast.IsEqualApprox(new Vector3(-1, 0, 0)), $"Yaw 90 pitch 0 should be -X, was {horizonEast}");
+    }
+
+    [Test]
+    public void RadianceVolume_BakeSkyAndSun_BakesOpenAirProbe()
+    {
+        // Create an empty octree world (size 64 = scale 6)
+        var octa = new Octa(6);
+        octa.EmptyMap(6);
+
+        var volume = new RadianceVolume(new RadianceGrid(new Vector3(0, 0, 0), 64f, 4));
+        volume.SkyRays = 8;
+
+        var config = new MapConfig
+        {
+            Ambient = 0x191919, // ~0.1
+            Skylight = 0x808080, // ~0.5
+            Sunlight = 0xFFFFFF, // 1.0
+            SunlightScale = 1.0f,
+            SunlightYaw = 0,
+            SunlightPitch = 90, // straight down
+        };
+
+        volume.BakeSkyAndSun(octa, config);
+
+        TestAssert.True(volume.Texture != null, "3D texture generated after bake");
+
+        // The center probe in an empty map should see full sky and full sun
+        var centerProbe = volume.Grid[2, 2, 2];
+        TestAssert.True(centerProbe.Amb > 0f, "Ambient irradiance should be accumulated");
+        TestAssert.True(centerProbe.Dir.Length() > 0f, "Directional irradiance should have sun/sky component");
+    }
+
+    [Test]
+    public void MaterialBuilder_BuildsRadianceMaterials()
+    {
+        var catalogue = MetadataCatalogue.Load(TestData.CataloguePath);
+        var textures = new DumpTextureSource(TestData.ReferenceRoot);
+        var octa = new Octa(6);
+        octa.EmptyMap(6);
+
+        var volume = new RadianceVolume(new RadianceGrid(Vector3.Zero, 64f, 4));
+        volume.SkyRays = 4;
+        volume.BakeSkyAndSun(octa, catalogue.Config);
+
+        var set = MaterialBuilder.Build(catalogue, textures, volume);
+        TestAssert.True(set != null, "MaterialSet built");
+
+        int shaderMats = 0;
+        foreach (var pair in set!.Materials)
+        {
+            if (pair.Value is ShaderMaterial sm && sm.Shader != null)
+            {
+                shaderMats++;
+                TestAssert.True(sm.GetShaderParameter("use_radiance").AsBool(), "Radiance enabled");
+                TestAssert.True(sm.GetShaderParameter("radiance_tex").Obj == volume.Texture, "Radiance 3D texture bound");
+            }
+        }
+
+        TestAssert.True(shaderMats > 0, "Materials are ShaderMaterials bound with radiance");
     }
 }

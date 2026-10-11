@@ -28,6 +28,19 @@ public sealed class CatalogueVSlot
     public float AlphaFront = 0.5f, AlphaBack;
 }
 
+/// <summary>Map configuration values (lighting, skybox, etc.) from the metadata catalogue.</summary>
+public sealed class MapConfig
+{
+    public int Ambient { get; set; } = 0x191919;
+    public int Skylight { get; set; } = 0;
+    public int Sunlight { get; set; } = 0;
+    public float SunlightScale { get; set; } = 1.0f;
+    public int SunlightYaw { get; set; } = 0;
+    public int SunlightPitch { get; set; } = 90;
+    public int SkyboxColour { get; set; } = 0xFFFFFF;
+    public string Skybox { get; set; } = "";
+}
+
 /// <summary>
 /// The engine-exported metadata catalogue (see tools/ogztool/patches/ogz-metadata.patch):
 /// resolved slot/vslot data for one map. Only what the map uses is present.
@@ -39,9 +52,9 @@ public sealed class MetadataCatalogue
     public readonly Dictionary<int, string> MapModels = new();
     public readonly Dictionary<int, string> Sounds = new();
 
-    public string? MapModelPath(int index) => MapModels.GetValueOrDefault(index);
+    public MapConfig Config { get; set; } = new();
 
-    /// <summary>Resolved map sound path (relative to <c>packages/sounds/</c>).</summary>
+    public string? MapModelPath(int index) => MapModels.GetValueOrDefault(index);
     public string? SoundPath(int index) => Sounds.GetValueOrDefault(index);
 
     public static MetadataCatalogue Load(string path)
@@ -108,6 +121,20 @@ public sealed class MetadataCatalogue
         {
             foreach (var s in sounds.EnumerateArray())
                 catalogue.Sounds[s.GetProperty("index").GetInt32()] = s.GetProperty("path").GetString() ?? "";
+        }
+
+        if (root.TryGetProperty("config", out var cfg))
+        {
+            var config = new MapConfig();
+            if (cfg.TryGetProperty("ambient", out var amb)) config.Ambient = amb.GetInt32();
+            if (cfg.TryGetProperty("skylight", out var sky)) config.Skylight = sky.GetInt32();
+            if (cfg.TryGetProperty("sunlight", out var sun)) config.Sunlight = sun.GetInt32();
+            if (cfg.TryGetProperty("sunlightscale", out var suns)) config.SunlightScale = (float)suns.GetDouble();
+            if (cfg.TryGetProperty("sunlightyaw", out var suny)) config.SunlightYaw = suny.GetInt32();
+            if (cfg.TryGetProperty("sunlightpitch", out var sunp)) config.SunlightPitch = sunp.GetInt32();
+            if (cfg.TryGetProperty("skyboxcolour", out var skyc)) config.SkyboxColour = skyc.GetInt32();
+            if (cfg.TryGetProperty("skybox", out var skyb)) config.Skybox = skyb.GetString() ?? "";
+            catalogue.Config = config;
         }
 
         return catalogue;

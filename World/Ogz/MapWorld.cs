@@ -42,6 +42,9 @@ public partial class MapWorld : Node3D
     /// <summary>The converted-model catalogue (glTF paths + Cube2 parameters), if present.</summary>
     public ModelCatalog? Models { get; private set; }
 
+    /// <summary>The radiance hints volume, when baked.</summary>
+    public Lighting.RadianceVolume? Radiance { get; private set; }
+
     /// <summary>AABB of the geometry in Sauerbraten (Z-up, local) space.</summary>
     public Aabb Bounds { get; private set; }
 
@@ -90,7 +93,18 @@ public partial class MapWorld : Node3D
         ITextureSource textures = new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource(MapRoots.ReferenceRoot));
         Textures = textures;
         var catalogue = MetadataCatalogue.TryLoadForMap(mapName);
-        MaterialSet? materials = catalogue != null ? MaterialBuilder.Build(catalogue, textures) : null;
+
+        // Radiance hints volume: bake sky & sun pass (docs/radiance-hints.md §4.1)
+        Lighting.RadianceVolume? radiance = null;
+        if (catalogue != null)
+        {
+            var volume = Lighting.RadianceVolume.CreateForOcta(octa);
+            volume.BakeSkyAndSun(octa, catalogue.Config);
+            radiance = volume;
+            Radiance = volume;
+        }
+
+        MaterialSet? materials = catalogue != null ? MaterialBuilder.Build(catalogue, textures, radiance) : null;
         if (materials == null) GD.PushWarning($"[world] no metadata catalogue for '{mapName}'; showing untextured geometry.");
 
         var chunked = new OctaMesher(octa, materials).BuildChunked(ChunkSize);
