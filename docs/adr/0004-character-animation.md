@@ -1,8 +1,9 @@
-# Character animation (MD5 skies) — findings & required approach
+# ADR 0004: Character Animation & MD5 Import Approach
 
-**Status: implemented.** The player body now animates correctly. This records what
-why the obvious Godot approach failed and what we do instead. See the tracking
-items in [features.md](features.md) §5.
+## Status
+
+Accepted. Complete.
+The player body and hudguns animate correctly. This records why the runtime engine-to-Godot skeleton pose mapping failed and details the chosen offline-baked approach. See the tracking items in [features.md](../features.md) §5.
 
 > **Chosen approach (option 1):** bake every `.md5anim` clip into the model glb at
 > import time and let Godot's own importer own the skeleton + `AnimationPlayer`.

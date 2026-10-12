@@ -16,7 +16,7 @@ namespace SauerbratenRevival.World.Entities;
 /// <see cref="AnimationPlayer"/> whose clips are named per the engine's <c>anims.cfg</c>
 /// table ("idle", "forward", "hold 1", "attack 1", …). We do <b>not</b> map engine
 /// poses onto Godot's skeleton ourselves — that deforms the mesh; see
-/// docs/character-animation.md.
+/// (docs/adr/0004-character-animation.md).
 /// </summary>
 [GlobalClass]
 public partial class PlayerModel : ModelInstance

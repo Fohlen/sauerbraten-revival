@@ -10,7 +10,7 @@ namespace SauerbratenRevival.Tests;
 /// Verifies <see cref="PlayerModel"/> uses the <b>baked glb's own</b>
 /// <see cref="AnimationPlayer"/> (clips exported by <c>tools/model-import</c>), not a
 /// hand-mapped engine pose. Skips if the converted models aren't present (git-ignored).
-/// See docs/character-animation.md for why the manual mapping was abandoned.
+/// See (docs/adr/0004-character-animation.md) for why the manual mapping was abandoned.
 /// </summary>
 public class PlayerModelAnimTest : GoTestBase
 {

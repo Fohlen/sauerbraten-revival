@@ -718,7 +718,7 @@ def bake_animated_glb(assimp: str, mesh_source: str, anims: dict, packages_root:
     results with :mod:`gltf_anim_merge`. Godot then imports the single glb with an
     ``AnimationPlayer`` holding every clip, and animates the skeleton itself — which
     is why this is used instead of mapping the engine poses onto Godot's skeleton
-    (see docs/character-animation.md). ``adjusts`` (``md5adjust``) is baked into each
+    (see (docs/adr/0004-character-animation.md)). ``adjusts`` (``md5adjust``) is baked into each
     clip before export.
     """
     import tempfile
@@ -1100,7 +1100,7 @@ def main() -> int:
             glb = os.path.join(args.out, sanitize(name) + ".glb")
             # Skeletal MD5: bake every clip into the glb so Godot's own importer can
             # play them (assimp drops separately-named .md5anim files otherwise; see
-            # docs/character-animation.md).
+            # (docs/adr/0004-character-animation.md)).
             baked = False
             if ext == ".md5mesh" and record.get("anims"):
                 baked = bake_animated_glb(args.assimp, source, record["anims"], packages, glb)

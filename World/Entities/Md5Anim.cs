@@ -164,7 +164,7 @@ public sealed class Md5Anim
     /// <c>frame[]</c> compose. This is the engine-side delta used for golden
     /// verification (<see cref="Evaluate"/>, <c>tools/animprobe</c>); it is <b>not</b>
     /// mapped onto Godot's skeleton at runtime — the baked glb's own AnimationPlayer is
-    /// used instead (docs/character-animation.md).
+    /// used instead (docs/adr/0004-character-animation.md).
     /// </summary>
     private Dq[] EvaluateDq(int frame, Md5MeshBind bind)
     {
