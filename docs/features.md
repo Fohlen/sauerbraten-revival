@@ -37,12 +37,12 @@ Order reflects intent, not schedule.
 Explicitly **out of scope for the MVP**, to be picked up after the roadmap above.
 This list is the one place these are tracked; design lives in the linked docs.
 
-- **Lighting** ([radiance-hints.md](radiance-hints.md)) — **chosen:** a
+- **Lighting** ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)) — **chosen:** a
   world-space L1 SH probe volume ("radiance hints"): soft, diffuse-only, async
   full bake + incremental region rebake on edit. The pre-baked path (T1 lightmap
   import / `lightmap.gdshader`, T2 `calclight` rebake) is **dropped** as
   incompatible with real-time editing. Removal plan:
-  [radiance-hints.md §9](radiance-hints.md#9-t1--lightmapgdshader-removal-plan).
+  [adr/0002-radiance-hints.md § T1 Removal Inventory](adr/0002-radiance-hints.md#t1-removal-inventory).
   Radiance hints are post-MVP but planned; envmap world sampling and
   blend-layer rendering remain deferred.
 - **Renderer extras** ([rendering.md](rendering.md)) — LOD, specular maps,
@@ -86,7 +86,7 @@ Remaining:
 - [ ] RenderingServer mesh streaming (bypass the scene tree; [rendering.md](rendering.md#renderingserver-usage-planned-optimisation)).
 - [ ] Exact `visibletris` culling, face merges, T-joints, grass.
 - [ ] **Post-MVP fidelity** (see [Post-MVP / deferred fidelity](#post-mvp--deferred-fidelity)):
-      lighting ([radiance-hints.md](radiance-hints.md)), layers/envmap, specular maps,
+      lighting ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)), layers/envmap, specular maps,
       alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), blend shader.
 
 ## 2. OGZ import pipeline
@@ -158,14 +158,14 @@ Remaining:
 - [~] **One-shot full metadata export** — capture all resolved engine state in the
       single ~25-min sweep (resolved shaders/slots/vslots/config) as **JSON only**;
       no binary sidecar (blendmap/PVS are already in the OGZ; lighting is baked
-      at runtime — [radiance-hints.md](radiance-hints.md)). The
+      at runtime — [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)). The
       exporter is **extended and validated** (`shaderType`/`smooth`/`texmask`/grass,
       `shaders[]`, `config`, vslot `linked`/`changed`); re-exporting the whole
       catalogue still pending.
 - [~] ~~**Lightmap import** (T1)~~ — **dropped**; superseded by
-      [radiance-hints.md](radiance-hints.md). The T1 parsing/link artifacts
+      [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md). The T1 parsing/link artifacts
       (`OgzLightMap`, `SurfaceKey`/UV2, `WorldSnapshot` `CubeExt` v2) still exist
-      and are slated for removal (radiance-hints.md §9).
+      and are slated for removal (adr/0002-radiance-hints.md § T1 Removal Inventory).
 - [ ] Parse the **blendmap** and **PVS** sections (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
 

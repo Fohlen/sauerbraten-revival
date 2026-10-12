@@ -12,7 +12,7 @@ namespace SauerbratenRevival.Tests;
 
 /// <summary>
 /// Unit tests for the core radiance data structures: <see cref="RadianceProbe"/>
-/// and <see cref="RadianceGrid"/> (docs/radiance-hints.md §2, §3, §10).
+/// and <see cref="RadianceGrid"/> (docs/adr/0002-radiance-hints.md §2, §3, §10).
 /// </summary>
 public class RadianceVolumeTest : GoTestBase
 {

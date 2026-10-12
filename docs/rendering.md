@@ -38,7 +38,7 @@ This is the opposite of a custom GL renderer. We leverage Godot's mature pipelin
 | Mesh upload cost | Chunk updates require GPU upload; budget per-frame updates. |
 | No custom occlusion | Godot's GPU-based occlusion culling is different from Sauer's octree-based approach; likely comparable or better on modern GPUs. |
 | Material mapping | Sauer's `Slot`/`VSlot` system must map to Godot materials; one-time conversion work. |
-| Lighting | Original Sauer lightmaps are **not** used; worlds are lit by a world-space L1 SH probe volume (radiance hints) — see [radiance-hints.md](radiance-hints.md). |
+| Lighting | Original Sauer lightmaps are **not** used; worlds are lit by a world-space L1 SH probe volume (radiance hints) — see [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md). |
 | Blend/detail shaders | Multi-layer blending requires a custom shader; doable but not free. |
 | Memory overhead | Godot mesh structures are slightly larger than raw VBOs; negligible on modern systems. |
 
@@ -181,7 +181,7 @@ equivalent manifest into the native format at conversion time.
 2. **Blended**: Multi-layer material blending, per-face UVs.
 3. **Exact**: Original envmaps, decals, full surface model. World lighting is a
    world-space L1 SH probe volume (radiance hints), independent of surface
-   topology — see [radiance-hints.md](radiance-hints.md).
+   topology — see [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md).
 
 The ArrayMesh approach supports all three stages — only the materials/shaders change.
 
@@ -267,6 +267,6 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   **specular maps** (packed/non-PBR), **alpha/transparency**
   (`alphafront`/`alphaback`, `LAYER_*`), blended layers, exact `visibletris`
   culling, face merges, T-joints and grass. World lighting is the L1 SH probe
-  volume ([radiance-hints.md](radiance-hints.md)); the baked-lightmap path is
+  volume ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)); the baked-lightmap path is
   dropped. Tracked divergences live in [known-bugs.md](known-bugs.md). See
-  [radiance-hints.md](radiance-hints.md) for lighting.
+  [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md) for lighting.

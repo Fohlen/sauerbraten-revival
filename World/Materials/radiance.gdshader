@@ -1,4 +1,4 @@
-// Radiance hints world shader (docs/radiance-hints.md §2, §5).
+// Radiance hints world shader (docs/adr/0002-radiance-hints.md §2, §5).
 // Evaluates L1 SH irradiance stored in a 3D texture:
 //   rgb = c1 (directional irradiance vector, signed)
 //   a   = c0 (scalar ambient irradiance)

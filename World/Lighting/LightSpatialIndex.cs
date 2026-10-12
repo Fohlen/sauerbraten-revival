@@ -7,7 +7,7 @@ using SauerbratenRevival.World.Ogz;
 namespace SauerbratenRevival.World.Lighting;
 
 /// <summary>
-/// A pre-processed light source ready for spatial indexing and probe raycasting (docs/radiance-hints.md §4.2).
+/// A pre-processed light source ready for spatial indexing and probe raycasting (docs/adr/0002-radiance-hints.md §4.2).
 /// All coordinates are in Sauerbraten space.
 /// </summary>
 public sealed class DirectLightSource
@@ -95,7 +95,7 @@ public sealed class DirectLightSource
 }
 
 /// <summary>
-/// Coarse 3D grid spatial index for direct entity lights (docs/radiance-hints.md §4.2, §7).
+/// Coarse 3D grid spatial index for direct entity lights (docs/adr/0002-radiance-hints.md §4.2, §7).
 /// Accelerates probe light queries by pruning lights outside cell influence.
 /// </summary>
 public sealed class LightSpatialIndex

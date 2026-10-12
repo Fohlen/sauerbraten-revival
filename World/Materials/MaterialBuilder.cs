@@ -120,7 +120,7 @@ public static class MaterialBuilder
         return new TexGen(s, t);
     }
 
-    /// <summary>Resource path of the world radiance hints shader (docs/radiance-hints.md §5).</summary>
+    /// <summary>Resource path of the world radiance hints shader (docs/adr/0002-radiance-hints.md §5).</summary>
     public const string RadianceShaderPath = "res://World/Materials/radiance.gdshader";
 
     /// <summary>

@@ -7,7 +7,7 @@ using SauerbratenRevival.World.Physics;
 namespace SauerbratenRevival.World.Lighting;
 
 /// <summary>
-/// Controller for the L1 SH irradiance probe volume (docs/radiance-hints.md).
+/// Controller for the L1 SH irradiance probe volume (docs/adr/0002-radiance-hints.md).
 /// Manages the underlying <see cref="RadianceGrid"/> and coordinates bake passes.
 ///
 /// Stage 1: Sky + Sun bake pass.
@@ -112,7 +112,7 @@ public class RadianceVolume
 
     /// <summary>
     /// Cosine-weighted hemisphere direction around +Z (Sauerbraten up), using a golden-angle spiral.
-    /// Matches docs/radiance-hints.md §4.1 and RadianceBakeProbe.
+    /// Matches docs/adr/0002-radiance-hints.md §4.1 and RadianceBakeProbe.
     /// </summary>
     public static Vector3 CosineHemisphereSauer(int i, int n)
     {
@@ -274,7 +274,7 @@ public class RadianceVolume
         Vector3 centerSauer = Grid.CellCenterSauer(x, y, z);
         var cellCoords = new Vector3I(Mathf.FloorToInt(centerSauer.X), Mathf.FloorToInt(centerSauer.Y), Mathf.FloorToInt(centerSauer.Z));
 
-        // Skip probes inside solid geometry (docs/radiance-hints.md §3)
+        // Skip probes inside solid geometry (docs/adr/0002-radiance-hints.md §3)
         Cube? leaf = ctx.Octa.LeafCube(cellCoords);
         if (leaf != null && leaf.IsEntirelySolid())
             return;
@@ -492,7 +492,7 @@ public class RadianceVolume
     }
 
     /// <summary>
-    /// Default neutral surface albedo (docs/radiance-hints.md §4.3).
+    /// Default neutral surface albedo (docs/adr/0002-radiance-hints.md §4.3).
     /// </summary>
     public const float DefaultAlbedo = 0.5f;
 

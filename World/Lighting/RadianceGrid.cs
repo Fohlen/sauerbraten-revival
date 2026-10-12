@@ -6,7 +6,7 @@ namespace SauerbratenRevival.World.Lighting;
 
 /// <summary>
 /// World-space 3D probe grid storage and coordinate mapping for L1 SH radiance hints
-/// (docs/radiance-hints.md §2, §3).
+/// (docs/adr/0002-radiance-hints.md §2, §3).
 ///
 /// Features:
 /// <list type="bullet">
@@ -20,7 +20,7 @@ namespace SauerbratenRevival.World.Lighting;
 /// </summary>
 public class RadianceGrid
 {
-	/// <summary>Default probe resolution per axis (32³ = 32,768 probes), matching docs/radiance-hints.md §7.</summary>
+	/// <summary>Default probe resolution per axis (32³ = 32,768 probes), matching docs/adr/0002-radiance-hints.md §7.</summary>
 	public const int DefaultResolution = 32;
 
 	/// <summary>Number of probes per axis (grid is cubic: Resolution × Resolution × Resolution).</summary>
@@ -97,7 +97,7 @@ public class RadianceGrid
 	public bool ContainsWorld(Vector3 worldPos) => Bounds.HasPoint(worldPos);
 
 	// =========================================================================
-	// Coordinate conversions (docs/radiance-hints.md §3)
+	// Coordinate conversions (docs/adr/0002-radiance-hints.md §3)
 	// Sauerbraten is Z-up; Godot world is Y-up (rotated −90° about X).
 	// =========================================================================
 
@@ -192,7 +192,7 @@ public class RadianceGrid
 	}
 
 	// =========================================================================
-	// Grid construction from geometry bounds (docs/radiance-hints.md §3)
+	// Grid construction from geometry bounds (docs/adr/0002-radiance-hints.md §3)
 	// =========================================================================
 
 	/// <summary>
@@ -332,7 +332,7 @@ public class RadianceGrid
 	}
 
 	// =========================================================================
-	// ImageTexture3D generation and upload (docs/radiance-hints.md §2.2, §6)
+	// ImageTexture3D generation and upload (docs/adr/0002-radiance-hints.md §2.2, §6)
 	// =========================================================================
 
 	/// <summary>

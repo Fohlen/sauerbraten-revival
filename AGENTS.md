@@ -18,7 +18,7 @@ converted **once, offline**; the game **never** loads `.ogz` or CubeScript.
 | Editor + command system | [docs/editor-and-commands.md](docs/editor-and-commands.md) |
 | OGZ import / native format | [docs/ogz-import.md](docs/ogz-import.md) |
 | Rendering strategy | [docs/rendering.md](docs/rendering.md) |
-| Lighting (runtime) | [docs/radiance-hints.md](docs/radiance-hints.md) |
+| Lighting (runtime) | [docs/adr/0002-radiance-hints.md](docs/adr/0002-radiance-hints.md) |
 | Networking model | [docs/authority-and-latency.md](docs/authority-and-latency.md) |
 | Toolchain requirements | [docs/dependencies.md](docs/dependencies.md) |
 | Known divergences to preserve | [docs/known-bugs.md](docs/known-bugs.md) |

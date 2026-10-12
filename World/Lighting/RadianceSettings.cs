@@ -3,7 +3,7 @@ using Godot;
 namespace SauerbratenRevival.World.Lighting;
 
 /// <summary>
-/// Lighting quality mode for the radiance hints subsystem (docs/radiance-hints.md §8 Stage 5).
+/// Lighting quality mode for the radiance hints subsystem (docs/adr/0002-radiance-hints.md §8 Stage 5).
 /// </summary>
 public enum RadianceQualityMode
 {
@@ -20,7 +20,7 @@ public enum RadianceQualityMode
 }
 
 /// <summary>
-/// Quality and performance knobs for <see cref="RadianceVolume"/> (docs/radiance-hints.md §8 Stage 5).
+/// Quality and performance knobs for <see cref="RadianceVolume"/> (docs/adr/0002-radiance-hints.md §8 Stage 5).
 /// Allows tuning ray counts, temporal slicing / frame budget, ray travel distance,
 /// grid resolution, and global quality mode.
 /// </summary>

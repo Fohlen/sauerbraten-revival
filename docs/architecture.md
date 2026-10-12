@@ -170,7 +170,7 @@ have to rewrite world data to improve rendering:
    coordinates.
 3. **Exact**: original envmaps, decals, and the full surface model. World
    lighting is a world-space L1 SH probe volume (radiance hints), independent of
-   surface topology — see [radiance-hints.md](radiance-hints.md).
+   surface topology — see [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md).
 
 The material manifest/shader is the pluggable seam; world data does not change
 between stages.

@@ -97,7 +97,7 @@ public partial class MapWorld : Node3D
         Textures = textures;
         var catalogue = MetadataCatalogue.TryLoadForMap(mapName);
 
-        // Radiance hints volume: bake sky, sun, and direct entity lights (docs/radiance-hints.md §4.1, §4.2)
+        // Radiance hints volume: bake sky, sun, and direct entity lights (docs/adr/0002-radiance-hints.md §4.1, §4.2)
         Lighting.RadianceVolume? radiance = null;
         if (catalogue != null)
         {

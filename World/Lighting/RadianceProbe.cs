@@ -4,7 +4,7 @@ using Godot;
 namespace SauerbratenRevival.World.Lighting;
 
 /// <summary>
-/// A single L1 spherical harmonics (SH) irradiance probe (docs/radiance-hints.md §2).
+/// A single L1 spherical harmonics (SH) irradiance probe (docs/adr/0002-radiance-hints.md §2).
 ///
 /// Stores:
 /// <list type="bullet">
@@ -84,7 +84,7 @@ public struct RadianceProbe : IEquatable<RadianceProbe>
     public readonly float EvaluateClamped(Vector3 normal) => Mathf.Max(0f, Amb + Dir.Dot(normal));
 
     /// <summary>
-    /// Evaluate tinted diffuse irradiance matching the shader formula (docs/radiance-hints.md §2.3):
+    /// Evaluate tinted diffuse irradiance matching the shader formula (docs/adr/0002-radiance-hints.md §2.3):
     /// <code>
     /// irr = max(sky_tint * c0 + dot(c1, normal), vec3(0.0))
     /// </code>
