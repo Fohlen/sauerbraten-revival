@@ -83,6 +83,94 @@ public class RadianceVolume
         return new Vector3(r * Mathf.Cos(phi), r * Mathf.Sin(phi), Mathf.Sqrt(Mathf.Max(0f, 1f - r * r)));
     }
 
+
+    /// <summary>Maximum probes rebaked per frame during incremental updates.</summary>
+    public int BudgetPerFrame { get; set; } = 256;
+
+    /// <summary>Number of dirty probes currently queued for rebaking.</summary>
+    public int PendingCount => _dirtyQueue.Count;
+
+    /// <summary>Total probes rebaked so far across all incremental updates (diagnostics/tests).</summary>
+    public int RebakeCount { get; private set; }
+
+    /// <summary>Internal context caching baking inputs for incremental updates.</summary>
+    private sealed class BakeContext
+    {
+        public Octa Octa { get; }
+        public MapConfig Config { get; }
+        public LightSpatialIndex? SpatialIndex { get; }
+        public MetadataCatalogue? Catalogue { get; }
+        public ITextureSource? TextureSource { get; }
+        public Dictionary<int, float> AlbedoCache { get; }
+        public List<DirectLightSource> CandidateLights { get; }
+        public Vector3[] SkyDirsSauer { get; }
+        public Vector3[] SkyDirsWorld { get; }
+        public Vector3 SunDirSauer { get; }
+        public Vector3 SunDirWorld { get; }
+        public float AmbientRadiance { get; }
+        public float SkyRadiance { get; }
+        public float SunRadiance { get; }
+        public float MaxRayDist { get; }
+        public int RayCount { get; }
+
+        public BakeContext(
+            Octa octa,
+            MapConfig config,
+            IReadOnlyList<DirectLightSource>? directLights,
+            MetadataCatalogue? catalogue,
+            ITextureSource? textureSource,
+            int skyRays,
+            RadianceGrid grid)
+        {
+            Octa = octa;
+            Config = config;
+            Catalogue = catalogue;
+            TextureSource = textureSource;
+            AlbedoCache = new Dictionary<int, float>();
+            CandidateLights = new List<DirectLightSource>();
+
+            Color ambientColor = DecodeColor(config.Ambient);
+            Color skylightColor = DecodeColor(config.Skylight);
+            Color sunlightColor = DecodeColor(config.Sunlight);
+            float sunlightScale = config.SunlightScale;
+
+            AmbientRadiance = (ambientColor.R + ambientColor.G + ambientColor.B) / 3.0f;
+
+            Color effectiveSkyColor = new(
+                Mathf.Max(skylightColor.R, ambientColor.R),
+                Mathf.Max(skylightColor.G, ambientColor.G),
+                Mathf.Max(skylightColor.B, ambientColor.B)
+            );
+            SkyRadiance = (effectiveSkyColor.R + effectiveSkyColor.G + effectiveSkyColor.B) / 3.0f;
+
+            SunDirSauer = CalculateSunlightDirSauer(config.SunlightYaw, config.SunlightPitch);
+            SunDirWorld = RadianceGrid.SauerToWorld(SunDirSauer);
+            SunRadiance = ((sunlightColor.R + sunlightColor.G + sunlightColor.B) / 3.0f) * sunlightScale;
+
+            RayCount = Mathf.Max(1, skyRays);
+            SkyDirsSauer = new Vector3[RayCount];
+            SkyDirsWorld = new Vector3[RayCount];
+            for (int i = 0; i < RayCount; i++)
+            {
+                SkyDirsSauer[i] = CosineHemisphereSauer(i, RayCount);
+                SkyDirsWorld[i] = RadianceGrid.SauerToWorld(SkyDirsSauer[i]);
+            }
+
+            if (directLights != null && directLights.Count > 0)
+            {
+                Aabb boundsSauer = RadianceGrid.WorldBoundsToSauer(grid.Bounds);
+                SpatialIndex = new LightSpatialIndex(boundsSauer, directLights);
+            }
+
+            MaxRayDist = grid.Extent * 1.5f;
+        }
+    }
+
+    private BakeContext? _context;
+    private readonly List<Vector3I> _dirtyQueue = new();
+    private readonly HashSet<Vector3I> _dirtySet = new();
+    private bool _textureNeedsUpdate;
+
     /// <summary>
     /// Run the synchronous bake pass over the entire volume:
     /// Sky + Sun pass (Stage 1), Direct Entity Lights pass (Stage 2),
@@ -95,60 +183,11 @@ public class RadianceVolume
         MetadataCatalogue? catalogue = null,
         ITextureSource? textureSource = null)
     {
-        // Decode lighting parameters from config
-        Color ambientColor = DecodeColor(config.Ambient);
-        Color skylightColor = DecodeColor(config.Skylight);
-        Color sunlightColor = DecodeColor(config.Sunlight);
-        float sunlightScale = config.SunlightScale;
-
-        // Base ambient irradiance (minimum diffuse floor)
-        float ambientRadiance = (ambientColor.R + ambientColor.G + ambientColor.B) / 3.0f;
-
-        // Effective skylight radiance above ambient
-        Color effectiveSkyColor = new(
-            Mathf.Max(skylightColor.R, ambientColor.R),
-            Mathf.Max(skylightColor.G, ambientColor.G),
-            Mathf.Max(skylightColor.B, ambientColor.B)
-        );
-        float skyRadiance = (effectiveSkyColor.R + effectiveSkyColor.G + effectiveSkyColor.B) / 3.0f;
-
-        // Sun direction (in Sauerbraten space: pointing toward the sun)
-        Vector3 sunDirSauer = CalculateSunlightDirSauer(config.SunlightYaw, config.SunlightPitch);
-        // Sun direction in Godot world space
-        Vector3 sunDirWorld = RadianceGrid.SauerToWorld(sunDirSauer);
-
-        // Sunlight radiance (scaled)
-        float sunRadiance = ((sunlightColor.R + sunlightColor.G + sunlightColor.B) / 3.0f) * sunlightScale;
-
-        // Hemisphere ray directions in Sauerbraten and World space
-        int rayCount = Mathf.Max(1, SkyRays);
-        var skyDirsSauer = new Vector3[rayCount];
-        var skyDirsWorld = new Vector3[rayCount];
-        for (int i = 0; i < rayCount; i++)
-        {
-            skyDirsSauer[i] = CosineHemisphereSauer(i, rayCount);
-            skyDirsWorld[i] = RadianceGrid.SauerToWorld(skyDirsSauer[i]);
-        }
-
-        // Spatial index for direct lights (Stage 2)
-        LightSpatialIndex? spatialIndex = null;
-        if (directLights != null && directLights.Count > 0)
-        {
-            // Grid bounds in Sauerbraten coordinates
-            Aabb boundsSauer = RadianceGrid.WorldBoundsToSauer(Grid.Bounds);
-            spatialIndex = new LightSpatialIndex(boundsSauer, directLights);
-        }
-
-        var candidateLights = new List<DirectLightSource>();
-
-        // Cache average albedos for slots/vslots in catalogue to avoid repeated calculation
-        var albedoCache = new Dictionary<int, float>();
-
-        // Raycast max distance: extent * 1.5 reaches the world bounds
-        float maxRayDist = Grid.Extent * 1.5f;
+        _context = new BakeContext(octa, config, directLights, catalogue, textureSource, SkyRays, Grid);
+        _dirtyQueue.Clear();
+        _dirtySet.Clear();
 
         int res = Grid.Resolution;
-
         for (int z = 0; z < res; z++)
         {
             for (int y = 0; y < res; y++)
@@ -156,121 +195,7 @@ public class RadianceVolume
                 for (int x = 0; x < res; x++)
                 {
                     ref var probe = ref Grid[x, y, z];
-                    probe = RadianceProbe.Zero;
-
-                    Vector3 centerSauer = Grid.CellCenterSauer(x, y, z);
-                    var cellCoords = new Vector3I(Mathf.FloorToInt(centerSauer.X), Mathf.FloorToInt(centerSauer.Y), Mathf.FloorToInt(centerSauer.Z));
-
-                    // Skip probes inside solid geometry (docs/radiance-hints.md §3)
-                    Cube? leaf = octa.LeafCube(cellCoords);
-                    if (leaf != null && leaf.IsEntirelySolid())
-                        continue;
-
-                    // Base ambient
-                    probe.AddAmbient(ambientRadiance);
-
-                    // 1. Sky pass: cast hemisphere rays (Stage 1 unoccluded sky + Stage 3 indirect bounce)
-                    for (int r = 0; r < rayCount; r++)
-                    {
-                        Vector3 rayDir = skyDirsSauer[r];
-                        float dist = OctaRaycast.RayCube(octa, centerSauer, rayDir, maxRayDist, 0, 0, out Vector3 hitSurface);
-                        if (dist >= maxRayDist * 0.999f)
-                        {
-                            // Unoccluded sky: radiance divided by rayCount for Monte Carlo estimate
-                            probe.AddDirectional(skyDirsWorld[r], skyRadiance / rayCount);
-                        }
-                        else
-                        {
-                            // Stage 3: Hit geometry within maxRayDist -> single bounce indirect irradiance
-                            Vector3 hitPos = centerSauer + rayDir * dist;
-                            Vector3 hitNormal = hitSurface != Vector3.Zero ? hitSurface.Normalized() : -rayDir;
-
-                            // Estimate surface albedo
-                            float albedo = ResolveAlbedoAtHit(octa, hitPos, hitNormal, catalogue, textureSource, albedoCache);
-
-                            // Incident radiance on hit surface from sky/sun:
-                            // Upper hemisphere factor facing +Z in Sauer space:
-                            float skyCos = Mathf.Max(0f, hitNormal.Z);
-                            float incSkyRadiance = skyRadiance * skyCos;
-
-                            // Direct sun incident on hit surface:
-                            float incSunRadiance = 0f;
-                            if (sunRadiance > 0.001f)
-                            {
-                                float nDotL = hitNormal.Dot(sunDirSauer);
-                                if (nDotL > 0f)
-                                {
-                                    float sunShadow = OctaRaycast.RayCube(octa, hitPos + hitNormal * 0.1f, sunDirSauer, maxRayDist, 0, 0, out _);
-                                    if (sunShadow >= maxRayDist * 0.999f)
-                                    {
-                                        incSunRadiance = sunRadiance * nDotL;
-                                    }
-                                }
-                            }
-
-                            // Reflected diffuse radiance arriving from hit surface towards probe:
-                            // Reflected radiance = (incident * albedo) / rayCount.
-                            // Arriving along skyDirsWorld[r] from hit point.
-                            float bounceRadiance = (incSkyRadiance + incSunRadiance) * albedo / rayCount;
-                            if (bounceRadiance > 1e-5f)
-                            {
-                                probe.AddDirectional(skyDirsWorld[r], bounceRadiance);
-                            }
-                        }
-                    }
-
-                    // 2. Sun pass: shadow ray toward sun (if sunlight > 0)
-                    if (sunRadiance > 0.001f)
-                    {
-                        float sunDist = OctaRaycast.RayCube(octa, centerSauer, sunDirSauer, maxRayDist, 0, 0, out _);
-                        if (sunDist >= maxRayDist * 0.999f)
-                        {
-                            probe.AddDirectional(sunDirWorld, sunRadiance);
-                        }
-                    }
-
-                    // 3. Direct entity lights pass (Stage 2)
-                    if (spatialIndex != null)
-                    {
-                        spatialIndex.QueryLights(centerSauer, candidateLights);
-                        for (int li = 0; li < candidateLights.Count; li++)
-                        {
-                            var light = candidateLights[li];
-                            Vector3 lightVec = light.Position - centerSauer;
-                            float dist = lightVec.Length();
-
-                            if (dist < 1e-4f || dist >= light.Radius)
-                                continue;
-
-                            Vector3 rayDir = lightVec / dist; // normalized direction toward light
-
-                            // Spotlight cone attenuation check
-                            float spotAtten = 1.0f;
-                            if (light.IsSpotlight)
-                            {
-                                // Vector from light to probe is -rayDir
-                                float cosAngle = (-rayDir).Dot(light.SpotDirection);
-                                if (cosAngle < light.SpotCosAngle)
-                                    continue;
-                                spotAtten = (cosAngle - light.SpotCosAngle) / (1.0f - light.SpotCosAngle);
-                            }
-
-                            // Linear distance attenuation matching Sauerbraten: intensity = 1 - dist / radius
-                            float intensity = (1.0f - dist / light.Radius) * spotAtten;
-                            if (intensity <= 0f)
-                                continue;
-
-                            // Cast shadow ray from probe to light
-                            float hitDist = OctaRaycast.RayCube(octa, centerSauer, rayDir, dist, 0, 0, out _);
-                            if (hitDist >= dist * 0.999f)
-                            {
-                                // Unoccluded: accumulate into probe in Godot world space
-                                Vector3 rayDirWorld = RadianceGrid.SauerToWorld(rayDir);
-                                float lightLum = (light.Color.R + light.Color.G + light.Color.B) / 3.0f;
-                                probe.AddDirectional(rayDirWorld, lightLum * intensity);
-                            }
-                        }
-                    }
+                    BakeProbe(ref probe, x, y, z, _context);
                 }
             }
         }
@@ -280,6 +205,235 @@ public class RadianceVolume
             Texture = Grid.CreateTexture();
         else
             Grid.UpdateTexture(Texture);
+
+        _textureNeedsUpdate = false;
+    }
+
+    /// <summary>
+    /// Bakes or rebakes a single probe at grid coordinates (x, y, z).
+    /// </summary>
+    private void BakeProbe(ref RadianceProbe probe, int x, int y, int z, BakeContext ctx)
+    {
+        probe = RadianceProbe.Zero;
+
+        Vector3 centerSauer = Grid.CellCenterSauer(x, y, z);
+        var cellCoords = new Vector3I(Mathf.FloorToInt(centerSauer.X), Mathf.FloorToInt(centerSauer.Y), Mathf.FloorToInt(centerSauer.Z));
+
+        // Skip probes inside solid geometry (docs/radiance-hints.md §3)
+        Cube? leaf = ctx.Octa.LeafCube(cellCoords);
+        if (leaf != null && leaf.IsEntirelySolid())
+            return;
+
+        // Base ambient
+        probe.AddAmbient(ctx.AmbientRadiance);
+
+        // 1. Sky pass: cast hemisphere rays (Stage 1 unoccluded sky + Stage 3 indirect bounce)
+        for (int r = 0; r < ctx.RayCount; r++)
+        {
+            Vector3 rayDir = ctx.SkyDirsSauer[r];
+            float dist = OctaRaycast.RayCube(ctx.Octa, centerSauer, rayDir, ctx.MaxRayDist, 0, 0, out Vector3 hitSurface);
+            if (dist >= ctx.MaxRayDist * 0.999f)
+            {
+                // Unoccluded sky: radiance divided by rayCount for Monte Carlo estimate
+                probe.AddDirectional(ctx.SkyDirsWorld[r], ctx.SkyRadiance / ctx.RayCount);
+            }
+            else
+            {
+                // Stage 3: Hit geometry within maxRayDist -> single bounce indirect irradiance
+                Vector3 hitPos = centerSauer + rayDir * dist;
+                Vector3 hitNormal = hitSurface != Vector3.Zero ? hitSurface.Normalized() : -rayDir;
+
+                // Estimate surface albedo
+                float albedo = ResolveAlbedoAtHit(ctx.Octa, hitPos, hitNormal, ctx.Catalogue, ctx.TextureSource, ctx.AlbedoCache);
+
+                // Incident radiance on hit surface from sky/sun:
+                // Upper hemisphere factor facing +Z in Sauer space:
+                float skyCos = Mathf.Max(0f, hitNormal.Z);
+                float incSkyRadiance = ctx.SkyRadiance * skyCos;
+
+                // Direct sun incident on hit surface:
+                float incSunRadiance = 0f;
+                if (ctx.SunRadiance > 0.001f)
+                {
+                    float nDotL = hitNormal.Dot(ctx.SunDirSauer);
+                    if (nDotL > 0f)
+                    {
+                        float sunShadow = OctaRaycast.RayCube(ctx.Octa, hitPos + hitNormal * 0.1f, ctx.SunDirSauer, ctx.MaxRayDist, 0, 0, out _);
+                        if (sunShadow >= ctx.MaxRayDist * 0.999f)
+                        {
+                            incSunRadiance = ctx.SunRadiance * nDotL;
+                        }
+                    }
+                }
+
+                // Reflected diffuse radiance arriving from hit surface towards probe:
+                // Reflected radiance = (incident * albedo) / rayCount.
+                // Arriving along skyDirsWorld[r] from hit point.
+                float bounceRadiance = (incSkyRadiance + incSunRadiance) * albedo / ctx.RayCount;
+                if (bounceRadiance > 1e-5f)
+                {
+                    probe.AddDirectional(ctx.SkyDirsWorld[r], bounceRadiance);
+                }
+            }
+        }
+
+        // 2. Sun pass: shadow ray toward sun (if sunlight > 0)
+        if (ctx.SunRadiance > 0.001f)
+        {
+            float sunDist = OctaRaycast.RayCube(ctx.Octa, centerSauer, ctx.SunDirSauer, ctx.MaxRayDist, 0, 0, out _);
+            if (sunDist >= ctx.MaxRayDist * 0.999f)
+            {
+                probe.AddDirectional(ctx.SunDirWorld, ctx.SunRadiance);
+            }
+        }
+
+        // 3. Direct entity lights pass (Stage 2)
+        if (ctx.SpatialIndex != null)
+        {
+            ctx.SpatialIndex.QueryLights(centerSauer, ctx.CandidateLights);
+            for (int li = 0; li < ctx.CandidateLights.Count; li++)
+            {
+                var light = ctx.CandidateLights[li];
+                Vector3 lightVec = light.Position - centerSauer;
+                float dist = lightVec.Length();
+
+                if (dist < 1e-4f || dist >= light.Radius)
+                    continue;
+
+                Vector3 rayDir = lightVec / dist; // normalized direction toward light
+
+                // Spotlight cone attenuation check
+                float spotAtten = 1.0f;
+                if (light.IsSpotlight)
+                {
+                    // Vector from light to probe is -rayDir
+                    float cosAngle = (-rayDir).Dot(light.SpotDirection);
+                    if (cosAngle < light.SpotCosAngle)
+                        continue;
+                    spotAtten = (cosAngle - light.SpotCosAngle) / (1.0f - light.SpotCosAngle);
+                }
+
+                // Linear distance attenuation matching Sauerbraten: intensity = 1 - dist / radius
+                float intensity = (1.0f - dist / light.Radius) * spotAtten;
+                if (intensity <= 0f)
+                    continue;
+
+                // Cast shadow ray from probe to light
+                float hitDist = OctaRaycast.RayCube(ctx.Octa, centerSauer, rayDir, dist, 0, 0, out _);
+                if (hitDist >= dist * 0.999f)
+                {
+                    // Unoccluded: accumulate into probe in Godot world space
+                    Vector3 rayDirWorld = RadianceGrid.SauerToWorld(rayDir);
+                    float lightLum = (light.Color.R + light.Color.G + light.Color.B) / 3.0f;
+                    probe.AddDirectional(rayDirWorld, lightLum * intensity);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Mark all probes overlapping the given region dirty.
+    /// Region is in Sauerbraten coordinates (matching EditorController / WorldChunkRenderer).
+    /// An optional margin (in world units) expands the region before mapping to probe cells.
+    /// </summary>
+    public void MarkDirty(Aabb sauerRegion, float margin = 0f)
+    {
+        if (margin > 0f)
+            sauerRegion = sauerRegion.Grow(margin);
+
+        // Convert Sauerbraten AABB to Godot World AABB
+        Aabb worldRegion = RadianceGrid.SauerBoundsToWorld(sauerRegion);
+
+        // Find cell coordinate bounds
+        Vector3I minCell = Grid.WorldToCell(worldRegion.Position);
+        Vector3I maxCell = Grid.WorldToCell(worldRegion.End);
+
+        int res = Grid.Resolution;
+        int x0 = Mathf.Clamp(Mathf.Min(minCell.X, maxCell.X), 0, res - 1);
+        int y0 = Mathf.Clamp(Mathf.Min(minCell.Y, maxCell.Y), 0, res - 1);
+        int z0 = Mathf.Clamp(Mathf.Min(minCell.Z, maxCell.Z), 0, res - 1);
+        int x1 = Mathf.Clamp(Mathf.Max(minCell.X, maxCell.X), 0, res - 1);
+        int y1 = Mathf.Clamp(Mathf.Max(minCell.Y, maxCell.Y), 0, res - 1);
+        int z1 = Mathf.Clamp(Mathf.Max(minCell.Z, maxCell.Z), 0, res - 1);
+
+        for (int z = z0; z <= z1; z++)
+        {
+            for (int y = y0; y <= y1; y++)
+            {
+                for (int x = x0; x <= x1; x++)
+                {
+                    MarkCellDirty(new Vector3I(x, y, z));
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Mark a single probe cell at (x, y, z) dirty.
+    /// </summary>
+    public void MarkCellDirty(Vector3I cell)
+    {
+        if (cell.X < 0 || cell.X >= Grid.Resolution ||
+            cell.Y < 0 || cell.Y >= Grid.Resolution ||
+            cell.Z < 0 || cell.Z >= Grid.Resolution)
+            return;
+
+        if (_dirtySet.Add(cell))
+        {
+            _dirtyQueue.Add(cell);
+        }
+    }
+
+    /// <summary>
+    /// Rebakes up to <paramref name="budget"/> queued dirty probes.
+    /// If any probes were rebaked and changed, updates the GPU 3D texture (at most once per call).
+    /// </summary>
+    public int RebakePending(int budget)
+    {
+        if (_dirtyQueue.Count == 0 || _context == null)
+            return 0;
+
+        int count = Mathf.Min(budget, _dirtyQueue.Count);
+        for (int i = 0; i < count; i++)
+        {
+            Vector3I cell = _dirtyQueue[0];
+            _dirtyQueue.RemoveAt(0);
+            _dirtySet.Remove(cell);
+
+            ref var probe = ref Grid[cell.X, cell.Y, cell.Z];
+            BakeProbe(ref probe, cell.X, cell.Y, cell.Z, _context);
+            RebakeCount++;
+            _textureNeedsUpdate = true;
+        }
+
+        if (_textureNeedsUpdate && Texture != null)
+        {
+            Grid.UpdateTexture(Texture);
+            _textureNeedsUpdate = false;
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Process incremental rebake updates for one frame according to <see cref="BudgetPerFrame"/>.
+    /// </summary>
+    public void Process(double delta)
+    {
+        if (_dirtyQueue.Count == 0) return;
+        RebakePending(BudgetPerFrame);
+    }
+
+    /// <summary>
+    /// Immediately rebakes all remaining dirty probes in the queue and updates the GPU texture.
+    /// Intended for synchronous tests, save/export, or level initialization.
+    /// </summary>
+    public void FlushDirty()
+    {
+        while (_dirtyQueue.Count > 0)
+        {
+            RebakePending(_dirtyQueue.Count);
+        }
     }
 
     /// <summary>

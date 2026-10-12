@@ -27,6 +27,7 @@ public partial class EmptyMap : Node3D
     public Octa? Octa { get; set; }
     public WorldCommandSink? Sink { get; set; }
     public WorldChunkRenderer? Renderer { get; set; }
+    public Lighting.RadianceVolume? Radiance { get; set; }
 
     /// <summary>
     /// Reuse a built-once canonical world (octree + meshes) across instances by
@@ -94,6 +95,7 @@ public partial class EmptyMap : Node3D
             Name = "WorldMesh",
             ChunkSize = ChunkSize,
             BudgetPerFrame = 4,
+            Radiance = Radiance,
         };
         AddChild(Renderer);
         Renderer.Setup(octa, materials: null, prebuilt);
@@ -108,6 +110,7 @@ public partial class EmptyMap : Node3D
                 ec.Octa = octa;
                 ec.Sink = Sink;
                 ec.Renderer = Renderer;
+                ec.Radiance = Radiance;
             }
     }
 

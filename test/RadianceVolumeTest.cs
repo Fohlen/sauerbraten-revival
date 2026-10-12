@@ -581,4 +581,107 @@ public class RadianceVolumeTest : GoTestBase
         float albedoNullCat = RadianceVolume.ComputeVSlotAlbedo(5, null, null);
         TestAssert.Equal(RadianceVolume.DefaultAlbedo, albedoNullCat, "Null catalogue returns DefaultAlbedo");
     }
+
+    // =========================================================================
+    // Stage 4: Incremental Updates & Editor Dirty Wiring
+    // =========================================================================
+
+    [Test]
+    public void RadianceVolume_MarkDirty_EnqueuesExactProbeRegion()
+    {
+        var bounds = new Aabb(Vector3.Zero, new Vector3(64, 64, 64));
+        var grid = RadianceGrid.FromSauerBounds(bounds, resolution: 4, marginCells: 0);
+        var volume = new RadianceVolume(grid);
+
+        TestAssert.Equal(0, volume.PendingCount, "Initially no dirty probes");
+
+        // Mark a region covering a subset of probes
+        // In Sauer space: AABB (0, 0, 0) to (32, 32, 32)
+        volume.MarkDirty(new Aabb(Vector3.Zero, new Vector3(32, 32, 32)));
+
+        TestAssert.True(volume.PendingCount > 0, "Dirty probes should be queued");
+        int countBefore = volume.PendingCount;
+
+        // Duplicate mark should not re-add duplicate cells
+        volume.MarkDirty(new Aabb(Vector3.Zero, new Vector3(32, 32, 32)));
+        TestAssert.Equal(countBefore, volume.PendingCount, "Duplicate dirty mark should not increase pending queue");
+    }
+
+    [Test]
+    public void RadianceVolume_Process_BudgetsRebakes()
+    {
+        var octa = new Octa(10);
+        octa.EmptyMap(10);
+        var config = new MapConfig { Skylight = 0xFFFFFF };
+
+        var bounds = new Aabb(new Vector3(512, 512, 512), new Vector3(64, 64, 64));
+        var grid = RadianceGrid.FromSauerBounds(bounds, resolution: 4, marginCells: 0);
+        var volume = new RadianceVolume(grid)
+        {
+            SkyRays = 4,
+            BudgetPerFrame = 8,
+        };
+
+        volume.Bake(octa, config);
+        TestAssert.Equal(0, volume.PendingCount, "Initial bake clears pending dirty probes");
+
+        // Mark all 64 probes dirty
+        volume.MarkDirty(bounds);
+        TestAssert.Equal(64, volume.PendingCount, "All 64 probes should be marked dirty");
+
+        // Process 1 frame (delta): should process BudgetPerFrame = 8 probes
+        volume.Process(0.016);
+        TestAssert.Equal(56, volume.PendingCount, "8 probes rebaked in frame 1, 56 remaining");
+        TestAssert.Equal(8, volume.RebakeCount, "RebakeCount tracked");
+
+        // Process another frame
+        volume.Process(0.016);
+        TestAssert.Equal(48, volume.PendingCount, "Another 8 probes rebaked in frame 2, 48 remaining");
+        TestAssert.Equal(16, volume.RebakeCount, "RebakeCount tracked");
+
+        // Flush remaining
+        volume.FlushDirty();
+        TestAssert.Equal(0, volume.PendingCount, "FlushDirty clears all remaining dirty probes");
+        TestAssert.Equal(64, volume.RebakeCount, "All 64 probes rebaked in total");
+    }
+
+    [Test]
+    public void RadianceVolume_IncrementalRebake_ReflectsGeometryChange()
+    {
+        var octa = new Octa(10);
+        octa.EmptyMap(10);
+
+        var config = new MapConfig
+        {
+            Ambient = 0,
+            Skylight = 0xFFFFFF,
+            Sunlight = 0,
+        };
+
+        // Probe placed in open air at (512, 512, 550)
+        var bounds = new Aabb(new Vector3(512, 512, 550), new Vector3(16, 16, 16));
+        var grid = RadianceGrid.FromSauerBounds(bounds, resolution: 2, marginCells: 0);
+        var volume = new RadianceVolume(grid) { SkyRays = 16 };
+
+        // Initial bake: open sky overhead
+        volume.Bake(octa, config);
+        float initialAmb = volume.Grid[0, 0, 0].Amb;
+        TestAssert.True(initialAmb > 0.1f, $"Initial probe has high sky irradiance: {initialAmb}");
+
+        // Now modify the geometry: add a solid ceiling over the probe (octant 4 or 5)
+        // Solidifying octant 4 covering Sauer [0..512, 0..512, 512..1024]
+        octa.WorldRoot[4].SolidFaces();
+        octa.WorldRoot[5].SolidFaces();
+
+        // Mark the probe region dirty and flush
+        volume.MarkDirty(bounds, margin: 16f);
+        TestAssert.True(volume.PendingCount > 0, "Probes queued dirty after geometry change");
+
+        volume.FlushDirty();
+        TestAssert.Equal(0, volume.PendingCount, "All probes rebaked");
+
+        float rebakedAmb = volume.Grid[0, 0, 0].Amb;
+        TestAssert.True(rebakedAmb < initialAmb,
+            $"Rebaked probe under ceiling should have lower irradiance than open sky: rebaked={rebakedAmb}, initial={initialAmb}");
+    }
 }

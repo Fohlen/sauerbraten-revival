@@ -44,6 +44,11 @@ public partial class WorldChunkRenderer : Node3D
     /// </summary>
     [Export] public int BudgetPerFrame { get; set; } = 4;
 
+    /// <summary>
+    /// Optional radiance volume to invalidate and tick incrementally alongside geometry chunks.
+    /// </summary>
+    public Lighting.RadianceVolume? Radiance { get; set; }
+
     private Octa _octa = null!;
     private MaterialSet? _materials;
     private readonly Dictionary<Vector3I, MeshInstance3D> _nodes = new();
@@ -99,8 +104,6 @@ public partial class WorldChunkRenderer : Node3D
         RecomputeTriangleCount();
     }
     /// <summary>
-    /// Mark every chunk overlapping <paramref name="region"/> (expanded by the
-    /// <summary>
     /// Mark every chunk overlapping <paramref name="region"/> dirty. Pass
     /// <paramref name="margin"/> = the edited cube size so the chunks owning
     /// neighbouring faces (whose culling the change may have affected) are
@@ -109,6 +112,8 @@ public partial class WorldChunkRenderer : Node3D
     /// </summary>
     public void MarkDirty(Aabb region, float margin = 0f)
     {
+        Radiance?.MarkDirty(region, margin);
+
         if (margin > 0f) region = region.Grow(margin);
         int c = ChunkSize;
         int worldMax = Mathf.CeilToInt((float)_octa.WorldSize);
@@ -179,6 +184,8 @@ public partial class WorldChunkRenderer : Node3D
 
     public override void _Process(double delta)
     {
+        Radiance?.Process(delta);
+
         if (_dirty.Count == 0) return;
         int n = Mathf.Min(BudgetPerFrame, _dirty.Count);
         for (int i = 0; i < n; i++)
@@ -194,6 +201,8 @@ public partial class WorldChunkRenderer : Node3D
     /// <summary>Flush all pending chunks immediately (tests, or a save/export).</summary>
     public void FlushDirty()
     {
+        Radiance?.FlushDirty();
+
         while (_dirty.Count > 0)
         {
             var origin = _dirty[0];

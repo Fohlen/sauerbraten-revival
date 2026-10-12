@@ -35,6 +35,7 @@ public partial class MapLevel : Node3D
     public Octa? Octa { get; set; }
     public WorldCommandSink? Sink { get; set; }
     public WorldChunkRenderer? Renderer { get; set; }
+    public Lighting.RadianceVolume? Radiance { get; set; }
 
     /// <summary>The loaded snapshot (octree + entities).</summary>
     public WorldSnapshot? Snapshot { get; private set; }
@@ -75,6 +76,7 @@ public partial class MapLevel : Node3D
             Name = "WorldMesh",
             ChunkSize = ChunkSize,
             BudgetPerFrame = 4,
+            Radiance = Radiance,
         };
         AddChild(Renderer);
 
@@ -101,6 +103,7 @@ public partial class MapLevel : Node3D
                 ec.Octa = octa;
                 ec.Sink = Sink;
                 ec.Renderer = Renderer;
+                ec.Radiance = Radiance;
             }
 
         GD.Print($"[maplevel] worldsize={octa.WorldSize} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount} entities={Entities.Count}");
