@@ -44,6 +44,25 @@ public partial class OgzMapViewer : Node3D
 	[Export] public int PlayerTeam { get; set; } = 0;
 
 	/// <summary>
+	/// Show edit-mode blue entity markers and facing arrows. When false (e.g. in
+	/// player/game scenes), all <see cref="EntityMarker"/> nodes are hidden.
+	/// </summary>
+	[Export]
+	public bool ShowEntityMarkers
+	{
+		get => _showEntityMarkers;
+		set
+		{
+			_showEntityMarkers = value;
+			if (World != null)
+			{
+				World.ShowEntityMarkers = value;
+			}
+		}
+	}
+	private bool _showEntityMarkers = true;
+
+	/// <summary>
 	/// Third-person view weapon to attach to the player model's <c>Weapon</c> bone
 	/// (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>). Empty attaches none. This is
 	/// a live property: changing it from the remote inspector swaps the weapon on the
@@ -80,7 +99,13 @@ public partial class OgzMapViewer : Node3D
 		if (_built) return;
 		_built = true;
 
-		World = new MapWorld { Name = "MapWorld", OgzPath = OgzPath, ChunkSize = ChunkSize };
+		World = new MapWorld
+		{
+			Name = "MapWorld",
+			OgzPath = OgzPath,
+			ChunkSize = ChunkSize,
+			ShowEntityMarkers = ShowEntityMarkers,
+		};
 		AddChild(World);
 		World.Build();
 		if (!World.Built) return; // missing map, error already pushed

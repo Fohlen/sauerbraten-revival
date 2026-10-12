@@ -38,6 +38,29 @@ public static class EntityMarker
             if (node is Node3D n3) n3.Visible = visible;
     }
 
+    /// <summary>Show/hide all markers under a root node hierarchy.</summary>
+    public static void SetVisible(Node root, bool visible)
+    {
+        if (root.IsInsideTree())
+        {
+            foreach (var node in root.GetTree().GetNodesInGroup(Group))
+                if (node is Node3D n3 && (root == n3 || root.IsAncestorOf(n3)))
+                    n3.Visible = visible;
+        }
+        else
+        {
+            SetVisibleRecursive(root, visible);
+        }
+    }
+
+    private static void SetVisibleRecursive(Node node, bool visible)
+    {
+        if (node.IsInGroup(Group) && node is Node3D n3)
+            n3.Visible = visible;
+        foreach (var child in node.GetChildren())
+            SetVisibleRecursive(child, visible);
+    }
+
     private static Sprite3D CreateMarker(ITextureSource? textures, float size)
     {
         if (!_textureTried)

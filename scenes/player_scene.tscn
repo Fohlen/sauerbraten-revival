@@ -25,6 +25,7 @@ SpawnPlayer = true
 PlayerModelIndex = 0
 PlayerTeam = 1
 ViewWeapon = "vwep/rifle"
+ShowEntityMarkers = false
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=829647378]
 environment = SubResource("Environment_env")

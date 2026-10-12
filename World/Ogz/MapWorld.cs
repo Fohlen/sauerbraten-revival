@@ -30,6 +30,19 @@ public partial class MapWorld : Node3D
     [Export] public string OgzPath { get; set; } = "";
     [Export] public int ChunkSize { get; set; } = 512;
 
+    /// <summary>Show edit-mode blue entity markers and facing arrows.</summary>
+    [Export]
+    public bool ShowEntityMarkers
+    {
+        get => _showEntityMarkers;
+        set
+        {
+            _showEntityMarkers = value;
+            EntityMarker.SetVisible(this, value);
+        }
+    }
+    private bool _showEntityMarkers = true;
+
     /// <summary>The parsed map (slots, entities, metadata). Null until <see cref="Build"/>.</summary>
     public OgzMap? Map { get; private set; }
 
@@ -137,6 +150,9 @@ public partial class MapWorld : Node3D
             if (child is MapModel { ModelLoaded: true }) loadedModels++;
         }
         GD.Print($"[world] mapmodels: {loadedModels}/{totalModels} loaded");
+
+        if (!ShowEntityMarkers)
+            EntityMarker.SetVisible(this, false);
 
         // Water/lava/glass material surfaces (empty-space materials).
         var materialSurfaces = MaterialMesher.Build(octa);
