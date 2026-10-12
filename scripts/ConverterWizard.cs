@@ -43,7 +43,8 @@ public partial class ConverterWizard : Control
     public override void _Ready()
     {
         BuildUi();
-        _pathEdit.Text = LoadSetting(SauerbratenPathKey);
+        string saved = LoadSetting(SauerbratenPathKey);
+        _pathEdit.Text = !string.IsNullOrWhiteSpace(saved) ? saved : World.Ogz.MapRoots.ReferenceRoot;
         RescanMaps();
     }
 

@@ -64,4 +64,49 @@ public class MapRootsTest : GoTestBase
         string resolved = MapRoots.Resolve("base/bt_falls");
         TestAssert.True(File.Exists(resolved), $"expected an existing map, got '{resolved}'");
     }
+
+    [Test]
+    public void ReferenceRootHonoursProjectSettings()
+    {
+        string? originalEnv = System.Environment.GetEnvironmentVariable("SAUER_REF");
+        string originalSetting = ProjectSettings.HasSetting(MapRoots.ProjectSettingKey)
+            ? ProjectSettings.GetSetting(MapRoots.ProjectSettingKey).AsString()
+            : "";
+
+        try
+        {
+            // Clear env var to test ProjectSettings lookup
+            System.Environment.SetEnvironmentVariable("SAUER_REF", null);
+
+            ProjectSettings.SetSetting(MapRoots.ProjectSettingKey, "/test/custom/sauer_path");
+            TestAssert.Equal(
+                ProjectSettings.GlobalizePath("/test/custom/sauer_path"),
+                MapRoots.ReferenceRoot,
+                "honours ProjectSettings when env var is unset");
+
+            // Empty setting should fall back to default
+            ProjectSettings.SetSetting(MapRoots.ProjectSettingKey, "");
+            TestAssert.Equal(
+                MapRoots.DefaultReferenceRoot,
+                MapRoots.ReferenceRoot,
+                "falls back to default when setting is empty");
+
+            // Env var takes priority over ProjectSettings
+            System.Environment.SetEnvironmentVariable("SAUER_REF", "/test/env/override");
+            ProjectSettings.SetSetting(MapRoots.ProjectSettingKey, "/test/custom/sauer_path");
+            TestAssert.Equal(
+                "/test/env/override",
+                MapRoots.ReferenceRoot,
+                "env var takes precedence over ProjectSettings");
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("SAUER_REF", originalEnv);
+            if (!string.IsNullOrEmpty(originalSetting))
+                ProjectSettings.SetSetting(MapRoots.ProjectSettingKey, originalSetting);
+            else if (ProjectSettings.HasSetting(MapRoots.ProjectSettingKey))
+                ProjectSettings.SetSetting(MapRoots.ProjectSettingKey, Variant.From<string?>(null));
+        }
+    }
 }
+

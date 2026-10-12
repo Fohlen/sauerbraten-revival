@@ -27,10 +27,27 @@ namespace SauerbratenRevival.World.Ogz;
 /// </summary>
 public static class MapRoots
 {
-    /// <summary>Reference dump root (<c>$SAUER_REF</c>, else the maintainer default).</summary>
-    public static string ReferenceRoot =>
-        System.Environment.GetEnvironmentVariable("SAUER_REF")
-        ?? "/Users/fohlen/Downloads/sauerbraten-code-r6889";
+    public const string ProjectSettingKey = "sauerbraten/reference_path";
+    public const string DefaultReferenceRoot = "/Users/fohlen/Downloads/sauerbraten-code-r6889";
+
+    /// <summary>Reference dump root (<c>$SAUER_REF</c>, else ProjectSetting <c>sauerbraten/reference_path</c>, else the default).</summary>
+    public static string ReferenceRoot
+    {
+        get
+        {
+            string? env = System.Environment.GetEnvironmentVariable("SAUER_REF");
+            if (!string.IsNullOrWhiteSpace(env)) return env;
+
+            if (ProjectSettings.HasSetting(ProjectSettingKey))
+            {
+                string setting = ProjectSettings.GetSetting(ProjectSettingKey).AsString();
+                if (!string.IsNullOrWhiteSpace(setting))
+                    return ProjectSettings.GlobalizePath(setting.Trim());
+            }
+
+            return DefaultReferenceRoot;
+        }
+    }
 
     /// <summary>Project-owned converted maps (<c>res://assets/packages</c>), as an OS path.</summary>
     public static string ProjectPackages => ProjectSettings.GlobalizePath("res://assets/packages");

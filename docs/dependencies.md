@@ -46,14 +46,15 @@ tools/animprobe/build.sh                  # MD5 animation ground truth
 tools/ogztool/build.sh                    # OGZ metadata + old-map conversion
 ```
 
-## Environment variables
+## Environment variables & settings
 
-| Variable | Used by | Default |
-| --- | --- | --- |
-| `SAUER_REF` | Tests, viewer, import tools, refharness, ogztool | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
-| `GODOT` | `run-tests.sh` | `/Applications/Godot_mono.app/Contents/MacOS/Godot` |
-| `SAUER_TRACE` | A1/A2 instrumented reference client (refharness) | unset (features inert) |
-| `SAUER_METADATA` / `SAUER_METADATA_EXIT` / `SAUER_CONVERT_SAVE` | OGZ tooling client (ogztool) | unset (features inert) |
+| Setting / Variable | Type | Used by | Default |
+| --- | --- | --- | --- |
+| `sauerbraten/reference_path` | `ProjectSettings` | In-engine resolver (`MapRoots`), converter wizard default | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
+| `SAUER_REF` | Env var (overrides ProjectSetting) | Tests, viewer, import tools, refharness, ogztool | Unset (falls back to ProjectSetting or default) |
+| `GODOT` | Env var | `run-tests.sh` | `/Applications/Godot_mono.app/Contents/MacOS/Godot` |
+| `SAUER_TRACE` | Env var | A1/A2 instrumented reference client (refharness) | unset (features inert) |
+| `SAUER_METADATA` / `SAUER_METADATA_EXIT` / `SAUER_CONVERT_SAVE` | Env var | OGZ tooling client (ogztool) | unset (features inert) |
 
 ## Recreating an ad-hoc analysis environment
 

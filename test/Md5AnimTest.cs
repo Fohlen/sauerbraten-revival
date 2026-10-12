@@ -30,8 +30,7 @@ public class Md5AnimTest : TestClass
 
     private static void Compare(string model, string anim, int frame)
     {
-        string refRoot = System.Environment.GetEnvironmentVariable("SAUER_REF")
-            ?? "/Users/fohlen/Downloads/sauerbraten-code-r6889";
+        string refRoot = SauerbratenRevival.World.Ogz.MapRoots.ReferenceRoot;
         string meshPath = Path.Combine(refRoot, "packages", "models", model, model + ".md5mesh");
         string animPath = Path.Combine(refRoot, "packages", "models", model, anim + ".md5anim");
         string goldenPath = Path.Combine(ProjectSettings.GlobalizePath("res://"),
