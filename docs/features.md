@@ -173,8 +173,7 @@ Remaining:
 
 ## 3. Physics (movement + collision)
 
-See [movement-verification.md](movement-verification.md) and
-[movement-physics.md](movement-physics.md).
+See [movement-physics.md](movement-physics.md) (and [ADR 0003](adr/0003-movement-verification.md)).
 
 Done:
 

@@ -209,7 +209,7 @@ uses `moveres = 10` sub-steps of `move()` per physics frame, i.e. ~0.5 ms
 effective resolution. `interppos` smooths rendering between physics frames.
 
 Measured on a real run (see
-[movement-verification.md](movement-verification.md)): the main-loop `curtime` is
+[ADR 0003: Movement Verification](adr/0003-movement-verification.md)): the main-loop `curtime` is
 **variable** (5–28 ms at a 200 fps cap) but `physframetime` is **always 5 ms** and
 the jitter is absorbed by `physsteps = ceil(diff/5)`. So the rule is not just “run
 at 200 Hz” — a faithful port must advance in **fixed 5 ms steps and catch up by
@@ -217,7 +217,26 @@ step count**, never scale the step by a variable `delta`.
 
 ---
 
-## 5. Port notes / deviations in the current MVP
+## 5. Verification & Validation (Plan A)
+
+Movement fidelity is proven against SVN r6889 via differential replay, not vibes.
+The full architecture and results are documented in:
+👉 **[ADR 0003: Movement Physics Port & Differential Verification (Plan A)](adr/0003-movement-verification.md)**
+
+### Verification Summary
+- **Stage A1 (Reference Harness):** Isolated r6889 velocity functions in `tools/refharness/` generating golden CSV baselines.
+- **Stage A2 (Instrumented Telemetry):** Non-invasive logging patches on r6889 client (`SAUER_TRACE`, `SAUER_INPUTTRACE`, `SAUER_MOVETRACE`).
+- **Stage A3 (Differential Replay):** Automated replay tests (`test/A3ReplayTest.cs`) on real `church51` geometry.
+- **Stage A4 (Determinism):** Verified bit-identical execution run-to-run (`SAUER_REPLAY`).
+
+### Results & Root Cause Fixes
+- **`session-clean.csv` (7,001 steps):** **100.0% velocity match**, **100.0% falling match**, `0.0149 u` max position error, zero trajectory misses.
+- **`genfacevecs` winding:** Non-solid faces in r6889 invert vertex order for `dimcoord == 0` (LEFT/BACK/BOTTOM). Reversing iteration in `OctaVisible.GenFaceVecs` fixed 1,383 flipped face visibility bits.
+- **`-ffast-math` step-up fold:** `trystepup()` round-trip z addition folds away under compiler `-ffast-math`. Porting `zadd = old.z + smoothdir.z` in `OctaPhysics.TryStepUp` eliminated $2^{-12}$ u per-substep rounding drift.
+
+---
+
+## 6. Port notes / deviations in the current MVP
 
 The live player is `World/Ogz/MapPlayer.cs`. It uses the **ported octree physics**
 (`World/Physics/OctaPhysics.cs` — `collide`/`move`/`trystepup`/`trystepdown`/…), so
@@ -234,7 +253,7 @@ Still to do / known deviations:
 
 - Collision volume/`moveres` are shared with A3; velocity + collision are verified
   across all stages with zero deviation (100.0% velocity, 100.0% falling, zero misses
-  on event-free movement; see [movement-verification.md](movement-verification.md)).
+  on event-free movement; see [ADR 0003](adr/0003-movement-verification.md)).
 - Water, spectator-float and the strafe-roll camera state are now ported
   (`PhysEnt.InWater`, `PhysEnt.State`, `Movement.ModifyVelocity`/
   `ModifyGravity`, `OctaPhysics.MovePlayer`): the one-time `vel /= 8` entry damp,

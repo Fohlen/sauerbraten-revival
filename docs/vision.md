@@ -2,7 +2,7 @@
 
 Sauerbraten Revival — project vision, scope, non-goals, and core technical decisions.
 For movement/physics details, see [movement-physics.md](movement-physics.md) and
-[movement-verification.md](movement-verification.md). For live tracking, see [features.md](features.md).
+[ADR 0003](adr/0003-movement-verification.md). For live tracking, see [features.md](features.md).
 
 ---
 
@@ -20,7 +20,7 @@ deliberately go beyond the original by making the world **mutable at runtime**
 ## 2. Scope & MVP modes
 
 - Port the original movement/physics first, proven against the original
-  ([movement-verification.md](movement-verification.md)).
+  ([movement-physics.md § 5](movement-physics.md#5-verification--validation-plan-a) / [ADR 0003](adr/0003-movement-verification.md)).
 - Reuse the original engine only as a **one-time offline source** for content
   conversion — never as a runtime dependency.
 - Keep an **editable, dynamic octree** world so live editing and runtime geometry
@@ -153,7 +153,7 @@ sync. It is also the foundation for multiplayer and Workshop content.
 | `octaedit.cpp` | 3003 | 19 | **Port the algorithms**, reimplement UI/undo/selection plumbing (todo) |
 | `octarender.cpp` | 1803 | 45 | ✅ **Replaced** by the ArrayMesh mesher (`World/Meshing/`); see [rendering.md](rendering.md) |
 | `worldio.cpp` | 1388 | — | ✅ **Ported for OGZ import only** (`World/Ogz/OgzReader.cs`); see [ogz-import.md](ogz-import.md). Native format is `Resource`. |
-| octree traversal (`physics.cpp`) | ~500 | 0 | ✅ **Ported to C#** (`World/Physics/`: `move`/`collide`/`trystepup`/`trystepdown` + clipping/visibility); see [movement-verification.md](movement-verification.md) |
+| octree traversal (`physics.cpp`) | ~500 | 0 | ✅ **Ported to C#** (`World/Physics/`: `move`/`collide`/`trystepup`/`trystepdown` + clipping/visibility); see [movement-physics.md](movement-physics.md) and [ADR 0003](adr/0003-movement-verification.md) |
 
 `octa.cpp` depends on only a handful of globals (`worldroot`, `worldsize`,
 `worldscale`, `allocnodes`, `lu`, `isempty`, `isentirelysolid`, `octastep`,
@@ -165,7 +165,7 @@ Language: **C# (.NET)** for everything — octree, meshing, collision queries,
 save/load, command application, editor, game logic, HUD. C# `int` is 32-bit and
 `float` is 32-bit, which matches the original C++ better than GDScript. (The A1
 reference harness stays C++ as an offline dev tool; see
-[movement-verification.md](movement-verification.md).)
+[ADR 0003](adr/0003-movement-verification.md).)
 
 ---
 
@@ -212,10 +212,10 @@ have to rewrite world data to improve rendering:
 
 1. **Approximate**: base texture + tint, single layer, dynamic Godot lighting.
 2. **Blended**: Sauerbraten multi-layer material blending and per-face texture
-   coordinates.
+    coordinates.
 3. **Exact**: original envmaps, decals, and the full surface model. World
-   lighting is a world-space L1 SH probe volume (radiance hints), independent of
-   surface topology — see [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md).
+    lighting is a world-space L1 SH probe volume (radiance hints), independent of
+    surface topology — see [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md).
 
 The material manifest/shader is the pluggable seam; world data does not change
 between stages.
@@ -293,7 +293,7 @@ imports cover maps, materials, entities, weapon stats, and mode parameters.
 
 ## 13. Movement verification (Plan A)
 
-Full detail in [movement-verification.md](movement-verification.md). Summary:
+Full detail in [movement-physics.md § 5](movement-physics.md#5-verification--validation-plan-a) and [ADR 0003](adr/0003-movement-verification.md). Summary:
 
 - **A1** — standalone C++ harness running the *original* movement functions at
   fixed 5 ms steps with scripted inputs; emits golden CSV traces.

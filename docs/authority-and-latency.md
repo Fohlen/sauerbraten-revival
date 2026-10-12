@@ -86,7 +86,7 @@ interpolation + lag compensation.** Three mechanisms, often conflated:
 
 **Our advantage:** this model *requires* a deterministic fixed-step movement
 simulation, which is the project's central effort and is already ported and
-verified (movement-verification.md). Determinism is the expensive prerequisite,
+verified ([movement-physics.md § 5](movement-physics.md#5-verification--validation-plan-a) / [ADR 0003](adr/0003-movement-verification.md)). Determinism is the expensive prerequisite,
 and we have it.
 
 ---
