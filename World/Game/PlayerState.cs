@@ -32,6 +32,18 @@ public sealed class PlayerState
     /// <summary>Milliseconds left before the next shot (engine <c>gunwait</c>).</summary>
     public int GunWait;
 
+    /// <summary>Timestamp (ms) of the last attack (engine <c>fpsent::lastaction</c>).</summary>
+    public int LastAction;
+
+    /// <summary>Gun id used during the last attack (engine <c>fpsent::lastattackgun</c>).</summary>
+    public int LastAttackGun = (int)Gun.Pistol;
+
+    /// <summary>Timestamp (ms) of last damage taken or death (engine <c>fpsent::lastpain</c>).</summary>
+    public int LastPain;
+
+    /// <summary>True while the attack button is held down (engine <c>fpsent::attacking</c>).</summary>
+    public bool Attacking;
+
     /// <summary>Ammo per gun, indexed by <see cref="Gun"/> (engine <c>ammo[NUMGUNS]</c>).</summary>
     public readonly int[] Ammo = new int[Guns.Count];
 
@@ -67,6 +79,10 @@ public sealed class PlayerState
         QuadMillis = 0;
         GunSelect = (int)Gun.Pistol;
         GunWait = 0;
+        LastAction = 0;
+        LastAttackGun = (int)Gun.Pistol;
+        LastPain = 0;
+        Attacking = false;
         for (int i = 0; i < Ammo.Length; i++) Ammo[i] = 0;
         Ammo[(int)Gun.Fist] = 1;
     }

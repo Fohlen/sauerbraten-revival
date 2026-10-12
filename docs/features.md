@@ -324,14 +324,16 @@ Remaining:
             [character-animation.md](character-animation.md)). `PlayerModel.Play(name)`
             selects clips; idle runs by default. Body orientation verified in-engine
             (upright, facing correct).
-      - [~] Anim state machine mirroring `renderclient`: **movement done**
+      - [x] Anim state machine mirroring `renderclient`: **movement + combat done**
             (`MapPlayer.SelectBodyAnim` — idle/forward/backward/left/right/jump,
-            swim/sink, edit; `test/BodyAnimTest.cs`). Attack/hold/pain/dead land with
-            weapons/combat.
+            swim/sink, edit, lag, hold 1..6, attack 1..7, pain, dying, dead;
+            `test/BodyAnimTest.cs`). Faithfully ports `renderclient`
+            (`rendermodel.cpp:1060-1110`) and `renderplayer` (`render.cpp:133`).
       - [x] First-person hudgun display: imports the linked hand/weapon GLBs as a
             camera-local model, maps Cube2's Z-up coordinates into Godot's camera
             frame, and starts the idle clips. Placement is pending in-engine visual
-            review; weapon switching and attack animations come with combat.
+            review; weapon switching (`HudgunModel.SetGun`) and attack animations
+            (`HudgunModel.UpdateAnim` / `gun shoot`) wired with combat.
       - [x] **Third-person view weapon** attached to the body's `Weapon` bone
             (render.cpp `renderplayer` / `vweps[]`). The seven `vwep/*` models now
             convert (`tools/model-import`, including `md5dir`-relative skin/bumpmap
@@ -342,8 +344,8 @@ Remaining:
             (backed by `PlayerModel.SetViewWeapon`), so the weapon can be swapped or
             cleared from the remote debugger without reloading the body, and
             `PlayerModel.ViewWeaponRotationDegrees` is exported to tune the attach.
-            The real weapon selection and the `hold N`/`attack N` anims land with the
-            state machine below.
+            Real weapon selection (`MapPlayer.SelectWeapon`) swaps the view weapon and
+            the `hold N`/`attack N` anims drive the pose.
 - [~] Hitscan weapons (insta rifle; effic loadout).
       - [x] **Weapon definitions** (`Gun`/`Guns`, `WeaponInfo`, `GameSound`,
             `WeaponCatalog` + `resources/weapons/*.tres`), locked to the engine

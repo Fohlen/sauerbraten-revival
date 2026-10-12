@@ -29,6 +29,10 @@ public class PlayerStateTest : GoTestBase
         s.QuadMillis = 30000;
         s.GunSelect = (int)Gun.Rifle;
         s.GunWait = 42;
+        s.LastAction = 999;
+        s.LastAttackGun = (int)Gun.RocketLauncher;
+        s.LastPain = 888;
+        s.Attacking = true;
         s.Ammo[(int)Gun.Rifle] = 100;
 
         s.Respawn();
@@ -40,6 +44,10 @@ public class PlayerStateTest : GoTestBase
         TestAssert.Equal(0, s.QuadMillis, "quadmillis");
         TestAssert.Equal((int)Gun.Pistol, s.GunSelect, "gunselect");
         TestAssert.Equal(0, s.GunWait, "gunwait");
+        TestAssert.Equal(0, s.LastAction, "lastaction");
+        TestAssert.Equal((int)Gun.Pistol, s.LastAttackGun, "lastattackgun");
+        TestAssert.Equal(0, s.LastPain, "lastpain");
+        TestAssert.True(!s.Attacking, "attacking");
         for (int i = 0; i < Guns.Count; i++)
             TestAssert.Equal(i == (int)Gun.Fist ? 1 : 0, s.Ammo[i], $"ammo[{i}]");
     }

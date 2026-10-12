@@ -1,6 +1,8 @@
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Physics;
+using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.World.Ogz;
 
@@ -85,6 +87,12 @@ public partial class MapPlayer : Node3D
     /// <summary>The simulated entity (Sauerbraten Z-up). Read by tests/diagnostics.</summary>
     public PhysEnt Entity { get; } = new();
 
+    /// <summary>Combat and weapon state (fpsgame/game.h:367 <c>fpsstate</c>).</summary>
+    public PlayerState Combat { get; } = new();
+
+    /// <summary>Simulation clock in milliseconds (engine <c>lastmillis</c>).</summary>
+    public int LastMillis { get; set; }
+
     /// <summary>View pitch in degrees (the physics model only uses yaw; pitch is camera-only).</summary>
     public float Pitch { get; private set; }
 
@@ -97,6 +105,11 @@ public partial class MapPlayer : Node3D
 
     /// <summary>True once <see cref="Setup"/> has run.</summary>
     public bool Initialized { get; private set; }
+
+    public MapPlayer()
+    {
+        Combat.Respawn();
+    }
 
     public override void _Ready()
     {
@@ -139,6 +152,7 @@ public partial class MapPlayer : Node3D
         Entity.O = spawnFeet with { Z = spawnFeet.Z + EyeHeight };
         Entity.Yaw = yawDegrees;
         Pitch = 0f;
+        LastMillis = (int)Time.GetTicksMsec();
         Initialized = true;
         SyncTransform();
         if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
@@ -150,8 +164,37 @@ public partial class MapPlayer : Node3D
             _mouseDelta += motion.Relative;
         else if (@event.IsActionPressed("ui_cancel"))
             Input.MouseMode = Input.MouseModeEnum.Visible;
-        else if (@event is InputEventMouseButton { Pressed: true } && Input.MouseMode != Input.MouseModeEnum.Captured)
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+        else if (@event is InputEventMouseButton mb)
+        {
+            if (Input.MouseMode != Input.MouseModeEnum.Captured)
+            {
+                if (mb.Pressed) Input.MouseMode = Input.MouseModeEnum.Captured;
+            }
+            else
+            {
+                if (mb.ButtonIndex == MouseButton.Left)
+                {
+                    Combat.Attacking = mb.Pressed;
+                    if (mb.Pressed) TryAttack();
+                }
+                else if (mb.Pressed && mb.ButtonIndex == MouseButton.WheelUp)
+                {
+                    NextWeapon(-1);
+                }
+                else if (mb.Pressed && mb.ButtonIndex == MouseButton.WheelDown)
+                {
+                    NextWeapon(1);
+                }
+            }
+        }
+        else if (@event is InputEventKey { Pressed: true } key && !key.Echo)
+        {
+            if (key.Keycode >= Key.Key1 && key.Keycode <= Key.Key7)
+            {
+                int gun = (int)(key.Keycode - Key.Key1);
+                SelectWeapon((Gun)gun);
+            }
+        }
     }
 
     /// <summary>
@@ -190,34 +233,87 @@ public partial class MapPlayer : Node3D
         if (Input.IsActionJustPressed("third_person")) ToggleThirdPerson();
 
         Advance(delta);
+
+        if (Combat.Attacking && Entity.State == PhysEnt.CsAlive)
+        {
+            if (LastMillis - Combat.LastAction >= Combat.GunWait)
+                TryAttack();
+        }
+
         UpdateBodyAnim();
+        UpdateHudgunAnim();
     }
 
     private string _bodyAnim = "";
+    private int _lastActionSeen = -1;
+    private int _lastPainSeen = -1;
 
     /// <summary>
     /// Play the body clip matching the current state, mirroring the engine's
-    /// <c>renderclient</c> secondary-animation selection (rendermodel.cpp): water →
-    /// swim/sink, in-air → jump, else forward/backward/left/right, else idle. The
-    /// attack/hold/pain clips (the engine's <i>primary</i> anim) come with weapons.
+    /// <c>renderclient</c> animation selection (rendermodel.cpp:1060-1110).
     /// </summary>
     private void UpdateBodyAnim()
     {
         if (PlayerModel is not { } model) return;
         string name = SelectBodyAnim();
-        if (name != _bodyAnim)
+        bool isNewAction = (Combat.LastAction != _lastActionSeen && name.StartsWith("attack "))
+                        || (Combat.LastPain != _lastPainSeen && name == "pain");
+        if (name != _bodyAnim || isNewAction)
         {
-            model.Play(name, loop: name != "jump");
+            model.Play(name, loop: IsLoopingAnim(name), restart: isNewAction);
             _bodyAnim = name;
+            _lastActionSeen = Combat.LastAction;
+            _lastPainSeen = Combat.LastPain;
         }
     }
 
-    /// <summary>Engine anim name for the current player state (see <see cref="UpdateBodyAnim"/>).</summary>
-    public string SelectBodyAnim()
+    /// <summary>Update the first-person hudgun animation.</summary>
+    private void UpdateHudgunAnim()
     {
-        // CS_EDITING / CS_SPECTATOR float (renderclient → ANIM_EDIT).
+        if (Hudgun is not { } hudgun) return;
+        int attackDelay = WeaponCatalog.Get((Gun)Combat.GunSelect).AttackDelay;
+        hudgun.UpdateAnim(LastMillis, Combat.LastAction, Combat.LastAttackGun, Combat.GunSelect, attackDelay);
+    }
+
+    /// <summary>
+    /// Engine anim name for the current player state, faithfully porting
+    /// <c>rendermodel.cpp:1060-1110</c> (<c>renderclient</c>) and
+    /// <c>render.cpp:133</c> (<c>renderplayer</c>).
+    /// </summary>
+    public string SelectBodyAnim(int? nowMillis = null)
+    {
+        int now = nowMillis ?? LastMillis;
+
+        // CS_DEAD: dying for the first 1000 ms after death/lastpain, then dead (looping).
+        // rendermodel.cpp:1068-1078
+        if (Entity.State == PhysEnt.CsDead)
+        {
+            int baseTime = Combat.LastPain;
+            return (now - baseTime > 1000) ? "dead" : "dying";
+        }
+
+        // CS_EDITING / CS_SPECTATOR float (rendermodel.cpp:1080 -> ANIM_EDIT).
         if (Floating) return "edit";
 
+        // CS_LAGGED (rendermodel.cpp:1081 -> ANIM_LAG).
+        if (Entity.State == PhysEnt.CsLagged) return "lag";
+
+        // Pain: 300 ms after damage (rendermodel.cpp:1084-1088 -> ANIM_PAIN).
+        if (Combat.LastPain > 0 && now - Combat.LastPain < 300)
+            return "pain";
+
+        // Attack: active while now - lastaction < attackdelay and lastpain < lastaction.
+        // rendermodel.cpp:1089-1093 + render.cpp:133
+        int attackDelay = WeaponCatalog.Get((Gun)Combat.GunSelect).AttackDelay + 50;
+        if (Combat.LastAction > 0 && Combat.LastPain < Combat.LastAction && now - Combat.LastAction < attackDelay)
+        {
+            int gun = Combat.LastAttackGun >= Guns.First && Combat.LastAttackGun <= Guns.Last
+                ? Combat.LastAttackGun
+                : Combat.GunSelect;
+            return $"attack {gun + 1}";
+        }
+
+        // Locomotion (secondary anim in rendermodel.cpp:1095-1107)
         bool moving = Entity.Move != 0 || Entity.Strafe != 0;
 
         // In water at/below the falling state → swim (moving or rising) else sink.
@@ -238,7 +334,121 @@ public partial class MapPlayer : Node3D
                     : (Entity.Strafe > 0 ? "left" : "right");
             if (Entity.Move < 0) return "backward";
         }
+
+        // Hold: rendermodel.cpp:1060 + render.cpp:133.
+        // hold = mdl.vwep || d->gunselect==GUN_PISTOL ? 0 : (ANIM_HOLD1+d->gunselect)|ANIM_LOOP.
+        // Pistol and models with mdl.vwep fall back to ANIM_IDLE.
+        if (Combat.GunSelect >= Guns.First && Combat.GunSelect < (int)Gun.Pistol)
+            return $"hold {Combat.GunSelect + 1}";
+
         return "idle";
+    }
+
+    /// <summary>
+    /// True if the named clip loops (idle, holds, walks, swims, dead);
+    /// false for one-shot clips (jump, dying, pain, attacks).
+    /// </summary>
+    public static bool IsLoopingAnim(string name) => name switch
+    {
+        "jump" or "dying" or "pain" => false,
+        _ when name.StartsWith("attack ") => false,
+        _ => true,
+    };
+
+    /// <summary>
+    /// Select a weapon (engine <c>gunselect</c>, weapon.cpp). Updates combat state,
+    /// swaps third-person view weapon, and switches the first-person hudgun.
+    /// </summary>
+    public void SelectWeapon(Gun gun)
+    {
+        int g = (int)gun;
+        if (!Guns.IsPlayerSelectable(g)) return;
+        Combat.GunSelect = g;
+        PlayerModel?.SetViewWeapon(WeaponCatalog.Vweps[g]);
+        Hudgun?.SetGun(WeaponCatalog.Get(gun).File);
+        UpdateBodyAnim();
+    }
+
+    /// <summary>Cycle to next/previous selectable weapon with ammo (weapon.cpp <c>nextweapon</c>).</summary>
+    public void NextWeapon(int dir = 1)
+    {
+        if (Entity.State != PhysEnt.CsAlive) return;
+        int step = dir < 0 ? -1 : 1;
+        int current = Combat.GunSelect;
+        int count = Guns.Last - Guns.First + 1;
+        for (int i = 1; i <= count; i++)
+        {
+            int next = (current + i * step) % count;
+            if (next < 0) next += count;
+            if (Combat.HasAmmo(next) || next == (int)Gun.Fist)
+            {
+                SelectWeapon((Gun)next);
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Attempt to fire the current weapon (weapon.cpp <c>shoot</c>).
+    /// </summary>
+    public bool TryAttack(int? nowMillis = null)
+    {
+        if (Entity.State != PhysEnt.CsAlive)
+        {
+            // If dead, pressing attack triggers respawn (fps.cpp:376)
+            if (Entity.State == PhysEnt.CsDead)
+                Respawn();
+            return false;
+        }
+
+        int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
+        LastMillis = now;
+        if (now - Combat.LastAction < Combat.GunWait) return false;
+
+        var weapon = WeaponCatalog.Get((Gun)Combat.GunSelect);
+        if (Combat.GunSelect != (int)Gun.Fist && !Combat.HasAmmo(Combat.GunSelect))
+        {
+            Combat.GunWait = 600; // weapon.cpp:788 msgsound(S_NOAMMO); d->gunwait = 600;
+            NextWeapon();
+            return false;
+        }
+
+        Combat.LastAction = now;
+        Combat.LastAttackGun = Combat.GunSelect;
+        Combat.GunWait = weapon.AttackDelay;
+        if (Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
+            Combat.Ammo[Combat.GunSelect]--;
+
+        UpdateBodyAnim();
+        UpdateHudgunAnim();
+        return true;
+    }
+
+    /// <summary>Apply damage to the player, updating health and lastpain timestamp.</summary>
+    public void TakeDamage(int damage, int? nowMillis = null)
+    {
+        int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
+        LastMillis = now;
+        Combat.LastPain = now;
+        Combat.Health -= damage;
+        if (Combat.Health <= 0)
+        {
+            Combat.Health = 0;
+            Entity.State = PhysEnt.CsDead;
+            Entity.Dead = true;
+        }
+        UpdateBodyAnim();
+    }
+
+    /// <summary>Respawn the player after death.</summary>
+    public void Respawn()
+    {
+        Combat.Respawn();
+        Entity.State = PhysEnt.CsAlive;
+        Entity.Dead = false;
+        _bodyAnim = "";
+        UpdateBodyAnim();
+        UpdateHudgunAnim();
     }
 
     /// <summary>
@@ -255,6 +465,7 @@ public partial class MapPlayer : Node3D
         while (_accum >= StepSeconds && guard++ < 100)
         {
             _phys.MovePlayer(Entity, Phys.MoveRes, Phys.PhysFrameTime);
+            LastMillis += Phys.PhysFrameTime;
             _accum -= StepSeconds;
         }
         SyncTransform();

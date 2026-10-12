@@ -40,6 +40,9 @@ public partial class HudgunModel : Node3D
     public bool ModelLoaded { get; private set; }
     public IReadOnlyList<ModelInstance> Parts => _parts;
 
+    /// <summary>Active hudgun submodel name (e.g. "rifle", "shotg").</summary>
+    public string CurrentGun => _gunName;
+
     private static readonly Basis BaseHudBasis = new(Vector3.Up, Mathf.Pi / 2f);
 
     /// <summary>
@@ -52,9 +55,14 @@ public partial class HudgunModel : Node3D
         new(vector.Y, vector.Z, -vector.X);
 
     private readonly List<ModelInstance> _parts = new();
+    private ModelCatalog? _models;
     private ModelInfo? _info;
     private ITextureSource? _textures;
     private Dictionary<string, Material>? _skinCache;
+    private int _modelIndex;
+    private string _gunName = "";
+    private string _currentAnim = "";
+    private int _lastActionSeen = -1;
 
     /// <summary>Configure before adding this node to the camera.</summary>
     public void Configure(
@@ -64,10 +72,25 @@ public partial class HudgunModel : Node3D
         string gun,
         Dictionary<string, Material>? skinCache = null)
     {
+        _models = models;
+        _textures = textures;
+        _modelIndex = modelIndex;
+        _gunName = gun;
         ModelPath = $"{Playermodels.Get(modelIndex).Hudguns}/{gun}";
         _info = models?.Get(ModelPath);
-        _textures = textures;
         _skinCache = skinCache ?? new Dictionary<string, Material>();
+        if (IsInsideTree()) BuildModel();
+    }
+
+    /// <summary>Switch to a different gun model at runtime (e.g. "shotg", "rifle").</summary>
+    public void SetGun(string gun)
+    {
+        if (gun == _gunName) return;
+        _gunName = gun;
+        ModelPath = $"{Playermodels.Get(_modelIndex).Hudguns}/{gun}";
+        _info = _models?.Get(ModelPath);
+        _currentAnim = "";
+        _lastActionSeen = -1;
         if (IsInsideTree()) BuildModel();
     }
 
@@ -158,6 +181,47 @@ public partial class HudgunModel : Node3D
         animation.LoopMode = Animation.LoopModeEnum.Linear;
         player.SpeedScale = info.AnimSpeeds.GetValueOrDefault("gun idle", 10f) / 24f;
         player.Play("gun idle");
+    }
+
+    /// <summary>
+    /// Play a named clip across all parts that author it (e.g. "gun idle", "gun shoot").
+    /// </summary>
+    public void Play(string name, bool loop = true, bool restart = false)
+    {
+        for (int i = 0; i < _parts.Count; i++)
+        {
+            var part = _parts[i];
+            var partInfo = (_info != null && i < _info.Parts.Count) ? _info.Parts[i] : null;
+            var player = FindAnimationPlayer(part);
+            if (player == null || !player.HasAnimation(name)) continue;
+            var animation = player.GetAnimation(name);
+            animation.LoopMode = loop ? Animation.LoopModeEnum.Linear : Animation.LoopModeEnum.None;
+            float defaultSpeed = name == "gun shoot" ? 60f : 10f;
+            float fps = partInfo?.AnimSpeeds.GetValueOrDefault(name, defaultSpeed) ?? defaultSpeed;
+            player.SpeedScale = fps / 24f;
+            if (restart || player.CurrentAnimation != name || !player.IsPlaying())
+            {
+                if (restart && player.CurrentAnimation == name) player.Seek(0, update: true);
+                player.Play(name);
+            }
+        }
+        _currentAnim = name;
+    }
+
+    /// <summary>
+    /// Update hudgun animations for the active player weapon state (render.cpp drawhudgun).
+    /// Plays "gun shoot" while an attack is active, otherwise "gun idle".
+    /// </summary>
+    public void UpdateAnim(int now, int lastAction, int lastAttackGun, int currentGun, int attackDelay)
+    {
+        bool shooting = lastAction > 0 && lastAttackGun == currentGun && now - lastAction < attackDelay;
+        string targetAnim = shooting ? "gun shoot" : "gun idle";
+        bool isNewAction = shooting && lastAction != _lastActionSeen;
+        if (targetAnim != _currentAnim || isNewAction)
+        {
+            Play(targetAnim, loop: !shooting, restart: isNewAction);
+            _lastActionSeen = lastAction;
+        }
     }
 
     private static AnimationPlayer? FindAnimationPlayer(Node node)

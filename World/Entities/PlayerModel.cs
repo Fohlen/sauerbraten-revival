@@ -233,13 +233,15 @@ public partial class PlayerModel : ModelInstance
     }
 
     /// <summary>Play a named clip (engine <c>anims.cfg</c> name, e.g. "forward", "attack 3").</summary>
-    public void Play(string name, bool loop = true)
+    public void Play(string name, bool loop = true, bool restart = false)
     {
         if (_player == null || !_player.HasAnimation(name)) return;
-        if (CurrentAnim == name && _player.IsPlaying()) return;
+        if (!restart && CurrentAnim == name && _player.IsPlaying()) return;
         var anim = _player.GetAnimation(name);
         anim.LoopMode = loop ? Animation.LoopModeEnum.Linear : Animation.LoopModeEnum.None;
         _player.SpeedScale = SpeedScaleFor(name);
+        if (restart && CurrentAnim == name)
+            _player.Seek(0, update: true);
         _player.Play(name);
         CurrentAnim = name;
     }
