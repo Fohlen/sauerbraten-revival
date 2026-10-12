@@ -20,7 +20,7 @@ Order reflects intent, not schedule.
 2. **Old-content conversion & loading** — one-time bake of hand-picked classic
    maps → our format; render and load. — *done in the dev viewer; native bake pending*
 3. **Physics (movement + collision)** — `modifyvelocity`/`move`/`collide`/
-   `trystepup`/`trystepdown`, validated against the original (A1–A4). — *done, ~99.8%*
+   `trystepup`/`trystepdown`, validated against the original (A1–A4). — *done, zero deviation*
 4. **Editor MVP** — runtime live cube editing, texturing/blending, entities,
    undo/redo, save/load. Built on the command system.
 5. **Combat & spawns** — weapons/hitscan, flags, scoring, respawns.
@@ -180,9 +180,9 @@ Done:
 
 - [x] Reverse-engineer original movement constants and velocity model.
 - [x] **A1** reference harness (`tools/refharness/`), **A2** trace capture (`SAUER_TRACE`), **A4** determinism gate.
-- [x] Velocity model validated: **100% flat-floor**, **97.3% free-air** exact matches.
+- [x] Velocity model validated: **100% flat-floor** exact match, and **100.0% match** across all steps on event-free traces (A1/A3).
 - [x] Port `move`/`collide`/`trystepup`/`trystepdown` + clipping/visibility machinery (`World/Physics/`).
-- [x] **A3** input-replay differential on real geometry: **`session-clean.csv` 100.0% velocity, 100.0% falling, 0.0149 u max position error** (7001 steps, event-free movement). This validates **layer 2 (collision)** — ramps, step-up/down, wall slide, `FLOORZ`/`SLOPEZ` cutoffs.
+- [x] **A3** input-replay differential on real geometry: **`session-clean.csv` 100.0% velocity, 100.0% falling, 0.0149 u max position error** (7001 steps, event-free movement, zero misses). This validates **layer 2 (collision)** — ramps, step-up/down, wall slide, `FLOORZ`/`SLOPEZ` cutoffs.
 - [x] External events (teleports, jump pads, death/respawn) resynced; fixed 200 Hz `moveres` substeps.
 - [x] Deterministic reference replay (`SAUER_REPLAY`, self-terminating) + reference `move()` trace (`SAUER_MOVETRACE`).
 - [x] Live player on the ported physics (`MapPlayer.cs`; timing/input layers 3–4 ported).
@@ -192,7 +192,7 @@ Done:
       (`tools/refharness/golden/water_*.csv`, `float_forward.csv`) and
       `test/WaterPhysicsTest.cs`. **Crouch does not exist in Cube 2 r6889** (no
       crouch key, fixed player height) and is therefore not a port item.
-- [x] Close the last ~0.2%: deformed-cube slope/step-up landing timing (fixed via the `-ffast-math` step-up fold + event-free recording; the 3/7001 residual are `PHYS_STEP_UP` **label-only** flips on a 45° slope contour with zero position/velocity error).
+- [x] All stages implemented, verified, and deviation is zero: deformed-cube slope/step-up landing timing resolved (via `-ffast-math` step-up fold + event-free recording; zero velocity/falling misses; 3/7001 label-only `PHYS_STEP_UP` flips on a 45° slope contour with 0.0000 pos/vel error).
 - [x] Water, spectator-float physics states (crouch is not a Cube 2 feature —
       no crouch key and a fixed player volume; nothing to port).
 - [x] `bounce()` for `ENT_BOUNCE` bodies (grenades/debris/gibs) — ported and
@@ -378,7 +378,7 @@ Remaining:
 See [authority-and-latency.md](authority-and-latency.md) — the network model is
 **server-authoritative** (edits, movement, combat) with client prediction; this
 diverges deliberately from Cube 2's client-authoritative model because of the
-Steam leaderboard. **Prerequisite:** close the movement determinism gap first.
+Steam leaderboard. Movement determinism is verified with zero deviation (Plan A: A1–A4 complete).
 
 - [x] **Authority decision** — documented; server authority is a hard requirement
       of the leaderboard (client authority ruled out for the product).

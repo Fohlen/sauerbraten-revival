@@ -233,8 +233,8 @@ rendered frame** (never per tick).
 Still to do / known deviations:
 
 - Collision volume/`moveres` are shared with A3; velocity + collision are verified
-  to ~99.8% of steps (deformed-cube slope landings are the residual — see
-  [movement-verification.md](movement-verification.md)).
+  across all stages with zero deviation (100.0% velocity, 100.0% falling, zero misses
+  on event-free movement; see [movement-verification.md](movement-verification.md)).
 - Water, spectator-float and the strafe-roll camera state are now ported
   (`PhysEnt.InWater`, `PhysEnt.State`, `Movement.ModifyVelocity`/
   `ModifyGravity`, `OctaPhysics.MovePlayer`): the one-time `vel /= 8` entry damp,

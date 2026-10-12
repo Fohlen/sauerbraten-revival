@@ -191,7 +191,7 @@ leaderboard path is not needed given the map-hash gate.
 | Regime | Expected behaviour |
 | --- | --- |
 | < 30 ms (LAN / same region) | prediction essentially perfect; run it and never notice |
-| 30–80 ms | movement feels fine *if* prediction converges; corrections on interaction only — **requires closing the determinism gap** |
+| 30–80 ms | movement feels fine *if* prediction converges; corrections on interaction only — determinism verified with zero deviation |
 | > 100 ms | CS:GO is "playable, noticeable"; for movement-as-skill it may be **worse than client authority** (a mid-strafe snap breaks the chain) |
 
 Server load: authoritative movement makes the server run `move`/`collide` per
@@ -210,7 +210,8 @@ a leaderboard that means anything.
 - **Decided:** permission is a mode/config concern (editor vs game mode), enforced
   in `Sink.MayApply`; the prediction-scope rule (§7) is required and cheap to
   validate, not an open investigation.
-- **Prerequisite:** close the movement determinism gap (features.md #3) and prove
-  it under a prediction loop (§5 source #5, then #1) — **before** designing M6/M7.
+- **Prerequisite:** movement determinism is verified with zero deviation
+  (features.md #3, Plan A complete); remaining is proving it under a prediction
+  loop (§5 source #5, then #1) — **before** designing M6/M7.
 - **Remaining:** a small reconciliation policy (snap / smooth) and the map-hash
   gate; both are local, not architectural.

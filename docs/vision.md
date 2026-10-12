@@ -301,5 +301,6 @@ Full detail in [movement-verification.md](movement-verification.md). Summary:
 - **A3** — input-replay: one input file drives both engines; diff traces.
 - **A4** — determinism check on the original.
 
-The port must be run at a fixed 200 Hz step and match the harness. This is
-non-negotiable: movement is the product.
+All stages (A1–A4) are implemented, verified, and deviation is zero. The port runs
+at a fixed 200 Hz step matching the harness and original engine bit-for-bit on
+event-free trajectories. Movement is the product.

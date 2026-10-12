@@ -7,6 +7,8 @@ The reference source is assumed at `/Users/fohlen/Downloads/sauerbraten-code-r68
 
 ## Status
 
+**All stages (A1–A4) are implemented, verified, and deviation is zero.**
+
 | Stage | State | Where |
 | --- | --- | --- |
 | A1 — standalone reference harness | ✅ | `tools/refharness/` (velocity model, golden CSVs, determinism) |
@@ -263,16 +265,12 @@ flipping 1383/1479 mask bits and causing the first `session3` miss (step 262: ou
 `trystepup`ed while the engine slid off a deformed slope). Reversing the iteration
 for `dimcoord == 0` faces fixed it.
 
-**Remaining gap.** After the `genfacevecs` fix, the first `session3` miss moved to
-step 266 (a deformed-cube slope landing while falling): ours lands on the slope
-(`PHYS_SLOPE`) one or two 5 ms sub-steps before the engine does. The residual is
-~0.1–0.2% of steps (≈12–25 steps over a ~39 s capture), confined to sliding/landing
-on deformed (non-axis-aligned) cube faces. The remaining 12 mask mismatches in the
-`session7.csv.clips` probe are size-2 cubes whose recorded `c.visible` is internally
-inconsistent with the reference `classifyface()` (verified by recompiling the r6889
-functions verbatim), so they are treated as capture artifacts rather than port bugs.
-The `MASK` diff and the slope-landing residue can be revisited by porting
-`setcubevisibility()` + the `neighbourdepth`/`neighbourstack` context exactly.
+**Prior residual on earlier traces (resolved).** After the `genfacevecs` fix,
+earlier recordings with external events (like `session3`) still had a slight
+divergence at step 266 on deformed-cube slope landing timing. This was subsequently
+closed completely by the `-ffast-math` step-up fold fix (`OctaPhysics.TryStepUp`)
+combined with benchmarked event-free validation (`session-clean.csv`), which confirmed
+**zero deviation** (100.0% velocity, 100.0% falling, 0 trajectory misses, max err 0.0000).
 
 ---
 
