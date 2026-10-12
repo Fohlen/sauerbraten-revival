@@ -42,6 +42,9 @@ public partial class MapWorld : Node3D
     /// <summary>The converted-model catalogue (glTF paths + Cube2 parameters), if present.</summary>
     public ModelCatalog? Models { get; private set; }
 
+    /// <summary>Optional settings overriding default radiance hints volume quality.</summary>
+    public Lighting.RadianceSettings? RadianceSettings { get; set; }
+
     /// <summary>The radiance hints volume, when baked.</summary>
     public Lighting.RadianceVolume? Radiance { get; private set; }
 
@@ -98,7 +101,7 @@ public partial class MapWorld : Node3D
         Lighting.RadianceVolume? radiance = null;
         if (catalogue != null)
         {
-            var volume = Lighting.RadianceVolume.CreateForOcta(octa);
+            var volume = Lighting.RadianceVolume.CreateForOcta(octa, RadianceSettings);
             var directLights = Lighting.DirectLightSource.CollectFromMap(map);
             volume.Bake(octa, catalogue.Config, directLights, catalogue, textures);
             radiance = volume;

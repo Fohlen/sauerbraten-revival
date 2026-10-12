@@ -684,4 +684,144 @@ public class RadianceVolumeTest : GoTestBase
         TestAssert.True(rebakedAmb < initialAmb,
             $"Rebaked probe under ceiling should have lower irradiance than open sky: rebaked={rebakedAmb}, initial={initialAmb}");
     }
+
+    // =========================================================================
+    // Stage 5: Quality Knobs & Static Ambient Switch
+    // =========================================================================
+
+    [Test]
+    public void RadianceSettings_PresetsAndProperties_MatchExpectedValues()
+    {
+        var def = RadianceSettings.Default;
+        TestAssert.Equal(RadianceQualityMode.RadianceHints, def.Mode, "Default mode is RadianceHints");
+        TestAssert.Equal(16, def.SkyRays, "Default SkyRays is 16");
+        TestAssert.Equal(256, def.BudgetPerFrame, "Default BudgetPerFrame is 256");
+        TestAssert.True(def.MaxRayDistance == null, "Default MaxRayDistance is null (auto)");
+        TestAssert.Equal(RadianceGrid.DefaultResolution, def.Resolution, "Default Resolution is 32");
+
+        var staticAmb = RadianceSettings.StaticAmbient;
+        TestAssert.Equal(RadianceQualityMode.StaticAmbient, staticAmb.Mode, "StaticAmbient mode is StaticAmbient");
+
+        var low = RadianceSettings.Low;
+        TestAssert.Equal(4, low.SkyRays, "Low SkyRays is 4");
+        TestAssert.Equal(128, low.BudgetPerFrame, "Low BudgetPerFrame is 128");
+        TestAssert.Equal(256f, low.MaxRayDistance ?? 0f, "Low MaxRayDistance is 256");
+
+        var ultra = RadianceSettings.Ultra;
+        TestAssert.Equal(32, ultra.SkyRays, "Ultra SkyRays is 32");
+        TestAssert.Equal(512, ultra.BudgetPerFrame, "Ultra BudgetPerFrame is 512");
+        TestAssert.Equal(48, ultra.Resolution, "Ultra Resolution is 48");
+
+        var cloned = low.Clone();
+        TestAssert.Equal(low.Mode, cloned.Mode, "Cloned Mode matches");
+        TestAssert.Equal(low.SkyRays, cloned.SkyRays, "Cloned SkyRays matches");
+        TestAssert.Equal(low.BudgetPerFrame, cloned.BudgetPerFrame, "Cloned BudgetPerFrame matches");
+        TestAssert.Equal(low.MaxRayDistance, cloned.MaxRayDistance, "Cloned MaxRayDistance matches");
+        TestAssert.Equal(low.Resolution, cloned.Resolution, "Cloned Resolution matches");
+    }
+
+    [Test]
+    public void RadianceVolume_SettingsForwarding_UpdatesUnderlyingKnobs()
+    {
+        var grid = new RadianceGrid(Vector3.Zero, 64f, 4);
+        var volume = new RadianceVolume(grid, new RadianceSettings { SkyRays = 8, BudgetPerFrame = 64 });
+
+        TestAssert.Equal(8, volume.SkyRays, "Initial SkyRays forwarded from Settings");
+        TestAssert.Equal(64, volume.BudgetPerFrame, "Initial BudgetPerFrame forwarded from Settings");
+
+        volume.SkyRays = 32;
+        TestAssert.Equal(32, volume.Settings.SkyRays, "SkyRays setter updates Settings");
+
+        volume.BudgetPerFrame = 512;
+        TestAssert.Equal(512, volume.Settings.BudgetPerFrame, "BudgetPerFrame setter updates Settings");
+
+        volume.MaxRayDistance = 128f;
+        TestAssert.Equal(128f, volume.Settings.MaxRayDistance, "MaxRayDistance setter updates Settings");
+
+        volume.Mode = RadianceQualityMode.StaticAmbient;
+        TestAssert.Equal(RadianceQualityMode.StaticAmbient, volume.Settings.Mode, "Mode setter updates Settings");
+    }
+
+    [Test]
+    public void RadianceVolume_StaticAmbientMode_FillsAmbientImmediatelyWithoutRays()
+    {
+        var octa = new Octa(10);
+        octa.EmptyMap(10);
+
+        var config = new MapConfig
+        {
+            Ambient = 0x808080, // 0.502 grayscale
+            Skylight = 0xFFFFFF,
+            Sunlight = 0xFFFFFF,
+        };
+
+        var grid = new RadianceGrid(Vector3.Zero, 64f, 4);
+        var volume = new RadianceVolume(grid, RadianceSettings.StaticAmbient);
+
+        volume.Bake(octa, config);
+
+        // Every probe in the grid should have zero directional and exact ambient irradiance
+        Color ambColor = RadianceVolume.DecodeColor(config.Ambient);
+        float expectedAmb = (ambColor.R + ambColor.G + ambColor.B) / 3.0f;
+
+        for (int z = 0; z < grid.Resolution; z++)
+        {
+            for (int y = 0; y < grid.Resolution; y++)
+            {
+                for (int x = 0; x < grid.Resolution; x++)
+                {
+                    ref readonly var probe = ref grid[x, y, z];
+                    TestAssert.Equal(Vector3.Zero, probe.Dir, "StaticAmbient mode has zero directional vector");
+                    TestAssert.True(Mathf.Abs(probe.Amb - expectedAmb) < 1e-4f,
+                        $"StaticAmbient mode probe has exact ambient {expectedAmb}, got {probe.Amb}");
+                }
+            }
+        }
+
+        // Marking dirty and rebaking should also keep ambient in StaticAmbient mode
+        volume.MarkCellDirty(new Vector3I(0, 0, 0));
+        TestAssert.Equal(1, volume.PendingCount, "1 probe marked dirty");
+        volume.Process(0.016);
+        TestAssert.Equal(0, volume.PendingCount, "Pending probe rebaked in static mode");
+        TestAssert.Equal(Vector3.Zero, grid[0, 0, 0].Dir, "Rebaked probe has zero directional vector");
+        TestAssert.True(Mathf.Abs(grid[0, 0, 0].Amb - expectedAmb) < 1e-4f, "Rebaked probe retains ambient");
+    }
+
+    [Test]
+    public void MaterialBuilder_BuildRadianceMaterial_BindsAmbientColorAndConfiguresUseRadiance()
+    {
+        var octa = new Octa(10);
+        octa.EmptyMap(10);
+
+        var grid = new RadianceGrid(Vector3.Zero, 64f, 4);
+        var volHints = new RadianceVolume(grid, RadianceSettings.High);
+        var volStatic = new RadianceVolume(grid, RadianceSettings.StaticAmbient);
+
+        var catalogue = new MetadataCatalogue();
+        catalogue.Config.Ambient = 0x336699;
+        catalogue.Config.SkyboxColour = 0xFFFFFF;
+        catalogue.VSlots[0] = new CatalogueVSlot { Index = 0, Slot = 0 };
+
+        volHints.Bake(octa, catalogue.Config);
+        volStatic.Bake(octa, catalogue.Config);
+
+        var textures = new DumpTextureSource(TestData.ReferenceRoot);
+
+        // 1. RadianceHints mode -> use_radiance = true
+        var setHints = MaterialBuilder.Build(catalogue, textures, volHints);
+        var matHints = setHints.MaterialFor(0) as ShaderMaterial;
+        TestAssert.True(matHints != null, "ShaderMaterial generated for RadianceHints");
+        TestAssert.Equal(true, (bool)matHints!.GetShaderParameter("use_radiance"), "use_radiance is true for RadianceHints");
+        var ambHints = (Vector3)matHints.GetShaderParameter("ambient_color");
+        Color expectedAmb = RadianceVolume.DecodeColor(catalogue.Config.Ambient);
+        TestAssert.True(ambHints.IsEqualApprox(new Vector3(expectedAmb.R, expectedAmb.G, expectedAmb.B)), "ambient_color bound in shader");
+
+        // 2. StaticAmbient mode -> use_radiance = false (bypasses 3D texture lookups)
+        var setStatic = MaterialBuilder.Build(catalogue, textures, volStatic);
+        var matStatic = setStatic.MaterialFor(0) as ShaderMaterial;
+        TestAssert.True(matStatic != null, "ShaderMaterial generated for StaticAmbient");
+        TestAssert.Equal(false, (bool)matStatic!.GetShaderParameter("use_radiance"), "use_radiance is false for StaticAmbient");
+        var ambStatic = (Vector3)matStatic.GetShaderParameter("ambient_color");
+        TestAssert.True(ambStatic.IsEqualApprox(new Vector3(expectedAmb.R, expectedAmb.G, expectedAmb.B)), "ambient_color bound in shader");
+    }
 }

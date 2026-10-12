@@ -17,6 +17,7 @@ uniform vec3 grid_origin;
 uniform float grid_extent = 1.0;
 uniform vec3 sky_tint : source_color = vec3(1.0, 1.0, 1.0);
 uniform bool use_radiance = false;
+uniform vec3 ambient_color : source_color = vec3(1.0, 1.0, 1.0);
 
 // Optional normal map and glow (retained from original materials)
 uniform sampler2D normal_tex : hint_normal, filter_nearest_mipmap, repeat_enable;
@@ -55,7 +56,7 @@ void fragment() {
 
         ALBEDO = out_col;
     } else {
-        vec3 out_col = base_col;
+        vec3 out_col = base_col * ambient_color;
         if (use_glow) {
             vec3 glow = texture(glow_tex, UV).rgb * glow_tint;
             out_col += glow;

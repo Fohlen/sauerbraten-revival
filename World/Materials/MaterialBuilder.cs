@@ -31,6 +31,7 @@ public static class MaterialBuilder
     {
         var set = new MaterialSet();
         Color skyTint = radiance != null ? Lighting.RadianceVolume.DecodeColor(catalogue.Config.SkyboxColour) : Colors.White;
+        Color ambientColor = Lighting.RadianceVolume.DecodeColor(catalogue.Config.Ambient);
 
         foreach (var vs in catalogue.VSlots.Values)
         {
@@ -45,6 +46,7 @@ public static class MaterialBuilder
             Material material;
             if (radiance != null)
             {
+                bool useRadiance = radiance.Settings.Mode == Lighting.RadianceQualityMode.RadianceHints;
                 material = BuildRadianceMaterial(
                     albedo,
                     tint,
@@ -54,7 +56,9 @@ public static class MaterialBuilder
                     radiance.Texture,
                     radiance.Grid.Origin,
                     radiance.Grid.Extent,
-                    skyTint);
+                    skyTint,
+                    ambientColor,
+                    useRadiance);
             }
             else
             {
@@ -131,7 +135,9 @@ public static class MaterialBuilder
         Texture3D? radianceTex = null,
         Vector3? gridOrigin = null,
         float gridExtent = 1f,
-        Color? skyTint = null)
+        Color? skyTint = null,
+        Color? ambientColor = null,
+        bool useRadiance = true)
     {
         var shader = ResourceLoader.Load<Shader>(RadianceShaderPath)
             ?? throw new System.InvalidOperationException($"missing shader {RadianceShaderPath}");
@@ -153,6 +159,9 @@ public static class MaterialBuilder
             material.SetShaderParameter("use_glow", true);
         }
 
+        Color amb = ambientColor ?? Colors.White;
+        material.SetShaderParameter("ambient_color", new Vector3(amb.R, amb.G, amb.B));
+
         if (radianceTex != null && gridOrigin.HasValue)
         {
             material.SetShaderParameter("radiance_tex", radianceTex);
@@ -160,7 +169,11 @@ public static class MaterialBuilder
             material.SetShaderParameter("grid_extent", gridExtent);
             Color st = skyTint ?? Colors.White;
             material.SetShaderParameter("sky_tint", new Vector3(st.R, st.G, st.B));
-            material.SetShaderParameter("use_radiance", true);
+            material.SetShaderParameter("use_radiance", useRadiance);
+        }
+        else
+        {
+            material.SetShaderParameter("use_radiance", false);
         }
 
         return material;

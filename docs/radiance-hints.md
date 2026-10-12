@@ -373,6 +373,7 @@ Project (planned):
 | --- | --- |
 | `World/Lighting/RadianceVolume.cs` | grid, L1 SH accumulator, bake passes, dirty queue |
 | `World/Lighting/RadianceGrid.cs` | storage, `ImageTexture3D` upload, world↔grid mapping |
+| `World/Lighting/RadianceSettings.cs` | quality knobs (ray count, budget, distance, static ambient switch) |
 | `World/Materials/radiance.gdshader` | world shader: sample volume, `c0 + dot(c1, N)` |
 | `World/Materials/MaterialBuilder.cs` | build vslot `ShaderMaterial`s against the volume |
 | `World/Meshing/WorldChunkRenderer.cs` | call `RadianceVolume.MarkDirty` on rebuild |

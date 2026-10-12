@@ -19,24 +19,62 @@ public class RadianceVolume
     /// <summary>The underlying world-space probe grid.</summary>
     public RadianceGrid Grid { get; }
 
-    /// <summary>Number of hemisphere rays cast per probe for the sky pass (default 16).</summary>
-    public int SkyRays { get; set; } = 16;
+    /// <summary>Quality and performance settings for this radiance volume.</summary>
+    public RadianceSettings Settings { get; set; }
+
+    /// <summary>Global quality mode (forwarded to <see cref="Settings"/>).</summary>
+    public RadianceQualityMode Mode
+    {
+        get => Settings.Mode;
+        set => Settings.Mode = value;
+    }
+
+    /// <summary>Number of hemisphere rays cast per probe for the sky pass (forwarded to <see cref="Settings"/>).</summary>
+    public int SkyRays
+    {
+        get => Settings.SkyRays;
+        set => Settings.SkyRays = value;
+    }
+
+    /// <summary>Maximum probes rebaked per frame during incremental updates (forwarded to <see cref="Settings"/>).</summary>
+    public int BudgetPerFrame
+    {
+        get => Settings.BudgetPerFrame;
+        set => Settings.BudgetPerFrame = value;
+    }
+
+    /// <summary>Maximum raycast travel distance (forwarded to <see cref="Settings"/>).</summary>
+    public float? MaxRayDistance
+    {
+        get => Settings.MaxRayDistance;
+        set => Settings.MaxRayDistance = value;
+    }
 
     /// <summary>The generated 3D texture resource.</summary>
     public ImageTexture3D? Texture { get; private set; }
 
-    public RadianceVolume(RadianceGrid grid)
+    public RadianceVolume(RadianceGrid grid, RadianceSettings? settings = null)
     {
         Grid = grid ?? throw new ArgumentNullException(nameof(grid));
+        Settings = settings ?? new RadianceSettings();
     }
 
     /// <summary>
     /// Factory creating a volume sized from non-empty geometry in <paramref name="octa"/>.
     /// </summary>
-    public static RadianceVolume CreateForOcta(Octa octa, int resolution = RadianceGrid.DefaultResolution)
+    public static RadianceVolume CreateForOcta(Octa octa, RadianceSettings? settings = null)
     {
-        var grid = RadianceGrid.FromOcta(octa, resolution);
-        return new RadianceVolume(grid);
+        var s = settings ?? new RadianceSettings();
+        var grid = RadianceGrid.FromOcta(octa, s.Resolution);
+        return new RadianceVolume(grid, s);
+    }
+
+    /// <summary>
+    /// Factory creating a volume sized from non-empty geometry in <paramref name="octa"/> with custom resolution.
+    /// </summary>
+    public static RadianceVolume CreateForOcta(Octa octa, int resolution)
+    {
+        return CreateForOcta(octa, new RadianceSettings { Resolution = resolution });
     }
 
     /// <summary>
@@ -84,9 +122,6 @@ public class RadianceVolume
     }
 
 
-    /// <summary>Maximum probes rebaked per frame during incremental updates.</summary>
-    public int BudgetPerFrame { get; set; } = 256;
-
     /// <summary>Number of dirty probes currently queued for rebaking.</summary>
     public int PendingCount => _dirtyQueue.Count;
 
@@ -98,6 +133,7 @@ public class RadianceVolume
     {
         public Octa Octa { get; }
         public MapConfig Config { get; }
+        public RadianceSettings Settings { get; }
         public LightSpatialIndex? SpatialIndex { get; }
         public MetadataCatalogue? Catalogue { get; }
         public ITextureSource? TextureSource { get; }
@@ -119,11 +155,12 @@ public class RadianceVolume
             IReadOnlyList<DirectLightSource>? directLights,
             MetadataCatalogue? catalogue,
             ITextureSource? textureSource,
-            int skyRays,
+            RadianceSettings settings,
             RadianceGrid grid)
         {
             Octa = octa;
             Config = config;
+            Settings = settings;
             Catalogue = catalogue;
             TextureSource = textureSource;
             AlbedoCache = new Dictionary<int, float>();
@@ -147,7 +184,7 @@ public class RadianceVolume
             SunDirWorld = RadianceGrid.SauerToWorld(SunDirSauer);
             SunRadiance = ((sunlightColor.R + sunlightColor.G + sunlightColor.B) / 3.0f) * sunlightScale;
 
-            RayCount = Mathf.Max(1, skyRays);
+            RayCount = Mathf.Max(1, settings.SkyRays);
             SkyDirsSauer = new Vector3[RayCount];
             SkyDirsWorld = new Vector3[RayCount];
             for (int i = 0; i < RayCount; i++)
@@ -162,7 +199,7 @@ public class RadianceVolume
                 SpatialIndex = new LightSpatialIndex(boundsSauer, directLights);
             }
 
-            MaxRayDist = grid.Extent * 1.5f;
+            MaxRayDist = settings.MaxRayDistance is > 0f ? settings.MaxRayDistance.Value : grid.Extent * 1.5f;
         }
     }
 
@@ -183,9 +220,21 @@ public class RadianceVolume
         MetadataCatalogue? catalogue = null,
         ITextureSource? textureSource = null)
     {
-        _context = new BakeContext(octa, config, directLights, catalogue, textureSource, SkyRays, Grid);
+        _context = new BakeContext(octa, config, directLights, catalogue, textureSource, Settings, Grid);
         _dirtyQueue.Clear();
         _dirtySet.Clear();
+
+        if (Settings.Mode == RadianceQualityMode.StaticAmbient)
+        {
+            Grid.Fill(new RadianceProbe(Vector3.Zero, _context.AmbientRadiance));
+            if (Texture == null)
+                Texture = Grid.CreateTexture();
+            else
+                Grid.UpdateTexture(Texture);
+
+            _textureNeedsUpdate = false;
+            return;
+        }
 
         int res = Grid.Resolution;
         for (int z = 0; z < res; z++)
@@ -215,6 +264,12 @@ public class RadianceVolume
     private void BakeProbe(ref RadianceProbe probe, int x, int y, int z, BakeContext ctx)
     {
         probe = RadianceProbe.Zero;
+
+        if (ctx.Settings.Mode == RadianceQualityMode.StaticAmbient)
+        {
+            probe.AddAmbient(ctx.AmbientRadiance);
+            return;
+        }
 
         Vector3 centerSauer = Grid.CellCenterSauer(x, y, z);
         var cellCoords = new Vector3I(Mathf.FloorToInt(centerSauer.X), Mathf.FloorToInt(centerSauer.Y), Mathf.FloorToInt(centerSauer.Z));
