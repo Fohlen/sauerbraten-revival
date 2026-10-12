@@ -146,6 +146,10 @@ Done (lives in the dev viewer; not yet a standalone offline tool):
       stream, not a revived SP-only rigid-body subsystem. The mode entities stay
       as **representation** (models + gizmos), which is correct. Revisited only if
       we ship the SP campaign, and then via commands.
+- [x] ~~**Lightmap import** (T1)~~ — **dropped**; superseded by
+      [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md). The T1 parsing/link artifacts
+      (`OgzLightMap`, `SurfaceKey`/UV2, `WorldSnapshot` `CubeExt` v2) still exist
+      and are slated for removal (adr/0002-radiance-hints.md § T1 Removal Inventory).
 
 Remaining:
 
@@ -162,10 +166,6 @@ Remaining:
       exporter is **extended and validated** (`shaderType`/`smooth`/`texmask`/grass,
       `shaders[]`, `config`, vslot `linked`/`changed`); re-exporting the whole
       catalogue still pending.
-- [~] ~~**Lightmap import** (T1)~~ — **dropped**; superseded by
-      [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md). The T1 parsing/link artifacts
-      (`OgzLightMap`, `SurfaceKey`/UV2, `WorldSnapshot` `CubeExt` v2) still exist
-      and are slated for removal (adr/0002-radiance-hints.md § T1 Removal Inventory).
 - [ ] Parse the **blendmap** and **PVS** sections (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
@@ -296,7 +296,7 @@ Remaining:
 
 ## 5. Combat & spawns
 
-- [~] Player model + view — third-person camera first (inspect models).
+- [x] Player model + view — third-person camera first (inspect models).
       - [x] Third-person camera toggle (`MapPlayer`, `third_person` bind, engine
             `thirdpersondistance`/`thirdpersonup`; `test/MapPlayerTest.cs`).
       - [x] **MD5 import** (`tools/model-import/import_models.py`): skeletal player
@@ -348,6 +348,9 @@ Remaining:
             `PlayerModel.ViewWeaponRotationDegrees` is exported to tune the attach.
             Real weapon selection (`MapPlayer.SelectWeapon`) swaps the view weapon and
             the `hold N`/`attack N` anims drive the pose.
+
+Remaining:
+
 - [~] Hitscan weapons (insta rifle; effic loadout).
       - [x] **Weapon definitions** (`Gun`/`Guns`, `WeaponInfo`, `GameSound`,
             `WeaponCatalog` + `resources/weapons/*.tres`), locked to the engine
