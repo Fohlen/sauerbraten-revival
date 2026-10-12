@@ -248,9 +248,7 @@ The engine bakes direct irradiance per lumel into embedded 512×512 atlases; tha
 model is **not** used. It is bound to surface topology and is incompatible with
 real-time editing, so the T1 import path is dropped. The world is lit instead by
 a world-space L1 SH probe volume baked from the map's geometry and entities —
-see [radiance-hints.md](radiance-hints.md) (design) and
-[lighting.md](lighting.md) §1 (the original model, retained as the T1 removal
-inventory). `LightmapGI` is ruled out.
+see [radiance-hints.md](radiance-hints.md). `LightmapGI` is ruled out.
 
 The map's resolved lighting **config** (`ambient`, `skylight`, `sunlight`,
 `sunlightyaw`/`sunlightpitch`/`sunlightscale`, `skyboxcolour`) is still exported

@@ -86,8 +86,7 @@ Remaining:
 - [ ] RenderingServer mesh streaming (bypass the scene tree; [rendering.md](rendering.md#renderingserver-usage-planned-optimisation)).
 - [ ] Exact `visibletris` culling, face merges, T-joints, grass.
 - [ ] **Post-MVP fidelity** (see [Post-MVP / deferred fidelity](#post-mvp--deferred-fidelity)):
-      lighting ([radiance-hints.md](radiance-hints.md)), layers/envmap
-      ([lighting.md](lighting.md)), specular maps,
+      lighting ([radiance-hints.md](radiance-hints.md)), layers/envmap, specular maps,
       alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), blend shader.
 
 ## 2. OGZ import pipeline
@@ -110,7 +109,7 @@ Done (lives in the dev viewer; not yet a standalone offline tool):
             (4..9, capped by `envmapsize` 7), `attr3` blur (1..2). Asserted by
             `test/EntityEnvMapTest.cs` on **earthstation** (38 probes). The
             sampling material side (`SHADER_ENVMAP`, `closestenvmap`) is still
-            open — see [lighting.md](lighting.md).
+            open (deferred post-MVP).
       - [x] Mode entities (CTF/capture) with their **models and gizmos**:
             `ModeEntityBuilder` handles `FLAG`, `BASE`, `BOX`, `BARREL`,
             `PLATFORM`, `ELEVATOR`, `RESPAWNPOINT`, `CARROT` (the `fixentity`
@@ -162,13 +161,12 @@ Remaining:
       at runtime — [radiance-hints.md](radiance-hints.md)). The
       exporter is **extended and validated** (`shaderType`/`smooth`/`texmask`/grass,
       `shaders[]`, `config`, vslot `linked`/`changed`); re-exporting the whole
-      catalogue still pending. Design:
-      [lighting.md § Export everything in one pass](lighting.md#4-export-everything-in-one-pass).
+      catalogue still pending.
 - [~] ~~**Lightmap import** (T1)~~ — **dropped**; superseded by
       [radiance-hints.md](radiance-hints.md). The T1 parsing/link artifacts
       (`OgzLightMap`, `SurfaceKey`/UV2, `WorldSnapshot` `CubeExt` v2) still exist
       and are slated for removal (radiance-hints.md §9).
-- [ ] Parse the **blendmap** and **PVS** sections (post-MVP; [lighting.md](lighting.md)).
+- [ ] Parse the **blendmap** and **PVS** sections (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
 
 **New maps use our compact binary format only** — no OGZ at runtime.
@@ -290,8 +288,7 @@ Remaining:
 - [ ] **M4e GUI**: texture/material pickers, entity placement, keybinds via
       `InputMap` ([editor-and-commands.md §10](editor-and-commands.md#10-implementation-order-milestones)).
 - [ ] Texturing, blending (layers no longer ride the lightmap alpha — that
-      model is gone with T1; the blendmap must be sampled directly. See
-      [lighting.md § Layers](lighting.md#14-layers--the-alpha-channel-is-the-blend-mask)),
+      model is gone with T1; the blendmap must be sampled directly),
       entity placement.
 - [ ] **Prefabs, recipes, cross-map paste** (M8) — `ReplaceBlock` content
       resources, rotation, recipe API.

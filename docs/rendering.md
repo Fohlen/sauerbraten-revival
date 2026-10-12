@@ -269,5 +269,4 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   culling, face merges, T-joints and grass. World lighting is the L1 SH probe
   volume ([radiance-hints.md](radiance-hints.md)); the baked-lightmap path is
   dropped. Tracked divergences live in [known-bugs.md](known-bugs.md). See
-  [radiance-hints.md](radiance-hints.md) for lighting and
-  [lighting.md](lighting.md) for the original layer/envmap model.
+  [radiance-hints.md](radiance-hints.md) for lighting.
