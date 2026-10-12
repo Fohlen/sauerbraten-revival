@@ -17,10 +17,11 @@ In order to work with this new engine you will need to:
 1. [Download Godot .NET](https://godotengine.org)
 2. Clone this repository
 3. [Download](https://drive.google.com/file/d/17UIVVnpPHoTrtI9q5V6h07SRTl0lAnGx/view?usp=share_link) and unpack a copy of the already converted assets (e.g models) into your new repository
-4. [Importing this new project](https://docs.godotengine.org/en/stable/engine_details/development/configuring_an_ide/visual_studio.html#importing-the-project)
+4. [Importing the project](https://docs.godotengine.org/en/stable/engine_details/development/configuring_an_ide/visual_studio.html#importing-the-project)
 5. Project → Project Settings → Filter Settings → Sauerbraten
 6. Set a reference path to a copy of Sauerbraten (if you wish to load OGZ maps)
 
+Once the project is set up you can run the `player_scene.tscn` to play the game or the `editor_scene.tscn` to start the in-game editor using the [_"Run Current Scene"_](https://docs.godotengine.org/en/stable/getting_started/step_by_step/nodes_and_scenes.html#running-the-scene) button.
 
 See **[AGENTS.md](AGENTS.md)** for detailed instructions you need to work on the project:
 build/run instructions, tests, repository layout, the documentation index, the
