@@ -9,7 +9,7 @@ namespace SauerbratenRevival.World.Save;
 
 /// <summary>
 /// Loads and saves a map in the native format (docs/editor-and-commands.md §7,
-/// architecture.md §4). A map is a **directory of external resources**:
+/// vision.md §9). A map is a **directory of external resources**:
 ///
 /// <code>
 /// map/
@@ -158,7 +158,7 @@ public static class MapStore
 
     /// <summary>
     /// Content hash of a map directory — the unit of Workshop distribution and
-    /// multiplayer parity (architecture.md §7). It hashes the **semantic content**
+    /// multiplayer parity (vision.md §12). It hashes the **semantic content**
     /// (the decoded snapshot and command history), not the raw <c>.res</c> framing:
     /// Godot embeds resource paths/uids in the framing, so raw bytes differ across
     /// save locations even for identical worlds (docs §5.1 parity caveat). This is

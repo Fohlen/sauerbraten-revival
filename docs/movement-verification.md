@@ -328,7 +328,7 @@ the harness gives the truth.
 
 Plan A validates **layer 1 (velocity model)** and **layer 2 (collision)** exactly
 via the A3 real-geometry differential. Layers 3–5 (timing, input, camera /
-feedback) need their own checks — see [architecture.md](architecture.md).
+feedback) need their own checks — see [vision.md](vision.md).
 
 **Layer 3–4 captured (A2 input trace).** `SAUER_INPUTTRACE`
 (`tools/refharness/patches/a2b-input-trace.patch`, see the

@@ -4,8 +4,8 @@ Design plan for the **editor MVP** (features.md #5) and the **command system**
 that powers it, undo/redo, runtime geometry, networking, demos, and prefabs.
 
 This document is the reasoning; the implementation status lives in
-[features.md](features.md). It complements [architecture.md](architecture.md)
-§2 (command system) and §4 (level format) and [rendering.md](rendering.md)
+[features.md](features.md). It complements [vision.md](vision.md)
+§7 (command system) and §9 (level format) and [rendering.md](rendering.md)
 (dirty-chunk rebuilds).
 
 > **Thesis.** In Sauerbraten every edit was a local mutation of a `cube[]`, and
@@ -40,7 +40,7 @@ This document is the reasoning; the implementation status lives in
 
 - No `octaedit.cpp` plumbing, no `undoblock` binary format, no CubeScript, no
   `.obr`.
-- Not byte-compatible with `.ogz` (see [architecture.md](architecture.md) §4).
+- Not byte-compatible with `.ogz` (see [vision.md](vision.md) §9).
 - Not a fully client-side-authoritative editor; the server owns the world.
 
 ---
@@ -609,7 +609,7 @@ mechanically identical to a cube edit.
 
 ## 7. Map format: versioned command history
 
-The native format (architecture.md §4) becomes:
+The native format (vision.md §9) becomes:
 
 ```
 map/
@@ -689,14 +689,14 @@ Godot has three storage tiers, and the editor uses two of them:
 - **Creating/editing a map** writes to `user://maps/<id>/` — `res://` is
   read-only at runtime, so live edits cannot round-trip there.
 - **Shipping/subbing a map** is a `res://` (packed) resource, or a mounted
-  `.pck`/`.zip` via `ProjectSettings.load_resource_pack` ([architecture.md §7](architecture.md#7-modding--workshop)).
+  `.pck`/`.zip` via `ProjectSettings.load_resource_pack` ([vision.md §12](vision.md#12-modding--workshop)).
 - **Writing** uses `ResourceSaver.Save(res, "user://.../world.res",
   ResourceSaver.SaverFlags.Compress)`; **reading** uses `ResourceLoader.Load`.
 - For a shipping game set `application/config/use_custom_user_dir = true` so
   saves live under the game's own name rather than Godot's shared data dir.
 
 **Hashing & distributing:** the hash is computed over the map **archive**, not
-over individual files. Workshop (and our parity checks in architecture.md §7)
+over individual files. Workshop (and our parity checks in vision.md §12)
 expects `.zip`/`.tar`, so the content hash is the archive hash — one value that
 covers `Level.tscn` + `world.res` + `history.res` + `materials/` together. This
 is why the directory layout above is safe: the unit of distribution, hashing, and
@@ -828,7 +828,7 @@ hash differently (§9).
   `6` allfaces, `N` selcorners. Mouse gestures (`MOUSE1` box-select, `MOUSE2`
   extend, `MOUSE3` selcorners, `MOUSE6/7` cut, wheel/trackpad scroll) stay raw
   events — they need press+release and analog scroll, which `InputMap` actions
-  cannot carry (architecture.md §6.1).
+  cannot carry (vision.md §11.1).
   **macOS note:** trackpad/Magic-Mouse scrolling arrives as `InputEventPanGesture`,
   not `WheelUp/Down` — both are handled.
 
@@ -844,7 +844,7 @@ hash differently (§9).
 
   **Not wired yet:** the texture/material picker UI (M4e) — the texture/material
   wheel ops walk the current index and apply it until the picker lands; persistent
-  user remaps via `user://input.cfg` (architecture.md §6.1, with the settings UI);
+  user remaps via `user://input.cfg` (vision.md §11.1, with the settings UI);
   remappable mouse gestures.
 
   **Done (engine work):** `OctaRay.RayCube` is now a port of
@@ -879,7 +879,7 @@ rotation, recipe API, Workshop packaging hook. *The payoff layer.*
 
 **M9 — Runtime geometry for game modes.** Modes submit `WorldCommand`s with
 `CommandSource.GameMode` through the same sink (crumbling walls, scripted
-platforms; architecture.md §1). They are never undoable and ride the edit
+platforms; vision.md §6.1). They are never undoable and ride the edit
 channels. *Shares everything above; no new mechanism.*
 
 Milestones M0–M3 are the real work and are all testable without a window. M4 is

@@ -6,7 +6,7 @@ release and its leaderboard, not a purely technical one — so it is written dow
 explicitly rather than left implied by "server-authoritative world" in the
 architecture table.
 
-See [architecture.md §2](architecture.md#2-world-command-system-editor--game-modes--network)
+See [vision.md §7](vision.md#7-world-command-system-editor--game-modes--network)
 for the command system and [editor-and-commands.md §3.2](editor-and-commands.md#32-channels--reliability)
 for channels.
 

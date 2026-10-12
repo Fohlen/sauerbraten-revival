@@ -175,7 +175,7 @@ equivalent manifest into the native format at conversion time.
 
 ---
 
-## Staged fidelity (from architecture.md)
+## Staged fidelity (from vision.md §10)
 
 1. **Approximate**: Base texture + tint, dynamic Godot lighting.
 2. **Blended**: Multi-layer material blending, per-face UVs.

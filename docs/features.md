@@ -414,7 +414,7 @@ networked world changes. This is a first-class feature, not a side effect.
 
 ## Cross-cutting: modding
 
-See [architecture.md §7](architecture.md#7-modding--workshop) for the design.
+See [vision.md §12](vision.md#12-modding--workshop) for the design.
 
 - [ ] Data-first mods (Resources, ConfigFiles, our maps) — safe and easy.
 - [ ] Opt-in code mods (C#) for total conversions; require trust.
@@ -429,5 +429,5 @@ No CubeScript.
 - [x] Editor/game actions are `InputMap` actions (`editor_*` in `project.godot`).
 - [ ] Persistent user remaps via `user://input.cfg` (load on startup, write on
       rebind) — lands with the settings UI / M4e. Design:
-      [architecture.md §6.1](architecture.md#61-keybinds-defaults-remapping-and-what-is-not-yet-bound).
+      [vision.md §11.1](vision.md#keybinds-defaults-remapping-and-what-is-not-yet-bound).
 - [ ] Remappable mouse gestures (editor press+release / analog scroll) — deferred.
