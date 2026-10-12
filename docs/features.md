@@ -25,8 +25,8 @@ Order reflects intent, not schedule.
    undo/redo, save/load. Built on the command system.
 5. **Combat & spawns** — weapons/hitscan, flags, scoring, respawns.
 6. **Modes** — FFA, insta CTF, effic CTF, coop edit.
-7. **Community / online** — Steamworks networking, Workshop, UGC.
-8. **Demos & replays** — record/playback of the movement + command stream.
+7. **Demos & replays** — record/playback of the movement + command stream.
+8. **Community / online** — Steamworks networking, Workshop, UGC.
 
 > Rationale: movement's *velocity model* is proven, but collision can only be
 > validated against the real maps the trace was captured on. So map loading
