@@ -117,24 +117,3 @@ were the source of the waterfall confusion:
   checksum (`World/Ogz/OgzGeometry.cs`) walks cubes in index order and does **not**
   hash coordinates, so an axis/child-order mistake would pass the checksum — worth
   a coordinate-aware assertion if geometry ever looks shifted.
-
----
-
-## Player/monster animation
-
-### 1. [FIXED] Driving Godot `Skeleton3D` bones from MD5 clips deformed the mesh
-
-**Symptom.** The player body animated, but the **hands and right foot were visibly
-deformed**, while the rest of the body looked correct.
-
-**Cause.** The engine's MD5 skeleton has **75 bones**; Godot's glTF importer
-**collapses bones with no skinning influence** (`Root`, `Torso`, `SpineIK*`,
-`FingerNull*`, …) into a **50-bone `Skeleton3D`** and re-parents survivors. Our
-runtime load (`GltfDocument.GenerateScene`) additionally discarded the bone *nodes*.
-The engine's per-bone `frame[k]` is parent-relative in the **engine** hierarchy, so
-no formula maps it exactly onto Godot's collapsed hierarchy.
-
-**Fix.** Bake every clip into the model glb at import time and let Godot's importer
-own the skeleton + `AnimationPlayer` (see
-[character-animation.md](character-animation.md)); `PlayerModel` no longer maps
-engine poses. Verified in-engine: hands/feet correct.
