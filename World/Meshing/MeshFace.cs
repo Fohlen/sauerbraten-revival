@@ -22,16 +22,10 @@ public static class MeshFace
     /// are accepted in any planar order and split (0,1,2)+(0,2,3); each triangle
     /// is wound independently against the outward <paramref name="orient"/>
     /// normal, so concave or non-planar faces never flip.
-    ///
-    /// When <paramref name="hasUv2"/> is set, the four <c>uv2*</c> values are the
-    /// baked-lightmap atlas coordinates for the same corners.
     /// </summary>
-    public static void Quad(ArrayMeshBuilder builder, SurfaceKey key, int orient,
+    public static void Quad(ArrayMeshBuilder builder, int vslot, int orient,
                             Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3,
-                            Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3,
-                            bool hasUv2 = false,
-                            Vector2 uv2_0 = default, Vector2 uv2_1 = default,
-                            Vector2 uv2_2 = default, Vector2 uv2_3 = default)
+                            Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3)
     {
         // The engine never derives a face normal from the polygon's corners; for a
         // face with no stored/envmap normal it uses the flat axis normal
@@ -41,9 +35,8 @@ public static class MeshFace
         // which shimmers at grazing angles as the per-face coverage changes.
         Vector3 normal = AxisNormal(orient);
 
-        builder.AddQuad(key, p0, p1, p2, p3, uv0, uv1, uv2, uv3, normal,
-            Reverse(p0, p1, p2, normal), Reverse(p0, p2, p3, normal),
-            hasUv2, uv2_0, uv2_1, uv2_2, uv2_3);
+        builder.AddQuad(vslot, p0, p1, p2, p3, uv0, uv1, uv2, uv3, normal,
+            Reverse(p0, p1, p2, normal), Reverse(p0, p2, p3, normal));
     }
 
     /// <summary>Whether a triangle must be reversed to face outward under Godot's front-face convention.</summary>

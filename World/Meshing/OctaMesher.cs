@@ -111,28 +111,16 @@ public sealed class OctaMesher
         int dim = face.Orient >> 1;
         var local = new Vector3(origin.X, origin.Y, origin.Z);
 
-        // Baked-lightmap link, if this face has one. A face with a CubeExt surface
-        // is rendered from its stored vertices in order (octarender.cpp builds
-        // pos[k] from verts[k].getxyz() directly, with no convexity reorder), and
-        // samples the atlas at that vertex's u/v. Otherwise fall back to the
-        // geometry-derived corners (the current unlit path).
+        // Baked geometry: if the face has stored vertices in CubeExt, render from
+        // those stored vertices in order (octarender.cpp builds pos[k] from
+        // verts[k].getxyz() directly, with no convexity reorder). Otherwise fall
+        // back to the geometry-derived corners.
         var surf = face.Cube.Ext?.Surfaces[face.Orient] ?? default;
-        int lmid = 0;
-        bool hasUv2 = false;
-        if (face.Cube.Ext != null)
-        {
-            int total = surf.TotalVerts();
-            if (total > 0)
-            {
-                lmid = surf.Lmid0;
-                hasUv2 = true;
-            }
-        }
-        var key = new SurfaceKey(vslot, lmid);
+        bool hasExtVerts = face.Cube.Ext != null && surf.TotalVerts() > 0;
 
-        if (hasUv2)
+        if (hasExtVerts)
         {
-            EmitLinkedFace(face, key, surf, local, builder);
+            EmitExtFace(face, vslot, surf, local, builder);
             return;
         }
 
@@ -151,18 +139,16 @@ public sealed class OctaMesher
         Vector2 uv2 = _materials?.Uv(vslot, dim, a2) ?? Vector2.Zero;
         Vector2 uv3 = _materials?.Uv(vslot, dim, a3) ?? Vector2.Zero;
 
-        MeshFace.Quad(builder, key, face.Orient,
+        MeshFace.Quad(builder, vslot, face.Orient,
             a0 - local, a1 - local, a2 - local, a3 - local, uv0, uv1, uv2, uv3);
     }
 
     /// <summary>
-    /// Emit a face that carries baked-lightmap vertices. The corners come from
-    /// <see cref="CubeExt.Verts"/> in stored order (the engine's render order), and
-    /// <c>TexUV2</c> is the normalized atlas coordinate <c>u / 65536</c>. Partial
-    /// faces have 3 corners; the quad is emitted as a degenerate (0,1,2)+(0,2,2)
-    /// pair so both meshers share one path.
+    /// Emit a face that carries stored vertices in <see cref="CubeExt.Verts"/>
+    /// in stored order (the engine's render order). Partial faces have 3 corners;
+    /// the quad is emitted as a degenerate (0,1,2)+(0,2,2) pair.
     /// </summary>
-    private void EmitLinkedFace(in CubeFace face, SurfaceKey key, in SurfaceInfo surf, Vector3 local, ArrayMeshBuilder builder)
+    private void EmitExtFace(in CubeFace face, int vslot, in SurfaceInfo surf, Vector3 local, ArrayMeshBuilder builder)
     {
         int dim = face.Orient >> 1;
         int total = surf.TotalVerts();
@@ -174,20 +160,14 @@ public sealed class OctaMesher
         Vector3 a2 = VertWorld(verts, surf.Verts, 2);
         Vector3 a3 = total >= 4 ? VertWorld(verts, surf.Verts, 3) : a2;
 
-        var uv2_0 = VertUv(verts, surf.Verts, 0);
-        var uv2_1 = VertUv(verts, surf.Verts, 1);
-        var uv2_2 = VertUv(verts, surf.Verts, 2);
-        var uv2_3 = total >= 4 ? VertUv(verts, surf.Verts, 3) : uv2_2;
+        // The albedo UV is world-space (calctexgen).
+        Vector2 uv0 = _materials?.Uv(vslot, dim, a0) ?? Vector2.Zero;
+        Vector2 uv1 = _materials?.Uv(vslot, dim, a1) ?? Vector2.Zero;
+        Vector2 uv2 = _materials?.Uv(vslot, dim, a2) ?? Vector2.Zero;
+        Vector2 uv3 = _materials?.Uv(vslot, dim, a3) ?? Vector2.Zero;
 
-        // The albedo UV is still world-space (calctexgen), like the unlit path.
-        Vector2 uv0 = _materials?.Uv(key.Texture, dim, a0) ?? Vector2.Zero;
-        Vector2 uv1 = _materials?.Uv(key.Texture, dim, a1) ?? Vector2.Zero;
-        Vector2 uv2 = _materials?.Uv(key.Texture, dim, a2) ?? Vector2.Zero;
-        Vector2 uv3 = _materials?.Uv(key.Texture, dim, a3) ?? Vector2.Zero;
-
-        MeshFace.Quad(builder, key, face.Orient,
-            a0 - local, a1 - local, a2 - local, a3 - local, uv0, uv1, uv2, uv3,
-            hasUv2: true, uv2_0, uv2_1, uv2_2, uv2_3);
+        MeshFace.Quad(builder, vslot, face.Orient,
+            a0 - local, a1 - local, a2 - local, a3 - local, uv0, uv1, uv2, uv3);
     }
 
     /// <summary>World position of the k-th stored vertex (VertInfo xyz are 1/8-world units).</summary>
@@ -196,15 +176,4 @@ public sealed class OctaMesher
         var v = verts[baseIndex + k];
         return new Vector3(v.X / 8.0f, v.Y / 8.0f, v.Z / 8.0f);
     }
-
-    /// <summary>Normalized atlas coordinate for the k-th stored vertex (u/v are ushort over the 512 atlas).</summary>
-    private static Vector2 VertUv(VertInfo[] verts, int baseIndex, int k)
-    {
-        var v = verts[baseIndex + k];
-        return new Vector2(v.U / 65536.0f, v.V / 65536.0f);
-    }
-
-    /// <summary>Test seam: emit one face into a fresh builder via the normal path.</summary>
-    internal void EmitFaceForTest(in CubeFace face, Vector3I origin, ArrayMeshBuilder builder) =>
-        EmitFace(face, origin, builder);
 }

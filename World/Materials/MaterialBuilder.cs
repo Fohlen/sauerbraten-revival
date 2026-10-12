@@ -178,25 +178,4 @@ public static class MaterialBuilder
 
         return material;
     }
-
-    /// <summary>Resource path of the world lightmap shader.</summary>
-    public const string LightmapShaderPath = "res://World/Materials/lightmap.gdshader";
-
-    /// <summary>
-    /// Build a baked-lightmap material: the world shader sampling <paramref name="atlas"/>
-    /// at UV2, modulated by the vslot's diffuse texture + tint. The atlas comes from
-    /// the map's parsed <see cref="Ogz.OgzLightMap"/>s (docs/lighting.md §3.3); this
-    /// does not itself read the map, so it is usable before/without a live world.
-    /// </summary>
-    public static ShaderMaterial BuildLightmapMaterial(Texture2D? albedo, Texture2D atlas, Color tint)
-    {
-        var shader = ResourceLoader.Load<Shader>(LightmapShaderPath)
-            ?? throw new System.InvalidOperationException($"missing shader {LightmapShaderPath}");
-        var material = new ShaderMaterial { Shader = shader };
-        if (albedo != null) material.SetShaderParameter("albedo_tex", albedo);
-        material.SetShaderParameter("lightmap", atlas);
-        material.SetShaderParameter("albedo_tint", new Vector3(tint.R, tint.G, tint.B));
-        material.SetShaderParameter("use_lightmap", true);
-        return material;
-    }
 }

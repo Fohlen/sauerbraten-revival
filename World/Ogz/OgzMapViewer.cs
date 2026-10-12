@@ -86,7 +86,6 @@ public partial class OgzMapViewer : Node3D
 		if (!World.Built) return; // missing map, error already pushed
 
 		ApplySky(World.Map!, World.Textures!);
-		AddSun();
 		if (SpawnPlayer) AttachPlayer();
 		if (FrameCamera) FrameSceneCamera(World.Centre, World.Radius);
 	}
@@ -165,15 +164,6 @@ public partial class OgzMapViewer : Node3D
 		worldEnvironment.Environment.BackgroundMode = Godot.Environment.BGMode.Sky;
 	}
 
-	private void AddSun()
-	{
-		AddChild(new DirectionalLight3D
-		{
-			Name = "Sun",
-			RotationDegrees = new Vector3(-50, -30, 0),
-			ShadowEnabled = true,
-		});
-	}
 
 	private void FrameSceneCamera(Vector3 centre, float radius)
 	{
