@@ -100,7 +100,7 @@ public partial class MapWorld : Node3D
         {
             var volume = Lighting.RadianceVolume.CreateForOcta(octa);
             var directLights = Lighting.DirectLightSource.CollectFromMap(map);
-            volume.Bake(octa, catalogue.Config, directLights);
+            volume.Bake(octa, catalogue.Config, directLights, catalogue, textures);
             radiance = volume;
             Radiance = volume;
         }

@@ -122,8 +122,9 @@ public class RadianceGrid
 		Vector3 sMax = sauerBounds.End;
 		// In Sauer space: y is forward, z is up.
 		// In Godot space: y is up (sauer.z), z is -forward (-sauer.y).
-		Vector3 wMin = new(sMin.X, sMin.Z, -sMax.Y);
-		Vector3 wMax = new(sMax.X, sMax.Z, -sMin.Y);
+		// Note: since world.z = -sauer.y, min world.z corresponds to -sMax.Y, and max world.z corresponds to -sMin.Y.
+		Vector3 wMin = new(Mathf.Min(sMin.X, sMax.X), Mathf.Min(sMin.Z, sMax.Z), Mathf.Min(-sMax.Y, -sMin.Y));
+		Vector3 wMax = new(Mathf.Max(sMin.X, sMax.X), Mathf.Max(sMin.Z, sMax.Z), Mathf.Max(-sMax.Y, -sMin.Y));
 		return new Aabb(wMin, wMax - wMin);
 	}
 
@@ -134,9 +135,10 @@ public class RadianceGrid
 	{
 		Vector3 wMin = worldBounds.Position;
 		Vector3 wMax = worldBounds.End;
-		// Inverse: sauer.x = world.x, sauer.y = -world.z, sauer.z = world.y
-		Vector3 sMin = new(wMin.X, -wMax.Z, wMin.Y);
-		Vector3 sMax = new(wMax.X, -wMin.Z, wMax.Y);
+		// Inverse: sauer.x = world.x, sauer.y = -world.z, sauer.z = world.y.
+		// Since sauer.y = -world.z, min sauer.y corresponds to -wMax.Z, and max sauer.y corresponds to -wMin.Z.
+		Vector3 sMin = new(Mathf.Min(wMin.X, wMax.X), Mathf.Min(-wMax.Z, -wMin.Z), Mathf.Min(wMin.Y, wMax.Y));
+		Vector3 sMax = new(Mathf.Max(wMin.X, wMax.X), Mathf.Max(-wMax.Z, -wMin.Z), Mathf.Max(wMin.Y, wMax.Y));
 		return new Aabb(sMin, sMax - sMin);
 	}
 

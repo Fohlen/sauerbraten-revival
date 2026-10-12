@@ -85,9 +85,15 @@ public class RadianceVolume
 
     /// <summary>
     /// Run the synchronous bake pass over the entire volume:
-    /// Sky + Sun pass (Stage 1) and Direct Entity Lights pass (Stage 2).
+    /// Sky + Sun pass (Stage 1), Direct Entity Lights pass (Stage 2),
+    /// and Single Bounce Indirect Irradiance pass (Stage 3).
     /// </summary>
-    public void Bake(Octa octa, MapConfig config, IReadOnlyList<DirectLightSource>? directLights = null)
+    public void Bake(
+        Octa octa,
+        MapConfig config,
+        IReadOnlyList<DirectLightSource>? directLights = null,
+        MetadataCatalogue? catalogue = null,
+        ITextureSource? textureSource = null)
     {
         // Decode lighting parameters from config
         Color ambientColor = DecodeColor(config.Ambient);
@@ -135,6 +141,9 @@ public class RadianceVolume
 
         var candidateLights = new List<DirectLightSource>();
 
+        // Cache average albedos for slots/vslots in catalogue to avoid repeated calculation
+        var albedoCache = new Dictionary<int, float>();
+
         // Raycast max distance: extent * 1.5 reaches the world bounds
         float maxRayDist = Grid.Extent * 1.5f;
 
@@ -160,14 +169,53 @@ public class RadianceVolume
                     // Base ambient
                     probe.AddAmbient(ambientRadiance);
 
-                    // 1. Sky pass: cast hemisphere rays
+                    // 1. Sky pass: cast hemisphere rays (Stage 1 unoccluded sky + Stage 3 indirect bounce)
                     for (int r = 0; r < rayCount; r++)
                     {
-                        float dist = OctaRaycast.RayCube(octa, centerSauer, skyDirsSauer[r], maxRayDist, 0, 0, out _);
+                        Vector3 rayDir = skyDirsSauer[r];
+                        float dist = OctaRaycast.RayCube(octa, centerSauer, rayDir, maxRayDist, 0, 0, out Vector3 hitSurface);
                         if (dist >= maxRayDist * 0.999f)
                         {
-                            // Radiance divided by rayCount for Monte Carlo estimate
+                            // Unoccluded sky: radiance divided by rayCount for Monte Carlo estimate
                             probe.AddDirectional(skyDirsWorld[r], skyRadiance / rayCount);
+                        }
+                        else
+                        {
+                            // Stage 3: Hit geometry within maxRayDist -> single bounce indirect irradiance
+                            Vector3 hitPos = centerSauer + rayDir * dist;
+                            Vector3 hitNormal = hitSurface != Vector3.Zero ? hitSurface.Normalized() : -rayDir;
+
+                            // Estimate surface albedo
+                            float albedo = ResolveAlbedoAtHit(octa, hitPos, hitNormal, catalogue, textureSource, albedoCache);
+
+                            // Incident radiance on hit surface from sky/sun:
+                            // Upper hemisphere factor facing +Z in Sauer space:
+                            float skyCos = Mathf.Max(0f, hitNormal.Z);
+                            float incSkyRadiance = skyRadiance * skyCos;
+
+                            // Direct sun incident on hit surface:
+                            float incSunRadiance = 0f;
+                            if (sunRadiance > 0.001f)
+                            {
+                                float nDotL = hitNormal.Dot(sunDirSauer);
+                                if (nDotL > 0f)
+                                {
+                                    float sunShadow = OctaRaycast.RayCube(octa, hitPos + hitNormal * 0.1f, sunDirSauer, maxRayDist, 0, 0, out _);
+                                    if (sunShadow >= maxRayDist * 0.999f)
+                                    {
+                                        incSunRadiance = sunRadiance * nDotL;
+                                    }
+                                }
+                            }
+
+                            // Reflected diffuse radiance arriving from hit surface towards probe:
+                            // Reflected radiance = (incident * albedo) / rayCount.
+                            // Arriving along skyDirsWorld[r] from hit point.
+                            float bounceRadiance = (incSkyRadiance + incSunRadiance) * albedo / rayCount;
+                            if (bounceRadiance > 1e-5f)
+                            {
+                                probe.AddDirectional(skyDirsWorld[r], bounceRadiance);
+                            }
                         }
                     }
 
@@ -235,7 +283,129 @@ public class RadianceVolume
     }
 
     /// <summary>
+    /// Default neutral surface albedo (docs/radiance-hints.md §4.3).
+    /// </summary>
+    public const float DefaultAlbedo = 0.5f;
+
+    /// <summary>
+    /// Resolves the diffuse albedo at a hit location from the hit cube's texture/vslot or catalogue.
+    /// </summary>
+    private static float ResolveAlbedoAtHit(
+        Octa octa,
+        Vector3 hitPos,
+        Vector3 hitNormal,
+        MetadataCatalogue? catalogue,
+        ITextureSource? textureSource,
+        Dictionary<int, float> albedoCache)
+    {
+        // Step slightly inside the hit surface along -hitNormal to find the leaf cube
+        Vector3 inside = hitPos - hitNormal * 0.05f;
+        var hitCoords = new Vector3I(Mathf.FloorToInt(inside.X), Mathf.FloorToInt(inside.Y), Mathf.FloorToInt(inside.Z));
+        Cube? hitCube = octa.LeafCube(hitCoords);
+        if (hitCube == null)
+            return DefaultAlbedo;
+
+        // Determine orientation from normal
+        int orient = NormalToOrient(hitNormal);
+        int vslotIndex = hitCube.Texture[orient];
+
+        if (albedoCache.TryGetValue(vslotIndex, out float cached))
+            return cached;
+
+        float albedo = ComputeVSlotAlbedo(vslotIndex, catalogue, textureSource);
+        albedoCache[vslotIndex] = albedo;
+        return albedo;
+    }
+
+    /// <summary>
+    /// Determine face orientation (0..5: Left, Right, Back, Front, Bottom, Top) from normal vector in Sauer space.
+    /// </summary>
+    public static int NormalToOrient(Vector3 n)
+    {
+        float absX = Mathf.Abs(n.X);
+        float absY = Mathf.Abs(n.Y);
+        float absZ = Mathf.Abs(n.Z);
+
+        if (absX >= absY && absX >= absZ)
+            return n.X < 0 ? 0 : 1;
+        if (absY >= absX && absY >= absZ)
+            return n.Y < 0 ? 2 : 3;
+        return n.Z < 0 ? 4 : 5;
+    }
+
+    /// <summary>
+    /// Computes the average scalar diffuse albedo for a vslot, taking into account
+    /// catalogue vslot tint and optional average texture color from textureSource.
+    /// Falls back to <see cref="DefaultAlbedo"/> (0.5).
+    /// </summary>
+    public static float ComputeVSlotAlbedo(int vslotIndex, MetadataCatalogue? catalogue, ITextureSource? textureSource)
+    {
+        if (catalogue == null)
+            return DefaultAlbedo;
+
+        if (catalogue.VSlots.TryGetValue(vslotIndex, out var vslot))
+        {
+            float tintLum = (vslot.Color.X + vslot.Color.Y + vslot.Color.Z) / 3.0f;
+            float texLum = 1.0f;
+
+            if (textureSource != null && catalogue.Slots.TryGetValue(vslot.Slot, out var slot) && slot?.DiffusePath != null)
+            {
+                texLum = ComputeAverageTextureLuminance(textureSource, slot.DiffusePath);
+            }
+
+            return Mathf.Clamp(tintLum * texLum, 0.05f, 1.0f);
+        }
+
+        return DefaultAlbedo;
+    }
+
+    private static readonly Dictionary<string, float> _texLuminanceCache = new();
+
+    /// <summary>
+    /// Sample a coarse grid (e.g. 8x8 or 4x4) of pixels from an image to estimate its average luminance.
+    /// </summary>
+    private static float ComputeAverageTextureLuminance(ITextureSource textureSource, string diffusePath)
+    {
+        if (_texLuminanceCache.TryGetValue(diffusePath, out float cached))
+            return cached;
+
+        Image? img = textureSource.GetImage(diffusePath);
+        if (img == null || img.IsEmpty())
+        {
+            _texLuminanceCache[diffusePath] = 1.0f;
+            return 1.0f;
+        }
+
+        int w = img.GetWidth();
+        int h = img.GetHeight();
+        if (w <= 0 || h <= 0)
+        {
+            _texLuminanceCache[diffusePath] = 1.0f;
+            return 1.0f;
+        }
+
+        int stepX = Mathf.Max(1, w / 8);
+        int stepY = Mathf.Max(1, h / 8);
+        float sum = 0f;
+        int count = 0;
+
+        for (int y = 0; y < h; y += stepY)
+        {
+            for (int x = 0; x < w; x += stepX)
+            {
+                Color c = img.GetPixel(x, y);
+                sum += (c.R + c.G + c.B) / 3.0f;
+                count++;
+            }
+        }
+
+        float avg = count > 0 ? sum / count : 1.0f;
+        _texLuminanceCache[diffusePath] = avg;
+        return avg;
+    }
+
+    /// <summary>
     /// Backward-compatible alias for <see cref="Bake"/> without entity lights.
     /// </summary>
-    public void BakeSkyAndSun(Octa octa, MapConfig config) => Bake(octa, config, null);
+    public void BakeSkyAndSun(Octa octa, MapConfig config) => Bake(octa, config, null, null, null);
 }

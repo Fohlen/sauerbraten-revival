@@ -5,7 +5,7 @@ lit by a world-space volume of spherical-harmonic irradiance probes (the
 classic "radiance hints" representation), not by imported, per-surface baked
 lightmaps.
 
-Status: **Stage 2 implemented (Stage 0, 1, 2 complete).** This doc supersedes the
+Status: **Stage 3 implemented (Stage 0, 1, 2, 3 complete).** This doc supersedes the
 baked-lightmap plan in [lighting.md](lighting.md) as the chosen runtime path.
 [lighting.md](lighting.md) is retained as the reference for the original
 engine's model and as the *removal inventory* for T1 (see §9).

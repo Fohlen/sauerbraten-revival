@@ -130,6 +130,14 @@ public sealed class LightSpatialIndex
             Vector3 min = light.Position - new Vector3(light.Radius, light.Radius, light.Radius);
             Vector3 max = light.Position + new Vector3(light.Radius, light.Radius, light.Radius);
 
+            Vector3 gridMax = _origin + new Vector3(_dimX * _cellSize, _dimY * _cellSize, _dimZ * _cellSize);
+            if (max.X < _origin.X || min.X > gridMax.X ||
+                max.Y < _origin.Y || min.Y > gridMax.Y ||
+                max.Z < _origin.Z || min.Z > gridMax.Z)
+            {
+                continue;
+            }
+
             int minX = Mathf.Clamp(Mathf.FloorToInt((min.X - _origin.X) / _cellSize), 0, _dimX - 1);
             int maxX = Mathf.Clamp(Mathf.FloorToInt((max.X - _origin.X) / _cellSize), 0, _dimX - 1);
             int minY = Mathf.Clamp(Mathf.FloorToInt((min.Y - _origin.Y) / _cellSize), 0, _dimY - 1);

@@ -428,10 +428,16 @@ public class RadianceVolumeTest : GoTestBase
     [Test]
     public void RadianceVolume_BakeDirectLights_IlluminatesProbeFromNearbyLight()
     {
-        var octa = new Octa(6);
-        octa.EmptyMap(6);
+        var octa = new Octa(10);
+        octa.EmptyMap(10); // scale 10: worldsize 1024. Low-Z (z < 512) is solid floor, high-Z (z >= 512) is air.
 
-        var volume = new RadianceVolume(new RadianceGrid(new Vector3(0, 0, 0), 64f, 4));
+        // Grid covering [0, 512] in Sauer X and Y, and [512, 1024] in Sauer Z (all air).
+        // In Sauer space: pos = (0, 0, 512), size = 512.
+        // In Godot space:
+        // x = 0, y = 512, z = -512
+        var sauerBounds = new Aabb(new Vector3(0, 0, 512f), new Vector3(512f, 512f, 512f));
+        var grid = RadianceGrid.FromSauerBounds(sauerBounds, resolution: 4, marginCells: 0);
+        var volume = new RadianceVolume(grid);
         volume.SkyRays = 4;
 
         // Map config with no sun and minimal ambient so direct light dominates
@@ -442,16 +448,137 @@ public class RadianceVolumeTest : GoTestBase
             Sunlight = 0,
         };
 
-        // Light placed at (32, 32, 50) with radius 40
+        // Light placed at Sauer (256, 256, 768) with radius 200
         var lights = new List<DirectLightSource>
         {
-            new DirectLightSource(new Vector3(32, 32, 50), 40f, Colors.White)
+            new DirectLightSource(new Vector3(256, 256, 768), 200f, Colors.White)
         };
 
         volume.Bake(octa, config, lights);
 
         // A probe close to the light should have high irradiance
-        var probeClose = volume.Grid.Sample(new Vector3(32, 45, -32));
+        Vector3 probeWorld = RadianceGrid.SauerToWorld(new Vector3(256, 256, 760));
+        var probeClose = volume.Grid.Sample(probeWorld);
         TestAssert.True(probeClose.Dir.Length() > 0f || probeClose.Amb > 0f, "Close probe receives light energy");
+    }
+
+    // =========================================================================
+    // Stage 3 Indirect Bounce & Ambient Occlusion Tests (§4.3)
+    // =========================================================================
+
+    [Test]
+    public void RadianceVolume_BakeIndirectBounce_ReceivesReflectedDiffuseFromFloor()
+    {
+        // World with solid floor at low Z (< 512) and air at high Z (>= 512)
+        var octa = new Octa(10);
+        octa.EmptyMap(10);
+
+        // Sunlight shining straight down (+Z pitch = 90)
+        var config = new MapConfig
+        {
+            Ambient = 0,
+            Skylight = 0,
+            Sunlight = 0xFFFFFF, // Full white sun
+            SunlightScale = 1.0f,
+            SunlightYaw = 0,
+            SunlightPitch = 90,
+        };
+
+        // Grid covering air space near floor [512, 600]
+        var sauerBounds = new Aabb(new Vector3(256, 256, 512), new Vector3(64, 64, 64));
+        var grid = RadianceGrid.FromSauerBounds(sauerBounds, resolution: 4, marginCells: 0);
+        var volume = new RadianceVolume(grid) { SkyRays = 8 };
+
+        // Test with catalogue containing a bright vslot
+        var catalogue = new MetadataCatalogue();
+        catalogue.VSlots[1] = new CatalogueVSlot
+        {
+            Index = 1,
+            Slot = 1,
+            Color = new Vector3(1f, 1f, 1f) // 100% white diffuse albedo
+        };
+
+        volume.Bake(octa, config, directLights: null, catalogue: catalogue);
+
+        // Probes above the lit floor should receive indirect bounce from the floor
+        var probe = volume.Grid[2, 2, 0];
+        TestAssert.True(probe.Amb > 0f, $"Probe above floor should receive reflected bounce, Amb was {probe.Amb}");
+    }
+
+    [Test]
+    public void RadianceVolume_AmbientOcclusion_EnclosedProbeHasLowerAmbientThanOpenSky()
+    {
+        // 1. World with open air in upper half
+        var octaOpen = new Octa(10);
+        octaOpen.EmptyMap(10);
+
+        // 2. World with ceiling (all high-Z octants 4, 5, 6, 7 are solid)
+        var octaCeiling = new Octa(10);
+        octaCeiling.EmptyMap(10);
+        // Make octant 4 solid: covers Sauer [0..512, 0..512, 512..1024]
+        octaCeiling.WorldRoot[4].SolidFaces();
+
+        var config = new MapConfig
+        {
+            Ambient = 0,
+            Skylight = 0xFFFFFF, // 1.0 skylight
+            Sunlight = 0,
+        };
+
+        // Open air probe in octaOpen at (600, 256, 600)
+        var sauerBoundsOpen = new Aabb(new Vector3(600, 256, 600), new Vector3(32, 32, 32));
+        var gridOpen = RadianceGrid.FromSauerBounds(sauerBoundsOpen, resolution: 2, marginCells: 0);
+        var volOpen = new RadianceVolume(gridOpen) { SkyRays = 16 };
+        volOpen.Bake(octaOpen, config);
+
+        // Probe under ceiling in octaCeiling at (256, 256, 600)
+        // Wait, octant 4 is solid [0..512, 0..512, 512..1024], so (256, 256, 600) is inside solid octant 4!
+        // Instead: in octaCeiling, make octants 4, 5 solid, but probe is at (600, 256, 600) in air, with ceiling next to it,
+        // or probe at (600, 256, 520) with low sky visibility.
+        // Even simpler: probe in open space vs probe with an overhead ceiling:
+        // In a world of scale 10, octant 0..3 are floor [0..1024, 0..1024, 0..512].
+        // If we compare probe right next to a high wall or under a ceiling:
+        // In octaOpen: probe at (600, 256, 600) has empty space all around.
+        // In octaWall: octant 5 [512..1024, 0..512, 512..1024] is air. Octants 4, 6, 7 are solid walls.
+        var octaOccluded = new Octa(10);
+        octaOccluded.EmptyMap(10);
+        octaOccluded.WorldRoot[4].SolidFaces();
+        octaOccluded.WorldRoot[6].SolidFaces();
+        octaOccluded.WorldRoot[7].SolidFaces();
+
+        // Probe at (600, 256, 520) in octaOccluded is surrounded on 3 sides by solid blocks
+        var sauerBoundsOccluded = new Aabb(new Vector3(520, 256, 520), new Vector3(32, 32, 32));
+        var gridOccluded = RadianceGrid.FromSauerBounds(sauerBoundsOccluded, resolution: 2, marginCells: 0);
+        var volOccluded = new RadianceVolume(gridOccluded) { SkyRays = 16 };
+        volOccluded.Bake(octaOccluded, config);
+
+        var probeOccluded = volOccluded.Grid[0, 0, 0];
+        var probeOpen = volOpen.Grid[0, 0, 0];
+
+        TestAssert.True(probeOpen.Amb > probeOccluded.Amb,
+            $"Open sky probe should have higher ambient irradiance than corner/occluded probe. Open={probeOpen.Amb}, Occluded={probeOccluded.Amb}");
+    }
+
+    [Test]
+    public void RadianceVolume_AlbedoLookup_ResolvesCatalogueAndDefault()
+    {
+        var catalogue = new MetadataCatalogue();
+        catalogue.VSlots[5] = new CatalogueVSlot
+        {
+            Index = 5,
+            Slot = 5,
+            Color = new Vector3(0.8f, 0.4f, 0.2f) // Average = (0.8+0.4+0.2)/3 = 0.4667
+        };
+
+        float albedo5 = RadianceVolume.ComputeVSlotAlbedo(5, catalogue, null);
+        TestAssert.True(Mathf.Abs(albedo5 - 0.4667f) < 0.01f, $"Computed albedo should match vslot color average, was {albedo5}");
+
+        // Unknown vslot should return DefaultAlbedo (0.5)
+        float albedoUnknown = RadianceVolume.ComputeVSlotAlbedo(999, catalogue, null);
+        TestAssert.Equal(RadianceVolume.DefaultAlbedo, albedoUnknown, "Unknown vslot returns DefaultAlbedo");
+
+        // Null catalogue should return DefaultAlbedo
+        float albedoNullCat = RadianceVolume.ComputeVSlotAlbedo(5, null, null);
+        TestAssert.Equal(RadianceVolume.DefaultAlbedo, albedoNullCat, "Null catalogue returns DefaultAlbedo");
     }
 }
