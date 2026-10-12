@@ -372,7 +372,16 @@ Remaining:
 - [ ] Effic CTF.
 - [ ] Coop edit (multiplayer editing over the command stream).
 
-## 7. Community / online
+## 7. Demos & replays
+
+- [ ] Record/playback the replicated stream (movement + world commands).
+- [ ] Shares the networking serialization, so it lands with #7.
+- [ ] **Visual A/B** against the original: play the same demo in both engines.
+- [ ] Not used for A3 — demos replay quantized *outputs* and carry no `jumping`
+      input, so they can't re-simulate movement. A3 uses the captured
+      `SAUER_TRACE` fixtures (`tools/refharness/traces/`).
+
+## 8. Community / online
 
 See [authority-and-latency.md](authority-and-latency.md) — the network model is
 **server-authoritative** (edits, movement, combat) with client prediction; this
@@ -392,15 +401,6 @@ Steam leaderboard. Movement determinism is verified with zero deviation (Plan A:
       compensation for hitscan.
 - [ ] Steam Workshop upload/download; content hashes and parity.
 - [ ] Matchmaking, friends, achievements.
-
-## 8. Demos & replays
-
-- [ ] Record/playback the replicated stream (movement + world commands).
-- [ ] Shares the networking serialization, so it lands with #7.
-- [ ] **Visual A/B** against the original: play the same demo in both engines.
-- [ ] Not used for A3 — demos replay quantized *outputs* and carry no `jumping`
-      input, so they can't re-simulate movement. A3 uses the captured
-      `SAUER_TRACE` fixtures (`tools/refharness/traces/`).
 
 ---
 
