@@ -150,18 +150,14 @@ The original engine is a pristine snapshot of **Sauerbraten SVN r6889**:
 
 (also kept as `.../sauerbraten-code-r6889.zip`). It is **not** part of this repo
 and is **never modified** — patches are applied to a copy at build time. Use it
-for lookup when porting original behaviour. Apply/rollback workflow:
-[`tools/refharness/patches/README.md`](tools/refharness/patches/README.md)
-(movement harness) and [`tools/ogztool/README.md`](tools/ogztool/README.md)
-(OGZ import pipeline).
+for lookup when porting original behaviour.
 
 ## Verifying against the original
 
 Prefer writing a **small, focused C++ probe** against the r6889 source over
 guessing from reading it. Build it in a scratch copy (never in the pristine
 tree), have it dump the exact values/behaviour you need, and turn that output
-into a golden fixture or a test assertion. `tools/octaprobe/` and
-`tools/rayprobe/` are existing examples of this pattern.
+into a golden fixture or a test assertion.
 
 Visual problems can't be validated by a probe or by self-inspection. When a
 change is about how something *looks*, do not churn alone guessing — **ask the
@@ -186,3 +182,4 @@ specific.
 - Deferred on purpose (do not "fix" opportunistically): `movable.cpp` (SP-only),
   single-player/bot AI, and the post-MVP fidelity list in
   [features.md § Post-MVP](docs/features.md#post-mvp--deferred-fidelity).
+- **Apply `dotnet format` to your C# changes** before handing them off.
