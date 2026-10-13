@@ -381,6 +381,10 @@ Remaining:
             shooter kickback velocity, target push impulses and `DoDamage` armour
             absorption. Asserted by `test/WeaponRayTest.cs`, `test/WeaponHitscanTest.cs`,
             and `test/MapPlayerTest.cs`.
+- [ ] Projectiles & explosions (Rocket Launcher & Grenade Launcher).
+      - [ ] **Radial splash damage & self-push** (`radialeffect` / `explode`): distance-attenuated damage `(damage * (1 - dist / (1.5 * exprad)))`, self-damage halving (`EXP_SELFDAMDIV = 2`), self-push amplification (`EXP_SELFPUSH = 2.5`), rocket jump impulse mechanics.
+      - [ ] **Rocket projectiles** (`projectile`, `projsplash`): linear flight at speed 320, dynamic collision against world octree & candidate bounding cylinders, visual fireball/spark trail and impact detonation.
+      - [ ] **Grenade bouncers** (`bouncer`, `BounceBody`): wire existing `BounceBody.Kind.Grenade` physics to weapon firing, fuse timer (`ttl = 1500`), detonation on timeout or target contact, and bounce reflections.
 - [ ] Flags and capture logic (CTF).
 - [ ] Scoring, respawns, spawn selection.
 - [ ] HUD.
