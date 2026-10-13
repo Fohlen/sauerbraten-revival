@@ -374,7 +374,13 @@ Remaining:
             keyed by a stable string id and carrying the engine `M_*` flags
             (`ModeFlags`) — no engine index, so mods can add/override modes.
             Asserted by `test/PlayerStateTest.cs`.
-      - [ ] Firing / hitscan raycast and hit resolution.
+      - [x] **Firing / hitscan raycast and hit resolution** (`WeaponRay`,
+            `WeaponHitscan`, `MapPlayer.TryAttack`): cylinder intersection
+            (`LineCylinderIntersect`), Sauerbraten MT19937 spread (`CalcRayOffset`),
+            world octree occlusion (`RayCube`), multi-pellet shotgun aggregation,
+            shooter kickback velocity, target push impulses and `DoDamage` armour
+            absorption. Asserted by `test/WeaponRayTest.cs`, `test/WeaponHitscanTest.cs`,
+            and `test/MapPlayerTest.cs`.
 - [ ] Flags and capture logic (CTF).
 - [ ] Scoring, respawns, spawn selection.
 - [ ] HUD.

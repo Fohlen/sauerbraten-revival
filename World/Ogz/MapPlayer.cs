@@ -89,6 +89,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>The local player's first-person hands/weapon, hidden outside first person.</summary>
     public HudgunModel? Hudgun { get; set; }
 
+    /// <summary>Weapon tracer and particle effect renderer.</summary>
+    public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
+
+    /// <summary>Audio player for weapon fire and player sounds.</summary>
+    public AudioStreamPlayer3D? AudioPlayer { get; set; }
+
     /// <summary>Toggle the detached third-person camera (engine <c>thirdperson</c> bind).</summary>
     public void ToggleThirdPerson()
     {
@@ -460,6 +466,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 hit.Target.ApplyHitPush(hit.PushVel);
                 hit.Target.TakeDamage(hit.Damage);
             }
+
+            // Spawn visual tracer beams (weapon.cpp:592 shoteffects)
+            WeaponEffects?.AddShotEffects((Gun)Combat.GunSelect, from, hitscan.RayEndpoints);
         }
 
         UpdateBodyAnim();
