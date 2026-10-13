@@ -19,4 +19,13 @@ public static class TestAssert
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
             throw new Exception($"Assertion failed: {message} (expected {expected}, got {actual})");
     }
+
+    public static void Near(float expected, float actual, float tolerance, string message)
+    {
+        if (Math.Abs(expected - actual) > tolerance)
+            throw new Exception($"Assertion failed: {message} (expected {expected} ± {tolerance}, got {actual})");
+    }
+
+    public static void False(bool condition, string message) => True(!condition, message);
 }
+
