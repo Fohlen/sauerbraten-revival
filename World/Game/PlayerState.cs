@@ -66,6 +66,20 @@ public sealed class PlayerState
         => gun >= 0 && gun < Guns.Count && gun != exclude && Ammo[gun] > 0;
 
     /// <summary>
+    /// Engine <c>fpsstate::dodamage(damage)</c>: armour absorbs <c>(damage*(armourtype+1)*25)/100</c>,
+    /// remainder reduces health. Returns the health damage actually dealt.
+    /// </summary>
+    public int DoDamage(int damage)
+    {
+        int ad = (damage * ((int)ArmourType + 1) * 25) / 100;
+        if (ad > Armour) ad = Armour;
+        Armour -= ad;
+        damage -= ad;
+        Health -= damage;
+        return damage;
+    }
+
+    /// <summary>
     /// Engine <c>fpsstate::respawn()</c>: reset everything not persistent across
     /// spawns. Note the <c>GUN_FIST</c> ammo of 1 — the engine always keeps the fist
     /// "loaded" so it is selectable when everything else is dry.
