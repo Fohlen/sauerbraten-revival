@@ -35,11 +35,15 @@ uniform vec4 tint : source_color = vec4(1.0);
 uniform vec3 glow_color : source_color = vec3(1.0);
 uniform float alphafront = 0.5;
 uniform float alphaback = 0.0;
+uniform float alpha_scissor = 0.0;
 uniform bool has_normal = false;
 uniform bool has_glow = false;
 
 void fragment() {
     vec4 c = texture(albedo_tex, UV);
+    if (alpha_scissor > 0.0 && c.a <= alpha_scissor) {
+        discard;
+    }
     // Per-side alpha: a zero side means the engine's pass for that side has no
     // triangles, so the other value covers the whole (two-sided) face.
     float af = alphafront;
@@ -61,7 +65,7 @@ void fragment() {
     /// the vslot glow tint (used only when a glow texture exists).
     /// </summary>
     public static ShaderMaterial Create(Texture2D? albedo, Texture2D? normal, Texture2D? glow,
-        Color tint, Color glowColor, float alphaFront, float alphaBack)
+        Color tint, Color glowColor, float alphaFront, float alphaBack, float alphaScissor = 0.0f)
     {
         var material = new ShaderMaterial { Shader = new Shader { Code = AlphaShader } };
         // A missing diffuse still needs a sampler bound; the engine falls back to
@@ -70,6 +74,7 @@ void fragment() {
         material.SetShaderParameter("tint", tint);
         material.SetShaderParameter("alphafront", alphaFront);
         material.SetShaderParameter("alphaback", alphaBack);
+        if (alphaScissor > 0.0f) material.SetShaderParameter("alpha_scissor", alphaScissor);
         if (normal != null)
         {
             material.SetShaderParameter("normal_tex", normal);
@@ -83,6 +88,11 @@ void fragment() {
         }
         return material;
     }
+
+    /// <summary>Builds a cutout (alpha-scissor) variant of the alpha material.</summary>
+    public static ShaderMaterial CreateCutout(Texture2D? albedo, Texture2D? normal, Texture2D? glow,
+        Color tint, Color glowColor, float scissorThreshold = 0.5f) =>
+        Create(albedo, normal, glow, tint, glowColor, 1.0f, 1.0f, scissorThreshold);
 
     private static Texture2D? _white;
 

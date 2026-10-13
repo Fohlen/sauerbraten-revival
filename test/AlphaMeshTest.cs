@@ -65,6 +65,46 @@ public class AlphaMeshTest : GoTestBase
     }
 
     [Test]
+    public void AlphaMaterialCutoutShaderBuilds()
+    {
+        var cutout = AlphaMaterial.CreateCutout(null, null, null, Colors.White, Colors.White, 0.7f);
+        TestAssert.True(cutout.Shader != null, "cutout material has a shader");
+        TestAssert.True(cutout.Shader!.Code.Contains("alpha_scissor"), "shader contains alpha_scissor uniform");
+        TestAssert.True(cutout.Shader.Code.Contains("discard"), "shader contains discard instruction");
+        TestAssert.True(Mathf.IsEqualApprox(0.7f, (float)cutout.GetShaderParameter("alpha_scissor")), "alpha_scissor parameter set");
+    }
+
+    [Test]
+    public void MaterialBuilderSetsAlphaTransparencyOnAlphaWorldShaders()
+    {
+        var catalogue = new MetadataCatalogue();
+        catalogue.Slots[1] = new CatalogueSlot { Index = 1, Shader = "alphaworld", DiffusePath = "test.png" };
+        catalogue.VSlots[1] = new CatalogueVSlot { Index = 1, Slot = 1 };
+
+        catalogue.Slots[2] = new CatalogueSlot { Index = 2, Shader = "stdworld", DiffusePath = "test.png" };
+        catalogue.VSlots[2] = new CatalogueVSlot { Index = 2, Slot = 2 };
+
+        var textures = new DummyTextureSource();
+        var set = MaterialBuilder.Build(catalogue, textures);
+
+        var alphaMat = set.MaterialFor(1) as StandardMaterial3D;
+        TestAssert.True(alphaMat != null, "alpha slot material created");
+        TestAssert.Equal(BaseMaterial3D.TransparencyEnum.Alpha, alphaMat!.Transparency, "alphaworld slot uses Transparency.Alpha");
+        TestAssert.Equal(BaseMaterial3D.DepthDrawModeEnum.Always, alphaMat.DepthDrawMode, "alphaworld slot uses DepthDrawMode.Always");
+
+        var stdMat = set.MaterialFor(2) as StandardMaterial3D;
+        TestAssert.True(stdMat != null, "std slot material created");
+        TestAssert.Equal(BaseMaterial3D.TransparencyEnum.Disabled, stdMat!.Transparency, "stdworld slot uses Transparency.Disabled");
+    }
+
+    private sealed class DummyTextureSource : ITextureSource
+    {
+        public Texture2D? Get(string path) => null;
+        public Vector2I Size(string path) => new(64, 64);
+        public Image? GetImage(string path) => null;
+    }
+
+    [Test]
     public void AlphaCubeFacesAreEmittedAgainstSolidNeighbour()
     {
         // With MAT_ALPHA the emitted surface must be the transparent variant while

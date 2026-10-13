@@ -81,6 +81,11 @@ public static class MaterialBuilder
                     standard.Emission = glowColor;
                     standard.EmissionEnergyMultiplier = 1.0f;
                 }
+                if (slot != null && slot.Shader.Contains("alpha"))
+                {
+                    standard.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                    standard.DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Always;
+                }
                 material = standard;
             }
 
