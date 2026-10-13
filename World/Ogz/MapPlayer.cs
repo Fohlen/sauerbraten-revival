@@ -208,10 +208,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 }
             }
         }
-        else if (@event.IsActionPressed("cycle_weapon"))
-        {
-            NextWeapon(1);
-        }
         else if (@event is InputEventKey { Pressed: true } key && !key.Echo)
         {
             if (key.Keycode >= Key.Key1 && key.Keycode <= Key.Key7)
