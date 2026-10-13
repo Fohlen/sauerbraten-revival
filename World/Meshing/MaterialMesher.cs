@@ -34,6 +34,7 @@ public static class MaterialMesher
                 ushort volume = (ushort)(face.Cube.Material & Octa.MATF_VOLUME);
                 // Water/lava hide their bottom face in-game (edit-only surface).
                 if (face.Orient == 4 && volume != Octa.MAT_GLASS) return;
+                if (!OctaEdit.VisibleFace(octa, face.Cube, face.Orient, face.Co, face.Size, volume, Octa.MAT_AIR, Octa.MATF_VOLUME)) return;
                 Emit(volume, face, builders);
             });
 

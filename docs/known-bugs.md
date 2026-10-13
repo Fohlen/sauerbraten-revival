@@ -68,17 +68,7 @@ conservative boundary mesh: it emits each surviving face as a standalone quad,
 without the engine's exact polygon clipping and per-face visibility tests, so a
 fully hidden voxel face can still leak as shimmering internal cubes.
 
-**Current status.** We have fixed the obvious duplicate-draw offset, but the
-remaining shimmer is the deeper “exact culling” bug. It should be solved by
-re-using the engine's `visibleface()` / `occludesface()` semantics (the
-`clipfacevecs`/`insideface` path) when deciding whether to emit a material
-surface, rather than the simplified same-material/solid-neighbour heuristic.
-
-**Likely fix direction.** Use the exact `OctaVisible` logic to reject material
-faces when they are occluded by a neighbour's face polygon or by a larger solid
-volume. This is required for both water-vs-glass and glass-vs-solid transitions,
-and for the interior case where one material cube's own hidden faces should never
-be emitted at all.
+**Current status.** Fixed. `MaterialMesher` now evaluates `OctaEdit.VisibleFace` (the r6889 `visibleface()` / `occludesface()` polygon test) when deciding whether to emit a material surface, culling internal material faces and faces occluded by neighbour polygons or solid volumes.
 
 ### 2. Waterfalls use a static texture instead of the waterfall shader
 
