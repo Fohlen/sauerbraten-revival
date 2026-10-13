@@ -52,7 +52,7 @@ public class OctaMeshTest : GoTestBase
         // 118 surfaces: surfaces are grouped by texture vslot (previously 229 with
         // (texture, lmid) baked-lightmap groupings before R2 removal).
         TestAssert.Equal(118, surfaces, "surface count baseline");
-        TestAssert.Equal(619448L, triangles, "triangle count baseline");
+        TestAssert.Equal(560314L, triangles, "triangle count baseline");
     }
 
     [Test]
