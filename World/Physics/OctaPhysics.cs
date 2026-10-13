@@ -89,6 +89,7 @@ public sealed class PhysEnt
 /// <summary>The move()/collide() state machine. One per world (collision is stateless).</summary>
 public sealed class OctaPhysics
 {
+    public Octa Octa => _octa;
     private readonly Octa _octa;
     public OctaPhysics(Octa octa)
     {

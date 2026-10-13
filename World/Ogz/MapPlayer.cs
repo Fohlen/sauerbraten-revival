@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
@@ -24,8 +26,18 @@ namespace SauerbratenRevival.World.Ogz;
 /// </list>
 /// </summary>
 [GlobalClass]
-public partial class MapPlayer : Node3D
+public partial class MapPlayer : Node3D, IHitscanTarget
 {
+    public PhysEnt CollisionEntity => Entity;
+    public bool IsAlive => Entity.State == PhysEnt.CsAlive && Combat.Health > 0;
+    public int Weight => 100;
+    public void ApplyHitPush(Vector3 pushVel) => Entity.Vel += pushVel;
+    int IHitscanTarget.TakeDamage(int damage)
+    {
+        TakeDamage(damage);
+        return damage;
+    }
+
     /// <summary>
     /// Original <c>fov</c> (rendergl.cpp VARP, default 100). This is the
     /// <b>horizontal</b> field of view; it is converted to Godot's vertical FOV via
@@ -391,7 +403,7 @@ public partial class MapPlayer : Node3D
     /// <summary>
     /// Attempt to fire the current weapon (weapon.cpp <c>shoot</c>).
     /// </summary>
-    public bool TryAttack(int? nowMillis = null)
+    public bool TryAttack(int? nowMillis = null, IReadOnlyList<IHitscanTarget>? targets = null)
     {
         if (Entity.State != PhysEnt.CsAlive)
         {
@@ -419,6 +431,37 @@ public partial class MapPlayer : Node3D
         if (Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
             Combat.Ammo[Combat.GunSelect]--;
 
+        // Hitscan raycast & resolution (weapon.cpp:775 shoot)
+        // Fist and hitscan weapons (projspeed == 0) execute hitscan raycast.
+        if (weapon.ProjSpeed == 0)
+        {
+            Vector3 from = Entity.O;
+            Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, Pitch, 1, 0);
+            if (forward.LengthSquared() < 1e-6f) forward = new Vector3(0f, 1f, 0f);
+            float maxRange = weapon.Range > 0 ? weapon.Range : 2048f;
+            Vector3 targetAim = from + forward.Normalized() * maxRange;
+
+            targets ??= Array.Empty<IHitscanTarget>();
+            var hitscan = WeaponHitscan.Fire(
+                _phys?.Octa,
+                from,
+                targetAim,
+                weapon,
+                Combat.QuadMillis > 0,
+                targets);
+
+            // Apply shooter recoil / kickback directly to entity velocity (weapon.cpp:799)
+            Entity.Vel += hitscan.KickbackVel;
+
+            // Apply damage and push to struck targets
+            for (int i = 0; i < hitscan.Hits.Count; i++)
+            {
+                var hit = hitscan.Hits[i];
+                hit.Target.ApplyHitPush(hit.PushVel);
+                hit.Target.TakeDamage(hit.Damage);
+            }
+        }
+
         UpdateBodyAnim();
         UpdateHudgunAnim();
         return true;
@@ -430,7 +473,7 @@ public partial class MapPlayer : Node3D
         int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
         LastMillis = now;
         Combat.LastPain = now;
-        Combat.Health -= damage;
+        Combat.DoDamage(damage);
         if (Combat.Health <= 0)
         {
             Combat.Health = 0;

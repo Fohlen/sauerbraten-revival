@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;
+using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.Tests;
 
@@ -218,5 +220,41 @@ public class MapPlayerTest : GoTestBase
         world.QueueFree();
         TestAssert.True(Mathf.Abs(off.X) < 1e-3f && Mathf.Abs(off.Y - 10f) < 1e-3f && Mathf.Abs(off.Z - 20f) < 1e-3f,
             $"camera raised (+Y local up) and behind (+Z local back) the eye (got {off})");
+    }
+
+    [Test]
+    public void TryAttackAppliesRecoilAndHitsTargetPlayer()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        // Shooter facing +Y (yaw = 0)
+        var shooter = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        shooter.SelectWeapon(Gun.Rifle);
+        shooter.Combat.Ammo[(int)Gun.Rifle] = 10;
+
+        // Target directly ahead at +Y = 946 + 40 = 986
+        var target = MakePlayer(octa, new Vector3(3000, 986, 3040), yaw: 0f);
+        target.Combat.Health = 100;
+        target.Combat.Armour = 0;
+
+        var targets = new List<IHitscanTarget> { target };
+
+        bool fired = shooter.TryAttack(nowMillis: 1000, targets: targets);
+        TestAssert.True(fired, "attack succeeded");
+
+        // Ammo decremented
+        TestAssert.Equal(9, shooter.Combat.Ammo[(int)Gun.Rifle], "ammo decremented to 9");
+
+        // Recoil: rifle kick is 30 -> -dir * 30 * 2.5 = -75 along +Y -> Vel.Y == -75
+        TestAssert.Near(-75f, shooter.Entity.Vel.Y, 0.01f, "shooter recoil along -Y");
+
+        // Target hit: rifle damage 100 -> target health reduced to 0 -> dead
+        TestAssert.Equal(0, target.Combat.Health, "target took 100 damage");
+        TestAssert.True(target.Entity.State == PhysEnt.CsDead, "target died from lethal damage");
+
+        // Target push: dir * (80 * 100 / 100) = 80 along +Y
+        TestAssert.Near(80f, target.Entity.Vel.Y, 0.01f, "target pushed along +Y");
+
+        shooter.Free();
+        target.Free();
     }
 }
