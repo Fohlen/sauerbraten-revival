@@ -215,3 +215,37 @@ a leaderboard that means anything.
   loop (§5 source #5, then #1) — **before** designing M6/M7.
 - **Remaining:** a small reconciliation policy (snap / smooth) and the map-hash
   gate; both are local, not architectural.
+
+---
+
+## 10. Server-authoritative hitscan & lag compensation design
+
+### 10.1 The divergence from Cube 2
+
+In original Sauerbraten (`src/fpsgame/weapon.cpp:819` and `src/fpsgame/server.cpp:2361`),
+the **client** raycasts against other players and sends a pre-computed list of
+hits (`addmsg(N_SHOOT, ..., hits)`). The server trusts those hits directly,
+providing zero defense against silent-aim or hit injection.
+
+In **Sauerbraten Revival**, clients send **firing intent only**; the server
+runs the authoritative raycast and collision resolution.
+
+### 10.2 Workflow
+
+1. **Client firing intent**:
+   - The local player predicts immediate feedback: plays hudgun firing animation,
+     spawns local tracer lines (`WeaponEffectsRenderer`), applies local shooter
+     recoil (`Entity.Vel += KickbackVel`), and starts the cooldown timer.
+   - Client sends `ShotIntentPacket`: `{ ClientTick, GunId, From, Dir, Seed }`.
+2. **Server validation & lag compensation (rewind phase)**:
+   - Validates shooter state (alive, cooldown satisfied, ammo available).
+   - Computes the client's view time: `ClientViewTime = ServerTime - (RTT / 2) - InterpDelay`.
+   - Rewinds other players' bounding cylinders (`PhysEnt`) using a ring buffer of
+     recent position history (~500 ms).
+   - Executes authoritative raycast using `WeaponHitscan.Fire` against the rewound
+     candidate cylinders and server world octree.
+3. **Application & replication**:
+   - Applies damage via `PlayerState.DoDamage` and momentum transfer (`hitpush`).
+   - Broadcasts `ShotResultPacket` to all clients to replicate confirmed damage,
+     health deduction, and death events.
+

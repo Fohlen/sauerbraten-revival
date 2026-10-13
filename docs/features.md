@@ -423,6 +423,9 @@ Steam leaderboard. Movement determinism is verified with zero deviation (Plan A:
 - [ ] Steamworks networking (movement + command replication).
 - [ ] Server-authoritative world; client prediction + reconciliation; lag
       compensation for hitscan.
+      - [ ] `ShotIntentPacket` & `ShotResultPacket` network codec.
+      - [ ] Server `PlayerPositionBuffer` rewind manager (~500 ms history buffer).
+      - [ ] Server-authoritative `WeaponHitscan.Fire` execution over rewound client view timestamps.
 - [ ] Steam Workshop upload/download; content hashes and parity.
 - [ ] Matchmaking, friends, achievements.
 
