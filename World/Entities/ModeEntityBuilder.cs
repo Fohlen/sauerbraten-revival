@@ -67,10 +67,12 @@ public static class ModeEntityBuilder
 
             PopulateSemantics(node, e);
 
+            // Orient the entity model in the Z-up world.
+            EntityFacing.ApplyYaw(node, e.Attr1);
+
             // entradius draws a facing arrow for FLAG/MONSTER/TELEDEST/
             // RESPAWNPOINT/BOX/BARREL/PLATFORM/ELEVATOR (size 4).
             bool arrow = DrawsFacingArrow(e.Type);
-            if (arrow) EntityFacing.ApplyYaw(node, e.Attr1);
             EntityMarker.Add(node, textures, arrow: arrow);
 
             root.AddChild(node);

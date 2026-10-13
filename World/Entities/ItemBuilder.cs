@@ -35,6 +35,7 @@ public static class ItemBuilder
                 ModelTranslation = info?.Translation ?? Vector3.Zero,
                 SkinMaterial = ModelSkin.Build(info, textures, skinCache),
             };
+            EntityFacing.ApplyYaw(item, 0);
             root.AddChild(item);
             EntityMarker.Add(item, textures);
         }

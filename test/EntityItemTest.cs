@@ -53,4 +53,20 @@ public class EntityItemTest : GoTestBase
         TestAssert.Equal("quad", ItemBuilder.ModelName(EntityType.QuadDamage), "quad");
         TestAssert.True(ItemBuilder.ModelName(EntityType.Light) == null, "lights are not items");
     }
+
+    [Test]
+    public void ItemsOrientUprightInZUpWorld()
+    {
+        var map = TestData.ReadMap();
+        var root = ItemBuilder.Build(map);
+
+        Basis expectedBasis = Basis.LookingAt(new Vector3(0, 1, 0), new Vector3(0, 0, 1));
+        foreach (var child in root.GetChildren())
+        {
+            if (child is not Item item) continue;
+            TestAssert.True(item.Basis.IsEqualApprox(expectedBasis),
+                $"{item.Name} basis ({item.Basis}) stands upright in Z-up world (yaw 0)");
+        }
+        root.Free();
+    }
 }
