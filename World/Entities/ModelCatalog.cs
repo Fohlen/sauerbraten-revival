@@ -21,6 +21,15 @@ public sealed class ModelInfo
     public string? Skin;
     public string? Bump;
 
+    /// <summary>Alpha test cutoff threshold in [0.0, 1.0] (Cube2 <c>mdlalphatest</c>).</summary>
+    public float? AlphaTest;
+
+    /// <summary>True for alpha blend, false for alpha scissor / cutout (Cube2 <c>mdlalphablend</c>).</summary>
+    public bool? AlphaBlend;
+
+    /// <summary>True to cull backfaces, false to disable backface culling for 2-sided geometry (Cube2 <c>mdlcullface</c>).</summary>
+    public bool? CullFace;
+
     /// <summary>Reference-dump-relative source geometry (e.g. <c>models/mrfixit/mrfixit.md5mesh</c>), or null.</summary>
     public string? Source;
 
@@ -145,6 +154,22 @@ public sealed class ModelCatalog
             info.Skin = skin.GetString();
         if (v.TryGetProperty("bump", out var bump) && bump.ValueKind == JsonValueKind.String)
             info.Bump = bump.GetString();
+        if (v.TryGetProperty("alphatest", out var at) && at.ValueKind == JsonValueKind.Number)
+            info.AlphaTest = (float)at.GetDouble();
+        if (v.TryGetProperty("alphablend", out var ab))
+        {
+            if (ab.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                info.AlphaBlend = ab.GetBoolean();
+            else if (ab.ValueKind == JsonValueKind.Number)
+                info.AlphaBlend = ab.GetInt32() != 0;
+        }
+        if (v.TryGetProperty("cullface", out var cf))
+        {
+            if (cf.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                info.CullFace = cf.GetBoolean();
+            else if (cf.ValueKind == JsonValueKind.Number)
+                info.CullFace = cf.GetInt32() != 0;
+        }
         if (v.TryGetProperty("source", out var src) && src.ValueKind == JsonValueKind.String)
             info.Source = src.GetString();
         if (v.TryGetProperty("skeleton", out var skel) && skel.ValueKind == JsonValueKind.True)

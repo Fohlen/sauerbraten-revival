@@ -44,7 +44,7 @@ def parse_cfg(path: str) -> dict:
     """Extract the model parameters we care about from a model .cfg."""
     params: dict = {"scale": 1.0, "trans": [0.0, 0.0, 0.0], "glow": None, "spec": None,
                     "skin": None, "bump": None, "source": None, "objdir": None,
-                    "md5dir": None,
+                    "md5dir": None, "alphatest": None, "alphablend": None, "cullface": None,
                     "execs": [], "cfgs": [], "skins": [], "anims": [], "tags": [],
                     "animparts": [], "pitches": [], "adjusts": [], "links": []}
     if not os.path.isfile(path):
@@ -77,6 +77,21 @@ def parse_cfg(path: str) -> dict:
                 params["glow"] = [int(args[0]), float(args[1]), float(args[2])]
             elif cmd == "mdlspec" and args:
                 params["spec"] = int(args[0])
+            elif cmd in ("mdlalphatest", "alphatest", "objalphatest", "md2alphatest", "md3alphatest", "md5alphatest", "iqmalphatest") and args:
+                try:
+                    params["alphatest"] = max(0.0, min(1.0, float(args[-1])))
+                except ValueError:
+                    pass
+            elif cmd in ("mdlalphablend", "alphablend", "objalphablend", "md2alphablend", "md3alphablend", "md5alphablend", "iqmalphablend") and args:
+                try:
+                    params["alphablend"] = int(float(args[-1])) != 0
+                except ValueError:
+                    pass
+            elif cmd in ("mdlcullface", "cullface", "objcullface", "md2cullface", "md3cullface", "md5cullface", "iqmcullface") and args:
+                try:
+                    params["cullface"] = int(float(args[-1])) != 0
+                except ValueError:
+                    pass
             elif cmd in ("objdir",) and args:
                 params["objdir"] = args[0]
             elif cmd == "md5dir" and args:
@@ -198,7 +213,7 @@ def _execute_cfg(params: dict, models_root: str, packages_root: str) -> None:
         for key in ("source", "objdir"):
             if not params.get(key) and sub.get(key):
                 params[key] = sub[key]
-        for key in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir"):
+        for key in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir", "alphatest", "alphablend", "cullface"):
             if params.get(key) in (None, 1.0, [0.0, 0.0, 0.0]) and sub.get(key) not in (None, 1.0, [0.0, 0.0, 0.0]):
                 params[key] = sub[key]
         # List-valued directives accumulate across the exec chain (md5.cfg execs
@@ -301,7 +316,7 @@ def _merge_cfg_params(params: dict, base: str) -> None:
             if path in seen:
                 continue
             other = parse_cfg(path)
-            for k in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir"):
+            for k in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir", "alphatest", "alphablend", "cullface"):
                 if params.get(k) in (None, 1.0, [0.0, 0.0, 0.0]) and other.get(k) not in (None, 1.0, [0.0, 0.0, 0.0]):
                     params[k] = other[k]
             part_offset = len(params.setdefault("animparts", []))
@@ -1059,6 +1074,9 @@ def main() -> int:
             "trans": params.get("trans", [0.0, 0.0, 0.0]),
             "glow": params.get("glow"),
             "spec": params.get("spec"),
+            "alphatest": params.get("alphatest"),
+            "alphablend": params.get("alphablend"),
+            "cullface": params.get("cullface"),
             "skin": None,
             "bump": None,
         }
