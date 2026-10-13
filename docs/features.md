@@ -68,7 +68,7 @@ Done:
 - [x] Glow (emission) maps.
 - [x] Skybox: cubemap `skybox` mapvar → `SkyBuilder` + `shader_type sky`.
 - [x] Texture pipeline: `ITextureSource` seam + `tools/texture-import/` + runtime dump fallback.
-- [x] Material surfaces (water/lava/glass) — `MaterialMesher` + `MaterialTextures`.
+- [x] Material surfaces (water/lava/glass) — `MaterialMesher` + `MaterialTextures` (exact occlusion culling via `OctaEdit.VisibleFace`).
 - [x] `Resource`-based world save/load (compact binary format) — `WorldSnapshot`
       (canonical octree + entity blob, versioned, content-hashed) wrapped in Godot
       `WorldResource`/`HistoryResource`, plus the map-directory layout + compaction +

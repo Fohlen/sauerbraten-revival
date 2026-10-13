@@ -9,68 +9,7 @@ divergence we are not fixing right now.
 
 ## Water & waterfalls
 
-### 1. Waterfall drawn twice, offset by one cube (the "−1 X" artifact)
-
-**Symptom.** In `bt_falls` the waterfalls render, but ~1 cube shifted in −X; the
-top waterfall pokes into the room although the original keeps it outside.
-
-**Cause.** `bt_falls`' water cubes are two different things, and both our meshers
-handle both:
-
-- **Solid cubes flagged with a material** — the waterfalls. In the map they read
-  `faces = 80808080,80808080,80808080`, `material = MAT_WATER` (i.e.
-  `IsEntirelySolid() == true`). The engine's `visibleface()`
-  (`engine/octa.cpp:1013`) **hides** these from the material path
-  (`faceedges(c,orient)==F_SOLID && touchingface(c,orient)`); they are solid
-  geometry (`classifyface`, `octa.cpp:1059`) drawn with the waterfall texture.
-- **Purely-liquid cubes** — the lake surface, a material volume that is *not*
-  fully solid. The engine's `classifyface()` drops their geometry via
-  `collapsedface()` (`octa.cpp:972`), and `genmatsurfs()`
-  (`engine/material.cpp:214`) draws them through the material path.
-
-Our meshers ignore the distinction:
-
-- `OctaMesher` meshes every `!IsEmpty()` cube, so it draws the purely-liquid cubes
-  whose engine geometry is collapsed.
-- `MaterialMesher` meshes every `(material & MATF_VOLUME) != MAT_AIR` cube, so it
-  draws the fully-solid waterfall cubes too.
-
-Every water cube is therefore drawn **twice** — once as a flat full face
-(`CubeGeometry.SolidFaceVerts`) and once edge-shaped (`Cube.GenFaceVerts`) — and
-the two surfaces disagree by up to a cube. That overlap is the −1 cube offset.
-
-**Intended fix** (developed, then reverted in `8b306cc`; re-apply when we return
-to water):
-
-- `MaterialMesher`: skip a face when its own cube is fully solid —
-  `if (face.Cube.IsEntirelySolid()) return false;` (the `visibleface()` early-out).
-- `OctaMesher` include:
-  `!c.IsEmpty() && ((c.Material & MATF_VOLUME) == 0 || c.IsEntirelySolid())` —
-  drop purely-liquid cubes, which `MaterialMesher` draws instead.
-
-Evidence from the experiment: bt_falls' material mesh went 996 → 335 faces (all
-horizontal — only the lake), church51's solid mesh 686392 → 622570 triangles.
-
-### 3. Residual shimmer inside liquid/glass volumes from per-cube material faces
-
-**Symptom.** After the obvious duplicate-draw fix, some shimmer remains at the
-interface between water/glass and solid cubes, and in the interior of the
-material volume itself. The surface is much closer to the reference, but the
-seams still show as faint “cubeish” flicker where a material face should have
-been hidden by the exact engine occlusion tests.
-
-**Cause.** The engine does not merely hide same-material faces or boundary faces
-at a solid neighbour. It also applies the exact per-face `visibleface()` /
-`classifyface()` / `occludesface()` occlusion path, which tests the polygon of
-both faces against each other and suppresses any face fully enclosed by the same
-volume or hidden by a neighbouring surface. Our material pass is still a
-conservative boundary mesh: it emits each surviving face as a standalone quad,
-without the engine's exact polygon clipping and per-face visibility tests, so a
-fully hidden voxel face can still leak as shimmering internal cubes.
-
-**Current status.** Fixed. `MaterialMesher` now evaluates `OctaEdit.VisibleFace` (the r6889 `visibleface()` / `occludesface()` polygon test) when deciding whether to emit a material surface, culling internal material faces and faces occluded by neighbour polygons or solid volumes.
-
-### 2. Waterfalls use a static texture instead of the waterfall shader
+### Waterfalls use a static texture instead of the waterfall shader
 
 The engine renders waterfalls with dedicated animated geometry and shaders
 (`engine/material.cpp:87 renderwaterfall`, the `MAT_WATER` case at
