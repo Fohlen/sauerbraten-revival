@@ -79,6 +79,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public bool HidePlaceholderBody { get; set; }
 
+    /// <summary>When true, ammo is not consumed when firing and weapons always have ammo.</summary>
+    [Export] public bool UnlimitedAmmo { get; set; } = false;
+
     /// <summary>
     /// The visible body model, if any. It must be a <b>sibling</b> of this node (a child
     /// of the same Z-up world node), so that it can be placed at the feet and kept
@@ -204,6 +207,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                     NextWeapon(1);
                 }
             }
+        }
+        else if (@event.IsActionPressed("cycle_weapon"))
+        {
+            NextWeapon(1);
         }
         else if (@event is InputEventKey { Pressed: true } key && !key.Echo)
         {
@@ -398,7 +405,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             int next = (current + i * step) % count;
             if (next < 0) next += count;
-            if (Combat.HasAmmo(next) || next == (int)Gun.Fist)
+            if (UnlimitedAmmo || Combat.HasAmmo(next) || next == (int)Gun.Fist)
             {
                 SelectWeapon((Gun)next);
                 return;
@@ -424,7 +431,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         if (now - Combat.LastAction < Combat.GunWait) return false;
 
         var weapon = WeaponCatalog.Get((Gun)Combat.GunSelect);
-        if (Combat.GunSelect != (int)Gun.Fist && !Combat.HasAmmo(Combat.GunSelect))
+        if (!UnlimitedAmmo && Combat.GunSelect != (int)Gun.Fist && !Combat.HasAmmo(Combat.GunSelect))
         {
             Combat.GunWait = 600; // weapon.cpp:788 msgsound(S_NOAMMO); d->gunwait = 600;
             NextWeapon();
@@ -434,7 +441,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Combat.LastAction = now;
         Combat.LastAttackGun = Combat.GunSelect;
         Combat.GunWait = weapon.AttackDelay;
-        if (Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
+        if (!UnlimitedAmmo && Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
             Combat.Ammo[Combat.GunSelect]--;
 
         // Hitscan raycast & resolution (weapon.cpp:775 shoot)
