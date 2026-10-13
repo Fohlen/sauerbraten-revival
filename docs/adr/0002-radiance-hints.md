@@ -42,7 +42,7 @@ $$E(n) = 0.886227 \cdot L_{00} + 1.023327 \cdot (L_{1,-1} n_y + L_{1,0} n_z + L_
 where $c_0 = 0.886227 \cdot L_{00}$ (scalar ambient) and $c_1 = 1.023327 \cdot (L_{1,1}, L_{1,-1}, L_{1,0})$ (colored directional vector).
 
 Cosine-lobe constants are folded directly into the probe accumulation during baking, leaving the runtime shader evaluation as a single dot product:
-$$E(n) = \max(\text{sky\_tint} \cdot c_0 + c_1 \cdot n, 0)$$
+$$E(n) = \max(\text{sky}_\text{tint} \cdot c_0 + c_1 \cdot n, 0)$$
 
 ### 2. GPU Storage & Shader Interface
 
@@ -66,7 +66,7 @@ $$E(n) = \max(\text{sky\_tint} \cdot c_0 + c_1 \cdot n, 0)$$
 
 - **Bounding Box:** Computed from the AABB of non-empty geometry (`GeometryBounds`), expanded by one cell margin, and cubified (equal dimensions along all axes) to guarantee cubic cells.
 - **Probe coordinates:** Probes sit at cell centers:
-  $$\text{uvw} = \frac{\text{world\_pos} - \text{grid\_min}}{\text{grid\_size}}$$
+  $$\text{uvw} = \frac{\text{world}_\text{pos} - min(\text{grid})}{|grid|}$$
 - **Coordinate transformation:** The octree is Sauerbraten Z-up, while Godot nodes are rotated −90° about X. Sauerbraten $(x, y, z)$ maps to Godot $(x, z, -y)$. The grid is stored directly in Godot world space so shaders sample using unmodified world coordinates.
 - **Solid rejection:** Probes embedded within solid cubes (`LeafCube.IsEntirelySolid()`) are excluded from raycasting and baking to prevent sampling artifacts.
 
