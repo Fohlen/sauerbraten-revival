@@ -90,50 +90,50 @@ public static class WorldCommandCodec
                 WriteSelection(a, ((DeleteCubePayload)cmd.Payload).Selection);
                 break;
             case WorldOp.EditFace:
-            {
-                var p = (EditFacePayload)cmd.Payload;
-                WriteSelection(a, p.Selection);
-                a.Add(p.Dir); a.Add(p.Mode);
-                break;
-            }
+                {
+                    var p = (EditFacePayload)cmd.Payload;
+                    WriteSelection(a, p.Selection);
+                    a.Add(p.Dir); a.Add(p.Mode);
+                    break;
+                }
             case WorldOp.ReplaceBlock:
-            {
-                var p = (ReplaceBlockPayload)cmd.Payload;
-                WriteSelection(a, p.Target);
-                if (p.Block == null) a.Add(false);
-                else { a.Add(true); WriteBlock(a, p.Block); }
-                break;
-            }
+                {
+                    var p = (ReplaceBlockPayload)cmd.Payload;
+                    WriteSelection(a, p.Target);
+                    if (p.Block == null) a.Add(false);
+                    else { a.Add(true); WriteBlock(a, p.Block); }
+                    break;
+                }
             case WorldOp.SetFaceTexture:
-            {
-                var p = (SetFaceTexturePayload)cmd.Payload;
-                WriteSelection(a, p.Selection);
-                a.Add(p.Texture); a.Add(p.Orient);
-                break;
-            }
+                {
+                    var p = (SetFaceTexturePayload)cmd.Payload;
+                    WriteSelection(a, p.Selection);
+                    a.Add(p.Texture); a.Add(p.Orient);
+                    break;
+                }
             case WorldOp.ReplaceTexture:
-            {
-                var p = (ReplaceTexturePayload)cmd.Payload;
-                a.Add(p.InSelection);
-                if (p.Selection.HasValue) { a.Add(true); WriteSelection(a, p.Selection.Value); } else a.Add(false);
-                a.Add(p.OldTexture); a.Add(p.NewTexture);
-                break;
-            }
+                {
+                    var p = (ReplaceTexturePayload)cmd.Payload;
+                    a.Add(p.InSelection);
+                    if (p.Selection.HasValue) { a.Add(true); WriteSelection(a, p.Selection.Value); } else a.Add(false);
+                    a.Add(p.OldTexture); a.Add(p.NewTexture);
+                    break;
+                }
             case WorldOp.SetFaceMaterial:
-            {
-                var p = (SetFaceMaterialPayload)cmd.Payload;
-                WriteSelection(a, p.Selection);
-                a.Add(p.MaterialId); a.Add(p.Filter);
-                break;
-            }
+                {
+                    var p = (SetFaceMaterialPayload)cmd.Payload;
+                    WriteSelection(a, p.Selection);
+                    a.Add(p.MaterialId); a.Add(p.Filter);
+                    break;
+                }
             case WorldOp.FlipCube:
             case WorldOp.RotateCube:
-            {
-                var p = (TransformCubePayload)cmd.Payload;
-                WriteSelection(a, p.Selection);
-                a.Add(p.Direction);
-                break;
-            }
+                {
+                    var p = (TransformCubePayload)cmd.Payload;
+                    WriteSelection(a, p.Selection);
+                    a.Add(p.Direction);
+                    break;
+                }
             case WorldOp.Remip:
                 a.Add(((RemipPayload)cmd.Payload).MipVis);
                 break;
@@ -156,25 +156,25 @@ public static class WorldCommandCodec
             case WorldOp.DeleteCube:
                 return new DeleteCubePayload(ReadSelection(a, b));
             case WorldOp.EditFace:
-            {
-                var sel = ReadSelection(a, b);
-                return new EditFacePayload(sel, (int)a[b + 8], (int)a[b + 9]);
-            }
+                {
+                    var sel = ReadSelection(a, b);
+                    return new EditFacePayload(sel, (int)a[b + 8], (int)a[b + 9]);
+                }
             case WorldOp.ReplaceBlock:
-            {
-                var target = ReadSelection(a, b);
-                if (!(bool)a[b + 8]) return new ReplaceBlockPayload(target, null);
-                return new ReplaceBlockPayload(target, ReadBlock(a, b + 9));
-            }
+                {
+                    var target = ReadSelection(a, b);
+                    if (!(bool)a[b + 8]) return new ReplaceBlockPayload(target, null);
+                    return new ReplaceBlockPayload(target, ReadBlock(a, b + 9));
+                }
             case WorldOp.SetFaceTexture:
                 return new SetFaceTexturePayload(ReadSelection(a, b), (int)a[b + 8], (int)a[b + 9]);
             case WorldOp.ReplaceTexture:
-            {
-                bool inSel = (bool)a[b];
-                SelectionPayload? sel = (bool)a[b + 1] ? ReadSelection(a, b + 2) : null;
-                int idx = inSel && sel.HasValue ? b + 2 + 8 : b + 2;
-                return new ReplaceTexturePayload(sel, inSel, (int)a[idx], (int)a[idx + 1]);
-            }
+                {
+                    bool inSel = (bool)a[b];
+                    SelectionPayload? sel = (bool)a[b + 1] ? ReadSelection(a, b + 2) : null;
+                    int idx = inSel && sel.HasValue ? b + 2 + 8 : b + 2;
+                    return new ReplaceTexturePayload(sel, inSel, (int)a[idx], (int)a[idx + 1]);
+                }
             case WorldOp.SetFaceMaterial:
                 return new SetFaceMaterialPayload(ReadSelection(a, b), (int)a[b + 8], (int)a[b + 9]);
             case WorldOp.FlipCube:

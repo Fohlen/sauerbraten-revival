@@ -62,7 +62,7 @@ public class NPlanesProbe : GoTestBase
                 int ourVt = OctaVisible.VisibleTris(octa, c, f, co, size, Phys.MatNoClip, Phys.MatFClip);
                 // engine visibletris isn't dumped directly; skip
             }
-            GD.Print($"[nplanes] step={step} co={co} size={size} mat={c.Material} edges={c1[15]} ourMask=0x{ourMask:X2} expMask=0x{(c1[17].Length>0?int.Parse(c1[17])&0x3F:0):X2} ourNPlanes={cp.Size} expNPlanes={expNPlanes} ourPVis=0x{cp.Visible:X2} expPVis=0x{expPVisible:X2} [{string.Join(" ", faceDiffs)}]");
+            GD.Print($"[nplanes] step={step} co={co} size={size} mat={c.Material} edges={c1[15]} ourMask=0x{ourMask:X2} expMask=0x{(c1[17].Length > 0 ? int.Parse(c1[17]) & 0x3F : 0):X2} ourNPlanes={cp.Size} expNPlanes={expNPlanes} ourPVis=0x{cp.Visible:X2} expPVis=0x{expPVisible:X2} [{string.Join(" ", faceDiffs)}]");
         }
         GD.Print($"[nplanes] {cubes} cubes, {shown} shown");
     }

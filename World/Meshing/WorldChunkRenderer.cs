@@ -84,7 +84,7 @@ public partial class WorldChunkRenderer : Node3D
     public void Setup(Octa octa, MaterialSet? materials, ChunkedWorldMesh? prebuilt)
     {
         _octa = octa;
-        _materials = materials;        _nodes.Clear();
+        _materials = materials; _nodes.Clear();
         _chunkTriangles.Clear();
         _dirty.Clear();
         _dirtySet.Clear();

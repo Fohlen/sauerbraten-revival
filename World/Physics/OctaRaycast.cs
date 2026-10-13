@@ -76,12 +76,12 @@ public static class OctaRaycast
         }
 
         int closest = -1, x = (int)v.X, y = (int)v.Y, z = (int)v.Z;
-        for (;;)
+        for (; ; )
         {
             // DOWNOCTREE: descend from the cached node at lshift to the leaf.
             Cube[] lcArr = levels[lshift];
             Cube lc;
-            for (;;)
+            for (; ; )
             {
                 lshift--;
                 lc = lcArr[Octa.OctaStep(x, y, z, lshift)];

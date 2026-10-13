@@ -137,9 +137,15 @@ public sealed class OgzMap
         {
             Header = new OgzHeader
             {
-                Magic = header.Magic, Version = header.Version, HeaderSize = header.HeaderSize,
-                WorldSize = header.WorldSize, NumEnts = header.NumEnts, NumPvs = header.NumPvs,
-                Lightmaps = header.Lightmaps, BlendMap = header.BlendMap, NumVars = header.NumVars,
+                Magic = header.Magic,
+                Version = header.Version,
+                HeaderSize = header.HeaderSize,
+                WorldSize = header.WorldSize,
+                NumEnts = header.NumEnts,
+                NumPvs = header.NumPvs,
+                Lightmaps = header.Lightmaps,
+                BlendMap = header.BlendMap,
+                NumVars = header.NumVars,
                 NumVSlots = header.NumVSlots,
             },
             Vars = new List<OgzVar>(Vars),

@@ -152,9 +152,14 @@ public sealed class Selection
     public Selection Clone() => new()
     {
         Corner = Corner,
-        Cx = Cx, Cxs = Cxs,
-        Cy = Cy, Cys = Cys,
-        O = O, S = S, Grid = Grid, Orient = Orient,
+        Cx = Cx,
+        Cxs = Cxs,
+        Cy = Cy,
+        Cys = Cys,
+        O = O,
+        S = S,
+        Grid = Grid,
+        Orient = Orient,
     };
 
     /// <summary>Copy another selection's state into this one (the original's <c>sel = savedsel</c>).</summary>

@@ -137,58 +137,58 @@ public sealed class WorldCommandSink
             case WorldOp.SetFaceTexture:
             case WorldOp.ReplaceTexture:
             case WorldOp.SetFaceMaterial:
-            {
-                var region = SelectionRegion(cmd);
-                entry.UndoRegion = region;
-                entry.UndoBlock = _world.Capture(region, region.Grid);
-                break;
-            }
+                {
+                    var region = SelectionRegion(cmd);
+                    entry.UndoRegion = region;
+                    entry.UndoBlock = _world.Capture(region, region.Grid);
+                    break;
+                }
             case WorldOp.FlipCube:
             case WorldOp.RotateCube:
-            {
-                // Rotate squares the selection's in-plane extent (mprotate sets
-                // ss = max(S[R], S[C])), so capture the square the edit can touch, not
-                // the pre-rotation rectangle — otherwise undo under-captures a thin one.
-                var p = (TransformCubePayload)cmd.Payload;
-                var sel = p.Selection;
-                int d = Selection.Dimension(sel.Orient);
-                int r = Octa.R[d], c = Octa.C[d];
-                int ss = System.Math.Max(sel.Size[r], sel.Size[c]);
-                var origin = sel.Origin;
-                var size = sel.Size;
-                size = SetAxis(size, r, ss);
-                size = SetAxis(size, c, ss);
-                var region = new Block3(origin, size, sel.Grid, sel.Orient);
-                entry.UndoRegion = region;
-                entry.UndoBlock = _world.Capture(region, region.Grid);
-                break;
-            }
+                {
+                    // Rotate squares the selection's in-plane extent (mprotate sets
+                    // ss = max(S[R], S[C])), so capture the square the edit can touch, not
+                    // the pre-rotation rectangle — otherwise undo under-captures a thin one.
+                    var p = (TransformCubePayload)cmd.Payload;
+                    var sel = p.Selection;
+                    int d = Selection.Dimension(sel.Orient);
+                    int r = Octa.R[d], c = Octa.C[d];
+                    int ss = System.Math.Max(sel.Size[r], sel.Size[c]);
+                    var origin = sel.Origin;
+                    var size = sel.Size;
+                    size = SetAxis(size, r, ss);
+                    size = SetAxis(size, c, ss);
+                    var region = new Block3(origin, size, sel.Grid, sel.Orient);
+                    entry.UndoRegion = region;
+                    entry.UndoBlock = _world.Capture(region, region.Grid);
+                    break;
+                }
             case WorldOp.EditFace:
-            {
-                // Fill collapses the selection to one grid slice and may move it by
-                // one cell along the oriented axis, so capture one cell either side to
-                // cover whichever slice is actually mutated.
-                var p = (EditFacePayload)cmd.Payload;
-                var sel = p.Selection;
-                int d = Selection.Dimension(sel.Orient);
-                var origin = sel.Origin;
-                var size = sel.Size;
-                origin = SetAxis(origin, d, origin[d] - sel.Grid);
-                size = SetAxis(size, d, size[d] + 2);
-                var region = new Block3(origin, size, sel.Grid, sel.Orient);
-                entry.UndoRegion = region;
-                entry.UndoBlock = _world.Capture(region, region.Grid);
-                break;
-            }
+                {
+                    // Fill collapses the selection to one grid slice and may move it by
+                    // one cell along the oriented axis, so capture one cell either side to
+                    // cover whichever slice is actually mutated.
+                    var p = (EditFacePayload)cmd.Payload;
+                    var sel = p.Selection;
+                    int d = Selection.Dimension(sel.Orient);
+                    var origin = sel.Origin;
+                    var size = sel.Size;
+                    origin = SetAxis(origin, d, origin[d] - sel.Grid);
+                    size = SetAxis(size, d, size[d] + 2);
+                    var region = new Block3(origin, size, sel.Grid, sel.Orient);
+                    entry.UndoRegion = region;
+                    entry.UndoBlock = _world.Capture(region, region.Grid);
+                    break;
+                }
             case WorldOp.ReplaceBlock:
-            {
-                var p = (ReplaceBlockPayload)cmd.Payload;
-                var region = p.Target.ToBlock();
-                entry.UndoRegion = region;
-                entry.UndoBlock = _world.Capture(region, region.Grid);
-                entry.RedoBlock = p.Block;
-                break;
-            }
+                {
+                    var p = (ReplaceBlockPayload)cmd.Payload;
+                    var region = p.Target.ToBlock();
+                    entry.UndoRegion = region;
+                    entry.UndoBlock = _world.Capture(region, region.Grid);
+                    entry.RedoBlock = p.Block;
+                    break;
+                }
         }
         return entry;
     }

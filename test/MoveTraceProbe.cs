@@ -53,7 +53,7 @@ public class MoveTraceProbe : GoTestBase
 
         foreach (var l in log) GD.Print($"[mt] {l}");
         GD.Print($"[movetrace] predicted v={pl.Vel} ps={pl.PhysState} o={pl.O}");
-        GD.Print($"[movetrace] expected  v=({F(cur,10)},{F(cur,11)},{F(cur,12)}) ps={F(cur,16)} o=({F(cur,7)},{F(cur,8)},{F(cur,9)})");
+        GD.Print($"[movetrace] expected  v=({F(cur, 10)},{F(cur, 11)},{F(cur, 12)}) ps={F(cur, 16)} o=({F(cur, 7)},{F(cur, 8)},{F(cur, 9)})");
     }
 
     private static float F(string[] row, int i) => float.Parse(row[i], CultureInfo.InvariantCulture);

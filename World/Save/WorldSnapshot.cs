@@ -270,8 +270,12 @@ public sealed class WorldSnapshot
         {
             verts[i] = new VertInfo
             {
-                X = r.ReadUInt16(), Y = r.ReadUInt16(), Z = r.ReadUInt16(),
-                U = r.ReadUInt16(), V = r.ReadUInt16(), Norm = r.ReadUInt16(),
+                X = r.ReadUInt16(),
+                Y = r.ReadUInt16(),
+                Z = r.ReadUInt16(),
+                U = r.ReadUInt16(),
+                V = r.ReadUInt16(),
+                Norm = r.ReadUInt16(),
             };
         }
         ext.Verts = verts;

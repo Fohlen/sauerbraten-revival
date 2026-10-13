@@ -65,8 +65,11 @@ public class BounceBodyTest : GoTestBase
         {
             O = new Vector3(256, 256, FloorZ + 24.0f),
             Type = Phys.EntPlayer,
-            Radius = 4.1f, XRadius = 4.1f, YRadius = 4.1f,
-            EyeHeight = 14.0f, AboveEye = 1.0f,
+            Radius = 4.1f,
+            XRadius = 4.1f,
+            YRadius = 4.1f,
+            EyeHeight = 14.0f,
+            AboveEye = 1.0f,
             State = PhysEnt.CsAlive,
         };
         phys.DynEnts.Add(player);

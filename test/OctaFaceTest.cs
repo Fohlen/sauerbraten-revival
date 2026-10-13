@@ -155,7 +155,7 @@ public class OctaFaceTest : GoTestBase
         uint before0 = c.Faces[0], before1 = c.Faces[1], before2 = c.Faces[2];
         for (int i = 0; i < 4; i++) OctaEdit.FlipCube(c, d: 1);
         for (int l = 0; l < 6; l++) TestAssert.Equal(l + 1, c.Texture[l], $"texture {l} restored");
-        for (int f = 0; f < 3; f++) TestAssert.Equal(new[]{ before0, before1, before2 }[f], c.Faces[f], "faces restored");
+        for (int f = 0; f < 3; f++) TestAssert.Equal(new[] { before0, before1, before2 }[f], c.Faces[f], "faces restored");
     }
 
     [Test]
@@ -167,7 +167,7 @@ public class OctaFaceTest : GoTestBase
         uint before0 = c.Faces[0], before1 = c.Faces[1], before2 = c.Faces[2];
         for (int i = 0; i < 4; i++) OctaEdit.RotateCube(c, d: 2);
         for (int l = 0; l < 6; l++) TestAssert.Equal(l + 1, c.Texture[l], $"texture {l} restored");
-        for (int f = 0; f < 3; f++) TestAssert.Equal(new[]{ before0, before1, before2 }[f], c.Faces[f], "faces restored");
+        for (int f = 0; f < 3; f++) TestAssert.Equal(new[] { before0, before1, before2 }[f], c.Faces[f], "faces restored");
     }
 
     [Test]

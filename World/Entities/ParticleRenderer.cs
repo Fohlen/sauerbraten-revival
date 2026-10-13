@@ -19,16 +19,16 @@ public static class ParticleRenderer
         switch (emitter.Effect)
         {
             case 0: // fire and smoke - <radius> <height> <rgb>
-            {
-                float radius = emitter.Attr2 != 0 ? emitter.Attr2 / 100.0f : 1.5f;
-                float height = emitter.Attr3 != 0 ? emitter.Attr3 / 100.0f : radius / 3.0f;
-                var flameColor = emitter.Attr4 != 0 ? ColorFromAttr(emitter.Attr4) : new Color(0x90 / 255f, 0x30 / 255f, 0x20 / 255f);
-                root.AddChild(Flame(textures, "particles/flames.png", radius, height, flameColor, 2.0f, 200.0f, 600.0f, -15.0f, 1.0f, true));
-                var smoke = Flame(textures, "particles/smoke.png", radius, height, new Color(0x30 / 255f, 0x30 / 255f, 0x20 / 255f), 4.0f, 100.0f, 2000.0f, -20.0f, 0.25f, false);
-                smoke.Position = new Vector3(0, 0, 4.0f * Mathf.Min(radius, height));
-                root.AddChild(smoke);
-                break;
-            }
+                {
+                    float radius = emitter.Attr2 != 0 ? emitter.Attr2 / 100.0f : 1.5f;
+                    float height = emitter.Attr3 != 0 ? emitter.Attr3 / 100.0f : radius / 3.0f;
+                    var flameColor = emitter.Attr4 != 0 ? ColorFromAttr(emitter.Attr4) : new Color(0x90 / 255f, 0x30 / 255f, 0x20 / 255f);
+                    root.AddChild(Flame(textures, "particles/flames.png", radius, height, flameColor, 2.0f, 200.0f, 600.0f, -15.0f, 1.0f, true));
+                    var smoke = Flame(textures, "particles/smoke.png", radius, height, new Color(0x30 / 255f, 0x30 / 255f, 0x20 / 255f), 4.0f, 100.0f, 2000.0f, -20.0f, 0.25f, false);
+                    smoke.Position = new Vector3(0, 0, 4.0f * Mathf.Min(radius, height));
+                    root.AddChild(smoke);
+                    break;
+                }
 
             case 11: // flame - <radius> <height> <rgb>
                 root.AddChild(Flame(textures, "particles/flames.png", emitter.Attr2 / 100.0f, emitter.Attr3 / 100.0f,
@@ -45,11 +45,11 @@ public static class ParticleRenderer
                 break;
 
             case 2: // water fountain - <dir> <rgb>
-            {
-                var color = emitter.Attr3 > 0 ? ColorFromAttr(emitter.Attr3) : new Color(0.5f, 0.6f, 0.8f);
-                root.AddChild(Splash(textures, "particles/base.png", color, 150.0f, 0.6f, 2.0f, 0.6f, 16, true));
-                break;
-            }
+                {
+                    var color = emitter.Attr3 > 0 ? ColorFromAttr(emitter.Attr3) : new Color(0.5f, 0.6f, 0.8f);
+                    root.AddChild(Splash(textures, "particles/base.png", color, 150.0f, 0.6f, 2.0f, 0.6f, 16, true));
+                    break;
+                }
 
             case 9: // steam - <dir> <rgb>
                 root.AddChild(Splash(textures, "particles/steam.png", ColorFromAttr(emitter.Attr4), 10.0f, 2.4f, -20.0f, 0.6f, 12, false));

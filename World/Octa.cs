@@ -198,21 +198,21 @@ public sealed class Octa
     public const ushort DEFAULT_SKY = 0;
     public const ushort DEFAULT_GEOM = 1;
 
-    public const ushort MAT_AIR      = 0;
-    public const ushort MAT_WATER    = 1 << 2;
-    public const ushort MAT_LAVA     = 2 << 2;
-    public const ushort MAT_GLASS    = 3 << 2;
-    public const ushort MAT_NOCLIP   = 1 << 5;
-    public const ushort MAT_CLIP     = 2 << 5;
+    public const ushort MAT_AIR = 0;
+    public const ushort MAT_WATER = 1 << 2;
+    public const ushort MAT_LAVA = 2 << 2;
+    public const ushort MAT_GLASS = 3 << 2;
+    public const ushort MAT_NOCLIP = 1 << 5;
+    public const ushort MAT_CLIP = 2 << 5;
     public const ushort MAT_GAMECLIP = 3 << 5;
-    public const ushort MAT_DEATH    = 1 << 8;
-    public const ushort MAT_ALPHA    = 4 << 8;
+    public const ushort MAT_DEATH = 1 << 8;
+    public const ushort MAT_ALPHA = 4 << 8;
 
     // iengine.h material masks.
-    public const ushort MATF_INDEX  = 3;
+    public const ushort MATF_INDEX = 3;
     public const ushort MATF_VOLUME = 7 << 2;
-    public const ushort MATF_CLIP   = 7 << 5;
-    public const ushort MATF_FLAGS  = 0xFF << 8;
+    public const ushort MATF_CLIP = 7 << 5;
+    public const ushort MATF_FLAGS = 0xFF << 8;
 
     // iengine.h material predicates (MATF_VOLUME-shifted values).
     public static bool IsLiquid(ushort mat) => mat == MAT_WATER || mat == MAT_LAVA;

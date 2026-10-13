@@ -34,8 +34,14 @@ public sealed class MapEntity
         return new MapEntity
         {
             Type = e.Type,
-            X = x, Y = y, Z = z,
-            Attr1 = e.Attr1, Attr2 = e.Attr2, Attr3 = e.Attr3, Attr4 = e.Attr4, Attr5 = e.Attr5,
+            X = x,
+            Y = y,
+            Z = z,
+            Attr1 = e.Attr1,
+            Attr2 = e.Attr2,
+            Attr3 = e.Attr3,
+            Attr4 = e.Attr4,
+            Attr5 = e.Attr5,
         };
     }
 
@@ -53,9 +59,14 @@ public sealed class MapEntity
     public static MapEntity Read(BinaryReader r) => new()
     {
         Type = r.ReadByte(),
-        X = r.ReadInt32(), Y = r.ReadInt32(), Z = r.ReadInt32(),
-        Attr1 = r.ReadInt16(), Attr2 = r.ReadInt16(), Attr3 = r.ReadInt16(),
-        Attr4 = r.ReadInt16(), Attr5 = r.ReadInt16(),
+        X = r.ReadInt32(),
+        Y = r.ReadInt32(),
+        Z = r.ReadInt32(),
+        Attr1 = r.ReadInt16(),
+        Attr2 = r.ReadInt16(),
+        Attr3 = r.ReadInt16(),
+        Attr4 = r.ReadInt16(),
+        Attr5 = r.ReadInt16(),
     };
 
     /// <summary>Mix the semantic fields into a hash accumulator, in a fixed order.</summary>
