@@ -362,7 +362,7 @@ Remaining:
 
 Remaining:
 
-- [~] Hitscan weapons (insta rifle; effic loadout).
+- [x] Hitscan weapons (insta rifle; effic loadout).
       - [x] **Weapon definitions** (`Gun`/`Guns`, `WeaponInfo`, `GameSound`,
             `WeaponCatalog` + `resources/weapons/*.tres`), locked to the engine
             `guns[]`/`vweps[]` tables by `test/WeaponCatalogTest.cs`.
@@ -381,6 +381,10 @@ Remaining:
             shooter kickback velocity, target push impulses and `DoDamage` armour
             absorption. Asserted by `test/WeaponRayTest.cs`, `test/WeaponHitscanTest.cs`,
             and `test/MapPlayerTest.cs`.
+      - [x] **Audio and shot effects** (`GameAudio`, `WeaponEffectsRenderer`): 70 hardcoded
+            sounds loaded from `data/sounds.cfg` (`assets/sounds/` or reference dump fallback),
+            slot/alt sampling, volume scaling, local 2D and 3D positional playback, empty-ammo
+            and hit confirmation sounds. Asserted by `test/GameAudioTest.cs`.
 - [ ] Projectiles & explosions (Rocket Launcher & Grenade Launcher).
       - [ ] **Radial splash damage & self-push** (`radialeffect` / `explode`): distance-attenuated damage `(damage * (1 - dist / (1.5 * exprad)))`, self-damage halving (`EXP_SELFDAMDIV = 2`), self-push amplification (`EXP_SELFPUSH = 2.5`), rocket jump impulse mechanics.
       - [ ] **Rocket projectiles** (`projectile`, `projsplash`): linear flight at speed 320, dynamic collision against world octree & candidate bounding cylinders, visual fireball/spark trail and impact detonation.

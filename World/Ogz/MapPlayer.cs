@@ -95,8 +95,11 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Weapon tracer and particle effect renderer.</summary>
     public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
 
-    /// <summary>Audio player for weapon fire and player sounds.</summary>
+    /// <summary>Audio player for weapon fire and player sounds in 3D (for remote / 3rd person).</summary>
     public AudioStreamPlayer3D? AudioPlayer { get; set; }
+
+    /// <summary>Audio player for local player sounds (non-spatialized, direct to ears).</summary>
+    public AudioStreamPlayer? AudioPlayer2D { get; set; }
 
     /// <summary>Toggle the detached third-person camera (engine <c>thirdperson</c> bind).</summary>
     public void ToggleThirdPerson()
@@ -139,6 +142,18 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             cam.Current = true;
             ApplyFov(cam);
+        }
+
+        if (AudioPlayer2D == null)
+        {
+            AudioPlayer2D = new AudioStreamPlayer { Name = "AudioPlayer2D" };
+            AddChild(AudioPlayer2D);
+        }
+
+        if (AudioPlayer == null)
+        {
+            AudioPlayer = new AudioStreamPlayer3D { Name = "AudioPlayer3D" };
+            AddChild(AudioPlayer);
         }
     }
 
@@ -430,6 +445,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         if (!UnlimitedAmmo && Combat.GunSelect != (int)Gun.Fist && !Combat.HasAmmo(Combat.GunSelect))
         {
             Combat.GunWait = 600; // weapon.cpp:788 msgsound(S_NOAMMO); d->gunwait = 600;
+            PlaySound(GameSound.NoAmmo);
             NextWeapon();
             return false;
         }
@@ -439,6 +455,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Combat.GunWait = weapon.AttackDelay;
         if (!UnlimitedAmmo && Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
             Combat.Ammo[Combat.GunSelect]--;
+
+        // Play weapon firing sound (weapon.cpp:672 playsound(sound))
+        PlaySound(weapon.Sound);
 
         // Hitscan raycast & resolution (weapon.cpp:775 shoot)
         // Fist and hitscan weapons (projspeed == 0) execute hitscan raycast.
@@ -468,6 +487,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 var hit = hitscan.Hits[i];
                 hit.Target.ApplyHitPush(hit.PushVel);
                 hit.Target.TakeDamage(hit.Damage);
+            }
+
+            // Play hit confirmation sound if any target was hit (fpsgame/weapon.cpp:717 playsound(S_HIT))
+            if (hitscan.Hits.Count > 0)
+            {
+                PlaySound(GameSound.Hit);
             }
 
             // Spawn visual tracer beams (weapon.cpp:592 shoteffects)
@@ -662,5 +687,22 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Vector3 facing = Movement.VecFromYawPitch(Entity.Yaw + 180f, 0f, 1, 0);
         if (facing.LengthSquared() > 1e-6f)
             model.Basis = Basis.LookingAt(facing, new Vector3(0, 0, 1));
+    }
+
+    /// <summary>
+    /// Play a game sound. If local player, uses non-positional <see cref="AudioPlayer2D"/>;
+    /// otherwise plays through 3D <see cref="AudioPlayer"/>.
+    /// </summary>
+    public void PlaySound(GameSound sound)
+    {
+        if (sound == GameSound.None) return;
+        if (AudioPlayer2D != null)
+        {
+            AudioPlayer2D.Play(sound);
+        }
+        else if (AudioPlayer != null)
+        {
+            AudioPlayer.Play3D(sound);
+        }
     }
 }
