@@ -82,6 +82,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>When true, ammo is not consumed when firing and weapons always have ammo.</summary>
     [Export] public bool UnlimitedAmmo { get; set; } = false;
 
+    /// <summary>Default weapon selected on spawn/respawn.</summary>
+    [Export] public Gun DefaultGun { get; set; } = Gun.Pistol;
+
     /// <summary>
     /// The visible body model, if any. It must be a <b>sibling</b> of this node (a child
     /// of the same Z-up world node), so that it can be placed at the feet and kept
@@ -190,6 +193,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Pitch = 0f;
         LastMillis = (int)Time.GetTicksMsec();
         Initialized = true;
+        SelectWeapon(DefaultGun);
         SyncTransform();
         if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
     }
@@ -527,6 +531,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.State = PhysEnt.CsAlive;
         Entity.Dead = false;
         _bodyAnim = "";
+        SelectWeapon(DefaultGun);
         UpdateBodyAnim();
         UpdateHudgunAnim();
     }

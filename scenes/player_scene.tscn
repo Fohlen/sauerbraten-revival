@@ -34,6 +34,7 @@ environment = SubResource("Environment_env")
 script = ExtResource("2_player")
 ThirdPersonDistance = 20.0
 UnlimitedAmmo = true
+DefaultGun = 4
 
 [node name="Body" type="MeshInstance3D" parent="Player" unique_id=982418121]
 mesh = SubResource("CapsuleMesh_body")

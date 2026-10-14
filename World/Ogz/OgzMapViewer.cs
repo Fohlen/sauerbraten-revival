@@ -1,6 +1,7 @@
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.World.Ogz;
 
@@ -27,43 +28,43 @@ namespace SauerbratenRevival.World.Ogz;
 [GlobalClass]
 public partial class OgzMapViewer : Node3D
 {
-	/// <summary>Override map to build. Absolute, or relative to the reference dump's <c>packages/</c> dir (e.g. <c>base/church51.ogz</c>); empty uses the default.</summary>
+    /// <summary>Override map to build. Absolute, or relative to the reference dump's <c>packages/</c> dir (e.g. <c>base/church51.ogz</c>); empty uses the default.</summary>
     [Export] public string OgzPath { get; set; } = "";
     [Export] public int ChunkSize { get; set; } = 512;
 
     /// <summary>Place the direct-child <c>Camera3D</c> at a full-map overview once built.</summary>
     [Export] public bool FrameCamera { get; set; } = true;
 
-	/// <summary>Attach the direct-child <see cref="MapPlayer"/> to the world's octree and place it at a spawn point.</summary>
-	[Export] public bool SpawnPlayer { get; set; } = false;
+    /// <summary>Attach the direct-child <see cref="MapPlayer"/> to the world's octree and place it at a spawn point.</summary>
+    [Export] public bool SpawnPlayer { get; set; } = false;
 
-	/// <summary>Player model table index to load (render.cpp <c>playermodel</c> 0..4); negative keeps the placeholder body.</summary>
-	[Export] public int PlayerModelIndex { get; set; } = -1;
+    /// <summary>Player model table index to load (render.cpp <c>playermodel</c> 0..4); negative keeps the placeholder body.</summary>
+    [Export] public int PlayerModelIndex { get; set; } = -1;
 
-	/// <summary>Team skin for the player model (0 = FFA, 1 = blue, 2 = red).</summary>
-	[Export] public int PlayerTeam { get; set; } = 0;
+    /// <summary>Team skin for the player model (0 = FFA, 1 = blue, 2 = red).</summary>
+    [Export] public int PlayerTeam { get; set; } = 0;
 
-	/// <summary>
-	/// Show edit-mode blue entity markers and facing arrows. When false (e.g. in
-	/// player/game scenes), all <see cref="EntityMarker"/> nodes are hidden.
-	/// </summary>
-	[Export]
-	public bool ShowEntityMarkers
-	{
-		get => _showEntityMarkers;
-		set
-		{
-			_showEntityMarkers = value;
-			if (World != null)
-			{
-				World.ShowEntityMarkers = value;
-			}
-		}
-	}
-	private bool _showEntityMarkers = true;
+    /// <summary>
+    /// Show edit-mode blue entity markers and facing arrows. When false (e.g. in
+    /// player/game scenes), all <see cref="EntityMarker"/> nodes are hidden.
+    /// </summary>
+    [Export]
+    public bool ShowEntityMarkers
+    {
+        get => _showEntityMarkers;
+        set
+        {
+            _showEntityMarkers = value;
+            if (World != null)
+            {
+                World.ShowEntityMarkers = value;
+            }
+        }
+    }
+    private bool _showEntityMarkers = true;
 
-	/// <summary>
-	/// Third-person view weapon to attach to the player model's <c>Weapon</c> bone
+    /// <summary>
+    /// Third-person view weapon to attach to the player model's <c>Weapon</c> bone
     /// (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>). Empty attaches none. This is
     /// a live property: changing it from the remote inspector swaps the weapon on the
     /// spawned <see cref="PlayerModel"/> immediately.
@@ -117,36 +118,36 @@ public partial class OgzMapViewer : Node3D
 
     /// <summary>
     /// Move a scene-authored <see cref="MapPlayer"/> under the Z-up world node and
-	/// initialise it against the octree at the map's first <c>ET_PLAYERSTART</c>
-	/// (falling back to the map centre). Physics then owns its position/orientation.
-	/// </summary>
-	private void AttachPlayer()
-	{
-		MapPlayer? player = null;
-		foreach (var child in GetChildren())
-			if (child is MapPlayer p) { player = p; break; }
-		if (player == null)
-		{
-			GD.PushWarning($"[viewer] SpawnPlayer is set but no direct-child {nameof(MapPlayer)} node exists.");
-			return;
-		}
+    /// initialise it against the octree at the map's first <c>ET_PLAYERSTART</c>
+    /// (falling back to the map centre). Physics then owns its position/orientation.
+    /// </summary>
+    private void AttachPlayer()
+    {
+        MapPlayer? player = null;
+        foreach (var child in GetChildren())
+            if (child is MapPlayer p) { player = p; break; }
+        if (player == null)
+        {
+            GD.PushWarning($"[viewer] SpawnPlayer is set but no direct-child {nameof(MapPlayer)} node exists.");
+            return;
+        }
 
-		player.Reparent(World!); // into the rotated Z-up world
+        player.Reparent(World!); // into the rotated Z-up world
 
-		(Vector3 feet, float yaw) = FindSpawn(World!.Map!);
-		player.Setup(World.Octa!, feet, yaw);
-		AttachPlayerModel(player);
+        (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
+        player.Setup(World.Octa!, feet, yaw);
+        AttachPlayerModel(player);
 
-		var effects = new Effects.WeaponEffectsRenderer { Name = "WeaponEffects" };
-		World.AddChild(effects);
-		player.WeaponEffects = effects;
+        var effects = new Effects.WeaponEffectsRenderer { Name = "WeaponEffects" };
+        World.AddChild(effects);
+        player.WeaponEffects = effects;
 
-		GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw}");
-	}
+        GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw}");
+    }
 
-	/// <summary>
-	/// Attach a converted body model to the player (engine <c>playermodels</c>, see
-	/// render.cpp). Leaving <see cref="PlayerModelIndex"/> negative keeps the scene's
+    /// <summary>
+    /// Attach a converted body model to the player (engine <c>playermodels</c>, see
+    /// render.cpp). Leaving <see cref="PlayerModelIndex"/> negative keeps the scene's
     /// placeholder body. The model is parented under the world as a <b>sibling</b> of
     /// the player so <see cref="MapPlayer.SyncBodyModel"/> can keep it upright at the
     /// feet, independent of the camera view pitch.
@@ -170,8 +171,10 @@ public partial class OgzMapViewer : Node3D
         {
             camera.AddChild(hudgun);
             player.Hudgun = hudgun;
+            // Sync active gun so view weapon and hudgun reflect player's selected weapon
+            player.SelectWeapon((Gun)player.Combat.GunSelect);
         }
-		GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
+        GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
     }
 
     private (Vector3 Feet, float Yaw) FindSpawn(OgzMap map)
@@ -183,7 +186,7 @@ public partial class OgzMapViewer : Node3D
 
     private void ApplySky(OgzMap map, ITextureSource textures)
     {
-		// Runtime only: don't dirty the edited scene's environment in the IDE.
+        // Runtime only: don't dirty the edited scene's environment in the IDE.
         if (Engine.IsEditorHint()) return;
         var sky = SkyBuilder.Build(textures, map.GetVarString("skybox"));
         if (sky == null) return;
@@ -217,14 +220,14 @@ public partial class OgzMapViewer : Node3D
 #if TOOLS
     private void FrameEditorViewport()
     {
-		// Move the editor's 3D viewport camera onto the scene camera so the
-		// geometry is visible immediately when the scene is opened.
-		if (_frameCamera == null) return;
-		var viewport = EditorInterface.Singleton.GetEditorViewport3D(0);
-		var editorCamera = viewport?.GetCamera3D();
-		if (editorCamera == null) return;
-		editorCamera.GlobalPosition = _frameCamera.GlobalPosition;
-		editorCamera.LookAt(_frameTarget, Vector3.Up);
-	}
+        // Move the editor's 3D viewport camera onto the scene camera so the
+        // geometry is visible immediately when the scene is opened.
+        if (_frameCamera == null) return;
+        var viewport = EditorInterface.Singleton.GetEditorViewport3D(0);
+        var editorCamera = viewport?.GetCamera3D();
+        if (editorCamera == null) return;
+        editorCamera.GlobalPosition = _frameCamera.GlobalPosition;
+        editorCamera.LookAt(_frameTarget, Vector3.Up);
+    }
 #endif
 }
