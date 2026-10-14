@@ -28,6 +28,7 @@ EXTRA_TEXTURES = [
     "textures/ow/lava_c.jpg", "dg/floor_lava2.jpg",
     "particles/flames.png", "particles/smoke.png", "particles/steam.png",
     "particles/base.png", "particles/snow.png",
+    "particles/bullet.png", "particles/scorch.png", "particles/blood.png",
 ]
 
 
@@ -81,7 +82,59 @@ def main() -> int:
         copied += 1
 
     print(f"copied {copied} textures to {args.out} ({missing} missing from the dump)")
+
+    # Post-process bullet.png if present: Sauerbraten uses <grey> and overbright (blend with neutral 128).
+    # In Godot Decal (alpha blend), convert neutral 128 to alpha=0 so it blends seamlessly.
+    bullet_dst = os.path.join(args.out, "particles", "bullet.png")
+    if os.path.isfile(bullet_dst):
+        convert_overbright_bullet(bullet_dst)
+
     return 0
+
+
+def convert_overbright_bullet(path: str) -> None:
+    import struct
+    import zlib
+    with open(path, "rb") as f:
+        data = f.read()
+    idx = 8
+    idat = bytearray()
+    ihdr_read = False
+    width = height = 0
+    while idx < len(data):
+        length = struct.unpack(">I", data[idx:idx+4])[0]
+        ctype = data[idx+4:idx+8].decode("ascii")
+        cdata = data[idx+8:idx+8+length]
+        if ctype == "IHDR":
+            width, height, bitdepth, colortype = struct.unpack(">IIBB", cdata[:10])
+            ihdr_read = True
+        elif ctype == "IDAT":
+            idat.extend(cdata)
+        idx += 12 + length
+
+    if not ihdr_read or colortype == 6:  # already RGBA
+        return
+
+    decomp = zlib.decompress(idat)
+    bpp = 3 if colortype == 2 else 1
+    stride = 1 + width * bpp
+    out_decomp = bytearray()
+    for y in range(height):
+        out_decomp.append(0)
+        for x in range(width):
+            grey = decomp[y * stride + 1 + x * bpp]
+            diff = abs(grey - 128)
+            alpha = min(255, int(diff * 2 * (255 / 256)))
+            out_decomp.extend([grey, grey, grey, alpha])
+
+    def chunk(ctype: bytes, cdata: bytes) -> bytes:
+        return struct.pack(">I", len(cdata)) + ctype + cdata + struct.pack(">I", zlib.crc32(ctype + cdata))
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    png_data = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(out_decomp)) + chunk(b"IEND", b"")
+    with open(path, "wb") as f:
+        f.write(png_data)
+
 
 
 if __name__ == "__main__":
