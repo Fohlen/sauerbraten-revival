@@ -67,4 +67,10 @@ public class GameAudioTest : TestClass
         var punchStream = GameAudio.LoadSound("free/punch1");
         TestAssert.True(punchStream != null, "Punch1 sound stream should load from assets or dump fallback");
     }
+
+    [Test]
+    public void SoundIsOffByDefault()
+    {
+        TestAssert.False(GameAudio.Enabled, "GameAudio.Enabled should be false by default");
+    }
 }

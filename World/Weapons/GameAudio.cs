@@ -43,6 +43,12 @@ public sealed class SoundConfig
 /// </summary>
 public static class GameAudio
 {
+    /// <summary>Global toggle for sound playback. False by default.</summary>
+    public static bool Enabled { get; set; } = false;
+
+    /// <summary>Master sound volume (engine <c>soundvol</c> 0..255; default 255).</summary>
+    public static int SoundVol { get; set; } = 255;
+
     private static readonly Dictionary<string, AudioStream?> LoadedStreams = new();
 
     public static readonly SoundConfig[] HardcodedSounds = new SoundConfig[]
@@ -191,7 +197,7 @@ public static class GameAudio
     /// </summary>
     public static void Play(this AudioStreamPlayer? player, GameSound sound)
     {
-        if (player == null || sound == GameSound.None) return;
+        if (!Enabled || SoundVol <= 0 || player == null || sound == GameSound.None) return;
         var config = GetConfig(sound);
         if (config == null) return;
 
@@ -200,8 +206,9 @@ public static class GameAudio
         if (stream == null) return;
 
         player.Stream = stream;
-        // Volume scale: 100 is 0 dB; 80 is ~ -1.9 dB; 200 is ~ +6 dB
-        float volumeLinear = Mathf.Clamp(slot.Volume / 100.0f, 0.01f, 4.0f);
+        // Volume scale: 100 is 0 dB; scaled by master volume (SoundVol / 255)
+        float masterScale = SoundVol / 255.0f;
+        float volumeLinear = Mathf.Clamp((slot.Volume / 100.0f) * masterScale, 0.001f, 4.0f);
         player.VolumeDb = Mathf.LinearToDb(volumeLinear);
         player.Play();
     }
@@ -211,7 +218,7 @@ public static class GameAudio
     /// </summary>
     public static void Play3D(this AudioStreamPlayer3D? player, GameSound sound)
     {
-        if (player == null || sound == GameSound.None) return;
+        if (!Enabled || SoundVol <= 0 || player == null || sound == GameSound.None) return;
         var config = GetConfig(sound);
         if (config == null) return;
 
@@ -220,7 +227,8 @@ public static class GameAudio
         if (stream == null) return;
 
         player.Stream = stream;
-        float volumeLinear = Mathf.Clamp(slot.Volume / 100.0f, 0.01f, 4.0f);
+        float masterScale = SoundVol / 255.0f;
+        float volumeLinear = Mathf.Clamp((slot.Volume / 100.0f) * masterScale, 0.001f, 4.0f);
         player.VolumeDb = Mathf.LinearToDb(volumeLinear);
         player.Play();
     }
