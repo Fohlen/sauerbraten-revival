@@ -500,7 +500,46 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             }
 
             // Spawn visual tracer beams (weapon.cpp:592 shoteffects)
-            WeaponEffects?.AddShotEffects((Gun)Combat.GunSelect, from, hitscan.RayEndpoints);
+            Gun gun = (Gun)Combat.GunSelect;
+            WeaponEffects?.AddShotEffects(gun, from, hitscan.RayEndpoints);
+
+            // Spawn bullet decals for ray endpoints that did not hit a candidate player/entity (weapon.cpp:752, 772)
+            if (WeaponEffects != null && gun != Gun.Fist && gun != Gun.Bite)
+            {
+                float decalRadius = gun == Gun.Rifle ? 3.0f : 2.0f;
+                // If there were no target hits, all ray endpoints hit world/geometry
+                if (hitscan.Hits.Count == 0)
+                {
+                    for (int i = 0; i < hitscan.RayEndpoints.Count; i++)
+                    {
+                        Vector3 hitPos = hitscan.RayEndpoints[i];
+                        Vector3 dir = (from - hitPos).Normalized();
+                        WeaponEffects.AddBulletHole(hitPos, dir, decalRadius);
+                    }
+                }
+                else
+                {
+                    // For multiple rays (e.g. shotgun), spawn decals for endpoints that didn't hit a target
+                    for (int i = 0; i < hitscan.RayEndpoints.Count; i++)
+                    {
+                        Vector3 hitPos = hitscan.RayEndpoints[i];
+                        bool hitTarget = false;
+                        for (int h = 0; h < hitscan.Hits.Count; h++)
+                        {
+                            if (hitscan.Hits[h].HitPos.IsEqualApprox(hitPos))
+                            {
+                                hitTarget = true;
+                                break;
+                            }
+                        }
+                        if (!hitTarget)
+                        {
+                            Vector3 dir = (from - hitPos).Normalized();
+                            WeaponEffects.AddBulletHole(hitPos, dir, decalRadius);
+                        }
+                    }
+                }
+            }
         }
 
         UpdateBodyAnim();

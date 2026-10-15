@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Godot;
 using SauerbratenRevival.World.Weapons;
 
@@ -21,9 +22,28 @@ public partial class WeaponEffectsRenderer : Node3D
         public float Width;
     }
 
+    private class ActiveDecal
+    {
+        public MeshInstance3D MeshInstance = null!;
+        public StandardMaterial3D Material = null!;
+        public float StartTime;
+        public float FadeStartTime;
+        public float TotalLifetime;
+    }
+
+    private const int MaxDecals = 256;
+    private const float BulletDecalFadeTime = 10f; // decalfade default: 10s (r6889)
+    private const float BulletDecalFadeOut = 1f;   // fadeouttime: 1s (r6889)
+
     private readonly List<ActiveBeam> _beams = new();
+    private readonly ActiveDecal[] _decalPool = new ActiveDecal[MaxDecals];
+    private int _decalIndex;
+    private Texture2D? _bulletTexture;
+    private QuadMesh _quadMesh = null!;
+
     private MeshInstance3D _meshInstance = null!;
     private ImmediateMesh _mesh = null!;
+    private Node3D _decalContainer = null!;
 
     public override void _Ready()
     {
@@ -42,6 +62,58 @@ public partial class WeaponEffectsRenderer : Node3D
             }
         };
         AddChild(_meshInstance);
+
+        _decalContainer = new Node3D { Name = "DecalContainer" };
+        AddChild(_decalContainer);
+
+        string texPath = "res://assets/textures/particles/bullet.png";
+        string diskPath = ProjectSettings.GlobalizePath(texPath);
+        if (File.Exists(diskPath))
+        {
+            var img = new Image();
+            if (img.Load(diskPath) == Error.Ok)
+            {
+                _bulletTexture = ImageTexture.CreateFromImage(img);
+            }
+        }
+        if (_bulletTexture == null && ResourceLoader.Exists(texPath))
+        {
+            _bulletTexture = GD.Load<Texture2D>(texPath);
+        }
+
+        // Shared 1x1 quad mesh (size is scaled via Node3D scale)
+        _quadMesh = new QuadMesh { Size = new Vector2(1f, 1f) };
+
+        for (int i = 0; i < MaxDecals; i++)
+        {
+            var mat = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                AlbedoTexture = _bulletTexture,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                NoDepthTest = false,
+                DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Always
+            };
+
+            var meshInst = new MeshInstance3D
+            {
+                Name = $"BulletDecal_{i}",
+                Mesh = _quadMesh,
+                MaterialOverride = mat,
+                Visible = false
+            };
+            _decalContainer.AddChild(meshInst);
+
+            _decalPool[i] = new ActiveDecal
+            {
+                MeshInstance = meshInst,
+                Material = mat,
+                StartTime = 0f,
+                FadeStartTime = 0f,
+                TotalLifetime = 0f
+            };
+        }
     }
 
     /// <summary>
@@ -106,6 +178,56 @@ public partial class WeaponEffectsRenderer : Node3D
         }
     }
 
+    /// <summary>
+    /// Spawns a bullet decal mark on a surface.
+    /// Matches <c>adddecal(DECAL_BULLET, to, dir, radius)</c> from <c>src/fpsgame/weapon.cpp</c>.
+    /// </summary>
+    /// <param name="pos">Impact center position in world space.</param>
+    /// <param name="dir">Surface normal or inverted ray direction.</param>
+    /// <param name="radius">Decal radius (Sauerbraten units: 2.0f for SG/CG/Pistol, 3.0f for Rifle).</param>
+    public void AddBulletHole(Vector3 pos, Vector3 dir, float radius)
+    {
+        if (dir.IsZeroApprox()) return;
+
+        float now = (float)Time.GetTicksMsec() / 1000f;
+        var entry = _decalPool[_decalIndex];
+        _decalIndex = (_decalIndex + 1) % MaxDecals;
+
+        var meshInst = entry.MeshInstance;
+        Vector3 normal = dir.Normalized();
+        Vector3 tangent;
+        if (MathF.Abs(normal.Y) > 0.99f)
+        {
+            tangent = normal.Cross(Vector3.Right).Normalized();
+        }
+        else
+        {
+            tangent = normal.Cross(Vector3.Up).Normalized();
+        }
+        Vector3 bitangent = normal.Cross(tangent).Normalized();
+
+        // Random rotation around normal axis (matches original DF_ROTATE)
+        float angle = (float)(Random.Shared.NextDouble() * Math.PI * 2.0);
+        tangent = tangent.Rotated(normal, angle);
+        bitangent = bitangent.Rotated(normal, angle);
+
+        float diameter = radius * 2.0f;
+        Basis basis = new Basis(tangent * diameter, bitangent * diameter, normal);
+
+        // Slightly offset quad outwards along normal to avoid Z-fighting with map geometry
+        Vector3 offsetPos = pos + normal * 0.05f;
+
+        meshInst.Basis = basis;
+        meshInst.Position = offsetPos;
+
+        entry.Material.AlbedoColor = new Color(1f, 1f, 1f, 1f);
+        meshInst.Visible = true;
+
+        entry.StartTime = now;
+        entry.FadeStartTime = now + BulletDecalFadeTime;
+        entry.TotalLifetime = BulletDecalFadeTime + BulletDecalFadeOut;
+    }
+
     public override void _Process(double delta)
     {
         float now = (float)Time.GetTicksMsec() / 1000f;
@@ -131,6 +253,27 @@ public partial class WeaponEffectsRenderer : Node3D
             _mesh.SurfaceSetColor(c);
             _mesh.SurfaceAddVertex(b.To);
             _mesh.SurfaceEnd();
+        }
+
+        // Process decal fading
+        for (int i = 0; i < MaxDecals; i++)
+        {
+            var entry = _decalPool[i];
+            if (!entry.MeshInstance.Visible) continue;
+
+            float elapsed = now - entry.StartTime;
+            if (elapsed >= entry.TotalLifetime)
+            {
+                entry.MeshInstance.Visible = false;
+                continue;
+            }
+
+            if (now > entry.FadeStartTime)
+            {
+                float fadeElapsed = now - entry.FadeStartTime;
+                float alpha = Math.Clamp(1f - (fadeElapsed / BulletDecalFadeOut), 0f, 1f);
+                entry.Material.AlbedoColor = new Color(1f, 1f, 1f, alpha);
+            }
         }
     }
 }
