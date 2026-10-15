@@ -16,33 +16,34 @@ namespace SauerbratenRevival;
 public partial class Main : Node
 {
 #if DEBUG
-    private TestEnvironment? _environment;
+	private TestEnvironment? _environment;
 #endif
 
-    public override void _Ready()
-    {
+	public override void _Ready()
+	{
 #if DEBUG
-        _environment = TestEnvironment.From(OS.GetCmdlineArgs());
-        if (_environment.ShouldRunTests)
-        {
-            CallDeferred(nameof(RunTests));
-            return;
-        }
+		_environment = TestEnvironment.From(OS.GetCmdlineArgs());
+		if (_environment.ShouldRunTests)
+		{
+			CallDeferred(nameof(RunTests));
+			return;
+		}
 #endif
-        // Deferred: the tree is busy adding children during _Ready.
-        CallDeferred(nameof(StartGame));
-    }
+		// Deferred: the tree is busy adding children during _Ready.
+		CallDeferred(nameof(StartGame));
+	}
 
-    private void StartGame()
-    {
-        // User settings are applied once at startup; the world layer reads its own
-        // (lighting) settings when it builds.
-        UserSettings settings = UserSettings.Load();
-        GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
-        GetTree().ChangeSceneToFile("res://scenes/player_scene.tscn");
-    }
+	private void StartGame()
+	{
+		// User settings are applied once at startup; the world layer reads its own
+		// (lighting) settings when it builds.
+		UserSettings settings = UserSettings.Load();
+		GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
+		InputBindings.Load().Apply();
+		GetTree().ChangeSceneToFile("res://scenes/player_scene.tscn");
+	}
 
 #if DEBUG
-    private void RunTests() => _ = GoTest.RunTests(Assembly.GetExecutingAssembly(), this, _environment!);
+	private void RunTests() => _ = GoTest.RunTests(Assembly.GetExecutingAssembly(), this, _environment!);
 #endif
 }

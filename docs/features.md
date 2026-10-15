@@ -302,7 +302,8 @@ Remaining:
       entity placement.
 - [ ] **Prefabs, recipes, cross-map paste** (M8) — `ReplaceBlock` content
       resources, rotation, recipe API.
-- [ ] Persistent user keybinds (`user://input.cfg`) — see
+- [x] Persistent user keybinds (`user://input.cfg`) — persistence implemented
+      (`scripts/InputBindings.cs`); the rebind UI lands with M4e. See
       [Cross-cutting: configuration](#cross-cutting-configuration).
 
 ## 5. Combat & spawns
@@ -467,7 +468,7 @@ No CubeScript.
 - [x] Look sensitivity/accel/invert/FOV persist as user settings (`sensitivity`,
       `sensitivity_scale`, `mouse_accel`, `invert_mouse`, `fov` in
       `user://settings.cfg`; applied to `MapPlayer` at spawn).
-- [ ] Persistent user remaps via `user://input.cfg` (load on startup, write on
-      rebind) — lands with the settings UI / M4e. Design:
+- [x] Persistent user remaps via `user://input.cfg` (load on startup, write on
+      rebind; `scripts/InputBindings.cs`). The rebinding UI lands with M4e. Design:
       [vision.md §11.1](vision.md#keybinds-defaults-remapping-and-what-is-not-yet-bound).
 - [ ] Remappable mouse gestures (editor press+release / analog scroll) — deferred.

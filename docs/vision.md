@@ -242,14 +242,15 @@ rebound. The state today and the intended shape:
 - **Defaults** live in `project.godot`'s `[input]` section (editor actions are
   `editor_*`, e.g. `editor_flip`, `editor_mod_face`). This is the Godot-native,
   inspector-visible location.
-- **Player remaps are not implemented yet.** The intended pattern, to land with
-  the settings UI (M4e / options work):
-  1. On startup, load a `ConfigFile` from `user://input.cfg`.
-  2. For each saved action, `InputMap.ActionEraseEvents` then
-     `InputMap.ActionAddEvent` with the stored `InputEvent`s.
-  3. On rebind, write the action's events back to the `ConfigFile`.
-  Until then, the `project.godot` defaults are authoritative and remapping is
-  only possible at runtime (see `test/EditorInputMapTest.cs`, which rebinds an
+- **Player remaps are implemented**; the rebinding UI lands with M4e / options
+  work. `scripts/InputBindings.cs` owns `user://input.cfg`:
+  1. On startup, `Main` loads `InputBindings` and applies each saved action via
+     `InputMap.ActionEraseEvents` then `InputMap.ActionAddEvent`.
+  2. On rebind, `InputBindings.SaveAction(action)` captures the action's live
+     `InputEvent`s and rewrites the file.
+  Actions absent from the file keep the `project.godot` defaults; a saved action
+  with an empty event list is deliberately unbound. Verified by
+  `test/InputBindingsTest.cs` (and `test/EditorInputMapTest.cs`, which rebinds an
   action to prove the mechanism works).
 
 **What is deliberately *not* an `InputMap` action:** mouse-button gestures in the

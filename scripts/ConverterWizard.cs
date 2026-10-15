@@ -133,14 +133,14 @@ public partial class ConverterWizard : Control
             foreach (var file in Directory.EnumerateFiles(packages, "*.ogz", SearchOption.AllDirectories))
             {
                 string rel = Path.GetRelativePath(packages, file);
-                _maps.Add(Path.ChangeExtension(rel, null).Replace('\\', '/'));
+				_maps.Add(Path.ChangeExtension(rel, null).Replace('\\', '/'));
             }
             _maps.Sort(System.StringComparer.OrdinalIgnoreCase);
         }
         PopulateMapSelect();
         _result.Text = _maps.Count > 0
             ? $"Found {_maps.Count} map(s)."
-            : $"No .ogz files found under '{packages}'.";
+			: $"No .ogz files found under '{packages}'.";
     }
 
     private void PopulateMapSelect()
@@ -174,13 +174,13 @@ public partial class ConverterWizard : Control
             string manifestInfo = catalogue != null
                 ? $"manifest: {catalogue.VSlots.Count} materials, {catalogue.MapModels.Count} models, {catalogue.Sounds.Count} sounds"
                 : "no metadata catalogue — geometry/entities only";
-            _result.Text = $"Converted '{map}' → {outDir}\n" +
+			_result.Text = $"Converted '{map}' → {outDir}\n" +
                            $"entities: {snapshot.Entities.Count}\n{manifestInfo}\ncontent hash: {hash}";
             GD.Print($"[converter] {_result.Text}");
         }
         catch (System.Exception e)
         {
-            _result.Text = $"Conversion failed for '{map}': {e.Message}";
+			_result.Text = $"Conversion failed for '{map}': {e.Message}";
             GD.PushError($"[converter] {e}");
         }
     }
