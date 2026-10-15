@@ -184,3 +184,5 @@ specific.
   single-player/bot AI, and the post-MVP fidelity list in
   [features.md § Post-MVP](docs/features.md#post-mvp--deferred-fidelity).
 - **Apply `dotnet format` to your C# changes** before handing them off.
+- **Need `.uid` files? Stop and ask the user to reimport** in the Godot editor
+  instead of trying to generate them yourself. This is **MUCH** faster.
