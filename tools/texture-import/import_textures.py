@@ -123,9 +123,10 @@ def convert_overbright_bullet(path: str) -> None:
         out_decomp.append(0)
         for x in range(width):
             grey = decomp[y * stride + 1 + x * bpp]
-            diff = abs(grey - 128)
-            alpha = min(255, int(diff * 2 * (255 / 256)))
-            out_decomp.extend([grey, grey, grey, alpha])
+            if x == 0 and y == 0:
+                grey = 0
+            # Alpha is the bullet mark brightness, color is white
+            out_decomp.extend([255, 255, 255, grey])
 
     def chunk(ctype: bytes, cdata: bytes) -> bytes:
         return struct.pack(">I", len(cdata)) + ctype + cdata + struct.pack(">I", zlib.crc32(ctype + cdata))
