@@ -20,6 +20,7 @@ converted **once, offline**; the game **never** loads `.ogz` or CubeScript.
 | Lighting (runtime) | [docs/adr/0002-radiance-hints.md](docs/adr/0002-radiance-hints.md) |
 | Networking model | [docs/authority-and-latency.md](docs/authority-and-latency.md) |
 | Toolchain requirements | [docs/dependencies.md](docs/dependencies.md) |
+| Weapon decals | [docs/adr/0005-decals.md](docs/adr/0005-decals.md) | Bullet decals on world geometry: unshaded world shader, alpha transparency, and quad mesh pool. |
 | Known divergences to preserve | [docs/known-bugs.md](docs/known-bugs.md) |
 
 If a design doc disagrees with `features.md` about ordering, timing or status,
