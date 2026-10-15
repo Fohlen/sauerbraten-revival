@@ -98,6 +98,27 @@ public class MapPlayerTest : GoTestBase
     }
 
     [Test]
+    public void ApplyLookSettingsCopiesUserSettings()
+    {
+        var player = new MapPlayer();
+        player.ApplyLookSettings(new UserSettings
+        {
+            Sensitivity = 7.5f,
+            SensitivityScale = 2f,
+            MouseAccel = 0.5f,
+            InvertMouse = true,
+            Fov = 120f,
+        });
+
+        TestAssert.Near(7.5f, player.Sensitivity, 1e-4f, "sensitivity applied");
+        TestAssert.Near(2f, player.SensitivityScale, 1e-4f, "sensitivity scale applied");
+        TestAssert.Near(0.5f, player.MouseAccel, 1e-4f, "mouse accel applied");
+        TestAssert.True(player.InvertMouse, "invert applied");
+        TestAssert.Near(120f, player.Fov, 1e-4f, "fov applied");
+        player.Free();
+    }
+
+    [Test]
     public void SpectatorFloatIgnoresGravityAndFliesOnPitch()
     {
         var octa = TestData.ReadMap().ToOcta();

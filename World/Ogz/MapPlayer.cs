@@ -54,6 +54,25 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Original <c>mouseaccel</c> default (0 = disabled).</summary>
     [Export] public float MouseAccel { get; set; } = 0.0f;
 
+    /// <summary>Original <c>invmouse</c> (rendergl.cpp:772): invert the vertical look axis.</summary>
+    [Export] public bool InvertMouse { get; set; } = false;
+
+    /// <summary>
+    /// Apply persisted user look settings (engine <c>sensitivity</c>,
+    /// <c>sensitivityscale</c>, <c>mouseaccel</c>, <c>invmouse</c>, <c>fov</c> —
+    /// rendergl.cpp) and refresh the camera FOV. Values are assumed already clamped
+    /// by <see cref="UserSettings"/>.
+    /// </summary>
+    public void ApplyLookSettings(UserSettings settings)
+    {
+        Sensitivity = settings.Sensitivity;
+        SensitivityScale = settings.SensitivityScale;
+        MouseAccel = settings.MouseAccel;
+        InvertMouse = settings.InvertMouse;
+        Fov = settings.Fov;
+        if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
+    }
+
     /// <summary>Spawn eye offset above the spawn point's feet (ents.h <c>eyeheight</c>).</summary>
     public const float EyeHeight = 14.0f;
 
@@ -675,7 +694,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         // Relative.Y matches SDL's (down-positive) yrel. Hence yaw uses -d.X and
         // pitch keeps the original -d.Y.
         Entity.Yaw -= d.X * cursens;
-        Pitch -= d.Y * cursens;
+        Pitch -= d.Y * cursens * (InvertMouse ? -1f : 1f);
         FixCameraRange();
         SyncTransform();
     }

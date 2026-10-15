@@ -115,7 +115,7 @@ public partial class OgzMapViewer : Node3D
         if (!World.Built) return; // missing map, error already pushed
 
         ApplySky(World.Map!, World.Textures!);
-        if (SpawnPlayer) AttachPlayer();
+        if (SpawnPlayer) AttachPlayer(userSettings);
         if (FrameCamera) FrameSceneCamera(World.Centre, World.Radius);
     }
 
@@ -124,7 +124,7 @@ public partial class OgzMapViewer : Node3D
     /// initialise it against the octree at the map's first <c>ET_PLAYERSTART</c>
     /// (falling back to the map centre). Physics then owns its position/orientation.
     /// </summary>
-    private void AttachPlayer()
+    private void AttachPlayer(UserSettings userSettings)
     {
         MapPlayer? player = null;
         foreach (var child in GetChildren())
@@ -139,6 +139,7 @@ public partial class OgzMapViewer : Node3D
 
         (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
         player.Setup(World.Octa!, feet, yaw);
+        player.ApplyLookSettings(userSettings); // sensitivity / accel / invert / FOV
         AttachPlayerModel(player);
 
         var effects = new Effects.WeaponEffectsRenderer { Name = "WeaponEffects" };

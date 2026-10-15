@@ -464,6 +464,9 @@ No CubeScript.
       `user://settings.cfg`; `scripts/UserSettings.cs`).
 - [x] Audio enabled/volume persist as user settings (`sound_enabled` / `sound_volume`
       in `user://settings.cfg`; `scripts/UserSettings.cs`).
+- [x] Look sensitivity/accel/invert/FOV persist as user settings (`sensitivity`,
+      `sensitivity_scale`, `mouse_accel`, `invert_mouse`, `fov` in
+      `user://settings.cfg`; applied to `MapPlayer` at spawn).
 - [ ] Persistent user remaps via `user://input.cfg` (load on startup, write on
       rebind) — lands with the settings UI / M4e. Design:
       [vision.md §11.1](vision.md#keybinds-defaults-remapping-and-what-is-not-yet-bound).

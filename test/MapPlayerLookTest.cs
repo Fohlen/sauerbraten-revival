@@ -46,4 +46,24 @@ public class MapPlayerLookTest : GoTestBase
 
         world.QueueFree();
     }
+
+    [Test]
+    public void InvertMouseFlipsVerticalLook()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = new MapPlayer();
+        player.Setup(octa, new Vector3(3000, 946, 3040), 0f);
+
+        player.InvertMouse = false;
+        player.SetView(0f, 0f);
+        player.ApplyMouseDelta(new Vector2(0f, 20f)); // cursor down
+        TestAssert.True(player.Pitch < 0f, "normal: cursor down pitches down");
+
+        player.InvertMouse = true;
+        player.SetView(0f, 0f);
+        player.ApplyMouseDelta(new Vector2(0f, 20f)); // cursor down
+        TestAssert.True(player.Pitch > 0f, "inverted: cursor down pitches up");
+
+        player.Free();
+    }
 }

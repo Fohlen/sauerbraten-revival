@@ -118,4 +118,64 @@ public class UserSettingsTest : GoTestBase
             previous.Save();
         }
     }
+
+    [Test]
+    public void LookSettingsRoundTrip()
+    {
+        UserSettings previous = UserSettings.Load();
+        try
+        {
+            (previous with
+            {
+                Sensitivity = 7.5f,
+                SensitivityScale = 2f,
+                MouseAccel = 0.5f,
+                InvertMouse = true,
+                Fov = 120f,
+            }).Save();
+
+            UserSettings loaded = UserSettings.Load();
+            TestAssert.Near(7.5f, loaded.Sensitivity, 1e-4f, "sensitivity persists");
+            TestAssert.Near(2f, loaded.SensitivityScale, 1e-4f, "sensitivity_scale persists");
+            TestAssert.Near(0.5f, loaded.MouseAccel, 1e-4f, "mouse_accel persists");
+            TestAssert.True(loaded.InvertMouse, "invert_mouse persists");
+            TestAssert.Near(120f, loaded.Fov, 1e-4f, "fov persists");
+        }
+        finally
+        {
+            previous.Save();
+        }
+    }
+
+    [Test]
+    public void LookDefaultsMatchEngine()
+    {
+        var defaults = new UserSettings();
+        TestAssert.Near(3f, defaults.Sensitivity, 1e-4f, "sensitivity default 3");
+        TestAssert.Near(1f, defaults.SensitivityScale, 1e-4f, "sensitivityscale default 1");
+        TestAssert.Near(0f, defaults.MouseAccel, 1e-4f, "mouseaccel default 0");
+        TestAssert.False(defaults.InvertMouse, "invmouse default off");
+        TestAssert.Near(100f, defaults.Fov, 1e-4f, "fov default 100");
+    }
+
+    [Test]
+    public void OutOfRangeLookValuesClampOnLoad()
+    {
+        UserSettings previous = UserSettings.Load();
+        var cfg = new ConfigFile();
+        cfg.Load(UserSettings.SettingsPath);
+        cfg.SetValue(UserSettings.Section, "sensitivity_scale", 0.0);
+        cfg.SetValue(UserSettings.Section, "fov", 999.0);
+        cfg.Save(UserSettings.SettingsPath);
+        try
+        {
+            UserSettings loaded = UserSettings.Load();
+            TestAssert.True(loaded.SensitivityScale > 0f, "sensitivity scale stays above zero (no divide by zero)");
+            TestAssert.Near(150f, loaded.Fov, 1e-4f, "fov clamps to max");
+        }
+        finally
+        {
+            previous.Save();
+        }
+    }
 }
