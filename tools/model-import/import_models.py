@@ -761,7 +761,7 @@ def bake_animated_glb(assimp: str, mesh_source: str, anims: dict, packages_root:
             else:
                 shutil.copyfile(anim_os, anim_target)
             clip_glb = os.path.join(tmp, f"clip_{sanitize(clip)}.glb")
-            proc = subprocess.run([assimp, "export", mesh_copy, clip_glb], capture_output=True, text=True)
+            proc = subprocess.run([assimp, "export", mesh_copy, clip_glb, "-cfast"], capture_output=True, text=True)
             if proc.returncode != 0 or not os.path.isfile(clip_glb):
                 print(f"WARN  {base}: assimp failed for clip '{clip}'", file=sys.stderr)
                 continue
@@ -968,7 +968,7 @@ def build_linked_record(name: str, parts: list[dict], model: dict, packages: str
             baked = bake_animated_glb(assimp, source, anims, packages, glb,
                                       adjusts=part.get("adjusts"))
         if not baked:
-            proc = subprocess.run([assimp, "export", source, glb], capture_output=True, text=True)
+            proc = subprocess.run([assimp, "export", source, glb, "-cfast"], capture_output=True, text=True)
             if proc.returncode == 0 and os.path.isfile(glb):
                 strip_glb_materials(glb)
             else:
@@ -1123,7 +1123,7 @@ def main() -> int:
             if ext == ".md5mesh" and record.get("anims"):
                 baked = bake_animated_glb(args.assimp, source, record["anims"], packages, glb)
             if not baked:
-                proc = subprocess.run([args.assimp, "export", source, glb], capture_output=True, text=True)
+                proc = subprocess.run([args.assimp, "export", source, glb, "-cfast"], capture_output=True, text=True)
                 if proc.returncode == 0 and os.path.isfile(glb):
                     strip_glb_materials(glb)
                 else:
