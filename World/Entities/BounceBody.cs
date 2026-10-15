@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Physics;
+using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.World.Entities;
 
@@ -39,6 +40,22 @@ public partial class BounceBody : Node3D
     /// <summary>Raised on each surface reflection with the surface normal.</summary>
     public event System.Action<PhysEnt, Vector3>? Reflected;
 
+    /// <summary>Remaining time to live in milliseconds (fuse for grenades).</summary>
+    public int LifeTime { get; set; } = 1500;
+
+    /// <summary>The owner who fired the projectile/bouncer.</summary>
+    public IExplosionTarget? ShooterOwner { get; set; }
+
+    /// <summary>Weapon info for grenade damage/radius.</summary>
+    public Weapons.WeaponInfo? GunInfo { get; set; }
+
+    public bool QuadDamage { get; set; }
+    public bool Local { get; set; } = true;
+    public bool Exploded { get; private set; }
+
+    /// <summary>Raised when a grenade detonates (timeout or player contact).</summary>
+    public event System.Action<Vector3, Weapons.ExplosionResult<IExplosionTarget>>? Detonated;
+
     private OctaPhysics? _phys;
     private double _accum;
     private const double StepSeconds = Phys.PhysFrameTime / 1000.0;
@@ -55,11 +72,38 @@ public partial class BounceBody : Node3D
     /// Initialise against a world. <paramref name="position"/>, <paramref name="velocity"/>
     /// and <paramref name="yawDegrees"/> are Sauerbraten units/degrees.
     /// </summary>
-    public void Setup(OctaPhysics phys, Vector3 position, Vector3 velocity, float yawDegrees = 0f)
+    public void Setup(
+        OctaPhysics phys,
+        Vector3 position,
+        Vector3 velocity,
+        float yawDegrees = 0f,
+        IExplosionTarget? owner = null,
+        Weapons.WeaponInfo? gun = null,
+        bool quadDamage = false,
+        int lifeTime = 1500,
+        bool local = true)
     {
         if (Initialized) _phys?.DynEnts.Remove(Entity);
         _phys = phys;
+        ShooterOwner = owner;
+        GunInfo = gun ?? (BodyKind == Kind.Grenade ? WeaponCatalog.Get(Gun.GrenadeLauncher) : null);
+        QuadDamage = quadDamage;
+        LifeTime = lifeTime;
+        Local = local;
+        Exploded = false;
+
         ConfigureEntity(position, velocity, yawDegrees);
+
+        // avoidcollision(&bnc, dir, owner, 0.1f);
+        if (owner != null)
+        {
+            Vector3 dir = velocity.Normalized();
+            if (dir.LengthSquared() > 1e-6f)
+            {
+                OctaPhysics.AvoidCollision(Entity, dir, owner.CollisionEntity, 0.1f);
+            }
+        }
+
         phys.DynEnts.Add(Entity);
         Bodies[Entity] = this;
         Hook();
@@ -110,10 +154,12 @@ public partial class BounceBody : Node3D
     /// Advance by <paramref name="delta"/> seconds, running whole fixed 5 ms steps
     /// caught up by count (the engine's <c>physsteps</c>). Each step is one
     /// <see cref="OctaPhysics.Bounce(PhysEnt, float, float, float, float)"/> substep.
+    /// In weapon.cpp:243, a grenade stops and detonates when bounce returns true (hit live player)
+    /// or when lifetime expires (<c>(bnc.lifetime -= time) &lt; 0</c>).
     /// </summary>
-    public void Advance(double delta)
+    public void Advance(double delta, IReadOnlyList<IExplosionTarget>? candidates = null)
     {
-        if (!Initialized || _phys == null) return;
+        if (!Initialized || _phys == null || Exploded) return;
         _accum += delta;
         int guard = 0;
         while (_accum >= StepSeconds && guard++ < 100)
@@ -123,10 +169,44 @@ public partial class BounceBody : Node3D
             _phys.ClearDynentCache();
             foreach (var dynent in _phys.DynEnts) _phys.UpdateDynentCache(dynent);
 
-            _phys.Bounce(Entity, Elasticity, WaterFric, Grav, 1, Phys.PhysFrameTime);
+            bool hitPlayer = _phys.Bounce(Entity, Elasticity, WaterFric, Grav, 1, Phys.PhysFrameTime);
             _accum -= StepSeconds;
+
+            if (BodyKind == Kind.Grenade)
+            {
+                LifeTime -= Phys.PhysFrameTime;
+                bool stopped = hitPlayer || LifeTime < 0;
+                if (stopped)
+                {
+                    Detonate(candidates);
+                    break;
+                }
+            }
         }
         SyncTransform();
+    }
+
+    private void Detonate(IReadOnlyList<IExplosionTarget>? candidates)
+    {
+        Exploded = true;
+        var gun = GunInfo ?? WeaponCatalog.Get(Gun.GrenadeLauncher);
+        candidates ??= System.Array.Empty<IExplosionTarget>();
+
+        var result = WeaponExplosion.ResolveExplosion(
+            Entity.O,
+            gun,
+            QuadDamage,
+            shooter: ShooterOwner,
+            candidates: candidates);
+
+        for (int i = 0; i < result.Hits.Count; i++)
+        {
+            var hit = result.Hits[i];
+            hit.Target.ApplyHitPush(hit.PushVel);
+            hit.Target.TakeDamage(hit.Damage);
+        }
+
+        Detonated?.Invoke(Entity.O, result);
     }
 
     private void OnReflected(PhysEnt d, Vector3 surface)

@@ -1,7 +1,10 @@
+using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Physics;
+using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.Tests;
 
@@ -118,5 +121,110 @@ public class BounceBodyTest : GoTestBase
 
         grenade.QueueFree();
         debris.QueueFree();
+    }
+
+    private class TestGrenadeTarget : IExplosionTarget
+    {
+        public PhysEnt CollisionEntity { get; }
+        public PlayerState State { get; } = new();
+        public bool IsAlive => State.Health > 0;
+        public int Weight => 100;
+        public Vector3 LastPushVel { get; private set; }
+
+        public TestGrenadeTarget(Vector3 pos)
+        {
+            CollisionEntity = new PhysEnt
+            {
+                O = pos,
+                Type = Phys.EntPlayer,
+                Radius = 4.1f,
+                XRadius = 4.1f,
+                YRadius = 4.1f,
+                EyeHeight = 14.0f,
+                AboveEye = 1.0f,
+                State = PhysEnt.CsAlive,
+            };
+            State.Health = 100;
+            State.Armour = 0;
+        }
+
+        public void ApplyHitPush(Vector3 pushVel)
+        {
+            LastPushVel = pushVel;
+            CollisionEntity.Vel += pushVel;
+        }
+
+        public int TakeDamage(int damage) => State.DoDamage(damage);
+    }
+
+    [Test]
+    public void GrenadeDetonatesOnFuseTimeout()
+    {
+        var phys = NewWorld();
+        var bystander = new TestGrenadeTarget(new Vector3(256, 256, FloorZ + 14.0f));
+        var candidates = new List<IExplosionTarget> { bystander };
+
+        var grenade = new BounceBody { BodyKind = BounceBody.Kind.Grenade };
+        // Place grenade 10 units away horizontally
+        grenade.Setup(
+            phys,
+            new Vector3(266, 256, FloorZ + 14.0f),
+            Vector3.Zero,
+            lifeTime: 300); // 300ms fuse
+        TestScene.AddChild(grenade);
+
+        bool detonated = false;
+        grenade.Detonated += (pos, result) =>
+        {
+            detonated = true;
+            TestAssert.Equal(1, result.Hits.Count, "bystander within 45 exprad hit");
+        };
+
+        // Advance 400ms (80 steps of 5ms)
+        for (int i = 0; i < 80 && !grenade.Exploded; i++)
+        {
+            grenade.Advance(Phys.PhysFrameTime / 1000.0, candidates);
+        }
+
+        TestAssert.True(detonated, "grenade detonated on fuse timeout");
+        TestAssert.True(grenade.Exploded, "grenade marked as exploded");
+        TestAssert.True(bystander.State.Health < 100, "bystander took splash damage from fuse detonation");
+
+        grenade.QueueFree();
+    }
+
+    [Test]
+    public void GrenadeDetonatesOnPlayerContact()
+    {
+        var phys = NewWorld();
+        var victim = new TestGrenadeTarget(new Vector3(256, 256, FloorZ + 24.0f));
+        phys.DynEnts.Add(victim.CollisionEntity);
+        var candidates = new List<IExplosionTarget> { victim };
+
+        var grenade = new BounceBody { BodyKind = BounceBody.Kind.Grenade };
+        // Drop straight down onto victim
+        grenade.Setup(
+            phys,
+            new Vector3(256, 256, FloorZ + 60.0f),
+            new Vector3(0, 0, -80.0f),
+            lifeTime: 1500);
+        TestScene.AddChild(grenade);
+
+        bool detonated = false;
+        grenade.Detonated += (pos, result) =>
+        {
+            detonated = true;
+        };
+
+        for (int i = 0; i < 400 && !grenade.Exploded; i++)
+        {
+            grenade.Advance(Phys.PhysFrameTime / 1000.0, candidates);
+        }
+
+        TestAssert.True(detonated, "grenade detonated on live player contact");
+        TestAssert.True(grenade.Exploded, "grenade marked as exploded");
+        TestAssert.True(victim.State.Health < 100, "victim took damage on contact detonation");
+
+        grenade.QueueFree();
     }
 }

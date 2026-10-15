@@ -841,6 +841,52 @@ public sealed class OctaPhysics
         return hitplayer;
     }
 
+    /// <summary>
+    /// Port of <c>physics.cpp:1446 avoidcollision</c>.
+    /// Adjusts <paramref name="d"/> position along <paramref name="dir"/> to avoid starting inside
+    /// <paramref name="obstacle"/> bounding box with given <paramref name="space"/> margin.
+    /// </summary>
+    public static void AvoidCollision(PhysEnt d, Vector3 dir, PhysEnt obstacle, float space)
+    {
+        float rad = obstacle.Radius + d.Radius;
+        Vector3 bbmin = obstacle.O;
+        bbmin.X -= rad + space;
+        bbmin.Y -= rad + space;
+        bbmin.Z -= (obstacle.EyeHeight + d.AboveEye + space);
+
+        Vector3 bbmax = obstacle.O;
+        bbmax.X += rad + space;
+        bbmax.Y += rad + space;
+        bbmax.Z += (obstacle.AboveEye + d.EyeHeight + space);
+
+        if (d.O.X <= bbmin.X || d.O.X >= bbmax.X ||
+            d.O.Y <= bbmin.Y || d.O.Y >= bbmax.Y ||
+            d.O.Z <= bbmin.Z || d.O.Z >= bbmax.Z)
+        {
+            return;
+        }
+
+        float minDist = 1e16f;
+        for (int i = 0; i < 3; i++)
+        {
+            float di = i switch { 0 => dir.X, 1 => dir.Y, _ => dir.Z };
+            if (di != 0f)
+            {
+                float targetCoord = di > 0f ? (i switch { 0 => bbmax.X, 1 => bbmax.Y, _ => bbmax.Z })
+                                            : (i switch { 0 => bbmin.X, 1 => bbmin.Y, _ => bbmin.Z });
+                float currentCoord = i switch { 0 => d.O.X, 1 => d.O.Y, _ => d.O.Z };
+                float dist = (targetCoord - currentCoord) / di;
+                minDist = Mathf.Min(minDist, dist);
+            }
+        }
+
+        if (minDist >= 0.0f && minDist < 1e15f)
+        {
+            d.O += dir * minDist;
+            d.NewPos = d.O;
+        }
+    }
+
     /// <summary>physics.cpp:1764 <c>interppos</c>. <paramref name="lastphysframe"/> and
     /// <paramref name="lastmillis"/> are passed in (the engine reads globals); with the
     /// defaults (<c>diff &lt;= 0</c>) this is just <c>o = newpos</c>, matching a settled
