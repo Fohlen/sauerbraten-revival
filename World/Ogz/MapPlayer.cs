@@ -32,7 +32,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public bool IsAlive => Entity.State == PhysEnt.CsAlive && Combat.Health > 0;
     public int Weight => 100;
     public void ApplyHitPush(Vector3 pushVel) => Entity.Vel += pushVel;
-    int IHitscanTarget.TakeDamage(int damage)
+    int IExplosionTarget.TakeDamage(int damage)
     {
         TakeDamage(damage);
         return damage;

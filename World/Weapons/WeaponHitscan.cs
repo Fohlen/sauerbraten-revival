@@ -32,15 +32,10 @@ public sealed class HitscanResult<TTarget> where TTarget : class
 }
 
 /// <summary>
-/// A candidate target for hitscan rays.
+/// A candidate target for hitscan rays and explosions.
 /// </summary>
-public interface IHitscanTarget
+public interface IHitscanTarget : IExplosionTarget
 {
-    PhysEnt CollisionEntity { get; }
-    bool IsAlive { get; }
-    int Weight { get; }
-    void ApplyHitPush(Vector3 pushVel);
-    int TakeDamage(int damage);
 }
 
 /// <summary>
