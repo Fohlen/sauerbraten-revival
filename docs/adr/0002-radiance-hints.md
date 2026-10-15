@@ -108,6 +108,20 @@ Measured on Debug builds with `test/RadianceBakeProbe.cs`:
 - **$128^3$ resolution:** Rejected (prohibitive bake times: 104s–459s).
 - Geometry-bounded grids avoid wasted probe allocation compared to full `worldsize`.
 
+### 7. Quality Mode & User Configuration
+
+Two lighting quality modes exist (`RadianceQualityMode`):
+
+- **`RadianceHints`** (default): the full L1 SH probe volume (sky, sun, direct
+  lights, indirect bounce).
+- **`StaticAmbient`**: skips probe raycasts and 3D texture lookups, shading
+  geometry with a constant ambient colour — for low-end hardware or fast editing.
+
+The mode is a **persistent user setting**, not a hard-coded constant. It is read
+from the shared Godot `ConfigFile` at `user://settings.cfg` under
+`lighting_mode` (tokens `radiance_hints` / `static_ambient`) and applied when a
+world bakes its volume (`UserSettings`, docs/vision.md §11).
+
 ## Technical Roadmap & Staged Plan
 
 | Stage | Scope | Status |
@@ -134,4 +148,5 @@ T1 lightmap support is replaced and will be phased out across stages:
 - `World/Lighting/RadianceProbe.cs`: L1 SH data structures and evaluation.
 - `World/Lighting/LightSpatialIndex.cs`: Coarse 3D grid indexing entity lights.
 - `World/Lighting/RadianceSettings.cs`: Performance and quality presets.
+- `scripts/UserSettings.cs`: Typed record for the user settings file (`user://settings.cfg`), including the lighting mode.
 - `World/Materials/radiance.gdshader`: Spatial shader evaluating the 3D probe volume.

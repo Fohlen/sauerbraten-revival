@@ -485,7 +485,7 @@ A single-panel wizard imports one map at a time:
 [`scripts/ConverterWizard.cs`](../scripts/ConverterWizard.cs).
 
 1. Pick the Sauerbraten install folder (`FileDialog`); the path is remembered in
-   `user://settings.cfg` (`sauerbraten/path`).
+   `user://settings.cfg` (`sauerbraten_path`, see `scripts/UserSettings.cs`).
 2. Pick a map from a filterable list of `<install>/packages/**/*.ogz`.
 3. Convert: `OgzConverter` reads the OGZ, loads the committed
    `metadata-catalogue/<map>.json`, and writes `user://maps/<map>/` (user space,

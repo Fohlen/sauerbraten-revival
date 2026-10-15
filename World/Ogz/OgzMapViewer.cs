@@ -100,12 +100,15 @@ public partial class OgzMapViewer : Node3D
         if (_built) return;
         _built = true;
 
+        UserSettings userSettings = UserSettings.Load();
         World = new MapWorld
         {
             Name = "MapWorld",
             OgzPath = OgzPath,
             ChunkSize = ChunkSize,
             ShowEntityMarkers = ShowEntityMarkers,
+            // Lighting quality is a user setting (`user://settings.cfg`).
+            RadianceSettings = new Lighting.RadianceSettings { Mode = userSettings.LightingMode },
         };
         AddChild(World);
         World.Build();

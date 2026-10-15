@@ -457,6 +457,8 @@ Godot-native only — `ProjectSettings`, `ConfigFile`, `Resource`, `InputMap`.
 No CubeScript.
 
 - [x] Editor/game actions are `InputMap` actions (`editor_*` in `project.godot`).
+- [x] Lighting quality mode persists as a user setting (`lighting_mode` in
+      `user://settings.cfg`; `scripts/UserSettings.cs`).
 - [ ] Persistent user remaps via `user://input.cfg` (load on startup, write on
       rebind) — lands with the settings UI / M4e. Design:
       [vision.md §11.1](vision.md#keybinds-defaults-remapping-and-what-is-not-yet-bound).

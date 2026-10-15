@@ -20,10 +20,6 @@ namespace SauerbratenRevival;
 /// </summary>
 public partial class ConverterWizard : Control
 {
-    /// <summary>Config file under <c>user://</c> holding the remembered paths.</summary>
-    public const string SettingsPath = "user://settings.cfg";
-    public const string SauerbratenPathKey = "sauerbraten/path";
-
     /// <summary>Project-relative directory holding the committed metadata catalogue.</summary>
     public const string CatalogueDir = "res://metadata-catalogue";
 
@@ -43,7 +39,7 @@ public partial class ConverterWizard : Control
     public override void _Ready()
     {
         BuildUi();
-        string saved = LoadSetting(SauerbratenPathKey);
+        string saved = UserSettings.Load().SauerbratenPath;
         _pathEdit.Text = !string.IsNullOrWhiteSpace(saved) ? saved : World.Ogz.MapRoots.ReferenceRoot;
         RescanMaps();
     }
@@ -120,7 +116,7 @@ public partial class ConverterWizard : Control
     private void OnFolderSelected(string dir)
     {
         _pathEdit.Text = dir;
-        SaveSetting(SauerbratenPathKey, dir);
+        (UserSettings.Load() with { SauerbratenPath = dir }).Save();
         RescanMaps();
     }
 
@@ -187,25 +183,5 @@ public partial class ConverterWizard : Control
             _result.Text = $"Conversion failed for '{map}': {e.Message}";
             GD.PushError($"[converter] {e}");
         }
-    }
-
-    // ---- settings (user://settings.cfg) ----
-
-    /// <summary>Read a value from <c>user://settings.cfg</c>, or empty if unset.</summary>
-    public static string LoadSetting(string key)
-    {
-        var cfg = new ConfigFile();
-        return cfg.Load(SettingsPath) == Error.Ok && cfg.HasSectionKey("settings", key)
-            ? cfg.GetValue("settings", key).AsString()
-            : "";
-    }
-
-    /// <summary>Write a value to <c>user://settings.cfg</c>, preserving other keys.</summary>
-    public static void SaveSetting(string key, Variant value)
-    {
-        var cfg = new ConfigFile();
-        cfg.Load(SettingsPath);
-        cfg.SetValue("settings", key, value);
-        cfg.Save(SettingsPath);
     }
 }
