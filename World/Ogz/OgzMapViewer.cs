@@ -63,29 +63,6 @@ public partial class OgzMapViewer : Node3D
     }
     private bool _showEntityMarkers = true;
 
-    /// <summary>
-    /// Third-person view weapon to attach to the player model's <c>Weapon</c> bone
-    /// (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>). Empty attaches none. This is
-    /// a live property: changing it from the remote inspector swaps the weapon on the
-    /// spawned <see cref="PlayerModel"/> immediately.
-    /// </summary>
-    [Export]
-    public string ViewWeapon
-    {
-        get => _viewWeapon;
-        set
-        {
-            _viewWeapon = value ?? "";
-            _playerModel?.SetViewWeapon(string.IsNullOrEmpty(_viewWeapon) ? null : _viewWeapon);
-        }
-    }
-
-    /// <summary>Gun model used for the local first-person hudgun (e.g. "rifle").</summary>
-    [Export] public string Hudgun { get; set; } = "rifle";
-
-    private string _viewWeapon = "";
-    private PlayerModel? _playerModel;
-
     /// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
     public MapWorld? World { get; private set; }
 
@@ -160,24 +137,28 @@ public partial class OgzMapViewer : Node3D
     {
         if (PlayerModelIndex < 0) return;
 
+        var gun = (Gun)player.Combat.GunSelect;
+
         var body = new PlayerModel { Name = "PlayerModel" };
         World!.AddChild(body);
         player.PlayerModel = body;
         player.HidePlaceholderBody = true;
-        _playerModel = body;
 
+        // Derive both models from the one gun selection: the first-person HUD gun is
+        // <mdl.hudguns>/<guns[].file> and the third-person view weapon is vweps[]
+        // (render.cpp:425, :158). SelectWeapon then keeps them in sync for the rest of
+        // the session — it is the single source of truth for the equipped gun.
         body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam,
-            viewWeapon: string.IsNullOrEmpty(_viewWeapon) ? null : _viewWeapon);
+            viewWeapon: WeaponCatalog.Vwep(gun));
         player.SyncBodyModelNow();
         var hudgun = new HudgunModel { Name = "Hudgun" };
-        hudgun.Configure(World.Models, World.Textures, PlayerModelIndex, Hudgun);
+        hudgun.Configure(World.Models, World.Textures, PlayerModelIndex, WeaponCatalog.Get(gun).File);
         if (player.GetNodeOrNull<Camera3D>("Camera3D") is { } camera)
         {
             camera.AddChild(hudgun);
             player.Hudgun = hudgun;
-            // Sync active gun so view weapon and hudgun reflect player's selected weapon
-            player.SelectWeapon((Gun)player.Combat.GunSelect);
         }
+        player.SelectWeapon(gun);
         GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
     }
 

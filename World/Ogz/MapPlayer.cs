@@ -423,7 +423,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         int g = (int)gun;
         if (!Guns.IsPlayerSelectable(g)) return;
         Combat.GunSelect = g;
-        PlayerModel?.SetViewWeapon(WeaponCatalog.Vweps[g]);
+        PlayerModel?.SetViewWeapon(WeaponCatalog.Vwep(gun));
         Hudgun?.SetGun(WeaponCatalog.Get(gun).File);
         UpdateBodyAnim();
     }
