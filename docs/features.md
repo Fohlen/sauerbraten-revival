@@ -385,6 +385,9 @@ Remaining:
             sounds loaded from `data/sounds.cfg` (`assets/sounds/` or reference dump fallback),
             slot/alt sampling, volume scaling, local 2D and 3D positional playback, empty-ammo
             and hit confirmation sounds. Asserted by `test/GameAudioTest.cs`.
+      - [x] **Audio settings**: `sound_enabled` / `sound_volume` (0..255) persist in
+            `user://settings.cfg` and are applied at startup via `GameAudio.Apply`.
+            Asserted by `test/UserSettingsTest.cs`.
 - [ ] Projectiles & explosions (Rocket Launcher & Grenade Launcher).
       - [ ] **Radial splash damage & self-push** (`radialeffect` / `explode`): distance-attenuated damage `(damage * (1 - dist / (1.5 * exprad)))`, self-damage halving (`EXP_SELFDAMDIV = 2`), self-push amplification (`EXP_SELFPUSH = 2.5`), rocket jump impulse mechanics.
       - [ ] **Rocket projectiles** (`projectile`, `projsplash`): linear flight at speed 320, dynamic collision against world octree & candidate bounding cylinders, visual fireball/spark trail and impact detonation.
@@ -459,6 +462,8 @@ No CubeScript.
 - [x] Editor/game actions are `InputMap` actions (`editor_*` in `project.godot`).
 - [x] Lighting quality mode persists as a user setting (`lighting_mode` in
       `user://settings.cfg`; `scripts/UserSettings.cs`).
+- [x] Audio enabled/volume persist as user settings (`sound_enabled` / `sound_volume`
+      in `user://settings.cfg`; `scripts/UserSettings.cs`).
 - [ ] Persistent user remaps via `user://input.cfg` (load on startup, write on
       rebind) — lands with the settings UI / M4e. Design:
       [vision.md §11.1](vision.md#keybinds-defaults-remapping-and-what-is-not-yet-bound).

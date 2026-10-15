@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Weapons;
 
 #if DEBUG
 using System.Reflection;
@@ -32,7 +33,14 @@ public partial class Main : Node
         CallDeferred(nameof(StartGame));
     }
 
-    private void StartGame() => GetTree().ChangeSceneToFile("res://scenes/player_scene.tscn");
+    private void StartGame()
+    {
+        // User settings are applied once at startup; the world layer reads its own
+        // (lighting) settings when it builds.
+        UserSettings settings = UserSettings.Load();
+        GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
+        GetTree().ChangeSceneToFile("res://scenes/player_scene.tscn");
+    }
 
 #if DEBUG
     private void RunTests() => _ = GoTest.RunTests(Assembly.GetExecutingAssembly(), this, _environment!);

@@ -43,11 +43,21 @@ public sealed class SoundConfig
 /// </summary>
 public static class GameAudio
 {
-    /// <summary>Global toggle for sound playback. False by default.</summary>
+    /// <summary>Maximum master sound volume (engine <c>soundvol</c> range 0..255).</summary>
+    public const int MaxSoundVol = 255;
+
+    /// <summary>Global toggle for sound playback. False until <see cref="Apply"/> sets it from user settings at startup.</summary>
     public static bool Enabled { get; set; } = false;
 
     /// <summary>Master sound volume (engine <c>soundvol</c> 0..255; default 255).</summary>
-    public static int SoundVol { get; set; } = 255;
+    public static int SoundVol { get; set; } = MaxSoundVol;
+
+    /// <summary>Apply persisted user audio settings to the runtime playback state.</summary>
+    public static void Apply(bool enabled, int volume)
+    {
+        Enabled = enabled;
+        SoundVol = Mathf.Clamp(volume, 0, MaxSoundVol);
+    }
 
     private static readonly Dictionary<string, AudioStream?> LoadedStreams = new();
 

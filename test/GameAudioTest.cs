@@ -69,6 +69,27 @@ public class GameAudioTest : TestClass
     }
 
     [Test]
+    public void ApplySetsEnabledAndClampsVolume()
+    {
+        bool previousEnabled = GameAudio.Enabled;
+        int previousVolume = GameAudio.SoundVol;
+        try
+        {
+            GameAudio.Apply(enabled: true, volume: 999);
+            TestAssert.True(GameAudio.Enabled, "enabled applies");
+            TestAssert.Equal(GameAudio.MaxSoundVol, GameAudio.SoundVol, "volume clamps to max");
+
+            GameAudio.Apply(enabled: false, volume: 128);
+            TestAssert.False(GameAudio.Enabled, "disabled applies");
+            TestAssert.Equal(128, GameAudio.SoundVol, "volume applies");
+        }
+        finally
+        {
+            GameAudio.Apply(previousEnabled, previousVolume);
+        }
+    }
+
+    [Test]
     public void SoundIsOffByDefault()
     {
         TestAssert.False(GameAudio.Enabled, "GameAudio.Enabled should be false by default");
