@@ -44,6 +44,16 @@ public partial class WeaponEffectsRenderer : Node3D
     private const float BulletDecalFadeTime = 10f; // decalfade default: 10s (r6889)
     private const float BulletDecalFadeOut = 1f;   // fadeouttime: 1s (r6889)
 
+    // Rocket projectile model (weapon.cpp renderprojectiles; the `projectiles/rocket` MD3).
+    private const string RocketModelPath = "res://assets/models/projectiles_rocket.glb";
+    private const string RocketSkinPath = "res://assets/textures/models/projectiles/rocket/skin.jpg";
+    // The converted MD3 is authored in Cube2 model units; 0.2 matches the grenade's
+    // chosen world scale (see BounceBody) so both projectiles read at a similar size.
+    private const float RocketVisualScale = 0.2f;
+    // renderprojectiles draws the model 3 units ahead of the smoke-trail position
+    // (weapon.cpp:910 `v.mul(3); v.add(pos)`).
+    private const float RocketVisualLead = 3f;
+
     /// <summary>Optional provider for active flying rockets to render visual rocket trails.</summary>
     public Func<IEnumerable<RocketProjectile>>? ActiveRocketsProvider { get; set; }
 
@@ -54,6 +64,13 @@ public partial class WeaponEffectsRenderer : Node3D
     private Texture2D? _bulletTexture;
     private Texture2D? _scorchTexture;
     private QuadMesh _quadMesh = null!;
+
+    private PackedScene? _rocketScene;
+    private Material? _rocketMaterial;
+    private readonly Dictionary<RocketProjectile, Node3D> _rocketVisuals = new();
+    private readonly List<Node3D> _rocketVisualPool = new();
+    private readonly HashSet<RocketProjectile> _activeRocketsScratch = new();
+    private readonly List<RocketProjectile> _expiredRocketsScratch = new();
 
     private MeshInstance3D _meshInstance = null!;
     private ImmediateMesh _mesh = null!;
@@ -143,6 +160,36 @@ public partial class WeaponEffectsRenderer : Node3D
                 TotalLifetime = 0f
             };
         }
+
+        LoadRocketVisual();
+    }
+
+    /// <summary>
+    /// Loads the converted <c>projectiles/rocket</c> model and its skin once. Mirrors
+    /// the grenade visual in <see cref="World.Entities.BounceBody"/> (the imperfect
+    /// direct GLB/skin load used for the first pass).
+    /// </summary>
+    private void LoadRocketVisual()
+    {
+        if (!ResourceLoader.Exists(RocketModelPath)) return;
+        _rocketScene = ResourceLoader.Load<PackedScene>(RocketModelPath);
+        if (_rocketScene == null) return;
+
+        var mat = new StandardMaterial3D
+        {
+            Roughness = 0.3f,
+            Metallic = 0.6f
+        };
+        if (ResourceLoader.Exists(RocketSkinPath))
+        {
+            mat.AlbedoTexture = ResourceLoader.Load<Texture2D>(RocketSkinPath);
+            mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps;
+        }
+        else
+        {
+            mat.AlbedoColor = new Color(0.5f, 0.5f, 0.5f); // fallback when the skin is missing
+        }
+        _rocketMaterial = mat;
     }
 
     /// <summary>
@@ -351,23 +398,8 @@ public partial class WeaponEffectsRenderer : Node3D
             _mesh.SurfaceEnd();
         }
 
-        // Render flying rocket tracers
-        if (ActiveRocketsProvider?.Invoke() is { } rockets)
-        {
-            foreach (var rocket in rockets)
-            {
-                if (rocket.Exploded) continue;
-                Vector3 head = rocket.GetVisualPosition();
-                Vector3 tail = head - rocket.Dir * 2.5f;
-
-                _mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
-                _mesh.SurfaceSetColor(new Color(1f, 0.8f, 0.2f, 1f));
-                _mesh.SurfaceAddVertex(tail);
-                _mesh.SurfaceSetColor(new Color(1f, 0.4f, 0.1f, 1f));
-                _mesh.SurfaceAddVertex(head);
-                _mesh.SurfaceEnd();
-            }
-        }
+        // Render flying rockets as their projectile model (weapon.cpp:renderprojectiles).
+        UpdateRocketVisuals();
 
         // Render explosion fireballs
         for (int i = _explosions.Count - 1; i >= 0; i--)
@@ -432,5 +464,101 @@ public partial class WeaponEffectsRenderer : Node3D
                 entry.Material.AlbedoColor = new Color(1f, 1f, 1f, alpha);
             }
         }
+    }
+
+    /// <summary>
+    /// Shows/positions a pooled <c>projectiles/rocket</c> model for every live rocket,
+    /// matching <c>weapon.cpp:renderprojectiles</c>: the model sits <see cref="RocketVisualLead"/>
+    /// units in front of the interpolated position and points along the flight direction.
+    /// </summary>
+    private void UpdateRocketVisuals()
+    {
+        if (_rocketScene == null)
+        {
+            HideAllRocketVisuals();
+            return;
+        }
+
+        _activeRocketsScratch.Clear();
+        if (ActiveRocketsProvider?.Invoke() is { } rockets)
+        {
+            foreach (var rocket in rockets)
+            {
+                if (rocket.Exploded) continue;
+                _activeRocketsScratch.Add(rocket);
+
+                if (!_rocketVisuals.TryGetValue(rocket, out Node3D? visual))
+                {
+                    visual = TakeRocketVisual();
+                    if (visual == null) continue;
+                    _rocketVisuals[rocket] = visual;
+                }
+
+                Vector3 dir = rocket.Dir;
+                if (dir.LengthSquared() < 1e-6f) dir = new Vector3(0f, 1f, 0f);
+                visual.Position = rocket.GetVisualPosition() + dir * RocketVisualLead;
+                // Bake the model scale into the basis: assigning Basis would otherwise
+                // reset the node's Scale to 1 every frame.
+                visual.Basis = RocketBasis(dir).Scaled(Vector3.One * RocketVisualScale);
+                visual.Visible = true;
+            }
+        }
+
+        _expiredRocketsScratch.Clear();
+        foreach (var pair in _rocketVisuals)
+            if (!_activeRocketsScratch.Contains(pair.Key))
+                _expiredRocketsScratch.Add(pair.Key);
+        for (int i = 0; i < _expiredRocketsScratch.Count; i++)
+        {
+            Node3D visual = _rocketVisuals[_expiredRocketsScratch[i]];
+            visual.Visible = false;
+            _rocketVisualPool.Add(visual);
+            _rocketVisuals.Remove(_expiredRocketsScratch[i]);
+        }
+    }
+
+    private void HideAllRocketVisuals()
+    {
+        foreach (var visual in _rocketVisuals.Values)
+        {
+            visual.Visible = false;
+            _rocketVisualPool.Add(visual);
+        }
+        _rocketVisuals.Clear();
+    }
+
+    private Node3D? TakeRocketVisual()
+    {
+        if (_rocketVisualPool.Count > 0)
+        {
+            Node3D pooled = _rocketVisualPool[^1];
+            _rocketVisualPool.RemoveAt(_rocketVisualPool.Count - 1);
+            return pooled;
+        }
+
+        if (_rocketScene?.Instantiate() is not Node3D scene) return null;
+        ApplyMaterial(scene, _rocketMaterial!);
+        scene.Name = "RocketVisual";
+        AddChild(scene);
+        return scene;
+    }
+
+    /// <summary>
+    /// Orients the rocket so its authored <b>+X</b> axis points along <paramref name="dir"/>.
+    /// <see cref="Basis.LookingAt"/> aims local -Z at the target, so a +90 deg rotation
+    /// about local Y maps +X onto the flight direction (the engine's <c>yaw += 90</c>).
+    /// The world is Z-up, so the reference up is the local +Z axis.
+    /// </summary>
+    private static Basis RocketBasis(Vector3 dir)
+    {
+        Vector3 up = new(0f, 0f, 1f);
+        if (Mathf.Abs(dir.Dot(up)) > 0.999f) up = new Vector3(0f, 1f, 0f);
+        return Basis.LookingAt(dir, up) * new Basis(Vector3.Up, Mathf.Pi / 2f);
+    }
+
+    private static void ApplyMaterial(Node node, Material material)
+    {
+        if (node is MeshInstance3D mesh) mesh.MaterialOverride = material;
+        foreach (var child in node.GetChildren()) ApplyMaterial(child, material);
     }
 }
