@@ -23,7 +23,11 @@ public partial class HudController : Control
     private Label? _healthLabel;
     private Label? _maxHealthLabel;
 
+    private TextureRect? _armorIcon;
+    private Label? _armorLabel;
+
     private Texture2D? _itemsTexture;
+    private ArmourType? _lastArmourType;
 
     public CrosshairRenderer Crosshair => _crosshairRenderer;
 
@@ -101,6 +105,27 @@ public partial class HudController : Control
             VerticalAlignment = VerticalAlignment.Center
         };
         _statusBarRoot.AddChild(_maxHealthLabel);
+
+        // Armor Icon
+        _armorIcon = new TextureRect
+        {
+            Name = "ArmorIcon",
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = MouseFilterEnum.Ignore,
+            Visible = false
+        };
+        _statusBarRoot.AddChild(_armorIcon);
+
+        // Armor Number
+        _armorLabel = new Label
+        {
+            Name = "ArmorLabel",
+            MouseFilter = MouseFilterEnum.Ignore,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visible = false
+        };
+        _statusBarRoot.AddChild(_armorLabel);
     }
 
     /// <summary>Initialize textures using the project's texture source.</summary>
@@ -117,20 +142,31 @@ public partial class HudController : Control
 
         if (_healthIcon != null)
         {
-            var atlas = new AtlasTexture
-            {
-                Atlas = _itemsTexture,
-                Region = StatusBarRenderer.GetIconUv(HudIcon.Health)
-            };
-            // GetIconUv returns normalized 0..1 coordinates for a 4x4 grid; convert to pixel region on items.png (256x256)
-            Vector2 texSize = _itemsTexture.GetSize();
-            if (texSize.X > 0 && texSize.Y > 0)
-            {
-                Rect2 uv = StatusBarRenderer.GetIconUv(HudIcon.Health);
-                atlas.Region = new Rect2(uv.Position.X * texSize.X, uv.Position.Y * texSize.Y, uv.Size.X * texSize.X, uv.Size.Y * texSize.Y);
-            }
-            _healthIcon.Texture = atlas;
+            _healthIcon.Texture = CreateAtlasTexture(HudIcon.Health);
         }
+
+        if (_armorIcon != null && _lastArmourType.HasValue)
+        {
+            _armorIcon.Texture = CreateAtlasTexture(StatusBarRenderer.GetArmorIcon(_lastArmourType.Value));
+        }
+    }
+
+    private AtlasTexture? CreateAtlasTexture(HudIcon icon)
+    {
+        if (_itemsTexture == null) return null;
+
+        var atlas = new AtlasTexture
+        {
+            Atlas = _itemsTexture,
+            Region = StatusBarRenderer.GetIconUv(icon)
+        };
+        Vector2 texSize = _itemsTexture.GetSize();
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            Rect2 uv = StatusBarRenderer.GetIconUv(icon);
+            atlas.Region = new Rect2(uv.Position.X * texSize.X, uv.Position.Y * texSize.Y, uv.Size.X * texSize.X, uv.Size.Y * texSize.Y);
+        }
+        return atlas;
     }
 
     public override void _Process(double delta)
@@ -244,6 +280,45 @@ public partial class HudController : Control
             {
                 _maxHealthLabel.Visible = false;
             }
+        }
+
+        // Armor Icon & text (fps.cpp:914, 937: if(d->state!=CS_DEAD && d->armour))
+        int armour = isDead ? 0 : Player.Combat.Armour;
+        ArmourType armourType = Player.Combat.ArmourType;
+
+        if (armour > 0)
+        {
+            if (_armorIcon != null)
+            {
+                if (_lastArmourType != armourType)
+                {
+                    _lastArmourType = armourType;
+                    _armorIcon.Texture = CreateAtlasTexture(StatusBarRenderer.GetArmorIcon(armourType));
+                }
+                _armorIcon.Visible = true;
+                _armorIcon.Position = new Vector2((StatusBarRenderer.IconX + StatusBarRenderer.IconStep) * scale, StatusBarRenderer.IconY * scale);
+                _armorIcon.Size = new Vector2(StatusBarRenderer.IconSize * scale, StatusBarRenderer.IconSize * scale);
+            }
+
+            if (_armorLabel != null)
+            {
+                _armorLabel.Visible = true;
+                _armorLabel.Text = armour.ToString();
+                _armorLabel.Modulate = Colors.White;
+                float armorTextX = (StatusBarRenderer.IconX + StatusBarRenderer.IconStep + StatusBarRenderer.IconSize + StatusBarRenderer.IconSpace) * scale;
+                float iconY = StatusBarRenderer.IconY * scale;
+                float iconHeight = StatusBarRenderer.IconSize * scale;
+                _armorLabel.Position = new Vector2(armorTextX, iconY);
+                _armorLabel.Size = new Vector2(200f * scale, iconHeight);
+                _armorLabel.VerticalAlignment = VerticalAlignment.Center;
+                int fontSize = Mathf.Max(12, (int)(64f * scale));
+                _armorLabel.AddThemeFontSizeOverride("font_size", fontSize);
+            }
+        }
+        else
+        {
+            if (_armorIcon != null) _armorIcon.Visible = false;
+            if (_armorLabel != null) _armorLabel.Visible = false;
         }
     }
 }

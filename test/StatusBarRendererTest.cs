@@ -93,4 +93,81 @@ public class StatusBarRendererTest : GoTestBase
 
         canvas.Free();
     }
+
+    [Test]
+    public void HudControllerUpdatesArmorIndicatorCorrectly()
+    {
+        var player = new MapPlayer();
+        var hud = new HudController { Player = player };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        var texSource = new SauerbratenRevival.World.Materials.ResourceTextureSource();
+        hud.SetupTextures(texSource);
+
+        var armorIcon = hud.GetNodeOrNull<TextureRect>("StatusBar/ArmorIcon");
+        var armorLabel = hud.GetNodeOrNull<Label>("StatusBar/ArmorLabel");
+        TestAssert.True(armorIcon != null, "armor icon node exists");
+        TestAssert.True(armorLabel != null, "armor label node exists");
+
+        // By default player has 0 armor -> hidden
+        player.Combat.Armour = 0;
+        hud.UpdateStatusBar();
+        TestAssert.False(armorIcon!.Visible, "armor icon hidden when 0 armor");
+        TestAssert.False(armorLabel!.Visible, "armor label hidden when 0 armor");
+
+        // Set green armor
+        player.Combat.Armour = 100;
+        player.Combat.ArmourType = ArmourType.Green;
+        hud.UpdateStatusBar();
+        TestAssert.True(armorIcon.Visible, "armor icon visible when > 0 armor");
+        TestAssert.True(armorLabel.Visible, "armor label visible when > 0 armor");
+        TestAssert.True(armorLabel.Text == "100", $"armor text is 100, got {armorLabel.Text}");
+        TestAssert.True(armorIcon.Texture is AtlasTexture, "armor icon texture is atlas texture");
+
+        var atlas = (AtlasTexture)armorIcon.Texture;
+        Rect2 greenUv = StatusBarRenderer.GetIconUv(HudIcon.GreenArmour);
+        Vector2 texSize = atlas.Atlas?.GetSize() ?? Vector2.Zero;
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.X, greenUv.Position.X * texSize.X), "correct atlas X offset for green armor");
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.Y, greenUv.Position.Y * texSize.Y), "correct atlas Y offset for green armor");
+        }
+
+        // Switch to yellow armor
+        player.Combat.Armour = 50;
+        player.Combat.ArmourType = ArmourType.Yellow;
+        hud.UpdateStatusBar();
+        TestAssert.True(armorLabel.Text == "50", $"armor text updated to 50, got {armorLabel.Text}");
+        atlas = (AtlasTexture)armorIcon.Texture;
+        Rect2 yellowUv = StatusBarRenderer.GetIconUv(HudIcon.YellowArmour);
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.X, yellowUv.Position.X * texSize.X), "correct atlas X offset for yellow armor");
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.Y, yellowUv.Position.Y * texSize.Y), "correct atlas Y offset for yellow armor");
+        }
+
+        // Switch to blue armor
+        player.Combat.Armour = 25;
+        player.Combat.ArmourType = ArmourType.Blue;
+        hud.UpdateStatusBar();
+        TestAssert.True(armorLabel.Text == "25", $"armor text updated to 25, got {armorLabel.Text}");
+        atlas = (AtlasTexture)armorIcon.Texture;
+        Rect2 blueUv = StatusBarRenderer.GetIconUv(HudIcon.BlueArmour);
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.X, blueUv.Position.X * texSize.X), "correct atlas X offset for blue armor");
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.Y, blueUv.Position.Y * texSize.Y), "correct atlas Y offset for blue armor");
+        }
+
+        // If player is dead, armor indicator is hidden
+        player.Combat.Armour = 100;
+        player.Entity.Dead = true;
+        hud.UpdateStatusBar();
+        TestAssert.False(armorIcon.Visible, "armor icon hidden when dead");
+        TestAssert.False(armorLabel.Visible, "armor label hidden when dead");
+
+        canvas.Free();
+    }
 }
