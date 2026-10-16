@@ -40,8 +40,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>
     /// Original <c>fov</c> (rendergl.cpp VARP, default 100). This is the
-    /// <b>horizontal</b> field of view; it is converted to Godot's vertical FOV via
-    /// the engine's <c>fovy = 2*atan(tan(fov/2)/aspect)</c> (rendergl.cpp:1872).
+	/// <b>horizontal</b> field of view; it is converted to Godot's vertical FOV via
+	/// the engine's <c>fovy = 2*atan(tan(fov/2)/aspect)</c> (rendergl.cpp:1872).
     /// </summary>
     [Export] public float Fov { get; set; } = 100.0f;
 
@@ -107,9 +107,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>
     /// The visible body model, if any. It must be a <b>sibling</b> of this node (a child
     /// of the same Z-up world node), so that it can be placed at the feet and kept
-    /// upright independently of the camera's view pitch.
-    /// </summary>
-    public PlayerModel? PlayerModel { get; set; }
+	/// upright independently of the camera's view pitch.
+	/// </summary>
+	public PlayerModel? PlayerModel { get; set; }
 
     /// <summary>The local player's first-person hands/weapon, hidden outside first person.</summary>
     public HudgunModel? Hudgun { get; set; }
@@ -333,10 +333,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     private int _lastPainSeen = -1;
 
     /// <summary>
-    /// Play the body clip matching the current state, mirroring the engine's
-    /// <c>renderclient</c> animation selection (rendermodel.cpp:1060-1110).
-    /// </summary>
-    private void UpdateBodyAnim()
+	/// Play the body clip matching the current state, mirroring the engine's
+	/// <c>renderclient</c> animation selection (rendermodel.cpp:1060-1110).
+	/// </summary>
+	private void UpdateBodyAnim()
     {
         if (PlayerModel is not { } model) return;
         string name = SelectBodyAnim();
@@ -775,10 +775,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>
     /// Toggle the spectator/edit floating state (<c>CS_SPECTATOR</c>). While floating
     /// the player ignores gravity and collision and flies along the view direction,
-    /// exactly like the engine's <c>moveplayer()</c> floating branch. Bound to
-    /// <c>spectate</c> (F1).
-    /// </summary>
-    public void ToggleFloat()
+	/// exactly like the engine's <c>moveplayer()</c> floating branch. Bound to
+	/// <c>spectate</c> (F1).
+	/// </summary>
+	public void ToggleFloat()
     {
         Entity.State = Entity.State == PhysEnt.CsSpectator ? PhysEnt.CsAlive : PhysEnt.CsSpectator;
         if (Entity.State == PhysEnt.CsSpectator) Entity.Jumping = false;
@@ -898,12 +898,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>
-    /// Place the visible <see cref="PlayerModel"/> at the player's <b>feet</b> and
-    /// orient it by yaw only, upright — the engine renders the body model at
-    /// <c>d->feetpos()</c> with <c>yaw+90</c> and ignores the view pitch
-    /// (rendermodel.cpp <c>renderclient</c>). This node stays at the eye, so the model
-    /// is offset down by the eye height. The model is a <b>sibling</b> in the same Z-up
-    /// world node, so local coordinates match this node's own <c>Position</c>/<c>Basis</c>.
+	/// Place the visible <see cref="PlayerModel"/> at the player's <b>feet</b> and
+	/// orient it by yaw only, upright — the engine renders the body model at
+	/// <c>d->feetpos()</c> with <c>yaw+90</c> and ignores the view pitch
+	/// (rendermodel.cpp <c>renderclient</c>). This node stays at the eye, so the model
+	/// is offset down by the eye height. The model is a <b>sibling</b> in the same Z-up
+	/// world node, so local coordinates match this node's own <c>Position</c>/<c>Basis</c>.
     /// </summary>
     private void SyncBodyModel()
     {

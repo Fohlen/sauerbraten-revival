@@ -121,18 +121,55 @@ public partial class BounceBody : Node3D
         Bodies[Entity] = this;
         Hook();
 
-        if (GetNodeOrNull<MeshInstance3D>("Visual") == null)
+        if (GetNodeOrNull<Node3D>("Visual") == null)
         {
-            float meshRadius = BodyKind == Kind.Debris ? 0.5f : 1.2f;
-            var sphere = new SphereMesh { Radius = meshRadius, Height = meshRadius * 2f };
-            var mat = new StandardMaterial3D
+            Node3D? visualNode = null;
+            if (BodyKind == Kind.Grenade)
             {
-                AlbedoColor = BodyKind == Kind.Grenade ? new Color(0.2f, 0.6f, 0.2f) : new Color(0.5f, 0.3f, 0.1f),
-                Roughness = 0.3f,
-                Metallic = 0.4f
-            };
-            var mi = new MeshInstance3D { Name = "Visual", Mesh = sphere, MaterialOverride = mat };
-            AddChild(mi);
+                const string glbPath = "res://assets/models/projectiles_grenade.glb";
+                if (ResourceLoader.Exists(glbPath))
+                {
+                    var packed = ResourceLoader.Load<PackedScene>(glbPath);
+                    if (packed != null && packed.Instantiate() is Node3D scene)
+                    {
+                        var mat = new StandardMaterial3D
+                        {
+                            Roughness = 0.3f,
+                            Metallic = 0.6f
+                        };
+                        const string texPath = "res://assets/textures/models/projectiles/grenade/skin.jpg";
+                        if (ResourceLoader.Exists(texPath))
+                        {
+                            mat.AlbedoTexture = ResourceLoader.Load<Texture2D>(texPath);
+                            mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps;
+                        }
+                        else
+                        {
+                            mat.AlbedoColor = new Color(0.21f, 0.31f, 0.33f); // r6889 skin.jpg average
+                        }
+
+                        // Apply material to all meshes in the scene
+                        ApplyMaterial(scene, mat);
+                        scene.Name = "Visual";
+                        visualNode = scene;
+                    }
+                }
+            }
+
+            if (visualNode == null)
+            {
+                float meshRadius = BodyKind == Kind.Debris ? 0.5f : 1.2f;
+                var sphere = new SphereMesh { Radius = meshRadius, Height = meshRadius * 2f };
+                var mat = new StandardMaterial3D
+                {
+                    AlbedoColor = BodyKind == Kind.Grenade ? new Color(0.21f, 0.31f, 0.33f) : new Color(0.5f, 0.3f, 0.1f),
+                    Roughness = 0.3f,
+                    Metallic = 0.5f
+                };
+                visualNode = new MeshInstance3D { Name = "Visual", Mesh = sphere, MaterialOverride = mat };
+            }
+
+            AddChild(visualNode);
         }
 
         Initialized = true;
@@ -310,5 +347,11 @@ public partial class BounceBody : Node3D
         Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, 0f, 1, 0);
         if (forward.LengthSquared() > 1e-6f)
             Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1));
+    }
+
+    private static void ApplyMaterial(Node node, Material material)
+    {
+        if (node is MeshInstance3D mesh) mesh.MaterialOverride = material;
+        foreach (var child in node.GetChildren()) ApplyMaterial(child, material);
     }
 }
