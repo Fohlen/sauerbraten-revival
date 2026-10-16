@@ -360,4 +360,84 @@ public class MapPlayerTest : GoTestBase
 
         shooter.Free();
     }
+
+    [Test]
+    public void GrenadeJumpAppliesUpwardImpulseOnBounceContact()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var shooter = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        shooter.SelectWeapon(Gun.GrenadeLauncher);
+        shooter.Combat.Ammo[(int)Gun.GrenadeLauncher] = 5;
+        shooter.Combat.Health = 100;
+        shooter.Combat.Armour = 0;
+
+        // Settle on floor
+        Step(shooter, 200);
+
+        // Jump and aim steeply down (-80 degrees)
+        shooter.Entity.Vel = new Vector3(0, 0, 60f); // jumping upward
+        shooter.SetView(0f, -80f);
+
+        bool fired = shooter.TryAttack(nowMillis: 1000);
+        TestAssert.True(fired, "grenade attack succeeded");
+        TestAssert.Equal(1, shooter.ActiveGrenades.Count, "active grenade spawned");
+
+        for (int s = 0; s < 40; s++)
+        {
+            shooter.Advance(Phys.PhysFrameTime / 1000.0);
+            if (shooter.ActiveGrenades.Count == 0) break;
+        }
+
+        TestAssert.Equal(0, shooter.ActiveGrenades.Count, "grenade detonated on contact with player");
+        TestAssert.True(shooter.Combat.Health > 0 && shooter.Combat.Health < 100,
+            $"player took halved self-damage: health={shooter.Combat.Health}");
+        GD.Print($"[grenade jump] player Vel={shooter.Entity.Vel} health={shooter.Combat.Health}");
+        TestAssert.True(shooter.Entity.Vel.Z > 30f,
+            $"grenade jump launched player upward: Vel.Z={shooter.Entity.Vel.Z}");
+
+        shooter.Free();
+    }
+
+    [Test]
+    public void GrenadeDetonatesOnPlayerContactWhenSteppingOnIt()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var shooter = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        shooter.SelectWeapon(Gun.GrenadeLauncher);
+        shooter.Combat.Ammo[(int)Gun.GrenadeLauncher] = 5;
+        shooter.Combat.Health = 100;
+        shooter.Combat.Armour = 0;
+
+        // Settle on floor
+        Step(shooter, 200);
+
+        // Aim forward-down (-60 degrees pitch) so grenade lands right in front of player
+        shooter.SetView(0f, -60f);
+        bool fired = shooter.TryAttack(nowMillis: 1000);
+        TestAssert.True(fired, "grenade attack succeeded");
+        TestAssert.Equal(1, shooter.ActiveGrenades.Count, "active grenade spawned");
+
+        var grenade = shooter.ActiveGrenades[0];
+
+        // Walk forward and jump towards the grenade
+        shooter.Entity.Move = 1;
+        shooter.Entity.Jumping = true;
+        bool detonatedOnPlayer = false;
+
+        for (int s = 0; s < 250; s++)
+        {
+            shooter.Advance(Phys.PhysFrameTime / 1000.0);
+            if (shooter.ActiveGrenades.Count == 0)
+            {
+                detonatedOnPlayer = true;
+                break;
+            }
+        }
+
+        TestAssert.True(detonatedOnPlayer, "grenade detonated when player jumped/walked into it before fuse timeout");
+        TestAssert.True(shooter.Combat.Health < 100, "player took damage from grenade explosion");
+        TestAssert.True(shooter.Entity.Vel.Length() > 50f, $"player received explosion impulse: Vel={shooter.Entity.Vel}");
+
+        shooter.Free();
+    }
 }

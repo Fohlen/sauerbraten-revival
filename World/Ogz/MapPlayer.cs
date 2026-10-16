@@ -231,9 +231,15 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Pitch = 0f;
         LastMillis = (int)Time.GetTicksMsec();
         Initialized = true;
+        _phys.DynEnts.Add(Entity);
         SelectWeapon(DefaultGun);
         SyncTransform();
         if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
+    }
+
+    public override void _ExitTree()
+    {
+        _phys?.DynEnts.Remove(Entity);
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -614,25 +620,49 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         }
         else if ((Gun)Combat.GunSelect == Gun.GrenadeLauncher)
         {
-            // Grenade Launcher (weapon.cpp:639-648)
+            // Grenade Launcher (weapon.cpp:639-648, 796-807)
             Vector3 from = Entity.O;
             Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, Pitch, 1, 0);
             if (forward.LengthSquared() < 1e-6f) forward = new Vector3(0f, 1f, 0f);
+            Vector3 dir = forward.Normalized();
             float maxRange = weapon.Range > 0 ? weapon.Range : 1024f;
-            Vector3 targetAim = from + forward.Normalized() * maxRange;
+            Vector3 to = from + dir * maxRange;
+            float dist = from.DistanceTo(to);
 
             // Recoil kickback (weapon.cpp:798)
-            Entity.Vel += forward.Normalized() * (weapon.KickAmount * -2.5f);
+            Entity.Vel += dir * (weapon.KickAmount * -2.5f);
+
+            float shorten = 0f;
+            if (weapon.Range > 0 && dist > weapon.Range)
+                shorten = weapon.Range;
+            if (_phys?.Octa != null)
+            {
+                float barrier = OctaRaycast.RayCube(
+                    _phys.Octa,
+                    from,
+                    dir,
+                    dist,
+                    OctaRaycast.RayClipMat | OctaRaycast.RayAlphaPoly,
+                    0,
+                    out _);
+                if (barrier > 0f && barrier < dist && (shorten == 0f || barrier < shorten))
+                    shorten = barrier;
+            }
+            if (shorten > 0f) to = from + dir * shorten;
 
             // In weapon.cpp:641-643: up = to; up.z += dist/8;
-            float dist = from.DistanceTo(targetAim);
-            Vector3 upAim = targetAim with { Z = targetAim.Z + dist / 8.0f };
-            Vector3 launchDir = (upAim - from).Normalized();
+            float hitDist = from.DistanceTo(to);
+            Vector3 up = to with { Z = to.Z + hitDist / 8.0f };
+            Vector3 launchDir = (up - from).Normalized();
             Vector3 launchVel = launchDir * (float)weapon.ProjSpeed;
 
             if (_phys != null)
             {
-                var grenade = new BounceBody { BodyKind = BounceBody.Kind.Grenade };
+                var grenade = new BounceBody
+                {
+                    BodyKind = BounceBody.Kind.Grenade,
+                    AutoAdvance = false
+                };
                 grenade.Setup(
                     _phys,
                     from,
@@ -729,7 +759,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 {
                     ActiveGrenades.RemoveAt(i);
                 }
-                else if (!grenade.IsInsideTree())
+                else
                 {
                     grenade.Advance(StepSeconds, candidates);
                     if (grenade.Exploded)

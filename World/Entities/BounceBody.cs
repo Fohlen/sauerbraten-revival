@@ -25,11 +25,20 @@ public partial class BounceBody : Node3D
 
     [Export] public Kind BodyKind { get; set; } = Kind.Grenade;
 
+    /// <summary>Whether this body steps itself in _PhysicsProcess. False when managed by MapPlayer or world runner.</summary>
+    [Export] public bool AutoAdvance { get; set; } = true;
+
     /// <summary>Facing yaw (degrees) — only affects the ellipse collision shape.</summary>
     [Export] public float Yaw { get; set; }
 
     /// <summary>The simulated entity (Sauerbraten Z-up). Read by tests/diagnostics.</summary>
     public PhysEnt Entity { get; } = new();
+
+    /// <summary>Visual offset for HUD convergence (weapon.cpp:215).</summary>
+    public Vector3 Offset { get; set; }
+
+    /// <summary>Remaining visual offset interpolation time in ms (weapon.cpp:216 OFFSETMILLIS).</summary>
+    public int OffsetMillis { get; set; }
 
     /// <summary>Number of surface reflections so far (<c>bouncer::bounces</c>).</summary>
     public int Bounces { get; private set; }
@@ -104,17 +113,23 @@ public partial class BounceBody : Node3D
             }
         }
 
+        // weapon.cpp:215-216: bnc.offset = from - bnc.o; bnc.offsetmillis = OFFSETMILLIS;
+        Offset = position - Entity.O;
+        OffsetMillis = 500;
+
         phys.DynEnts.Add(Entity);
         Bodies[Entity] = this;
         Hook();
 
         if (GetNodeOrNull<MeshInstance3D>("Visual") == null)
         {
-            var sphere = new SphereMesh { Radius = 0.5f, Height = 1.0f };
+            float meshRadius = BodyKind == Kind.Debris ? 0.5f : 1.2f;
+            var sphere = new SphereMesh { Radius = meshRadius, Height = meshRadius * 2f };
             var mat = new StandardMaterial3D
             {
-                AlbedoColor = BodyKind == Kind.Grenade ? new Color(0.2f, 0.4f, 0.2f) : new Color(0.5f, 0.3f, 0.1f),
-                Roughness = 0.3f
+                AlbedoColor = BodyKind == Kind.Grenade ? new Color(0.2f, 0.6f, 0.2f) : new Color(0.5f, 0.3f, 0.1f),
+                Roughness = 0.3f,
+                Metallic = 0.4f
             };
             var mi = new MeshInstance3D { Name = "Visual", Mesh = sphere, MaterialOverride = mat };
             AddChild(mi);
@@ -142,7 +157,7 @@ public partial class BounceBody : Node3D
         Entity.Yaw = yawDegrees;
         Entity.Radius = Entity.XRadius = Entity.YRadius = radius;
         Entity.EyeHeight = Entity.AboveEye = radius;
-        Entity.PhysState = Phys.PhysBounce;
+        Entity.PhysState = Phys.PhysFall;
         Entity.State = PhysEnt.CsAlive;
         // A grenade uses the precise ellipse form; debris/gibs the default.
         Entity.CollideType = BodyKind == Kind.Grenade ? Phys.CollideEllipsePrecise : Phys.CollideEllipse;
@@ -159,7 +174,7 @@ public partial class BounceBody : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!Initialized || _phys == null) return;
+        if (!Initialized || _phys == null || !AutoAdvance) return;
         Advance(delta);
     }
 
@@ -184,6 +199,7 @@ public partial class BounceBody : Node3D
 
             bool hitPlayer = _phys.Bounce(Entity, Elasticity, WaterFric, Grav, 1, Phys.PhysFrameTime);
             _accum -= StepSeconds;
+            OffsetMillis = System.Math.Max(0, OffsetMillis - Phys.PhysFrameTime);
 
             if (BodyKind == Kind.Grenade)
             {
@@ -275,9 +291,22 @@ public partial class BounceBody : Node3D
         if (Bodies.TryGetValue(d, out var body)) body.LastPlayerHit = other;
     }
 
+    /// <summary>
+    /// Visual interpolated position taking weapon spawn offset into account (weapon.cpp:158 offsetpos).
+    /// </summary>
+    public Vector3 GetVisualPosition()
+    {
+        if (OffsetMillis > 0)
+        {
+            float f = OffsetMillis / 500.0f;
+            return Entity.O + Offset * f;
+        }
+        return Entity.O;
+    }
+
     private void SyncTransform()
     {
-        Position = Entity.O;
+        Position = GetVisualPosition();
         Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, 0f, 1, 0);
         if (forward.LengthSquared() > 1e-6f)
             Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1));
