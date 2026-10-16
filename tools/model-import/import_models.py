@@ -1038,6 +1038,8 @@ def main() -> int:
         "mrfixit/hudguns", "snoutx10k/hudguns", "inky/hudguns", "captaincannon/hudguns",
         # third-person view weapons (render.cpp vweps; attached to the body's tag_weapon bone)
         "vwep/fist", "vwep/shotg", "vwep/chaing", "vwep/rocket", "vwep/rifle", "vwep/gl", "vwep/pistol",
+        # projectile models (weapon.cpp renderprojectiles / renderbouncers)
+        "projectiles/grenade", "projectiles/rocket",
     ]
     # First-person hudguns (render.cpp drawhudmodel): one linked hands+weapon model per
     # playermodel/gun. ogro2 reuses mrfixit's hudguns, so only four bases are distinct.
