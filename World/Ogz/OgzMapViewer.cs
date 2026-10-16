@@ -128,12 +128,12 @@ public partial class OgzMapViewer : Node3D
 
     /// <summary>
     /// Attach a converted body model to the player (engine <c>playermodels</c>, see
-    /// render.cpp). Leaving <see cref="PlayerModelIndex"/> negative keeps the scene's
-    /// placeholder body. The model is parented under the world as a <b>sibling</b> of
-    /// the player so <see cref="MapPlayer.SyncBodyModel"/> can keep it upright at the
-    /// feet, independent of the camera view pitch.
-    /// </summary>
-    private void AttachPlayerModel(MapPlayer player)
+	/// render.cpp). Leaving <see cref="PlayerModelIndex"/> negative keeps the scene's
+	/// placeholder body. The model is parented under the world as a <b>sibling</b> of
+	/// the player so <see cref="MapPlayer.SyncBodyModel"/> can keep it upright at the
+	/// feet, independent of the camera view pitch.
+	/// </summary>
+	private void AttachPlayerModel(MapPlayer player)
     {
         if (PlayerModelIndex < 0) return;
 

@@ -31,14 +31,28 @@ public partial class WeaponEffectsRenderer : Node3D
         public float TotalLifetime;
     }
 
+    private class ActiveExplosion
+    {
+        public Vector3 Origin;
+        public float Radius;
+        public Color Color;
+        public float StartTime;
+        public float Lifetime;
+    }
+
     private const int MaxDecals = 256;
     private const float BulletDecalFadeTime = 10f; // decalfade default: 10s (r6889)
     private const float BulletDecalFadeOut = 1f;   // fadeouttime: 1s (r6889)
 
+    /// <summary>Optional provider for active flying rockets to render visual rocket trails.</summary>
+    public Func<IEnumerable<RocketProjectile>>? ActiveRocketsProvider { get; set; }
+
     private readonly List<ActiveBeam> _beams = new();
+    private readonly List<ActiveExplosion> _explosions = new();
     private readonly ActiveDecal[] _decalPool = new ActiveDecal[MaxDecals];
     private int _decalIndex;
     private Texture2D? _bulletTexture;
+    private Texture2D? _scorchTexture;
     private QuadMesh _quadMesh = null!;
 
     private MeshInstance3D _meshInstance = null!;
@@ -79,6 +93,21 @@ public partial class WeaponEffectsRenderer : Node3D
         if (_bulletTexture == null && ResourceLoader.Exists(texPath))
         {
             _bulletTexture = GD.Load<Texture2D>(texPath);
+        }
+
+        string scorchPath = "res://assets/textures/particles/scorch.png";
+        string scorchDiskPath = ProjectSettings.GlobalizePath(scorchPath);
+        if (File.Exists(scorchDiskPath))
+        {
+            var img = new Image();
+            if (img.Load(scorchDiskPath) == Error.Ok)
+            {
+                _scorchTexture = ImageTexture.CreateFromImage(img);
+            }
+        }
+        if (_scorchTexture == null && ResourceLoader.Exists(scorchPath))
+        {
+            _scorchTexture = GD.Load<Texture2D>(scorchPath);
         }
 
         // Shared 1x1 quad mesh (size is scaled via Node3D scale)
@@ -219,13 +248,80 @@ public partial class WeaponEffectsRenderer : Node3D
 
         meshInst.Basis = basis;
         meshInst.Position = offsetPos;
-
+        entry.Material.AlbedoTexture = _bulletTexture;
         entry.Material.AlbedoColor = new Color(1f, 1f, 1f, 1f);
         meshInst.Visible = true;
 
         entry.StartTime = now;
         entry.FadeStartTime = now + BulletDecalFadeTime;
         entry.TotalLifetime = BulletDecalFadeTime + BulletDecalFadeOut;
+    }
+
+    /// <summary>
+    /// Spawns a scorch mark decal on a surface from an explosion impact.
+    /// Matches <c>adddecal(DECAL_SCORCH, pos, dir, exprad/2)</c> from <c>src/fpsgame/weapon.cpp</c>.
+    /// </summary>
+    public void AddScorchMark(Vector3 pos, Vector3 dir, float radius)
+    {
+        if (dir.IsZeroApprox()) dir = new Vector3(0f, 0f, 1f);
+
+        float now = (float)Time.GetTicksMsec() / 1000f;
+        var entry = _decalPool[_decalIndex];
+        _decalIndex = (_decalIndex + 1) % MaxDecals;
+
+        var meshInst = entry.MeshInstance;
+        Vector3 normal = dir.Normalized();
+        Vector3 tangent;
+        if (MathF.Abs(normal.Y) > 0.99f)
+        {
+            tangent = normal.Cross(Vector3.Right).Normalized();
+        }
+        else
+        {
+            tangent = normal.Cross(Vector3.Up).Normalized();
+        }
+        Vector3 bitangent = normal.Cross(tangent).Normalized();
+
+        float angle = (float)(Random.Shared.NextDouble() * Math.PI * 2.0);
+        tangent = tangent.Rotated(normal, angle);
+        bitangent = bitangent.Rotated(normal, angle);
+
+        float diameter = radius * 2.0f;
+        Basis basis = new Basis(tangent * diameter, bitangent * diameter, normal);
+
+        Vector3 offsetPos = pos + normal * 0.05f;
+
+        meshInst.Basis = basis;
+        meshInst.Position = offsetPos;
+
+        entry.Material.AlbedoTexture = _scorchTexture ?? _bulletTexture;
+        entry.Material.AlbedoColor = new Color(1f, 1f, 1f, 1f);
+        meshInst.Visible = true;
+
+        entry.StartTime = now;
+        entry.FadeStartTime = now + BulletDecalFadeTime;
+        entry.TotalLifetime = BulletDecalFadeTime + BulletDecalFadeOut;
+    }
+
+    /// <summary>
+    /// Spawns explosive fireball flash and sparks.
+    /// Matches <c>explode</c> visual effects in <c>src/fpsgame/weapon.cpp:428</c>.
+    /// </summary>
+    public void AddExplosionEffect(Gun gun, Vector3 pos, float radius)
+    {
+        float now = (float)Time.GetTicksMsec() / 1000f;
+        Color color = gun == Gun.GrenadeLauncher
+            ? new Color(0.5f, 1f, 1f, 0.9f) // Blue fireball (PART_EXPLOSION_BLUE)
+            : new Color(1f, 0.5f, 0.2f, 0.9f); // Orange/red fireball (PART_EXPLOSION)
+
+        _explosions.Add(new ActiveExplosion
+        {
+            Origin = pos,
+            Radius = Math.Max(4f, radius),
+            Color = color,
+            StartTime = now,
+            Lifetime = 0.35f
+        });
     }
 
     public override void _Process(double delta)
@@ -252,6 +348,67 @@ public partial class WeaponEffectsRenderer : Node3D
             _mesh.SurfaceAddVertex(b.From);
             _mesh.SurfaceSetColor(c);
             _mesh.SurfaceAddVertex(b.To);
+            _mesh.SurfaceEnd();
+        }
+
+        // Render flying rocket tracers
+        if (ActiveRocketsProvider?.Invoke() is { } rockets)
+        {
+            foreach (var rocket in rockets)
+            {
+                if (rocket.Exploded) continue;
+                Vector3 head = rocket.GetVisualPosition();
+                Vector3 tail = head - rocket.Dir * 2.5f;
+
+                _mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
+                _mesh.SurfaceSetColor(new Color(1f, 0.8f, 0.2f, 1f));
+                _mesh.SurfaceAddVertex(tail);
+                _mesh.SurfaceSetColor(new Color(1f, 0.4f, 0.1f, 1f));
+                _mesh.SurfaceAddVertex(head);
+                _mesh.SurfaceEnd();
+            }
+        }
+
+        // Render explosion fireballs
+        for (int i = _explosions.Count - 1; i >= 0; i--)
+        {
+            var exp = _explosions[i];
+            float elapsed = now - exp.StartTime;
+            if (elapsed >= exp.Lifetime)
+            {
+                _explosions.RemoveAt(i);
+                continue;
+            }
+
+            float progress = elapsed / exp.Lifetime;
+            float currentRadius = exp.Radius * MathF.Sin(progress * MathF.PI * 0.5f);
+            float fade = 1f - progress;
+            Color c = exp.Color with { A = exp.Color.A * fade };
+
+            // Draw expanding 3-axis star/burst lines
+            _mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
+            _mesh.SurfaceSetColor(c);
+
+            _mesh.SurfaceAddVertex(exp.Origin - new Vector3(currentRadius, 0, 0));
+            _mesh.SurfaceAddVertex(exp.Origin + new Vector3(currentRadius, 0, 0));
+
+            _mesh.SurfaceAddVertex(exp.Origin - new Vector3(0, currentRadius, 0));
+            _mesh.SurfaceAddVertex(exp.Origin + new Vector3(0, currentRadius, 0));
+
+            _mesh.SurfaceAddVertex(exp.Origin - new Vector3(0, 0, currentRadius));
+            _mesh.SurfaceAddVertex(exp.Origin + new Vector3(0, 0, currentRadius));
+
+            // Diagonal bursts
+            float diag = currentRadius * 0.707f;
+            _mesh.SurfaceAddVertex(exp.Origin - new Vector3(diag, diag, 0));
+            _mesh.SurfaceAddVertex(exp.Origin + new Vector3(diag, diag, 0));
+
+            _mesh.SurfaceAddVertex(exp.Origin - new Vector3(-diag, diag, 0));
+            _mesh.SurfaceAddVertex(exp.Origin + new Vector3(-diag, diag, 0));
+
+            _mesh.SurfaceAddVertex(exp.Origin - new Vector3(0, diag, diag));
+            _mesh.SurfaceAddVertex(exp.Origin + new Vector3(0, diag, diag));
+
             _mesh.SurfaceEnd();
         }
 

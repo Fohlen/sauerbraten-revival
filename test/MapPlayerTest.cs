@@ -278,4 +278,86 @@ public class MapPlayerTest : GoTestBase
         shooter.Free();
         target.Free();
     }
+
+    [Test]
+    public void TryAttackRocketLauncherSpawnsRocketAndAppliesRecoil()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var shooter = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        shooter.SelectWeapon(Gun.RocketLauncher);
+        shooter.Combat.Ammo[(int)Gun.RocketLauncher] = 5;
+
+        bool fired = shooter.TryAttack(nowMillis: 1000);
+        TestAssert.True(fired, "rocket attack succeeded");
+
+        // Ammo decremented
+        TestAssert.Equal(4, shooter.Combat.Ammo[(int)Gun.RocketLauncher], "rocket ammo decremented to 4");
+
+        // RL kick is 10 -> -dir * 10 * 2.5 = -25 along +Y
+        TestAssert.Near(-25f, shooter.Entity.Vel.Y, 0.01f, "shooter recoil kickback along -Y");
+
+        // Active rocket spawned
+        TestAssert.Equal(1, shooter.ActiveRockets.Count, "one active rocket in flight");
+
+        shooter.Free();
+    }
+
+    [Test]
+    public void RocketJumpAppliesUpwardImpulseAndReducedSelfDamage()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var shooter = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        shooter.SelectWeapon(Gun.RocketLauncher);
+        shooter.Combat.Ammo[(int)Gun.RocketLauncher] = 5;
+        shooter.Combat.Health = 100;
+        shooter.Combat.Armour = 0;
+
+        // Settle on floor
+        Step(shooter, 200);
+
+        // Aim straight down (-90 degrees pitch)
+        shooter.SetView(0f, -90f);
+        shooter.Entity.Vel = Vector3.Zero;
+
+        bool fired = shooter.TryAttack(nowMillis: 1000);
+        TestAssert.True(fired, "fired rocket straight down");
+        TestAssert.Equal(1, shooter.ActiveRockets.Count, "rocket spawned");
+
+        // Advance simulation for 200ms to allow rocket to hit ground right below player
+        Step(shooter, 40);
+
+        // Rocket should have detonated and been pruned
+        TestAssert.Equal(0, shooter.ActiveRockets.Count, "rocket detonated and pruned");
+
+        // Player took halved self damage (health reduced from 100)
+        TestAssert.True(shooter.Combat.Health > 0 && shooter.Combat.Health < 100,
+            $"took halved self damage: health={shooter.Combat.Health}");
+
+        // Player received upward Z velocity impulse from explosion
+        GD.Print($"[rocket jump] player Vel={shooter.Entity.Vel} health={shooter.Combat.Health}");
+        TestAssert.True(shooter.Entity.Vel.Z > 10f, $"rocket jump launched player upward: Vel.Z={shooter.Entity.Vel.Z}");
+
+        shooter.Free();
+    }
+
+    [Test]
+    public void TryAttackGrenadeLauncherSpawnsGrenadeWithArc()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var shooter = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        shooter.SelectWeapon(Gun.GrenadeLauncher);
+        shooter.Combat.Ammo[(int)Gun.GrenadeLauncher] = 5;
+
+        bool fired = shooter.TryAttack(nowMillis: 1000);
+        TestAssert.True(fired, "grenade attack succeeded");
+
+        TestAssert.Equal(4, shooter.Combat.Ammo[(int)Gun.GrenadeLauncher], "grenade ammo decremented to 4");
+        TestAssert.Equal(1, shooter.ActiveGrenades.Count, "one active grenade spawned");
+
+        var grenade = shooter.ActiveGrenades[0];
+        // In weapon.cpp:641-643: up = to; up.z += dist/8 -> launch velocity has upward Z arc
+        TestAssert.True(grenade.Entity.Vel.Z > 0f, $"grenade launched with upward arc: Vel.Z={grenade.Entity.Vel.Z}");
+
+        shooter.Free();
+    }
 }

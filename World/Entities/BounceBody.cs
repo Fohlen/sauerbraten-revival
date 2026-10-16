@@ -107,6 +107,19 @@ public partial class BounceBody : Node3D
         phys.DynEnts.Add(Entity);
         Bodies[Entity] = this;
         Hook();
+
+        if (GetNodeOrNull<MeshInstance3D>("Visual") == null)
+        {
+            var sphere = new SphereMesh { Radius = 0.5f, Height = 1.0f };
+            var mat = new StandardMaterial3D
+            {
+                AlbedoColor = BodyKind == Kind.Grenade ? new Color(0.2f, 0.4f, 0.2f) : new Color(0.5f, 0.3f, 0.1f),
+                Roughness = 0.3f
+            };
+            var mi = new MeshInstance3D { Name = "Visual", Mesh = sphere, MaterialOverride = mat };
+            AddChild(mi);
+        }
+
         Initialized = true;
         SyncTransform();
     }
@@ -190,7 +203,23 @@ public partial class BounceBody : Node3D
     {
         Exploded = true;
         var gun = GunInfo ?? WeaponCatalog.Get(Gun.GrenadeLauncher);
-        candidates ??= System.Array.Empty<IExplosionTarget>();
+        if (candidates == null || candidates.Count == 0)
+        {
+            candidates = ShooterOwner != null ? new[] { ShooterOwner } : System.Array.Empty<IExplosionTarget>();
+        }
+        else if (ShooterOwner != null)
+        {
+            bool found = false;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (candidates[i] == ShooterOwner) { found = true; break; }
+            }
+            if (!found)
+            {
+                var list = new List<IExplosionTarget>(candidates) { ShooterOwner };
+                candidates = list;
+            }
+        }
 
         var result = WeaponExplosion.ResolveExplosion(
             Entity.O,
@@ -207,6 +236,11 @@ public partial class BounceBody : Node3D
         }
 
         Detonated?.Invoke(Entity.O, result);
+
+        if (IsInsideTree())
+        {
+            QueueFree();
+        }
     }
 
     private void OnReflected(PhysEnt d, Vector3 surface)

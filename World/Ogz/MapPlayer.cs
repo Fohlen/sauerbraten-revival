@@ -114,8 +114,21 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>The local player's first-person hands/weapon, hidden outside first person.</summary>
     public HudgunModel? Hudgun { get; set; }
 
+    private Effects.WeaponEffectsRenderer? _weaponEffects;
+
     /// <summary>Weapon tracer and particle effect renderer.</summary>
-    public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
+    public Effects.WeaponEffectsRenderer? WeaponEffects
+    {
+        get => _weaponEffects;
+        set
+        {
+            _weaponEffects = value;
+            if (_weaponEffects != null)
+            {
+                _weaponEffects.ActiveRocketsProvider = () => ActiveRockets;
+            }
+        }
+    }
 
     /// <summary>Audio player for weapon fire and player sounds in 3D (for remote / 3rd person).</summary>
     public AudioStreamPlayer3D? AudioPlayer { get; set; }
@@ -148,6 +161,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     // Fixed-step accumulator (seconds of un-simulated time).
     private double _accum;
     private const double StepSeconds = Phys.PhysFrameTime / 1000.0;
+
+    /// <summary>Active flying rocket projectiles fired by or tracked by this player/scene.</summary>
+    public List<RocketProjectile> ActiveRockets { get; } = new();
+
+    /// <summary>Active bounce grenades fired by or tracked by this player/scene.</summary>
+    public List<BounceBody> ActiveGrenades { get; } = new();
 
     /// <summary>True once <see cref="Setup"/> has run.</summary>
     public bool Initialized { get; private set; }
@@ -560,6 +579,85 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 }
             }
         }
+        else if ((Gun)Combat.GunSelect == Gun.RocketLauncher)
+        {
+            // Rocket Launcher (weapon.cpp:628, 636)
+            Vector3 from = Entity.O;
+            Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, Pitch, 1, 0);
+            if (forward.LengthSquared() < 1e-6f) forward = new Vector3(0f, 1f, 0f);
+            float maxRange = weapon.Range > 0 ? weapon.Range : 1024f;
+            Vector3 targetAim = from + forward.Normalized() * maxRange;
+
+            // Recoil kickback (weapon.cpp:798)
+            Entity.Vel += forward.Normalized() * (weapon.KickAmount * -2.5f);
+
+            var rocket = new RocketProjectile(
+                from,
+                targetAim,
+                weapon,
+                owner: this,
+                world: _phys?.Octa,
+                quadDamage: Combat.QuadMillis > 0);
+
+            rocket.Detonated += (impactPos, directVictim, splashResult) =>
+            {
+                if (splashResult.Hits.Count > 0 || directVictim != null)
+                {
+                    PlaySound(GameSound.Hit);
+                }
+                PlaySound(GameSound.RlHit);
+                WeaponEffects?.AddExplosionEffect(Gun.RocketLauncher, impactPos, weapon.ExpRad);
+                WeaponEffects?.AddScorchMark(impactPos, -rocket.Dir, weapon.ExpRad * 0.5f);
+            };
+
+            ActiveRockets.Add(rocket);
+        }
+        else if ((Gun)Combat.GunSelect == Gun.GrenadeLauncher)
+        {
+            // Grenade Launcher (weapon.cpp:639-648)
+            Vector3 from = Entity.O;
+            Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, Pitch, 1, 0);
+            if (forward.LengthSquared() < 1e-6f) forward = new Vector3(0f, 1f, 0f);
+            float maxRange = weapon.Range > 0 ? weapon.Range : 1024f;
+            Vector3 targetAim = from + forward.Normalized() * maxRange;
+
+            // Recoil kickback (weapon.cpp:798)
+            Entity.Vel += forward.Normalized() * (weapon.KickAmount * -2.5f);
+
+            // In weapon.cpp:641-643: up = to; up.z += dist/8;
+            float dist = from.DistanceTo(targetAim);
+            Vector3 upAim = targetAim with { Z = targetAim.Z + dist / 8.0f };
+            Vector3 launchDir = (upAim - from).Normalized();
+            Vector3 launchVel = launchDir * (float)weapon.ProjSpeed;
+
+            if (_phys != null)
+            {
+                var grenade = new BounceBody { BodyKind = BounceBody.Kind.Grenade };
+                grenade.Setup(
+                    _phys,
+                    from,
+                    launchVel,
+                    yawDegrees: Entity.Yaw,
+                    owner: this,
+                    gun: weapon,
+                    quadDamage: Combat.QuadMillis > 0,
+                    lifeTime: weapon.Ttl > 0 ? weapon.Ttl : 1500);
+
+                grenade.Detonated += (impactPos, splashResult) =>
+                {
+                    if (splashResult.Hits.Count > 0)
+                    {
+                        PlaySound(GameSound.Hit);
+                    }
+                    PlaySound(GameSound.FExplode);
+                    WeaponEffects?.AddExplosionEffect(Gun.GrenadeLauncher, impactPos, weapon.ExpRad);
+                    WeaponEffects?.AddScorchMark(impactPos, new Vector3(0f, 0f, 1f), weapon.ExpRad * 0.5f);
+                };
+
+                GetParent()?.AddChild(grenade);
+                ActiveGrenades.Add(grenade);
+            }
+        }
 
         UpdateBodyAnim();
         UpdateHudgunAnim();
@@ -598,18 +696,48 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// Advance the simulation by <paramref name="delta"/> seconds of real time,
     /// running whole fixed 5 ms steps caught up by count (a partial step is kept
     /// in the accumulator). Input is taken from <see cref="Entity"/> — set it first.
+    /// Also advances active projectiles (rockets and grenades).
     /// </summary>
-    public void Advance(double delta)
+    public void Advance(double delta, IReadOnlyList<IExplosionTarget>? targets = null)
     {
         if (!Initialized || _phys == null) return;
         Entity.Pitch = Pitch; // pitch feeds movement only while floating (vecfromyawpitch)
         _accum += delta;
         int guard = 0;
+        var candidates = targets ?? new IExplosionTarget[] { this };
         while (_accum >= StepSeconds && guard++ < 100)
         {
             _phys.MovePlayer(Entity, Phys.MoveRes, Phys.PhysFrameTime);
             LastMillis += Phys.PhysFrameTime;
             _accum -= StepSeconds;
+
+            // Advance active flying rockets (weapon.cpp:523 updateprojectiles)
+            for (int i = ActiveRockets.Count - 1; i >= 0; i--)
+            {
+                var rocket = ActiveRockets[i];
+                if (rocket.Advance(Phys.PhysFrameTime, _phys.Octa, candidates))
+                {
+                    ActiveRockets.RemoveAt(i);
+                }
+            }
+
+            // Advance active grenades (weapon.cpp:243 updatebouncers)
+            for (int i = ActiveGrenades.Count - 1; i >= 0; i--)
+            {
+                var grenade = ActiveGrenades[i];
+                if (grenade.Exploded)
+                {
+                    ActiveGrenades.RemoveAt(i);
+                }
+                else if (!grenade.IsInsideTree())
+                {
+                    grenade.Advance(StepSeconds, candidates);
+                    if (grenade.Exploded)
+                    {
+                        ActiveGrenades.RemoveAt(i);
+                    }
+                }
+            }
         }
         SyncTransform();
     }
@@ -726,7 +854,15 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Position = Entity.O;
         Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, Pitch, 1, 0);
         if (forward.LengthSquared() > 1e-6f)
-            Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1));
+        {
+            Vector3 up = new Vector3(0, 0, 1);
+            if (Mathf.Abs(forward.Dot(up)) > 0.999f)
+            {
+                float rad = Mathf.DegToRad(Entity.Yaw);
+                up = new Vector3(-Mathf.Sin(rad), Mathf.Cos(rad), 0);
+            }
+            Basis = Basis.LookingAt(forward, up);
+        }
         SyncCamera();
         SyncBodyModel();
     }
