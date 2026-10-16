@@ -123,6 +123,13 @@ public partial class OgzMapViewer : Node3D
         World.AddChild(effects);
         player.WeaponEffects = effects;
 
+        // Attach CanvasLayer and HUD controller
+        var canvas = new CanvasLayer { Name = "HudCanvas" };
+        var hud = new World.Hud.HudController { Name = "HUD", Player = player };
+        hud.SetupTextures(World.Textures ?? new Materials.ResourceTextureSource());
+        canvas.AddChild(hud);
+        AddChild(canvas);
+
         GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw}");
     }
 

@@ -149,6 +149,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Combat and weapon state (fpsgame/game.h:367 <c>fpsstate</c>).</summary>
     public PlayerState Combat { get; } = new();
 
+    /// <summary>Player team index (0 = FFA, 1 = blue, 2 = red).</summary>
+    [Export] public int Team { get; set; } = 0;
+
+    /// <summary>Timestamp (ms) of the last successful hit on an enemy (engine <c>lasthit</c> in fps.cpp).</summary>
+    public int LastHit { get; set; }
+
     /// <summary>Simulation clock in milliseconds (engine <c>lastmillis</c>).</summary>
     public int LastMillis { get; set; }
 
@@ -537,9 +543,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 hit.Target.TakeDamage(hit.Damage);
             }
 
-            // Play hit confirmation sound if any target was hit (fpsgame/weapon.cpp:717 playsound(S_HIT))
+            // Play hit confirmation sound and record LastHit timestamp if any target was hit (fpsgame/weapon.cpp:357-358)
             if (hitscan.Hits.Count > 0)
             {
+                LastHit = LastMillis;
                 PlaySound(GameSound.Hit);
             }
 
@@ -609,6 +616,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             {
                 if (splashResult.Hits.Count > 0 || directVictim != null)
                 {
+                    LastHit = LastMillis;
                     PlaySound(GameSound.Hit);
                 }
                 PlaySound(GameSound.RlHit);
@@ -677,6 +685,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 {
                     if (splashResult.Hits.Count > 0)
                     {
+                        LastHit = LastMillis;
                         PlaySound(GameSound.Hit);
                     }
                     PlaySound(GameSound.FExplode);
@@ -716,6 +725,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Combat.Respawn();
         Entity.State = PhysEnt.CsAlive;
         Entity.Dead = false;
+        LastHit = 0;
         _bodyAnim = "";
         SelectWeapon(DefaultGun);
         UpdateBodyAnim();
