@@ -148,8 +148,9 @@ public partial class BounceBody : Node3D
                             mat.AlbedoColor = new Color(0.21f, 0.31f, 0.33f); // r6889 skin.jpg average
                         }
 
-                        // Apply material to all meshes in the scene
+                        // Apply material to all meshes in the scene and scale to match original dimensions (radius ~1.2)
                         ApplyMaterial(scene, mat);
+                        scene.Scale = Vector3.One * 0.2f;
                         scene.Name = "Visual";
                         visualNode = scene;
                     }
