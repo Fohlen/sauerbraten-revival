@@ -26,8 +26,12 @@ public partial class HudController : Control
     private TextureRect? _armorIcon;
     private Label? _armorLabel;
 
+    private TextureRect? _weaponIcon;
+    private Label? _ammoLabel;
+
     private Texture2D? _itemsTexture;
     private ArmourType? _lastArmourType;
+    private Gun? _lastGun;
 
     public CrosshairRenderer Crosshair => _crosshairRenderer;
 
@@ -126,6 +130,27 @@ public partial class HudController : Control
             Visible = false
         };
         _statusBarRoot.AddChild(_armorLabel);
+
+        // Active Weapon Icon
+        _weaponIcon = new TextureRect
+        {
+            Name = "WeaponIcon",
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = MouseFilterEnum.Ignore,
+            Visible = false
+        };
+        _statusBarRoot.AddChild(_weaponIcon);
+
+        // Active Weapon Ammo Number
+        _ammoLabel = new Label
+        {
+            Name = "AmmoLabel",
+            MouseFilter = MouseFilterEnum.Ignore,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visible = false
+        };
+        _statusBarRoot.AddChild(_ammoLabel);
     }
 
     /// <summary>Initialize textures using the project's texture source.</summary>
@@ -148,6 +173,11 @@ public partial class HudController : Control
         if (_armorIcon != null && _lastArmourType.HasValue)
         {
             _armorIcon.Texture = CreateAtlasTexture(StatusBarRenderer.GetArmorIcon(_lastArmourType.Value));
+        }
+
+        if (_weaponIcon != null && _lastGun.HasValue)
+        {
+            _weaponIcon.Texture = CreateAtlasTexture(StatusBarRenderer.GetGunIcon(_lastGun.Value));
         }
     }
 
@@ -319,6 +349,45 @@ public partial class HudController : Control
         {
             if (_armorIcon != null) _armorIcon.Visible = false;
             if (_armorLabel != null) _armorLabel.Visible = false;
+        }
+
+        // Active Weapon Icon & Ammo text (fps.cpp:915, 938: if(d->state!=CS_DEAD))
+        if (!isDead)
+        {
+            Gun gun = (Gun)Player.Combat.GunSelect;
+            int ammo = Player.Combat.SelectedAmmo;
+
+            if (_weaponIcon != null)
+            {
+                if (_lastGun != gun)
+                {
+                    _lastGun = gun;
+                    _weaponIcon.Texture = CreateAtlasTexture(StatusBarRenderer.GetGunIcon(gun));
+                }
+                _weaponIcon.Visible = true;
+                _weaponIcon.Position = new Vector2((StatusBarRenderer.IconX + 2 * StatusBarRenderer.IconStep) * scale, StatusBarRenderer.IconY * scale);
+                _weaponIcon.Size = new Vector2(StatusBarRenderer.IconSize * scale, StatusBarRenderer.IconSize * scale);
+            }
+
+            if (_ammoLabel != null)
+            {
+                _ammoLabel.Visible = true;
+                _ammoLabel.Text = ammo.ToString();
+                _ammoLabel.Modulate = Colors.White;
+                float ammoTextX = (StatusBarRenderer.IconX + 2 * StatusBarRenderer.IconStep + StatusBarRenderer.IconSize + StatusBarRenderer.IconSpace) * scale;
+                float iconY = StatusBarRenderer.IconY * scale;
+                float iconHeight = StatusBarRenderer.IconSize * scale;
+                _ammoLabel.Position = new Vector2(ammoTextX, iconY);
+                _ammoLabel.Size = new Vector2(200f * scale, iconHeight);
+                _ammoLabel.VerticalAlignment = VerticalAlignment.Center;
+                int fontSize = Mathf.Max(12, (int)(64f * scale));
+                _ammoLabel.AddThemeFontSizeOverride("font_size", fontSize);
+            }
+        }
+        else
+        {
+            if (_weaponIcon != null) _weaponIcon.Visible = false;
+            if (_ammoLabel != null) _ammoLabel.Visible = false;
         }
     }
 }

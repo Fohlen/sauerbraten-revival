@@ -3,6 +3,7 @@ using Godot;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Hud;
 using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.Tests;
 
@@ -167,6 +168,97 @@ public class StatusBarRendererTest : GoTestBase
         hud.UpdateStatusBar();
         TestAssert.False(armorIcon.Visible, "armor icon hidden when dead");
         TestAssert.False(armorLabel.Visible, "armor label hidden when dead");
+
+        canvas.Free();
+    }
+
+    [Test]
+    public void HudControllerUpdatesWeaponAndAmmoIndicatorCorrectly()
+    {
+        var player = new MapPlayer();
+        var hud = new HudController { Player = player };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        var texSource = new SauerbratenRevival.World.Materials.ResourceTextureSource();
+        hud.SetupTextures(texSource);
+
+        var weaponIcon = hud.GetNodeOrNull<TextureRect>("StatusBar/WeaponIcon");
+        var ammoLabel = hud.GetNodeOrNull<Label>("StatusBar/AmmoLabel");
+        TestAssert.True(weaponIcon != null, "weapon icon node exists");
+        TestAssert.True(ammoLabel != null, "ammo label node exists");
+
+        // Pistol by default with ammo
+        player.Combat.GunSelect = (int)Gun.Pistol;
+        player.Combat.Ammo[(int)Gun.Pistol] = 88;
+        hud.UpdateStatusBar();
+
+        TestAssert.True(weaponIcon!.Visible, "weapon icon visible when alive");
+        TestAssert.True(ammoLabel!.Visible, "ammo label visible when alive");
+        TestAssert.True(ammoLabel.Text == "88", $"ammo text is 88, got {ammoLabel.Text}");
+        TestAssert.True(weaponIcon.Texture is AtlasTexture, "weapon icon texture is atlas texture");
+
+        var atlas = (AtlasTexture)weaponIcon.Texture;
+        Rect2 pistolUv = StatusBarRenderer.GetIconUv(HudIcon.Pistol);
+        Vector2 texSize = atlas.Atlas?.GetSize() ?? Vector2.Zero;
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.X, pistolUv.Position.X * texSize.X), "correct atlas X offset for pistol");
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.Y, pistolUv.Position.Y * texSize.Y), "correct atlas Y offset for pistol");
+        }
+
+        // Switch to Rocket Launcher
+        player.Combat.GunSelect = (int)Gun.RocketLauncher;
+        player.Combat.Ammo[(int)Gun.RocketLauncher] = 15;
+        hud.UpdateStatusBar();
+
+        TestAssert.True(ammoLabel.Text == "15", $"ammo text is 15, got {ammoLabel.Text}");
+        atlas = (AtlasTexture)weaponIcon.Texture;
+        Rect2 rlUv = StatusBarRenderer.GetIconUv(HudIcon.Rl);
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.X, rlUv.Position.X * texSize.X), "correct atlas X offset for rocket launcher");
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.Y, rlUv.Position.Y * texSize.Y), "correct atlas Y offset for rocket launcher");
+        }
+
+        // Switch to Fist
+        player.Combat.GunSelect = (int)Gun.Fist;
+        player.Combat.Ammo[(int)Gun.Fist] = 0;
+        hud.UpdateStatusBar();
+
+        TestAssert.True(ammoLabel.Text == "0", $"ammo text is 0 for fist, got {ammoLabel.Text}");
+        atlas = (AtlasTexture)weaponIcon.Texture;
+        Rect2 fistUv = StatusBarRenderer.GetIconUv(HudIcon.Fist);
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.X, fistUv.Position.X * texSize.X), "correct atlas X offset for fist");
+            TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.Y, fistUv.Position.Y * texSize.Y), "correct atlas Y offset for fist");
+        }
+
+        // Test other weapons: Shotgun, Chaingun, Rifle, GrenadeLauncher
+        Gun[] guns = { Gun.Shotgun, Gun.Chaingun, Gun.Rifle, Gun.GrenadeLauncher };
+        HudIcon[] icons = { HudIcon.Sg, HudIcon.Cg, HudIcon.Rifle, HudIcon.Gl };
+        for (int i = 0; i < guns.Length; i++)
+        {
+            player.Combat.GunSelect = (int)guns[i];
+            player.Combat.Ammo[(int)guns[i]] = 20 + i;
+            hud.UpdateStatusBar();
+            TestAssert.True(ammoLabel.Text == (20 + i).ToString(), $"ammo text matches for {guns[i]}");
+            atlas = (AtlasTexture)weaponIcon.Texture;
+            Rect2 uv = StatusBarRenderer.GetIconUv(icons[i]);
+            if (texSize.X > 0 && texSize.Y > 0)
+            {
+                TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.X, uv.Position.X * texSize.X), $"correct atlas X offset for {guns[i]}");
+                TestAssert.True(Mathf.IsEqualApprox(atlas.Region.Position.Y, uv.Position.Y * texSize.Y), $"correct atlas Y offset for {guns[i]}");
+            }
+        }
+
+        // When dead, weapon icon and ammo label are hidden
+        player.Entity.Dead = true;
+        hud.UpdateStatusBar();
+        TestAssert.False(weaponIcon.Visible, "weapon icon hidden when dead");
+        TestAssert.False(ammoLabel.Visible, "ammo label hidden when dead");
 
         canvas.Free();
     }
