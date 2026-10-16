@@ -129,8 +129,11 @@ converts to the native format later.
 Import original content once (both outputs git-ignored, both Godot Resources):
 
 ```sh
-tools/model-import/import_models.py metadata-catalogue/church51.json
-tools/texture-import/import_textures.py metadata-catalogue/church51.json
+tools/model-import/import_models.py map metadata-catalogue/church51.json
+tools/texture-import/import_textures.py map metadata-catalogue/church51.json
+# Or import static assets / all maps:
+# tools/model-import/import_models.py static
+# tools/model-import/import_models.py all-maps
 ```
 
 - `assets/models/` — models converted to glTF with assimp.

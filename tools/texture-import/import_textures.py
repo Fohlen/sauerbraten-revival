@@ -11,7 +11,9 @@ Textures come from three places:
     (`matwater`/`matlava` and the particle textures).
 
 Usage:
-    import_textures.py metadata-catalogue/church51.json metadata-catalogue/bt_falls.json
+    import_textures.py static [--ref /path/to/sauerbraten-code-r6889] [--out assets/textures]
+    import_textures.py map metadata-catalogue/church51.json
+    import_textures.py all-maps [--catalogues-dir metadata-catalogue]
 """
 from __future__ import annotations
 
@@ -34,10 +36,26 @@ EXTRA_TEXTURES = [
 ]
 
 
+def _extract_model_textures(info: dict, paths: set[str]) -> None:
+    for key in ("skin", "bump"):
+        if info.get(key):
+            paths.add(info[key])
+    for s in info.get("skins", []):
+        if isinstance(s, dict):
+            for key in ("diffuse", "mask"):
+                if s.get(key):
+                    paths.add(s[key])
+    for part in info.get("parts", []):
+        if isinstance(part, dict):
+            _extract_model_textures(part, paths)
+
+
 def collect_textures(catalogues: list[str], models_manifest: str | None) -> set[str]:
     paths: set[str] = set(EXTRA_TEXTURES)
 
     for catalogue in catalogues:
+        if not os.path.isfile(catalogue):
+            continue
         with open(catalogue) as f:
             data = json.load(f)
         for slot in data.get("slots", []):
@@ -50,28 +68,78 @@ def collect_textures(catalogues: list[str], models_manifest: str | None) -> set[
         with open(models_manifest) as f:
             models = json.load(f).get("models", {})
         for info in models.values():
-            for key in ("skin", "bump"):
-                if info.get(key):
-                    paths.add(info[key])
+            if isinstance(info, dict):
+                _extract_model_textures(info, paths)
 
     return paths
 
 
-def main() -> int:
+def _build_arg_parser(repo_root: str) -> argparse.ArgumentParser:
+    default_ref = os.environ.get("SAUER_REF", "/Users/fohlen/Downloads/sauerbraten-code-r6889")
+    default_out = os.path.join(repo_root, "assets", "textures")
+    default_models = os.path.join(repo_root, "assets", "models", "models.json")
+    default_cat_dir = os.path.join(repo_root, "metadata-catalogue")
+
+    ap = argparse.ArgumentParser(description="Copy textures into the project.")
+    sub = ap.add_subparsers(dest="command")
+
+    # subcommand: static
+    p_static = sub.add_parser("static", help="Import static engine textures (water, lava, particles, HUD, model skins/bumps)")
+    p_static.add_argument("--ref", default=default_ref, help="Path to reference Sauerbraten r6889 tree")
+    p_static.add_argument("--out", default=default_out, help="Output directory for textures")
+    p_static.add_argument("--models", default=default_models, help="Path to models.json manifest")
+
+    # subcommand: map
+    p_map = sub.add_parser("map", help="Import static textures and slot textures for specific map(s)")
+    p_map.add_argument("catalogues", nargs="+", help="Path(s) to map metadata catalogue JSON file(s)")
+    p_map.add_argument("--ref", default=default_ref, help="Path to reference Sauerbraten r6889 tree")
+    p_map.add_argument("--out", default=default_out, help="Output directory for textures")
+    p_map.add_argument("--models", default=default_models, help="Path to models.json manifest")
+
+    # subcommand: all-maps
+    p_all = sub.add_parser("all-maps", help="Import static textures and slot textures across all maps in metadata-catalogue/")
+    p_all.add_argument("--catalogues-dir", default=default_cat_dir, help="Directory containing metadata catalogue JSON files")
+    p_all.add_argument("--ref", default=default_ref, help="Path to reference Sauerbraten r6889 tree")
+    p_all.add_argument("--out", default=default_out, help="Output directory for textures")
+    p_all.add_argument("--models", default=default_models, help="Path to models.json manifest")
+
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    ap = argparse.ArgumentParser()
-    ap.add_argument("catalogues", nargs="+")
-    ap.add_argument("--ref", default=os.environ.get("SAUER_REF", "/Users/fohlen/Downloads/sauerbraten-code-r6889"))
-    ap.add_argument("--out", default=os.path.join(repo_root, "assets", "textures"))
-    ap.add_argument("--models", default=os.path.join(repo_root, "assets", "models", "models.json"))
-    args = ap.parse_args()
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Backwards compatibility: if first arg is not a subcommand (or help flag), treat as 'map'
+    if argv and argv[0] not in ("static", "map", "all-maps", "-h", "--help"):
+        if argv[0].endswith(".json") or os.path.isfile(argv[0]):
+            argv = ["map"] + argv
+
+    ap = _build_arg_parser(repo_root)
+    args = ap.parse_args(argv)
+
+    if not args.command:
+        ap.print_help()
+        return 1
 
     packages = os.path.join(args.ref, "packages")
     if not os.path.isdir(packages):
         print(f"ERROR: packages dir not found: {packages}", file=sys.stderr)
         return 1
 
-    paths = collect_textures(args.catalogues, args.models)
+    catalogues: list[str] = []
+    if args.command == "map":
+        catalogues = args.catalogues
+    elif args.command == "all-maps":
+        if os.path.isdir(args.catalogues_dir):
+            import glob
+            catalogues = sorted(glob.glob(os.path.join(args.catalogues_dir, "*.json")))
+        else:
+            print(f"ERROR: catalogues directory not found: {args.catalogues_dir}", file=sys.stderr)
+            return 1
+
+    paths = collect_textures(catalogues, args.models)
     copied = missing = 0
     for path in sorted(paths):
         src = os.path.join(packages, path)

@@ -370,5 +370,25 @@ class ReferenceCfgTest(unittest.TestCase):
         self.assertEqual([["Spine"], ["Cape"]], p["animparts"])
 
 
+class CliSubcommandTest(unittest.TestCase):
+    def test_static_subcommand(self):
+        ap = import_models._build_arg_parser("/test/repo")
+        args = ap.parse_args(["static", "--out", "/test/out"])
+        self.assertEqual("static", args.command)
+        self.assertEqual("/test/out", args.out)
+
+    def test_map_subcommand(self):
+        ap = import_models._build_arg_parser("/test/repo")
+        args = ap.parse_args(["map", "cat1.json", "cat2.json"])
+        self.assertEqual("map", args.command)
+        self.assertEqual(["cat1.json", "cat2.json"], args.catalogue)
+
+    def test_all_maps_subcommand(self):
+        ap = import_models._build_arg_parser("/test/repo")
+        args = ap.parse_args(["all-maps", "--catalogues-dir", "custom/cat"])
+        self.assertEqual("all-maps", args.command)
+        self.assertEqual("custom/cat", args.catalogues_dir)
+
+
 if __name__ == "__main__":
     unittest.main()

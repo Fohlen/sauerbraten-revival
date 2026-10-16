@@ -24,8 +24,9 @@ fps and selection priority). ``md5pitch`` view-pitch corrections are recorded as
 The reference dump is never modified; output goes to a build dir (git-ignored).
 
 Usage:
-    import_models.py CATALOGUE.json --ref /path/to/sauerbraten-code-r6889 \
-        [--out tools/model-import/out] [--assimp assimp]
+    import_models.py static [--ref /path/to/sauerbraten-code-r6889] [--out assets/models]
+    import_models.py map metadata-catalogue/church51.json
+    import_models.py all-maps [--catalogues-dir metadata-catalogue]
 """
 from __future__ import annotations
 
@@ -991,14 +992,90 @@ def build_linked_record(name: str, parts: list[dict], model: dict, packages: str
     return record
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("catalogue")
-    ap.add_argument("--ref", default=os.environ.get("SAUER_REF", "/Users/fohlen/Downloads/sauerbraten-code-r6889"))
+STATIC_BUILTINS = [
+    "teleporter", "health", "boost", "quad",
+    "armor/green", "armor/yellow",
+    "ammo/shells", "ammo/bullets", "ammo/rockets", "ammo/rrounds", "ammo/grenades", "ammo/cartridges",
+    "carrot", "checkpoint",
+    # game-mode entities: CTF flags (ctf.h), capture bases (capture.h)
+    "flags/neutral", "flags/red", "flags/blue",
+    "base/neutral", "base/red", "base/blue",
+    # monsters (monster.cpp monstertypes)
+    "ogro", "monster/rhino", "monster/rat", "monster/slith", "monster/bauul",
+    "monster/hellpig", "monster/knight", "monster/goblin", "monster/spider",
+    # monster view-weapons (monstertypes vwepname; attached to the tag_weapon bone)
+    "ogro/vwep", "monster/rat/vwep", "monster/slith/vwep", "monster/bauul/vwep",
+    "monster/knight/vwep", "monster/goblin/vwep",
+    # player bodies (render.cpp playermodels; skeletal MD5) + their FFA/team skins
+    "mrfixit", "mrfixit/blue", "mrfixit/red",
+    "snoutx10k", "snoutx10k/blue", "snoutx10k/red",
+    "ogro2", "ogro2/blue", "ogro2/red",
+    "inky", "inky/blue", "inky/red",
+    "captaincannon", "captaincannon/blue", "captaincannon/red",
+    # first-person hands (render.cpp hudguns)
+    "mrfixit/hudguns", "snoutx10k/hudguns", "inky/hudguns", "captaincannon/hudguns",
+    # third-person view weapons (render.cpp vweps; attached to the body's tag_weapon bone)
+    "vwep/fist", "vwep/shotg", "vwep/chaing", "vwep/rocket", "vwep/rifle", "vwep/gl", "vwep/pistol",
+    # projectile models (weapon.cpp renderprojectiles / renderbouncers)
+    "projectiles/grenade", "projectiles/rocket",
+]
+
+# First-person hudguns (render.cpp drawhudmodel): one linked hands+weapon model per
+# playermodel/gun. ogro2 reuses mrfixit's hudguns, so only four bases are distinct.
+STATIC_HUDGUNS = [
+    f"{player}/hudguns/{gun}"
+    for player in ("mrfixit", "snoutx10k", "inky", "captaincannon")
+    for gun in ("fist", "shotg", "chaing", "rocket", "rifle", "gl", "pistol")
+]
+
+
+def _build_arg_parser(repo_root: str) -> argparse.ArgumentParser:
+    default_ref = os.environ.get("SAUER_REF", "/Users/fohlen/Downloads/sauerbraten-code-r6889")
+    default_out = os.path.join(repo_root, "assets", "models")
+    default_cat_dir = os.path.join(repo_root, "metadata-catalogue")
+
+    ap = argparse.ArgumentParser(description="Convert Sauerbraten models to glTF via assimp.")
+    sub = ap.add_subparsers(dest="command")
+
+    # subcommand: static
+    p_static = sub.add_parser("static", help="Import built-in static models (weapons, player models, pickups, flags, monsters)")
+    p_static.add_argument("--ref", default=default_ref, help="Path to reference Sauerbraten r6889 tree")
+    p_static.add_argument("--out", default=default_out, help="Output directory for glTF / GLB models and manifest")
+    p_static.add_argument("--assimp", default="assimp", help="Path to assimp binary")
+
+    # subcommand: map
+    p_map = sub.add_parser("map", help="Import static assets and models for specific map(s)")
+    p_map.add_argument("catalogue", nargs="+", help="Path(s) to map metadata catalogue JSON file(s)")
+    p_map.add_argument("--ref", default=default_ref, help="Path to reference Sauerbraten r6889 tree")
+    p_map.add_argument("--out", default=default_out, help="Output directory for glTF / GLB models and manifest")
+    p_map.add_argument("--assimp", default="assimp", help="Path to assimp binary")
+
+    # subcommand: all-maps
+    p_all = sub.add_parser("all-maps", help="Import static assets and deduplicated models for all maps in metadata-catalogue/")
+    p_all.add_argument("--catalogues-dir", default=default_cat_dir, help="Directory containing metadata catalogue JSON files")
+    p_all.add_argument("--ref", default=default_ref, help="Path to reference Sauerbraten r6889 tree")
+    p_all.add_argument("--out", default=default_out, help="Output directory for glTF / GLB models and manifest")
+    p_all.add_argument("--assimp", default="assimp", help="Path to assimp binary")
+
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    ap.add_argument("--out", default=os.path.join(repo_root, "assets", "models"))
-    ap.add_argument("--assimp", default="assimp")
-    args = ap.parse_args()
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Backwards compatibility: if first arg is not a subcommand (or help flag) but a json file or flag, treat as 'map'
+    if argv and argv[0] not in ("static", "map", "all-maps", "-h", "--help"):
+        if argv[0].endswith(".json") or os.path.isfile(argv[0]):
+            argv = ["map"] + argv
+
+    ap = _build_arg_parser(repo_root)
+    args = ap.parse_args(argv)
+
+    if not args.command:
+        ap.print_help()
+        return 1
 
     packages = os.path.join(args.ref, "packages")
     models_root = os.path.join(packages, "models")
@@ -1006,54 +1083,36 @@ def main() -> int:
         print(f"ERROR: models root not found: {models_root}", file=sys.stderr)
         return 1
 
-    with open(args.catalogue) as f:
-        catalogue = json.load(f)
+    catalogue_paths: list[str] = []
+    if args.command == "map":
+        catalogue_paths = args.catalogue
+    elif args.command == "all-maps":
+        if os.path.isdir(args.catalogues_dir):
+            import glob
+            catalogue_paths = sorted(glob.glob(os.path.join(args.catalogues_dir, "*.json")))
+        else:
+            print(f"ERROR: catalogues directory not found: {args.catalogues_dir}", file=sys.stderr)
+            return 1
 
     os.makedirs(args.out, exist_ok=True)
     manifest: dict = {"models": {}}
 
     # Built-in entity models (items, teleporter) referenced by entmdlname, plus
     # the map's own registered mapmodels. Dedupe by name.
-    builtins = [
-        "teleporter", "health", "boost", "quad",
-        "armor/green", "armor/yellow",
-        "ammo/shells", "ammo/bullets", "ammo/rockets", "ammo/rrounds", "ammo/grenades", "ammo/cartridges",
-        "carrot", "checkpoint",
-        # game-mode entities: CTF flags (ctf.h), capture bases (capture.h)
-        "flags/neutral", "flags/red", "flags/blue",
-        "base/neutral", "base/red", "base/blue",
-        # monsters (monster.cpp monstertypes)
-        "ogro", "monster/rhino", "monster/rat", "monster/slith", "monster/bauul",
-        "monster/hellpig", "monster/knight", "monster/goblin", "monster/spider",
-        # monster view-weapons (monstertypes vwepname; attached to the tag_weapon bone)
-        "ogro/vwep", "monster/rat/vwep", "monster/slith/vwep", "monster/bauul/vwep",
-        "monster/knight/vwep", "monster/goblin/vwep",
-        # player bodies (render.cpp playermodels; skeletal MD5) + their FFA/team skins
-        "mrfixit", "mrfixit/blue", "mrfixit/red",
-        "snoutx10k", "snoutx10k/blue", "snoutx10k/red",
-        "ogro2", "ogro2/blue", "ogro2/red",
-        "inky", "inky/blue", "inky/red",
-        "captaincannon", "captaincannon/blue", "captaincannon/red",
-        # first-person hands (render.cpp hudguns)
-        "mrfixit/hudguns", "snoutx10k/hudguns", "inky/hudguns", "captaincannon/hudguns",
-        # third-person view weapons (render.cpp vweps; attached to the body's tag_weapon bone)
-        "vwep/fist", "vwep/shotg", "vwep/chaing", "vwep/rocket", "vwep/rifle", "vwep/gl", "vwep/pistol",
-        # projectile models (weapon.cpp renderprojectiles / renderbouncers)
-        "projectiles/grenade", "projectiles/rocket",
-    ]
-    # First-person hudguns (render.cpp drawhudmodel): one linked hands+weapon model per
-    # playermodel/gun. ogro2 reuses mrfixit's hudguns, so only four bases are distinct.
-    gun_files = ("fist", "shotg", "chaing", "rocket", "rifle", "gl", "pistol")
-    hudgun_names = [f"{player}/hudguns/{gun}"
-                    for player in ("mrfixit", "snoutx10k", "inky", "captaincannon")
-                    for gun in gun_files]
-    entries = [{"index": -1, "path": name} for name in builtins]
+    entries = [{"index": -1, "path": name} for name in STATIC_BUILTINS]
     seen = {e["path"] for e in entries}
-    for entry in catalogue.get("mapmodels", []):
-        if entry["path"] not in seen:
-            entries.append(entry)
-            seen.add(entry["path"])
 
+    for cat_path in catalogue_paths:
+        if not os.path.isfile(cat_path):
+            continue
+        with open(cat_path) as f:
+            catalogue = json.load(f)
+        for entry in catalogue.get("mapmodels", []):
+            if entry["path"] not in seen:
+                entries.append(entry)
+                seen.add(entry["path"])
+
+    hudgun_names = list(STATIC_HUDGUNS)
     for name in hudgun_names:
         parts, model = parse_linked_parts(name, models_root, packages)
         record = build_linked_record(name, parts, model, packages, args.assimp, args.out)
