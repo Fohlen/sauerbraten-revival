@@ -29,6 +29,8 @@ EXTRA_TEXTURES = [
     "particles/flames.png", "particles/smoke.png", "particles/steam.png",
     "particles/base.png", "particles/snow.png",
     "particles/bullet.png", "particles/scorch.png", "particles/blood.png",
+    "hud/items.png", "hud/damage.png", "hud/hbar.png", "hud/radar.png",
+    "crosshairs/default.png", "crosshairs/default_hit.png", "crosshairs/default_teammate.png",
 ]
 
 
