@@ -582,6 +582,49 @@ public class RadianceVolumeTest : GoTestBase
         TestAssert.Equal(RadianceVolume.DefaultAlbedo, albedoNullCat, "Null catalogue returns DefaultAlbedo");
     }
 
+    [Test]
+    public void RadianceVolume_AlbedoLookup_HandlesCompressedTexture()
+    {
+        // Godot imports 3D textures VRAM-compressed by default; reading their
+        // luminance used to spam "Can't get_pixel() on compressed image".
+        var image = Image.CreateEmpty(4, 4, false, Image.Format.Rgba8);
+        image.Fill(new Color(1f, 1f, 1f));
+        Error err = image.Compress(Image.CompressMode.S3Tc, Image.CompressSource.Generic, Image.AstcFormat.Format4X4);
+        TestAssert.Equal(Error.Ok, err, $"test fixture: S3TC compression should succeed (was {err})");
+        TestAssert.True(image.IsCompressed(), "test fixture: image should be compressed");
+
+        var catalogue = new MetadataCatalogue();
+        catalogue.Slots[7] = new CatalogueSlot { Index = 7, DiffusePath = "radiance_test/compressed_albedo.png" };
+        catalogue.VSlots[7] = new CatalogueVSlot
+        {
+            Index = 7,
+            Slot = 7,
+            Color = new Vector3(0.6f, 0.6f, 0.6f),
+        };
+
+        var textures = new StubTextureSource("radiance_test/compressed_albedo.png", image);
+        float albedo = RadianceVolume.ComputeVSlotAlbedo(7, catalogue, textures);
+
+        // White texture luminance (1.0) * tint (0.6) = 0.6.
+        TestAssert.True(Mathf.Abs(albedo - 0.6f) < 0.01f, $"Compressed texture albedo should be 0.6, was {albedo}");
+    }
+
+    private sealed class StubTextureSource : ITextureSource
+    {
+        private readonly string _path;
+        private readonly Image _image;
+
+        public StubTextureSource(string path, Image image)
+        {
+            _path = path;
+            _image = image;
+        }
+
+        public Texture2D? Get(string path) => null;
+        public Vector2I Size(string path) => (Vector2I)_image.GetSize();
+        public Image? GetImage(string path) => path == _path ? _image : null;
+    }
+
     // =========================================================================
     // Stage 4: Incremental Updates & Editor Dirty Wiring
     // =========================================================================

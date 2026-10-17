@@ -585,6 +585,15 @@ public class RadianceVolume
             return 1.0f;
         }
 
+        // Godot's default 3D texture import stores VRAM-compressed images, which
+        // cannot be read with GetPixel(). Decompress before sampling (the source
+        // dump's JPG/PNG images are already uncompressed, so this is a no-op there).
+        if (img.IsCompressed() && img.Decompress() != Error.Ok)
+        {
+            _texLuminanceCache[diffusePath] = 1.0f;
+            return 1.0f;
+        }
+
         int w = img.GetWidth();
         int h = img.GetHeight();
         if (w <= 0 || h <= 0)
