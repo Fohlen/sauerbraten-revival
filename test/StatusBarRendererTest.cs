@@ -1,8 +1,10 @@
+using System.IO;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Hud;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Weapons;
 
@@ -81,7 +83,7 @@ public class StatusBarRendererTest : GoTestBase
         TestScene.AddChild(canvas);
         canvas.AddChild(hud);
 
-        var texSource = new SauerbratenRevival.World.Materials.ResourceTextureSource();
+        var texSource = TestTextures();
         hud.SetupTextures(texSource);
 
         var icon = hud.GetNodeOrNull<TextureRect>("StatusBar/HealthIcon");
@@ -107,7 +109,7 @@ public class StatusBarRendererTest : GoTestBase
         TestScene.AddChild(canvas);
         canvas.AddChild(hud);
 
-        var texSource = new SauerbratenRevival.World.Materials.ResourceTextureSource();
+        var texSource = TestTextures();
         hud.SetupTextures(texSource);
 
         var armorIcon = hud.GetNodeOrNull<TextureRect>("StatusBar/ArmorIcon");
@@ -185,7 +187,7 @@ public class StatusBarRendererTest : GoTestBase
         TestScene.AddChild(canvas);
         canvas.AddChild(hud);
 
-        var texSource = new SauerbratenRevival.World.Materials.ResourceTextureSource();
+        var texSource = TestTextures();
         hud.SetupTextures(texSource);
 
         var weaponIcon = hud.GetNodeOrNull<TextureRect>("StatusBar/WeaponIcon");
@@ -277,7 +279,7 @@ public class StatusBarRendererTest : GoTestBase
         TestScene.AddChild(canvas);
         canvas.AddChild(hud);
 
-        var texSource = new SauerbratenRevival.World.Materials.ResourceTextureSource();
+        var texSource = TestTextures();
         hud.SetupTextures(texSource);
 
         var quadIcon = hud.GetNodeOrNull<TextureRect>("StatusBar/QuadIcon");
@@ -509,7 +511,7 @@ public class StatusBarRendererTest : GoTestBase
         TestScene.AddChild(canvas);
         canvas.AddChild(hud);
 
-        var texSource = new SauerbratenRevival.World.Materials.ResourceTextureSource();
+        var texSource = TestTextures();
         hud.SetupTextures(texSource);
 
         hud.UpdateStatusBar();
@@ -789,6 +791,65 @@ public class StatusBarRendererTest : GoTestBase
 
         canvas.Free();
         player.Free();
+    }
+
+    [Test]
+    public void GoldenItemsAtlasMapsTo4x4PixelGrid()
+    {
+        var textures = new ItemsAtlasTextureSource();
+        Texture2D? items = textures.Get(ItemsAtlasTextureSource.ItemsPath);
+        TestAssert.True(items != null, "golden items.png loads");
+        TestAssert.True(items!.GetSize() == new Vector2(256, 256),
+            $"items.png is 256x256, got {items.GetSize()}");
+
+        // Every icon owns a 64x64 cell; the UV rect from GetIconUv must land on
+        // exact cell boundaries so icons are never sampled across a seam.
+        Vector2 size = items.GetSize();
+        foreach (HudIcon icon in System.Enum.GetValues<HudIcon>())
+        {
+            Rect2 uv = StatusBarRenderer.GetIconUv(icon);
+            var region = new Rect2(
+                uv.Position.X * size.X, uv.Position.Y * size.Y,
+                uv.Size.X * size.X, uv.Size.Y * size.Y);
+            TestAssert.True(region.Size == new Vector2(64f, 64f) &&
+                            Mathf.PosMod(region.Position.X, 64f) == 0f &&
+                            Mathf.PosMod(region.Position.Y, 64f) == 0f,
+                $"{icon} maps to a 64x64 atlas cell, got {region}");
+        }
+    }
+
+    /// <summary>
+    /// Serves the real <c>hud/items.png</c> committed under <c>test/golden/hud/</c>.
+    /// The runtime copy under <c>assets/textures/</c> is generated (and git-ignored)
+    /// by <c>tools/texture-import</c>, so the HUD tests read this fixture instead
+    /// to exercise the actual icon atlas.
+    /// </summary>
+    private static ITextureSource TestTextures() => new ItemsAtlasTextureSource();
+
+    private sealed class ItemsAtlasTextureSource : ITextureSource
+    {
+        public const string ItemsPath = "hud/items.png";
+        private const int AtlasSize = 256;
+        private readonly Texture2D _items;
+
+        public ItemsAtlasTextureSource()
+        {
+            string path = Path.Combine(
+                ProjectSettings.GlobalizePath("res://"), "test", "golden", "hud", "items.png");
+            TestAssert.True(File.Exists(path), $"golden items.png exists at {path}");
+
+            var image = new Image();
+            Error err = image.LoadPngFromBuffer(File.ReadAllBytes(path));
+            TestAssert.Equal((int)Error.Ok, (int)err, $"decode {path}");
+            TestAssert.True(image.GetWidth() == AtlasSize && image.GetHeight() == AtlasSize,
+                $"golden items.png is {AtlasSize}x{AtlasSize}, got {image.GetWidth()}x{image.GetHeight()}");
+
+            _items = ImageTexture.CreateFromImage(image);
+        }
+
+        public Texture2D? Get(string path) => path == ItemsPath ? _items : null;
+        public Vector2I Size(string path) => path == ItemsPath ? new Vector2I(AtlasSize, AtlasSize) : Vector2I.Zero;
+        public Image? GetImage(string path) => path == ItemsPath ? _items.GetImage() : null;
     }
 }
 
