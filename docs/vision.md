@@ -35,10 +35,11 @@ Exactly four: **insta CTF**, **effic CTF**, **FFA**, and **coop edit**.
 ## 3. Non-goals
 
 - Not rewriting the original renderer. Godot renders (Forward+).
-- Not re-authoring art from scratch. Original packages → our format / glTF, converted offline.
-- **No runtime `.ogz` loading and no CubeScript.** The original file format and
-  scripting language are dropped; we define our own format and use Godot-native
-  configuration. Old content is converted once, offline.
+- Not re-authoring art from scratch. Original packages → glTF / our format,
+  converted offline.
+- **No CubeScript, and no classic-map converter.** Classic maps ship as original
+  `.ogz` and are read at load time; maps we author use our own format and
+  Godot-native configuration. See [ADR 0006](adr/0006-ogz-import.md).
 - Not targeting 1:1 byte-level map-format compatibility.
 
 ## 4. Guiding principles
@@ -60,7 +61,7 @@ Exactly four: **insta CTF**, **effic CTF**, **FFA**, and **coop edit**.
 | Original octree code | Reuse `octa.cpp`/`octa.h` **core**; port editor *algorithms*; do **not** copy `octaedit.cpp` plumbing |
 | Rendering | Per-chunk `ArrayMesh` (one surface per vslot, Godot materials); Forward+; see [rendering.md](rendering.md) |
 | Collision & movement | Ported octree traversal (`move`/`collide`/steps) in fixed 5 ms steps, validated against the original |
-| Level format | `Level.tscn` (refs + config) + external binary `Resource` world blob. **No `.ogz`, no CubeScript** |
+| Level format | Classic maps: shipped `.ogz`, read at load time. Editor maps: `Level.tscn` (refs + config) + external binary `Resource` world blob. **No CubeScript** ([ADR 0006](adr/0006-ogz-import.md)) |
 | Editor | Runtime, in-game, Godot UI + **command system** |
 | World mutations | All are **serializable commands** (editor, game modes, network) |
 | Config | Godot-native: `ProjectSettings`, `ConfigFile`, `Resource`, `InputMap` |
@@ -74,8 +75,9 @@ Exactly four: **insta CTF**, **effic CTF**, **FFA**, and **coop edit**.
 Sauerbraten's octree is a good structure — it was never the problem. `.ogz` and
 CubeScript were. We keep octree-style editing and collision, but:
 
-- **No octree serialization to `.ogz`.** The octree lives in memory and is saved
-  as a Godot binary `Resource`.
+- **We never write `.ogz`.** Classic maps are read from the shipped `.ogz` at load
+  time ([ADR 0006](adr/0006-ogz-import.md)); maps we author are saved as a Godot
+  binary `Resource`.
 - **No `remip`-only statics assumption.** The octree is a *live, mutable* world
   structure, not just an editor-time one.
 
@@ -152,7 +154,7 @@ sync. It is also the foundation for multiplayer and Workshop content.
 | `octa.h` (structs) | — | — | ✅ Ported/adapted to C# (`Cube`, `CubeExt`) |
 | `octaedit.cpp` | 3003 | 19 | **Port the algorithms**, reimplement UI/undo/selection plumbing (todo) |
 | `octarender.cpp` | 1803 | 45 | ✅ **Replaced** by the ArrayMesh mesher (`World/Meshing/`); see [rendering.md](rendering.md) |
-| `worldio.cpp` | 1388 | — | ✅ **Ported for OGZ import only** (`World/Ogz/OgzReader.cs`); see [ogz-import.md](ogz-import.md). Native format is `Resource`. |
+| `worldio.cpp` | 1388 | — | ✅ **Ported for classic-map loading** (`World/Ogz/OgzReader.cs`); see [ADR 0006](adr/0006-ogz-import.md). Maps we author use `Resource`. |
 | octree traversal (`physics.cpp`) | ~500 | 0 | ✅ **Ported to C#** (`World/Physics/`: `move`/`collide`/`trystepup`/`trystepdown` + clipping/visibility); see [movement-physics.md](movement-physics.md) and [ADR 0003](adr/0003-movement-verification.md) |
 
 `octa.cpp` depends on only a handful of globals (`worldroot`, `worldsize`,
@@ -199,8 +201,7 @@ map/
 
 Saved/loaded by the world layer (C#), versioned for forward migration.
 
-This format is what the editor writes, what the converter produces, and what mods
-ship. The **unit of distribution, hashing, and multiplayer parity is the archive**
+This format is what the editor writes and what mods ship. The **unit of distribution, hashing, and multiplayer parity is the archive**
 (`.zip`/`.tar`) containing the whole directory.
 
 ---

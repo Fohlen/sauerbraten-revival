@@ -8,9 +8,10 @@ using SauerbratenRevival.World.Save;
 namespace SauerbratenRevival.Tests;
 
 /// <summary>
-/// Covers the resource manifest (docs/ogz-import.md, docs/editor-and-commands.md §7):
-/// building it from a metadata catalogue, saving/loading it in the map directory,
-/// the self-describing full-path requirement, and that the converter emits it.
+/// Covers the resource manifest (docs/adr/0006-ogz-import.md,
+/// docs/editor-and-commands.md §7): building it from a metadata catalogue,
+/// saving/loading it in the map directory, and the self-describing full-path
+/// requirement.
 /// </summary>
 public class ResourceManifestTest : GoTestBase
 {
@@ -93,20 +94,5 @@ public class ResourceManifestTest : GoTestBase
 
         TestAssert.True(MapStore.ContentHash(a) != MapStore.ContentHash(b),
             "adding a manifest changes the archive hash");
-    }
-
-    [Test]
-    public void ConverterEmitsManifestForKnownMap()
-    {
-        string dir = TempDir("convert_manifest");
-        var map = TestData.ReadMap();
-        var catalogue = MetadataCatalogue.Load(TestData.CataloguePathFor("church51"));
-
-        OgzConverter.Convert(map, dir, catalogue);
-
-        var manifest = MapStore.LoadManifest(dir);
-        TestAssert.True(manifest != null, "converter emitted a manifest");
-        TestAssert.Equal(catalogue.VSlots.Count, manifest!.Materials.Count, "vslots became materials");
-        TestAssert.Equal(catalogue.Sounds.Count, manifest.Sounds.Count, "sounds carried through");
     }
 }

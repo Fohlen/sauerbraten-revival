@@ -8,7 +8,7 @@ namespace SauerbratenRevival.World.Entities;
 /// Builds <see cref="ParticleEmitter"/> nodes from a map's <c>ET_PARTICLES</c>
 /// entities and attaches an entity marker. The actual effects (billboard particles,
 /// `GPUParticles3D`, or custom shaders) are a later slice; see
-/// docs/ogz-import.md#particles-et_particles.
+/// docs/adr/0006-ogz-import.md#particles-et_particles.
 /// </summary>
 public static class ParticleBuilder
 {

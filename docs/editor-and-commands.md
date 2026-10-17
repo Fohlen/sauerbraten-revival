@@ -639,8 +639,8 @@ Level.tscn
 Godot scenes store external resources by path and only inline them if the path is
 cleared. So editing the octree rewrites `world.res`; **`Level.tscn` never
 changes** as a result of a geometry or entity edit. The scene stays small and
-stable, and the #3 importer can write `world.res` + `Level.tscn` independently —
-exactly the split [ogz-import.md](ogz-import.md) already plans.
+stable, and the editor save path (M5) writes `world.res` + `Level.tscn`
+independently; the octree stays the only thing a geometry or entity edit rewrites.
 
 ### 7.2 Entities are runtime projections, not scene data
 
@@ -862,11 +862,11 @@ modifier (see the `delta_do` note below).
 **M5 — Save/load in native format (done).** `WorldSnapshot` encoder/decoder
 (canonical child-order octree traversal + entity blob, version field, content
 hash), Godot `WorldResource`/`HistoryResource`, the map directory (`world.res` +
-`history.res` + `Level.tscn`) with compaction and archive content hash, and the
-`OgzConverter` import path. Round-trip/replay tests in `test/WorldSnapshotTest.cs`
+`history.res` + `Level.tscn`) with compaction and archive content hash.
+Round-trip/replay tests in `test/WorldSnapshotTest.cs`
 and `test/MapFormatTest.cs`; church51 reloads with an identical geometry checksum.
 The map is a directory of external resources; the archive is the hashing/parity
-unit. *Unblocks #3 importer (geometry + entities).*
+unit.
 
 **M6 — Networking.** `WorldNetwork` RPC nodes, channels, authority, sequence,
 snapshot transfer, late join. Headless multi-client tests. *Unblocks coop edit.*
@@ -1023,8 +1023,7 @@ World/Save/
 ├── WorldResource.cs       # Godot Resource wrapper for world.res (M5)
 ├── HistoryResource.cs     # Godot Resource wrapper for history.res (M5)
 ├── MapStore.cs            # map directory load/save, compaction, archive hash (M5)
-├── MapLevel.cs            # scene node: refs the data resources (M5)
-└── OgzConverter.cs        # OGZ + metadata -> native format (import)
+└── MapLevel.cs            # scene node: refs the data resources (M5)
 World/Net/
 ├── WorldNetwork.cs        # RPC nodes, channels, authority
 └── WorldSnapshot.cs       # canonical snapshot encode/decode + hash

@@ -60,15 +60,14 @@ public class UserSettingsTest : GoTestBase
         UserSettings previous = UserSettings.Load();
         try
         {
-            string path = "/tmp/sauer-" + System.Guid.NewGuid().ToString("N");
-            new UserSettings { SauerbratenPath = path, LightingMode = RadianceQualityMode.StaticAmbient }.Save();
+            new UserSettings { Sensitivity = 7.5f, LightingMode = RadianceQualityMode.StaticAmbient }.Save();
 
             UserSettings loaded = UserSettings.Load();
-            TestAssert.Equal(path, loaded.SauerbratenPath, "path persists");
+            TestAssert.Near(7.5f, loaded.Sensitivity, 1e-4f, "sensitivity persists");
             TestAssert.Equal(RadianceQualityMode.StaticAmbient, loaded.LightingMode, "mode persists");
 
             (loaded with { LightingMode = RadianceQualityMode.RadianceHints }).Save();
-            TestAssert.Equal(path, UserSettings.Load().SauerbratenPath, "unrelated field is untouched");
+            TestAssert.Near(7.5f, UserSettings.Load().Sensitivity, 1e-4f, "unrelated field is untouched");
         }
         finally
         {

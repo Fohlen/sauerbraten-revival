@@ -11,7 +11,7 @@ namespace SauerbratenRevival.World.Entities;
 /// future game/edit-mode split can hide it with a single call.
 ///
 /// This is deliberately separate from the real particle system
-/// (<c>ET_PARTICLES</c> — see docs/ogz-import.md); these are gizmos, not effects.
+/// (<c>ET_PARTICLES</c> — see docs/adr/0006-ogz-import.md); these are gizmos, not effects.
 /// </summary>
 public static class EntityMarker
 {

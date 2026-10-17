@@ -22,7 +22,6 @@ public sealed record UserSettings
     /// <summary>Section holding the general user settings.</summary>
     public const string Section = "settings";
 
-    private const string SauerbratenPathKey = "sauerbraten_path";
     private const string LightingModeKey = "lighting_mode";
     private const string SoundEnabledKey = "sound_enabled";
     private const string SoundVolumeKey = "sound_volume";
@@ -46,9 +45,6 @@ public sealed record UserSettings
 
     private const string StaticAmbientToken = "static_ambient";
     private const string RadianceHintsToken = "radiance_hints";
-
-    /// <summary>Remembered Sauerbraten install path (converter wizard).</summary>
-    public string SauerbratenPath { get; init; } = "";
 
     /// <summary>World lighting quality mode (docs/adr/0002-radiance-hints.md §7).</summary>
     public RadianceQualityMode LightingMode { get; init; } = RadianceQualityMode.RadianceHints;
@@ -81,7 +77,6 @@ public sealed record UserSettings
         if (cfg.Load(SettingsPath) != Error.Ok) return new UserSettings();
         return new UserSettings
         {
-            SauerbratenPath = cfg.GetValue(Section, SauerbratenPathKey, "").AsString(),
             LightingMode = ParseLightingMode(cfg.GetValue(Section, LightingModeKey, "").AsString()),
             SoundEnabled = cfg.GetValue(Section, SoundEnabledKey, true).AsBool(),
             SoundVolume = Mathf.Clamp(cfg.GetValue(Section, SoundVolumeKey, GameAudio.MaxSoundVol).AsInt32(), 0, GameAudio.MaxSoundVol),
@@ -100,7 +95,6 @@ public sealed record UserSettings
     public void Save()
     {
         var cfg = new ConfigFile();
-        cfg.SetValue(Section, SauerbratenPathKey, SauerbratenPath);
         cfg.SetValue(Section, LightingModeKey, LightingModeToken(LightingMode));
         cfg.SetValue(Section, SoundEnabledKey, SoundEnabled);
         cfg.SetValue(Section, SoundVolumeKey, Mathf.Clamp(SoundVolume, 0, GameAudio.MaxSoundVol));

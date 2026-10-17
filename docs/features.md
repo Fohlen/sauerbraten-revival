@@ -17,8 +17,8 @@ Order reflects intent, not schedule.
 
 1. **World core** — native, dynamic octree (C#/.NET): structure, collision
    traversal, incremental meshing, our `Resource` format, Godot rendering. — *core done*
-2. **Old-content conversion & loading** — one-time bake of hand-picked classic
-   maps → our format; render and load. — *done in the dev viewer; native bake pending*
+2. **Classic content loading** — ship original `.ogz` maps + resolved metadata and
+   read them at load time; render and play. — *done* ([ADR 0006](adr/0006-ogz-import.md))
 3. **Physics (movement + collision)** — `modifyvelocity`/`move`/`collide`/
    `trystepup`/`trystepdown`, validated against the original (A1–A4). — *done, zero deviation*
 4. **Editor MVP** — runtime live cube editing, texturing/blending, entities,
@@ -98,11 +98,11 @@ Remaining:
             per-`alphafront`/`alphaback` transparent shader. Asserted by `test/AlphaMeshTest.cs`.
             The top/bottom **blend** (blendmap) is still open.
 
-## 2. OGZ import pipeline
+## 2. Classic content (OGZ)
 
-See [ogz-import.md](ogz-import.md).
+See [ADR 0006](adr/0006-ogz-import.md).
 
-Done (lives in the dev viewer; not yet a standalone offline tool):
+Done (classic maps are read at load time in both the viewer and the play scene):
 
 - [x] Metadata export patch (`SAUER_METADATA`) + metadata for `church51`, `bt_falls` in `metadata-catalogue/`.
 - [x] OGZ parser (`World/Ogz/OgzReader.cs`, MAPVERSION 33) → runtime `Cube` octree.
@@ -111,7 +111,7 @@ Done (lives in the dev viewer; not yet a standalone offline tool):
 - [x] Entities: lights/spotlights, playerstarts, mapmodels, triggers (teleport/teledest/jumppad),
       items, particles (billboard effects), sounds, edit-mode markers.
 - [x] envmap / monsters / mode entities — all represented (import only). See
-      [ogz-import.md § Entity porting status](ogz-import.md#entity-porting-status)
+      [ADR 0006 § Entity type mapping](adr/0006-ogz-import.md#entity-type-mapping)
       for the concrete work items (runtime behaviour remains unported):
       - [x] `ET_ENVMAP` (4) → `EnvMapProbe` (`ReflectionProbe`). `EnvMapBuilder`
             resolves `attr1` radius (0 → 128, clamp 0..10000), `attr2` cubemap size
@@ -162,12 +162,10 @@ Done (lives in the dev viewer; not yet a standalone offline tool):
 
 Remaining:
 
-- [ ] Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn`.
-      - [x] **Geometry + entities**: `OgzConverter` writes `world.res` + `Level.tscn` from
-            a parsed `.ogz` (asserted by `test/MapFormatTest.cs`, church51 round-trips
-            exactly). Metadata-driven material manifest emission is still pending.
-      - [ ] CLI/headless front end for `OgzConverter` (the GUI wizard exists;
-            [ogz-import.md § Converter GUI](ogz-import.md#converter-gui)).
+- [x] ~~Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn`.~~
+      **Dropped** ([ADR 0006](adr/0006-ogz-import.md)): classic maps ship as `.ogz`
+      and are read at load time; the native directory format is the editor's save
+      format. There is no GUI wizard or CLI importer.
 - [~] **One-shot full metadata export** — capture all resolved engine state in the
       single ~25-min sweep (resolved shaders/slots/vslots/config) as **JSON only**;
       no binary sidecar (blendmap/PVS are already in the OGZ; lighting is baked
@@ -289,7 +287,7 @@ order** (design detail for this roadmap item).
       dispatch that drive them interactively are **done** — see the M4d item above
       (`EditorController` + `DeltaModifier`, `test/DeltaDispatchTest.cs`).
 - [x] Save/load in our format (M5): `WorldSnapshot` + map directory (`world.res`,
-      `history.res`, `Level.tscn`) + compaction + archive hash; `OgzConverter`;
+      `history.res`, `Level.tscn`) + compaction + archive hash;
       `F2` save / `F3` load binds in `EditorController`. See
       [editor-and-commands.md](editor-and-commands.md#7-map-format-versioned-command-history).
 

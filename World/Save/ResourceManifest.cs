@@ -8,15 +8,15 @@ namespace SauerbratenRevival.World.Save;
 
 /// <summary>
 /// The resource manifest stored alongside a native map (<c>materials/manifest.res</c>
-/// in docs/editor-and-commands.md §7; the "material manifest" of docs/ogz-import.md).
-/// It is what makes a converted map **self-describing**: the octree stores only
+/// in docs/editor-and-commands.md §7; see also docs/adr/0006-ogz-import.md).
+/// It is what makes a native map **self-describing**: the octree stores only
 /// integer vslot indices, and this manifest resolves each index to the *full engine
 /// path* of every texture, model and sound the map needs.
 ///
 /// Deliberately **index → full path**, never index → index: the metadata
 /// catalogue's global slot/model/sound registries are meaningless outside the
 /// original engine's load order, so we bake the resolved paths in once (see
-/// docs/ogz-import.md, "Metadata JSON").
+/// docs/adr/0006-ogz-import.md).
 ///
 /// Like <see cref="WorldResource"/>, the Resource is a **thin byte holder**: the
 /// payload is a canonical <see cref="ManifestData.Encode"/> blob, so it is

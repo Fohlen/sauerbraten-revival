@@ -14,7 +14,7 @@ namespace SauerbratenRevival.World.Entities;
 /// <c>attr3</c> = tag. An out-of-range type is clamped to 0, matching the
 /// constructor's warning. The nine models are converted by <c>tools/model-import</c>.
 ///
-/// Representation only; the AI/physics is game logic (see docs/ogz-import.md).
+/// Representation only; the AI/physics is game logic (see docs/adr/0006-ogz-import.md).
 /// </summary>
 public static class MonsterBuilder
 {

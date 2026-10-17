@@ -16,9 +16,8 @@ namespace SauerbratenRevival.World.Ogz;
 /// <c>Camera3D</c> is placed at a full-map overview once the world is built. A
 /// controller whose camera is nested (e.g. under a player) is left alone.
 ///
-/// It deliberately reads OGZ at runtime for tooling convenience — it is NOT the
-/// shipping path. The shipped importer converts maps to the native format; see
-/// docs/ogz-import.md.
+/// It reads OGZ at runtime; classic maps are shipped and loaded this way in both
+/// the viewer and the play scene. See docs/adr/0006-ogz-import.md.
 ///
 /// It is a <c>[Tool]</c> script so the geometry also appears in the editor. Tool
 /// scripts only rebuild when the scene is (re)opened, so after editing this script

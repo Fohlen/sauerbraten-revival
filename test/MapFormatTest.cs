@@ -200,21 +200,4 @@ public class MapFormatTest : GoTestBase
         level.Free();
     }
 
-    // ---- OGZ -> native conversion (ogz-import.md, unblocked by M5) ----
-
-    [Test]
-    public void OgzConverterRoundTripsChurch51Geometry()
-    {
-        string dir = TempDir("ogz_convert");
-        var map = TestData.ReadMap();
-        ulong originalChecksum = Checksum(map.ToOcta());
-
-        var snapshot = OgzConverter.Convert(map, dir);
-        var reloaded = MapStore.Load(dir);
-
-        TestAssert.Equal(map.Entities.Count, snapshot.Entities.Count, "entities preserved in the snapshot");
-        TestAssert.Equal(originalChecksum, Checksum(reloaded.World), "converted map reloads with identical geometry");
-        TestAssert.True(File.Exists(Path.Combine(ProjectSettings.GlobalizePath(dir), MapStore.LevelSceneName)),
-            "Level.tscn emitted");
-    }
 }

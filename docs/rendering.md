@@ -168,10 +168,10 @@ VSlot (variant):
 | Blending | Custom shader with blend mask (no longer sourced from a lightmap alpha — that model is dropped with T1) |
 | Lighting | World-space L1 SH probe volume (radiance hints), sampled by the world shader |
 
-The material manifest maps face indices → Godot materials. In the dev viewer this
-is resolved at load time from the committed `metadata-catalogue/<map>.json`
-(`MetadataCatalogue` + `MaterialBuilder`); the shipped importer will bake an
-equivalent manifest into the native format at conversion time.
+The material manifest maps face indices → Godot materials. Classic maps resolve
+this at load time from the committed `metadata-catalogue/<map>.json`
+(`MetadataCatalogue` + `MaterialBuilder`); saved native maps instead carry an
+equivalent manifest in `materials/manifest.res`.
 
 ---
 
@@ -281,7 +281,7 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   `matlava` yet).
 - **TODO (deferred)** — **envmap sampling** (`SHADER_ENVMAP`, `closestenvmap`;
   the `ET_ENVMAP` probes themselves are now imported — see
-  [ogz-import.md](ogz-import.md#entity-porting-status) — but nothing reads them),
+  [ADR 0006](adr/0006-ogz-import.md#entity-type-mapping) — but nothing reads them),
   **specular maps** (packed/non-PBR), blended layers, exact `visibletris`
   culling, face merges, T-joints and grass. World lighting is the L1 SH probe
   volume ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)); the baked-lightmap path is

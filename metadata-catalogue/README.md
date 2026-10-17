@@ -1,12 +1,14 @@
 # Metadata catalogue
 
-Ground-truth metadata for the maps we import into Sauerbraten Revival, exported
-from the **original** Sauerbraten client (patched with
+Ground-truth metadata for the classic maps we ship in Sauerbraten Revival,
+exported from the **original** Sauerbraten client (patched with
 [`tools/ogztool/patches/ogz-metadata.patch`](../tools/ogztool/patches/ogz-metadata.patch)).
 
-Only the **JSON** is committed. The legacy `.ogz` files are large binary game
-assets and stay in the read-only reference dump; the OGZ reader tests read them
-from `$SAUER_REF/packages/base/<map>.ogz`.
+Only the **JSON** is committed. The `.ogz` maps themselves are large binary game
+assets: they ship in the git-ignored asset pack under `assets/packages/`. The OGZ
+reader resolves them through [`MapRoots`](../World/Ogz/MapRoots.cs) (asset pack
+first, then `$SAUER_REF/packages/`), so tests read `base/<map>.ogz` from whichever
+tree is present.
 
 Each file holds the resolved `slots`/`vslots`/`mapmodels`/`entities`/`sounds`, plus a
 `geometry` block (cube-tree counts, surface/vertex totals, per-vslot face histogram
@@ -28,7 +30,7 @@ needs it.
 
 The exporter only emits what the map actually uses (geometry-referenced
 textures, entity-referenced mapmodels and sounds). See
-[`docs/ogz-import.md`](../docs/ogz-import.md).
+[ADR 0006](../docs/adr/0006-ogz-import.md).
 
 ## Regenerating
 

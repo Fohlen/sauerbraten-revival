@@ -24,10 +24,10 @@ Run tests with `./run-tests.sh` (builds, then Godot `--headless --run-tests`).
 
 ## Reference engine (optional — only to regenerate traces/metadata)
 
-Only needed to run the A1/A2 harness (`tools/refharness`) or the OGZ tooling
-(`tools/ogztool`, the `SAUER_METADATA` exporter and old-map converter); the game
-and its tests otherwise read the committed `metadata-catalogue/` and the
-read-only dump.
+Only needed to **regenerate** classic-map metadata or normalise old maps
+(`tools/ogztool`), run the A1/A2 harness (`tools/refharness`), or build the
+engine ground-truth probes. The game ships its own `.ogz` maps and the committed
+`metadata-catalogue/`, so it needs none of this to run.
 
 | Dependency | Why |
 | --- | --- |
@@ -50,7 +50,7 @@ tools/ogztool/build.sh                    # OGZ metadata + old-map conversion
 
 | Setting / Variable | Type | Used by | Default |
 | --- | --- | --- | --- |
-| `sauerbraten/reference_path` | `ProjectSettings` | In-engine resolver (`MapRoots`), converter wizard default | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
+| `sauerbraten/reference_path` | `ProjectSettings` | Dev resolver (`MapRoots`) fallback when a map is not in the asset pack | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
 | `SAUER_REF` | Env var (overrides ProjectSetting) | Tests, viewer, import tools, refharness, ogztool | Unset (falls back to ProjectSetting or default) |
 | `GODOT` | Env var | `run-tests.sh` | `/Applications/Godot_mono.app/Contents/MacOS/Godot` |
 | `SAUER_TRACE` | Env var | A1/A2 instrumented reference client (refharness) | unset (features inert) |

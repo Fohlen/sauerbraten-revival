@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Convert pre-v32 OGZ maps to the current MAPVERSION (v33), so the offline
-# importer only ever reads v32+ (see docs/ogz-import.md).
+# importer only ever reads v32+ (see docs/adr/0006-ogz-import.md).
 #
 # For each packages/<pkg>/<map>.ogz with version < 32, this runs the ogz tooling
 # client once (SAUER_CONVERT_SAVE + SAUER_METADATA_EXIT). The client loads the

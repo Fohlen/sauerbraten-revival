@@ -119,5 +119,6 @@ through the same convert step.
 - The reference dump (`$SAUER_REF`, default `~/Downloads/sauerbraten-code-r6889`).
 - Python 3 (stdlib only) — the batch drivers read OGZ headers with it.
 
-See [`docs/ogz-import.md`](../../docs/ogz-import.md) for the import pipeline this
-feeds and [`docs/lighting.md`](../../docs/lighting.md) for the lightmap model.
+See [ADR 0006](../../docs/adr/0006-ogz-import.md) for the classic-content loading
+path this feeds, and [adr/0002-radiance-hints.md](../../docs/adr/0002-radiance-hints.md)
+for the lighting model.

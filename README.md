@@ -6,8 +6,8 @@ editor (a defining feature) and the game on top of it.
 
 - MVP modes: **insta CTF**, **effic CTF**, **FFA**, **coop edit**.
 - World: a native, **runtime-mutable octree** (live editing + dynamic geometry).
-- Legacy content is converted **once, offline**; the game never loads `.ogz` or
-  interprets CubeScript.
+- Classic maps ship as original `.ogz` files and are read at load time; there is
+  **no CubeScript** and no offline converter. Maps made in the editor use a new, versioned, native format.
 
 
 ## Playing with the project
@@ -16,10 +16,8 @@ In order to work with this new engine you will need to:
 
 1. [Download Godot .NET](https://godotengine.org)
 2. Clone this repository
-3. [Download](https://drive.google.com/file/d/17UIVVnpPHoTrtI9q5V6h07SRTl0lAnGx/view?usp=share_link) and unpack a copy of the already converted assets (e.g models) into your new repository
-4. [Importing the project](https://docs.godotengine.org/en/stable/engine_details/development/configuring_an_ide/visual_studio.html#importing-the-project)
-5. Project → Project Settings → Filter Settings → Sauerbraten
-6. Set a reference path to a copy of Sauerbraten (if you wish to load OGZ maps)
+3. [Download](https://drive.google.com/file/d/17UIVVnpPHoTrtI9q5V6h07SRTl0lAnGx/view?usp=share_link) and unpack the asset pack into your new repository — this holds the converted models/textures and the classic `.ogz` maps
+4. [Import the project](https://docs.godotengine.org/en/stable/engine_details/development/configuring_an_ide/visual_studio.html#importing-the-project)
 
 Once the project is set up you can run the `player_scene.tscn` to play the game or the `editor_scene.tscn` to start the in-game editor using the [_"Run Current Scene"_](https://docs.godotengine.org/en/stable/getting_started/step_by_step/nodes_and_scenes.html#running-the-scene) button.
 

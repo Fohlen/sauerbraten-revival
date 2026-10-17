@@ -8,7 +8,7 @@ namespace SauerbratenRevival.Tests;
 /// <summary>
 /// The OGZ path resolver: project-owned converted maps (<c>assets/packages/</c>)
 /// take priority over the read-only reference dump (<c>$SAUER_REF/packages/</c>).
-/// See <see cref="MapRoots"/> and docs/ogz-import.md.
+/// See <see cref="MapRoots"/> and docs/adr/0006-ogz-import.md.
 /// </summary>
 public class MapRootsTest : GoTestBase
 {

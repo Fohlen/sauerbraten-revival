@@ -16,9 +16,8 @@ namespace SauerbratenRevival.World.Ogz;
 /// (<see cref="FreeFlyCamera"/> for the inspection/editor scene, a player
 /// controller for the play scene); the collision layer reads <see cref="Octa"/>.
 ///
-/// It deliberately reads OGZ at runtime for tooling convenience — it is NOT the
-/// shipping path. The shipped importer converts maps to the native format; see
-/// docs/ogz-import.md.
+/// This is the load path for classic maps (it also backs the play scene); see
+/// docs/adr/0006-ogz-import.md.
 ///
 /// It is a <c>[Tool]</c> script so the geometry also appears in the editor.
 /// </summary>

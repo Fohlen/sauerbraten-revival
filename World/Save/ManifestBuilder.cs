@@ -4,13 +4,13 @@ namespace SauerbratenRevival.World.Save;
 
 /// <summary>
 /// Builds a <see cref="ManifestData"/> from an engine-exported
-/// <see cref="MetadataCatalogue"/> (docs/ogz-import.md). Every entry carries the
-/// **full resolved engine path** of its textures/models/sounds, so the manifest
-/// does not depend on the original engine's global registries.
+/// <see cref="MetadataCatalogue"/> (docs/adr/0006-ogz-import.md). Every entry
+/// carries the **full resolved engine path** of its textures/models/sounds, so the
+/// manifest does not depend on the original engine's global registries.
 ///
-/// This is the offline counterpart of <see cref="MaterialBuilder"/>: the runtime
-/// dev viewer still builds live materials directly from a catalogue, while the
-/// converter bakes the resolved paths into the map directory for later loading.
+/// It complements <see cref="MaterialBuilder"/>, which builds live materials
+/// directly from a catalogue at load time. The manifest lets a saved native map
+/// stay self-describing without the catalogue.
 /// </summary>
 public static class ManifestBuilder
 {

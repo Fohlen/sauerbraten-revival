@@ -12,7 +12,7 @@ namespace SauerbratenRevival.World.Ogz;
 ///   <item><description>
 ///     <b><c>assets/packages/</c></b> — the project's own converted copies. Maps
 ///     normalised to v32+ by <c>tools/ogztool/convert-all-maps.sh</c> land here
-///     (see docs/ogz-import.md). This is the canonical tree: it always holds the
+///     (see docs/adr/0006-ogz-import.md). This is the canonical tree: it always holds the
 ///     newest importable format, so it wins over the dump.
 ///   </description></item>
 ///   <item><description>

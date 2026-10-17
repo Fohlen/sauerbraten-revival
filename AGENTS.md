@@ -3,8 +3,9 @@
 **Sauerbraten Revival** — a port/revival of *Cube 2: Sauerbraten* in **Godot 4
 (.NET / C#)**. Goal: recreate the original's movement/feel first, then the in-game
 editor (a defining feature), then the game. MVP modes: **insta CTF, effic CTF,
-FFA, coop edit**. World is a native runtime-mutable **octree**. Legacy content is
-converted **once, offline**; the game **never** loads `.ogz` or CubeScript.
+FFA, coop edit**. World is a native runtime-mutable **octree**. Classic maps ship
+as original `.ogz` files and are read at load time; there is **no CubeScript** and
+no offline converter.
 
 ## Source of truth
 
@@ -15,7 +16,7 @@ converted **once, offline**; the game **never** loads `.ogz` or CubeScript.
 | Movement/physics fidelity | [docs/movement-physics.md](docs/movement-physics.md), [docs/adr/0003-movement-verification.md](docs/adr/0003-movement-verification.md) |
 | Character animation / MD5 models | [docs/adr/0004-character-animation.md](docs/adr/0004-character-animation.md) | MD5 skeletal models: engine model, why runtime `Skeleton3D` mapping deformed the mesh, and the baked GLB approach. |
 | Editor + command system | [docs/editor-and-commands.md](docs/editor-and-commands.md) |
-| OGZ import / native format | [docs/ogz-import.md](docs/ogz-import.md) |
+| Classic content (OGZ) import | [docs/adr/0006-ogz-import.md](docs/adr/0006-ogz-import.md) |
 | Rendering strategy | [docs/rendering.md](docs/rendering.md) |
 | Lighting (runtime) | [docs/adr/0002-radiance-hints.md](docs/adr/0002-radiance-hints.md) |
 | Networking model | [docs/authority-and-latency.md](docs/authority-and-latency.md) |
@@ -51,7 +52,7 @@ scripts/sources that produce them belong in git.
 | Path | Contents |
 | --- | --- |
 | `docs/` | Design, architecture, roadmap, physics reference |
-| `scenes/` | Godot scenes (`Main.tscn` entry; `editor_scene.tscn` dev viewer; `player_scene.tscn` play scene; `converter.tscn`) |
+| `scenes/` | Godot scenes (`Main.tscn` entry; `editor_scene.tscn` dev viewer; `player_scene.tscn` play scene; `empty_map.tscn`) |
 | `scripts/` | Game entry (`Main.cs`) |
 | `World/` | World core: octree (`Octa`, `CubeGeometry`), `Ogz/` reader + world/player, `Physics/` movement + collision, `Meshing/`, `Materials/`, `Entities/`, `Commands/`, `Editor/`, `Save/` |
 | `test/` | Unit tests, run by GoDotTest (compiled into the game assembly) |
@@ -59,7 +60,7 @@ scripts/sources that produce them belong in git.
 | `tools/model-import/` | Convert original models → glTF + manifest (git-ignored output) |
 | `tools/texture-import/` | Import original textures → Godot Resources (git-ignored output) |
 | `tools/refharness/` | A1/A2 movement harness, instrumented client, [reference patches](tools/refharness/patches/README.md) |
-| `tools/ogztool/` | OGZ [import pipeline](tools/ogztool/README.md): metadata export + pre-v32 → v33 conversion |
+| `tools/ogztool/` | Classic-map [prep](tools/ogztool/convert-maps.md) + [tool](tools/ogztool/README.md): metadata export + pre-v32 → v33 conversion |
 | `tools/octaprobe/`, `tools/rayprobe/` | Engine ground-truth probes for octree / raycube |
 | `SauerbratenRevival.csproj` | C# project (Godot .NET) |
 
@@ -119,12 +120,13 @@ clones, and `EmptyMap` can reuse a built-once seed world (enabled via
 
 ## Inspecting a map (dev viewer)
 
-`scenes/editor_scene.tscn` reads a legacy `.ogz` from the reference dump, builds
-the runtime octree, chunks it and displays it with diffuse textures resolved from
-the committed catalogue (`metadata-catalogue/<map>.json`) plus the cubemap skybox.
-Defaults to church51 (`OgzPath` overrides). It is a `[Tool]` scene, so it also
-builds in the editor viewport. This is **not** the shipping path — the importer
-converts to the native format later.
+`scenes/editor_scene.tscn` reads a classic `.ogz` (from `assets/packages/` first,
+then the reference dump), builds the runtime octree, chunks it and displays it
+with diffuse textures resolved from the committed catalogue
+(`metadata-catalogue/<map>.json`) plus the cubemap skybox. Defaults to church51
+(`OgzPath` overrides). It is a `[Tool]` scene, so it also builds in the editor
+viewport. The play scene uses the same reader; see
+[ADR 0006](docs/adr/0006-ogz-import.md).
 
 Import original content once (both outputs git-ignored, both Godot Resources):
 
@@ -177,8 +179,10 @@ specific.
 - **All world mutations are commands** (`WorldCommand`), shared by editor, game
   modes and scripts — this powers live editing, crumbling geometry and networked
   world changes ([features.md § dynamic world geometry](docs/features.md#cross-cutting-dynamic-world-geometry)).
-- **No CubeScript, no runtime `.ogz`.** Config is Godot-native
-  (`ProjectSettings`, `ConfigFile`, `Resource`, `InputMap`).
+- **No CubeScript.** Classic `.ogz` is read at load time by the ported reader
+  ([ADR 0006](docs/adr/0006-ogz-import.md)); maps created in the editor use the
+  native `Resource` format. Config is Godot-native (`ProjectSettings`,
+  `ConfigFile`, `Resource`, `InputMap`).
 - **Server-authoritative** networking is a hard requirement (leaderboard) — see
   [authority-and-latency.md](docs/authority-and-latency.md).
 - Preserve the engine rules listed in
