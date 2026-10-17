@@ -51,6 +51,12 @@ public sealed class EditCursor
     /// <summary>Corner-exact drag mode (mirrors <c>selectcorners</c>).</summary>
     public bool SelectCorners { get; set; }
 
+    /// <summary>Selected child count (mirrors engine selchildcount in octaedit.cpp).</summary>
+    public int SelChildCount { get; private set; }
+
+    /// <summary>Selected child material (mirrors engine selchildmat in octaedit.cpp).</summary>
+    public ushort SelChildMat { get; private set; }
+
     private Vector3I _lastCur;
     private Vector3I _lastCor;
 
@@ -256,8 +262,69 @@ public sealed class EditCursor
         int sR = Octa.R[sd], sC = Octa.C[sd];
         Selection.Corner = (Cor[sR] - (Lu[sR] * 2) / GridSize) + (Cor[sC] - (Lu[sC] * 2) / GridSize) * 2;
 
+        int mag = LuSize / GridSize;
+        RecalculateSelChild(octa, c, mag);
+
         _lastCur = Cur;
         _lastCor = Cor;
+    }
+
+    /// <summary>
+    /// Recalculates selchildcount and selchildmat matching <c>octaedit.cpp:506-513: countselchild</c>.
+    /// </summary>
+    public void RecalculateSelChild(Octa octa, Cube? c = null, int mag = 1)
+    {
+        int count = 0;
+        int mat = -1;
+        Vector3I selOrigin = Selection.O;
+        Vector3I selSize = new Vector3I(Selection.S.X * Selection.Grid, Selection.S.Y * Selection.Grid, Selection.S.Z * Selection.Grid);
+
+        void Count(Cube[] cubes, Vector3I cor, int size)
+        {
+            Vector3I bbmin = selOrigin;
+            Vector3I bbmax = selOrigin + selSize;
+
+            int p = 0xFF;
+            Vector3I mid = new Vector3I(cor.X + size, cor.Y + size, cor.Z + size);
+            if (mid.Z <= bbmin.Z) p &= 0xF0; else if (mid.Z >= bbmax.Z) p &= 0x0F;
+            if (mid.Y <= bbmin.Y) p &= 0xCC; else if (mid.Y >= bbmax.Y) p &= 0x33;
+            if (mid.X <= bbmin.X) p &= 0xAA; else if (mid.X >= bbmax.X) p &= 0x55;
+
+            for (int i = 0; i < 8; i++)
+            {
+                if ((p & (1 << i)) == 0) continue;
+                Vector3I o = new Vector3I(
+                    cor.X + ((i & 1) >> 0) * size,
+                    cor.Y + ((i & 2) >> 1) * size,
+                    cor.Z + ((i & 4) >> 2) * size
+                );
+
+                if (cubes[i].Children != null)
+                {
+                    Count(cubes[i].Children!, o, size / 2);
+                }
+                else
+                {
+                    count++;
+                    if (cubes[i].Material != Octa.MAT_AIR && mat != Octa.MAT_AIR)
+                    {
+                        if (mat < 0) mat = cubes[i].Material;
+                        else if (mat != cubes[i].Material) mat = Octa.MAT_AIR;
+                    }
+                }
+            }
+        }
+
+        Count(octa.WorldRoot, Vector3I.Zero, octa.WorldSize / 2);
+
+        if (c != null && mag >= 1 && count == 1)
+        {
+            mat = c.Material;
+            if (mag > 1) count = -mag;
+        }
+
+        SelChildCount = count;
+        SelChildMat = mat > 0 ? (ushort)mat : (ushort)0;
     }
 
     /// <summary>octaedit.cpp:329 <c>updateselection</c> — grow the selection to the cursor span.</summary>

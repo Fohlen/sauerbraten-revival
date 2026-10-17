@@ -1,5 +1,6 @@
 using Chickensoft.GoDotTest;
 using Godot;
+using SauerbratenRevival.World;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Hud;
 using SauerbratenRevival.World.Ogz;
@@ -637,6 +638,147 @@ public class StatusBarRendererTest : GoTestBase
         hud.GameClock = false;
         hud.UpdateGameClock();
         TestAssert.False(clockLabel.Visible, "Game clock hidden when GameClock is false");
+
+        canvas.Free();
+    }
+
+    [Test]
+    public void StatusColorMatchesEnginePrivilegeAndState()
+    {
+        // Normal alive player (privilege 0) -> 0xFFFFFF (white)
+        Color normal = StatusBarRenderer.GetStatusColor(0, isDead: false);
+        TestAssert.Equal(Colors.White, normal, "Normal player is white");
+
+        // Normal dead player -> 0x606060 (dim gray)
+        Color deadNormal = StatusBarRenderer.GetStatusColor(0, isDead: true);
+        Color expectedDead = new Color(0x60 / 255f, 0x60 / 255f, 0x60 / 255f);
+        TestAssert.True(Mathf.IsEqualApprox(deadNormal.R, expectedDead.R), "Dead normal red matches 0x60");
+
+        // Master alive (privilege 1) -> 0x40FF80 (green)
+        Color master = StatusBarRenderer.GetStatusColor(1, isDead: false);
+        Color expectedMaster = new Color(0x40 / 255f, 0xFF / 255f, 0x80 / 255f);
+        TestAssert.True(Mathf.IsEqualApprox(master.G, expectedMaster.G), "Master green matches 0xFF");
+
+        // Auth alive (privilege 2) -> 0xC040C0 (purple)
+        Color auth = StatusBarRenderer.GetStatusColor(2, isDead: false);
+        Color expectedAuth = new Color(0xC0 / 255f, 0x40 / 255f, 0xC0 / 255f);
+        TestAssert.True(Mathf.IsEqualApprox(auth.R, expectedAuth.R), "Auth red matches 0xC0");
+
+        // Admin alive (privilege 3) -> 0xFF8000 (orange)
+        Color admin = StatusBarRenderer.GetStatusColor(3, isDead: false);
+        Color expectedAdmin = new Color(0xFF / 255f, 0x80 / 255f, 0x00 / 255f);
+        TestAssert.True(Mathf.IsEqualApprox(admin.R, expectedAdmin.R), "Admin red matches 0xFF");
+
+        // Admin dead -> ((0xFF8000 >> 1) & 0x7F7F7F) == 0x7F4000
+        Color adminDead = StatusBarRenderer.GetStatusColor(3, isDead: true);
+        Color expectedAdminDead = new Color(0x7F / 255f, 0x40 / 255f, 0x00 / 255f);
+        TestAssert.True(Mathf.IsEqualApprox(adminDead.R, expectedAdminDead.R), "Admin dead dim red matches 0x7F");
+    }
+
+    [Test]
+    public void LayoutSpectatorOverlayPositionsTextCorrectly()
+    {
+        // 1920x1080 resolution
+        // scale = 1080 / 1800 = 0.6
+        // refW = 1920 / 0.6 = 3200
+        // pw = 60, ph = 64
+        // tw = 9 * 30 = 270, th = 64
+        // target = "unnamed" (7 chars) -> fw = 7 * 30 = 210, fh = 64
+        // specX = (3200 - 270 - 60) * 0.6 = 2870 * 0.6 = 1722
+        // specY = (1650 - 64 - 64) * 0.6 = 1522 * 0.6 = 913.2
+        // followX = (3200 - 210 - 60) * 0.6 = 2930 * 0.6 = 1758
+        // followY = (1650 - 64) * 0.6 = 1586 * 0.6 = 951.6
+        var (specPos, specSize, followPos, followSize) = StatusBarRenderer.LayoutSpectatorOverlay(
+            1920f, 1080f, "unnamed");
+
+        TestAssert.Near(1722f, specPos.X, 0.05f, "specPos.X is 1722");
+        TestAssert.Near(913.2f, specPos.Y, 0.05f, "specPos.Y is 913.2");
+        TestAssert.Near(1758f, followPos.X, 0.05f, "followPos.X is 1758");
+        TestAssert.Near(951.6f, followPos.Y, 0.05f, "followPos.Y is 951.6");
+    }
+
+    [Test]
+    public void FormatEditCubeAndMaterialDescriptionMatchEngine()
+    {
+        // Air / no material
+        string descAir = StatusBarRenderer.GetMaterialDesc(Octa.MAT_AIR, ": ");
+        TestAssert.Equal("", descAir, "Air returns empty description");
+
+        // Water
+        string descWater = StatusBarRenderer.GetMaterialDesc(Octa.MAT_WATER, ": ");
+        TestAssert.Equal(": water", descWater, "Water returns ': water'");
+
+        // Lava + Clip + Death
+        ushort combo = (ushort)(Octa.MAT_LAVA | Octa.MAT_CLIP | Octa.MAT_DEATH);
+        string descCombo = StatusBarRenderer.GetMaterialDesc(combo, ": ");
+        TestAssert.Equal(": lava, clip, death", descCombo, "Multi-material returns comma-separated list");
+
+        // FormatEditCube single child
+        string cube1 = StatusBarRenderer.FormatEditCube(1, Octa.MAT_AIR);
+        TestAssert.Equal("cube 1", cube1, "Single child cube text is 'cube 1'");
+
+        // FormatEditCube subdivided (negative count from mag > 1)
+        string cubeSub = StatusBarRenderer.FormatEditCube(-4, Octa.MAT_WATER);
+        TestAssert.Equal("cube 1/4: water", cubeSub, "Subdivided cube text is 'cube 1/4: water'");
+
+        // Quick edit stats
+        string stats = StatusBarRenderer.FormatEditQuickStats(16, 4, true, new Vector3I(128, 256, 512));
+        TestAssert.True(stats.Contains("grid 16 (power 4)"), "Stats contain grid and power");
+        TestAssert.True(stats.Contains("allfaces"), "Stats contain allfaces");
+        TestAssert.True(stats.Contains("pos (128 256 512)"), "Stats contain pos");
+    }
+
+    [Test]
+    public void HudControllerUpdatesSpectatorAndEditHudNodes()
+    {
+        var player = new MapPlayer();
+        var hud = new HudController
+        {
+            Player = player,
+            IsSpectator = true,
+            FollowingPlayerName = "CubeHero",
+            FollowingPlayerPrivilege = 3, // Admin
+            FollowingPlayerDead = false
+        };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        hud.UpdateSpectatorOverlay();
+
+        var specRoot = hud.GetNodeOrNull<Control>("SpectatorHud");
+        var specLabel = hud.GetNodeOrNull<Label>("SpectatorHud/SpectatorLabel");
+        var followLabel = hud.GetNodeOrNull<Label>("SpectatorHud/FollowingLabel");
+
+        TestAssert.True(specRoot != null && specRoot.Visible, "Spectator HUD root is visible");
+        TestAssert.True(specLabel != null && specLabel.Text == "SPECTATOR", "Spectator label text is SPECTATOR");
+        TestAssert.True(followLabel != null && followLabel.Text == "CubeHero", "Following player label shows CubeHero");
+        TestAssert.True(followLabel!.Visible, "Following player label is visible");
+
+        Color expectedAdmin = StatusBarRenderer.GetStatusColor(3, isDead: false);
+        TestAssert.True(Mathf.IsEqualApprox(followLabel.Modulate.R, expectedAdmin.R), "Followed player color is admin orange");
+
+        // Turn off spectator, enable edit mode
+        hud.IsSpectator = false;
+        hud.UpdateSpectatorOverlay();
+        TestAssert.False(specRoot!.Visible, "Spectator HUD hidden when not spectating");
+
+        hud.IsEditMode = true;
+        hud.EditSelChildCount = -2;
+        hud.EditSelChildMat = Octa.MAT_GLASS;
+        hud.EditGridSize = 32;
+        hud.EditGridPower = 5;
+        hud.EditAllFaces = true;
+        hud.UpdateEditHud();
+
+        var editRoot = hud.GetNodeOrNull<Control>("EditHud");
+        var cubeLabel = hud.GetNodeOrNull<Label>("EditHud/EditCubeLabel");
+        var statsLabel = hud.GetNodeOrNull<Label>("EditHud/EditStatsLabel");
+
+        TestAssert.True(editRoot != null && editRoot.Visible, "Edit HUD root is visible");
+        TestAssert.True(cubeLabel != null && cubeLabel.Text == "cube 1/2: glass", $"Cube label matches 'cube 1/2: glass', got '{cubeLabel?.Text}'");
+        TestAssert.True(statsLabel != null && statsLabel.Text.Contains("grid 32 (power 5)"), "Stats label contains grid power info");
+        TestAssert.True(statsLabel!.Text.Contains("allfaces"), "Stats label contains allfaces");
 
         canvas.Free();
     }

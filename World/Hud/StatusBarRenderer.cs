@@ -402,6 +402,158 @@ public static class StatusBarRenderer
         Vector2 screenSize = new Vector2(twth.X * effectiveScale, twth.Y * effectiveScale);
         return (screenPos, screenSize);
     }
+
+    /// <summary>
+    /// Computes player status color matching engine <c>scoreboard.cpp:150: statuscolor</c>.
+    /// Privilege colors: Admin = 0xFF8000, Auth = 0xC040C0, Master = 0x40FF80.
+    /// If dead, privilege color is dimmed <c>(color >> 1) &amp; 0x7F7F7F</c>, or default dead color is 0x606060.
+    /// </summary>
+    public static Color GetStatusColor(int privilege, bool isDead, uint baseColorRgb = 0xFFFFFF)
+    {
+        uint color = baseColorRgb;
+        if (privilege > 0)
+        {
+            color = privilege >= 3 ? 0xFF8000u : (privilege >= 2 ? 0xC040C0u : 0x40FF80u);
+            if (isDead)
+            {
+                color = (color >> 1) & 0x7F7F7Fu;
+            }
+        }
+        else if (isDead)
+        {
+            color = 0x606060u;
+        }
+
+        float r = ((color >> 16) & 0xFF) / 255.0f;
+        float g = ((color >> 8) & 0xFF) / 255.0f;
+        float b = (color & 0xFF) / 255.0f;
+        return new Color(r, g, b);
+    }
+
+    /// <summary>
+    /// Computes layout positions and sizes for spectator overlay in 1800p space, then scales to screen pixels.
+    /// Matching engine <c>fps.cpp:1064-1077</c>:
+    /// <c>
+    /// text_bounds("  ", pw, ph);
+    /// text_bounds("SPECTATOR", tw, th);
+    /// th = max(th, ph);
+    /// fpsent *f = followingplayer();
+    /// text_bounds(f ? colorname(f) : " ", fw, fh);
+    /// fh = max(fh, ph);
+    /// draw_text("SPECTATOR", w*1800/h - tw - pw, 1650 - th - fh);
+    /// if(f) draw_text(colorname(f), w*1800/h - fw - pw, 1650 - fh, ...);
+    /// </c>
+    /// </summary>
+    public static (Vector2 SpecPos, Vector2 SpecSize, Vector2 FollowPos, Vector2 FollowSize) LayoutSpectatorOverlay(
+        float screenW,
+        float screenH,
+        string targetPlayerName,
+        float refHeight = ReferenceHeight)
+    {
+        float scale = screenH / refHeight;
+        float refW = screenW / scale;
+
+        // pw, ph = text_bounds("  ") -> 2 spaces = 2 * 30 = 60, height = 64
+        float pw = 2.0f * DefaultFontCharWidth;
+        float ph = DefaultFontHeight;
+
+        float tw = "SPECTATOR".Length * DefaultFontCharWidth;
+        float th = Math.Max(DefaultFontHeight, ph);
+
+        float fw = string.IsNullOrEmpty(targetPlayerName) ? DefaultFontCharWidth : targetPlayerName.Length * DefaultFontCharWidth;
+        float fh = Math.Max(DefaultFontHeight, ph);
+
+        float specX = (refW - tw - pw) * scale;
+        float specY = (IconY - th - fh) * scale;
+
+        float followX = (refW - fw - pw) * scale;
+        float followY = (IconY - fh) * scale;
+
+        return (
+            new Vector2(specX, specY),
+            new Vector2(tw * scale, th * scale),
+            new Vector2(followX, followY),
+            new Vector2(fw * scale, fh * scale)
+        );
+    }
+
+    /// <summary>
+    /// Formats material description for cube selection matching engine <c>material.cpp:170: getmaterialdesc</c>.
+    /// Checks MATF_VOLUME|MATF_INDEX, MATF_CLIP, MAT_DEATH, MAT_ALPHA.
+    /// </summary>
+    public static string GetMaterialDesc(ushort mat, string prefix = "")
+    {
+        ushort[] masks = new ushort[] { Octa.MATF_VOLUME | Octa.MATF_INDEX, Octa.MATF_CLIP, Octa.MAT_DEATH, Octa.MAT_ALPHA };
+        string desc = "";
+        for (int i = 0; i < masks.Length; i++)
+        {
+            ushort masked = (ushort)(mat & masks[i]);
+            if (masked != 0)
+            {
+                string? name = FindMaterialName(masked);
+                if (name != null)
+                {
+                    if (desc.Length > 0)
+                        desc += ", ";
+                    else
+                        desc += prefix;
+                    desc += name;
+                }
+            }
+        }
+        return desc;
+    }
+
+    /// <summary>
+    /// Finds material name string matching engine <c>material.cpp:164: findmaterialname</c>.
+    /// </summary>
+    public static string? FindMaterialName(ushort mat)
+    {
+        return mat switch
+        {
+            Octa.MAT_AIR => "air",
+            Octa.MAT_WATER => "water",
+            Octa.MAT_WATER + 1 => "water2",
+            Octa.MAT_WATER + 2 => "water3",
+            Octa.MAT_WATER + 3 => "water4",
+            Octa.MAT_GLASS => "glass",
+            Octa.MAT_GLASS + 1 => "glass2",
+            Octa.MAT_GLASS + 2 => "glass3",
+            Octa.MAT_GLASS + 3 => "glass4",
+            Octa.MAT_LAVA => "lava",
+            Octa.MAT_LAVA + 1 => "lava2",
+            Octa.MAT_LAVA + 2 => "lava3",
+            Octa.MAT_LAVA + 3 => "lava4",
+            Octa.MAT_CLIP => "clip",
+            Octa.MAT_NOCLIP => "noclip",
+            Octa.MAT_GAMECLIP => "gameclip",
+            Octa.MAT_DEATH => "death",
+            Octa.MAT_ALPHA => "alpha",
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Formats edit mode selection cube text matching engine <c>rendergl.cpp:2313</c>:
+    /// <c>draw_textf("cube %s%d%s", FONTH/2, abovehud, selchildcount&lt;0 ? "1/" : "", abs(selchildcount), showmat &amp;&amp; selchildmat &gt; 0 ? getmaterialdesc(selchildmat, ": ") : "");</c>
+    /// </summary>
+    public static string FormatEditCube(int selChildCount, ushort selChildMat, bool showMat = true)
+    {
+        string countPrefix = selChildCount < 0 ? "1/" : "";
+        string matDesc = showMat && selChildMat > 0 ? GetMaterialDesc(selChildMat, ": ") : "";
+        return $"cube {countPrefix}{Math.Abs(selChildCount)}{matDesc}";
+    }
+
+    /// <summary>
+    /// Formats edit mode quick stats and status (e.g. grid size, grid power, allfaces).
+    /// </summary>
+    public static string FormatEditQuickStats(int gridSize, int gridPower, bool allFaces, Vector3I? selPos = null)
+    {
+        string text = $"grid {gridSize} (power {gridPower})";
+        if (allFaces) text += "  allfaces";
+        if (selPos.HasValue) text += $"  pos ({selPos.Value.X} {selPos.Value.Y} {selPos.Value.Z})";
+        return text;
+    }
 }
 
 

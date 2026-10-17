@@ -146,6 +146,50 @@ public partial class HudController : Control
     /// <summary>Current match/engine elapsed timestamp in milliseconds (engine lastmillis). If negative, falls back to Player.LastMillis or Time.GetTicksMsec().</summary>
     public int LastMillis { get; set; } = -1;
 
+    // --- Spectator & Edit Mode HUD ---
+
+    /// <summary>Whether spectator overlay should be drawn (or driven by Player.Entity.State == CsSpectator).</summary>
+    public bool IsSpectator { get; set; }
+
+    /// <summary>Name of target player currently followed in spectator mode (followingplayer()).</summary>
+    public string? FollowingPlayerName { get; set; }
+
+    /// <summary>Privilege level of followed target player (0 = none, 1 = master, 2 = auth, 3 = admin).</summary>
+    public int FollowingPlayerPrivilege { get; set; }
+
+    /// <summary>Whether followed target player is dead.</summary>
+    public bool FollowingPlayerDead { get; set; }
+
+    /// <summary>Base color for followed target player's name (default 0xFFFFFF).</summary>
+    public uint FollowingPlayerColor { get; set; } = 0xFFFFFF;
+
+    /// <summary>Whether the editor mode HUD is active.</summary>
+    public bool IsEditMode { get; set; }
+
+    /// <summary>Current editor grid size (cube units).</summary>
+    public int EditGridSize { get; set; } = 8;
+
+    /// <summary>Current editor grid power (gridsize = 1 &lt;&lt; power).</summary>
+    public int EditGridPower { get; set; } = 3;
+
+    /// <summary>Count of selected children in the edit selection (mirrors selchildcount in octaedit.cpp).</summary>
+    public int EditSelChildCount { get; set; }
+
+    /// <summary>Active selection material (mirrors selchildmat in octaedit.cpp).</summary>
+    public ushort EditSelChildMat { get; set; }
+
+    /// <summary>Whether to show material in cube selection string (showmat in Sauerbraten).</summary>
+    public bool EditShowMat { get; set; } = true;
+
+    /// <summary>Whether allfaces mode is enabled in the editor.</summary>
+    public bool EditAllFaces { get; set; }
+
+    /// <summary>Selection position in the editor for quick stats.</summary>
+    public Vector3I? EditSelPos { get; set; }
+
+    /// <summary>Optional quick edit stats / status string override (or auto-formatted if null).</summary>
+    public string? EditQuickStats { get; set; }
+
     // Quick ammo hud nodes container
     private Control? _ammoHudRoot;
     private readonly System.Collections.Generic.List<TextureRect> _ammoHudIcons = new();
@@ -156,6 +200,16 @@ public partial class HudController : Control
 
     // Game clock / match timer node
     private Label? _gameClockLabel;
+
+    // Spectator overlay nodes
+    private Control? _spectatorRoot;
+    private Label? _spectatorLabel;
+    private Label? _followingLabel;
+
+    // Edit mode HUD nodes
+    private Control? _editHudRoot;
+    private Label? _editCubeLabel;
+    private Label? _editStatsLabel;
 
     public override void _Ready()
     {
@@ -180,6 +234,8 @@ public partial class HudController : Control
         SetupAmmoHudNodes();
         SetupAmmoBarNodes();
         SetupGameClockNode();
+        SetupSpectatorNodes();
+        SetupEditHudNodes();
         UpdateAtlasTextures();
     }
 
@@ -191,6 +247,65 @@ public partial class HudController : Control
             MouseFilter = MouseFilterEnum.Ignore
         };
         AddChild(_gameClockLabel);
+    }
+
+    private void SetupSpectatorNodes()
+    {
+        _spectatorRoot = new Control
+        {
+            Name = "SpectatorHud",
+            MouseFilter = MouseFilterEnum.Ignore,
+            Visible = false
+        };
+        AddChild(_spectatorRoot);
+
+        _spectatorLabel = new Label
+        {
+            Name = "SpectatorLabel",
+            MouseFilter = MouseFilterEnum.Ignore,
+            Text = "SPECTATOR",
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _spectatorRoot.AddChild(_spectatorLabel);
+
+        _followingLabel = new Label
+        {
+            Name = "FollowingLabel",
+            MouseFilter = MouseFilterEnum.Ignore,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _spectatorRoot.AddChild(_followingLabel);
+    }
+
+    private void SetupEditHudNodes()
+    {
+        _editHudRoot = new Control
+        {
+            Name = "EditHud",
+            MouseFilter = MouseFilterEnum.Ignore,
+            Visible = false
+        };
+        AddChild(_editHudRoot);
+
+        _editCubeLabel = new Label
+        {
+            Name = "EditCubeLabel",
+            MouseFilter = MouseFilterEnum.Ignore,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _editHudRoot.AddChild(_editCubeLabel);
+
+        _editStatsLabel = new Label
+        {
+            Name = "EditStatsLabel",
+            MouseFilter = MouseFilterEnum.Ignore,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _editHudRoot.AddChild(_editStatsLabel);
     }
 
     private void SetupStatusBarNodes()
@@ -428,6 +543,8 @@ public partial class HudController : Control
         UpdateCrosshair();
         UpdateStatusBar();
         UpdateGameClock();
+        UpdateSpectatorOverlay();
+        UpdateEditHud();
     }
 
     /// <summary>Updates crosshair position, texture, size and modulation.</summary>
@@ -869,6 +986,111 @@ public partial class HudController : Control
             _ => HorizontalAlignment.Center
         };
         _gameClockLabel.VerticalAlignment = VerticalAlignment.Center;
+    }
+
+    /// <summary>
+    /// Updates spectator mode overlay ("SPECTATOR" and followed player name)
+    /// matching engine <c>fps.cpp:1064-1077</c>.
+    /// </summary>
+    public void UpdateSpectatorOverlay()
+    {
+        if (_spectatorRoot == null || _spectatorLabel == null || _followingLabel == null) return;
+
+        bool isSpec = IsSpectator || (Player != null && Player.Entity.State == PhysEnt.CsSpectator);
+        if (!isSpec)
+        {
+            _spectatorRoot.Visible = false;
+            return;
+        }
+
+        Vector2 viewportSize = GetViewportRect().Size;
+        if (viewportSize.X <= 0 || viewportSize.Y <= 0) return;
+
+        _spectatorRoot.Visible = true;
+
+        float scale = viewportSize.Y / StatusBarRenderer.ReferenceHeight;
+        int fontSize = Mathf.Max(12, (int)(StatusBarRenderer.DefaultFontHeight * scale));
+
+        string targetName = FollowingPlayerName ?? "";
+        var (specPos, specSize, followPos, followSize) = StatusBarRenderer.LayoutSpectatorOverlay(
+            viewportSize.X,
+            viewportSize.Y,
+            targetName,
+            StatusBarRenderer.ReferenceHeight);
+
+        _spectatorLabel.Position = specPos;
+        _spectatorLabel.Size = specSize;
+        _spectatorLabel.AddThemeFontSizeOverride("font_size", fontSize);
+
+        if (!string.IsNullOrEmpty(targetName))
+        {
+            _followingLabel.Visible = true;
+            _followingLabel.Text = targetName;
+            _followingLabel.Position = followPos;
+            _followingLabel.Size = followSize;
+            _followingLabel.AddThemeFontSizeOverride("font_size", fontSize);
+
+            Color targetColor = StatusBarRenderer.GetStatusColor(FollowingPlayerPrivilege, FollowingPlayerDead, FollowingPlayerColor);
+            _followingLabel.Modulate = targetColor;
+        }
+        else
+        {
+            _followingLabel.Visible = false;
+        }
+    }
+
+    /// <summary>
+    /// Updates edit mode HUD (cube count, material, and quick stats)
+    /// matching engine <c>rendergl.cpp:2310-2327</c>.
+    /// </summary>
+    public void UpdateEditHud()
+    {
+        if (_editHudRoot == null || _editCubeLabel == null || _editStatsLabel == null) return;
+
+        bool isEdit = IsEditMode || (Player != null && Player.Entity.State == PhysEnt.CsEditing);
+        if (!isEdit)
+        {
+            _editHudRoot.Visible = false;
+            return;
+        }
+
+        Vector2 viewportSize = GetViewportRect().Size;
+        if (viewportSize.X <= 0 || viewportSize.Y <= 0) return;
+
+        _editHudRoot.Visible = true;
+
+        float scale = viewportSize.Y / StatusBarRenderer.ReferenceHeight;
+        int fontSize = Mathf.Max(12, (int)(StatusBarRenderer.DefaultFontHeight * scale));
+
+        // Format cube line
+        string cubeText = StatusBarRenderer.FormatEditCube(EditSelChildCount, EditSelChildMat, EditShowMat);
+        _editCubeLabel.Text = cubeText;
+        _editCubeLabel.AddThemeFontSizeOverride("font_size", fontSize);
+
+        // Format quick edit stats / status
+        string statsText = EditQuickStats ?? StatusBarRenderer.FormatEditQuickStats(EditGridSize, EditGridPower, EditAllFaces, EditSelPos);
+        _editStatsLabel.Text = statsText;
+        _editStatsLabel.AddThemeFontSizeOverride("font_size", fontSize);
+
+        // Layout above bottom status bar matching rendergl.cpp:2310-2327:
+        // Positioned at X = FONTH / 2
+        // cubeText is abovehud - FONTH
+        // quick stats / edithud is abovehud - max(th, FONTH)
+        float fontH = StatusBarRenderer.DefaultFontHeight * scale;
+        float marginX = fontH / 2.0f;
+        float bottomY = StatusBarRenderer.IconY * scale;
+
+        Vector2 statsTextSize = _editStatsLabel.GetCombinedMinimumSize();
+        float statsHeight = Math.Max(statsTextSize.Y, fontH);
+
+        float statsY = bottomY - fontH - statsHeight;
+        float cubeY = bottomY - fontH;
+
+        _editStatsLabel.Position = new Vector2(marginX, statsY);
+        _editStatsLabel.Size = new Vector2(viewportSize.X - marginX * 2, statsHeight);
+
+        _editCubeLabel.Position = new Vector2(marginX, cubeY);
+        _editCubeLabel.Size = new Vector2(viewportSize.X - marginX * 2, fontH);
     }
 }
 

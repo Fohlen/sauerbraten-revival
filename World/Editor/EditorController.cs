@@ -58,6 +58,9 @@ public partial class EditorController : Node3D
     /// <summary>The radiance volume to invalidate after an edit (may be null or shared via Renderer).</summary>
     public Lighting.RadianceVolume? Radiance { get; set; }
 
+    /// <summary>The in-game HUD controller to sync edit mode HUD state to.</summary>
+    public Hud.HudController? Hud { get; set; }
+
     /// <summary>
     /// The currently-selected texture index (the editor's "current texture"), applied
     /// by <c>edittex</c> and the <c>&#96;delta__edit_5&#96;</c> wheel modifier. Set by the M4e
@@ -132,6 +135,17 @@ public partial class EditorController : Node3D
         {
             Cursor.ExtendSelection();
             Cursor.Reorient();
+        }
+
+        if (Hud != null)
+        {
+            Hud.IsEditMode = true;
+            Hud.EditGridSize = Cursor.GridSize;
+            Hud.EditGridPower = Cursor.GridPower;
+            Hud.EditSelChildCount = Cursor.SelChildCount;
+            Hud.EditSelChildMat = Cursor.SelChildMat;
+            Hud.EditAllFaces = AllFaces;
+            Hud.EditSelPos = Cursor.Selection.O;
         }
 
         DrawBox();
