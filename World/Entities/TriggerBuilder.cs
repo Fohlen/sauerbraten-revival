@@ -12,11 +12,12 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 public static class TriggerBuilder
 {
-    public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue = null, ITextureSource? textures = null)
+    public static (Node3D Root, List<JumpPad> JumpPads) BuildTriggers(OgzMap map, MetadataCatalogue? catalogue = null, ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "Triggers" };
         var teleports = new List<Teleport>();
         var destinations = new List<TeleDest>();
+        var jumpPads = new List<JumpPad>();
 
         for (int i = 0; i < map.Entities.Count; i++)
         {
@@ -62,6 +63,7 @@ public static class TriggerBuilder
                         Push = Push(e),
                         Sound = e.Attr4,
                     };
+                    jumpPads.Add(pad);
                     root.AddChild(pad);
                     EntityMarker.Add(pad, textures);
                     break;
@@ -77,8 +79,11 @@ public static class TriggerBuilder
             }
         }
 
-        return root;
+        return (root, jumpPads);
     }
+
+    public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue = null, ITextureSource? textures = null)
+        => BuildTriggers(map, catalogue, textures).Root;
 
     /// <summary>fpsgame/entities.cpp JUMPPAD: <c>((sbyte)attr3*10, (sbyte)attr2*10, attr1*12.5)</c>.</summary>
     public static Vector3 Push(OgzEntity e) =>

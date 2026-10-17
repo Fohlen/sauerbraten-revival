@@ -122,6 +122,7 @@ public partial class OgzMapViewer : Node3D
         World.AddChild(effects);
         player.WeaponEffects = effects;
         player.Items = World.Items;
+        player.JumpPads = World.JumpPads;
         World.Items?.SpawnItems(Game.GameModeCatalog.Get("ffa"), force: true);
 
         // Attach CanvasLayer and HUD controller

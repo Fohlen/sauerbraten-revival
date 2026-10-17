@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
@@ -529,6 +530,106 @@ public class MapPlayerTest : GoTestBase
         TestAssert.Equal(player.SpawnFeet with { Z = player.SpawnFeet.Z + MapPlayer.EyeHeight }, player.Entity.O,
             "position restored to spawn point");
         TestAssert.Equal(90f, player.Entity.Yaw, "yaw restored to spawn yaw");
+
+        player.Free();
+    }
+
+    [Test]
+    public void JumpPadAppliesPushVelocityAndSetsFallingPhysState()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040));
+        Step(player, 200); // settle on floor
+
+        var pad = new JumpPad
+        {
+            Position = new Vector3(3000, 946, 3040),
+            Push = new Vector3(50f, 100f, 150f),
+            Sound = 0,
+        };
+
+        bool triggered = player.ApplyJumpPad(pad, lastMillis: 1000);
+        TestAssert.True(triggered, "jump pad triggered");
+        TestAssert.Equal(pad.Push, player.Entity.Vel, "velocity set to push");
+        TestAssert.Equal(Vector3.Zero, player.Entity.Falling, "falling reset to zero");
+        TestAssert.Equal(Phys.PhysFall, player.Entity.PhysState, "physstate set to PhysFall");
+        TestAssert.Equal(1, player.Entity.TimeInAir, "timeinair set to 1");
+        TestAssert.Equal(EntityType.JumpPad, player.LastPickup, "lastpickup set to JumpPad");
+        TestAssert.Equal(1000, player.LastPickupMillis, "lastpickupmillis set to 1000");
+
+        // Within 300 ms, triggering the jump pad again is rate limited
+        bool retriggered = player.ApplyJumpPad(pad, lastMillis: 1200);
+        TestAssert.False(retriggered, "jump pad rate limited within 300 ms");
+
+        // After 300 ms, triggering succeeds
+        retriggered = player.ApplyJumpPad(pad, lastMillis: 1350);
+        TestAssert.True(retriggered, "jump pad triggers after 300 ms cooldown");
+        TestAssert.Equal(1350, player.LastPickupMillis, "lastpickupmillis updated");
+
+        player.Free();
+    }
+
+    [Test]
+    public void CheckJumpPadsDetectsWithinRadius()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040));
+        Step(player, 200);
+
+        Vector3 feet = player.Entity.FeetPos();
+
+        // One pad too far (> 12 units), one pad in range (< 12 units)
+        var farPad = new JumpPad
+        {
+            Position = feet + new Vector3(15f, 0, 0),
+            Push = new Vector3(0, 0, 100f),
+            Sound = 0,
+        };
+        var closePad = new JumpPad
+        {
+            Position = feet + new Vector3(5f, 0, 0),
+            Push = new Vector3(0, 0, 200f),
+            Sound = 0,
+        };
+
+        player.JumpPads = new[] { farPad, closePad };
+
+        var hit = player.CheckJumpPads(lastMillis: 1000);
+        TestAssert.Equal(closePad, hit, "triggered pad within 12 unit radius");
+        TestAssert.Equal(new Vector3(0, 0, 200f), player.Entity.Vel, "velocity set by close pad");
+
+        player.Free();
+    }
+
+    [Test]
+    public void JumpPadDoesNotTriggerWhenDeadOrFloating()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040));
+        Step(player, 200);
+
+        Vector3 feet = player.Entity.FeetPos();
+        var pad = new JumpPad
+        {
+            Position = feet,
+            Push = new Vector3(0, 0, 150f),
+            Sound = 0,
+        };
+        player.JumpPads = new[] { pad };
+
+        // Dead player should not trigger
+        player.Combat.Armour = 0;
+        player.TakeDamage(100, nowMillis: 500);
+        TestAssert.Equal(PhysEnt.CsDead, player.Entity.State, "player dead");
+        var hit = player.CheckJumpPads(lastMillis: 600);
+        TestAssert.True(hit == null, "dead player does not trigger jump pad");
+
+        // Respawn and float
+        player.Respawn();
+        player.ToggleFloat();
+        TestAssert.True(player.Floating, "player floating");
+        hit = player.CheckJumpPads(lastMillis: 1000);
+        TestAssert.True(hit == null, "floating player does not trigger jump pad");
 
         player.Free();
     }

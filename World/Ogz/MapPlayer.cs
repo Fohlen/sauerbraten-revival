@@ -116,6 +116,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Active item pickups manager for this map/session.</summary>
     public ItemManager? Items { get; set; }
 
+    /// <summary>Active jump pad trigger entities in this map/session.</summary>
+    public IReadOnlyList<JumpPad>? JumpPads { get; set; }
+
     /// <summary>
     /// The visible body model, if any. It must be a <b>sibling</b> of this node (a child
     /// of the same Z-up world node), so that it can be placed at the feet and kept
@@ -169,6 +172,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>Simulation clock in milliseconds (engine <c>lastmillis</c>).</summary>
     public int LastMillis { get; set; }
+
+    /// <summary>Last entity type picked up or triggered (fpsgame/game.h:549 <c>lastpickup</c>).</summary>
+    public int LastPickup { get; set; } = -1;
+
+    /// <summary>Timestamp (ms) of the last entity pickup or trigger (fpsgame/game.h:549 <c>lastpickupmillis</c>).</summary>
+    public int LastPickupMillis { get; set; }
 
     /// <summary>View pitch in degrees (the physics model only uses yaw; pitch is camera-only).</summary>
     public float Pitch { get; private set; }
@@ -807,6 +816,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         Combat.Spawn(Mode ?? GameModeCatalog.Get("ffa"));
         LastHit = 0;
+        LastPickup = -1;
+        LastPickupMillis = 0;
         _bodyAnim = "";
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
@@ -844,6 +855,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             }
 
             Items?.CheckPickups(this, LastMillis);
+            CheckJumpPads(LastMillis);
 
             // Advance active flying rockets (weapon.cpp:523 updateprojectiles)
             for (int i = ActiveRockets.Count - 1; i >= 0; i--)
@@ -1020,6 +1032,54 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Vector3 facing = Movement.VecFromYawPitch(Entity.Yaw + 180f, 0f, 1, 0);
         if (facing.LengthSquared() > 1e-6f)
             model.Basis = Basis.LookingAt(facing, new Vector3(0, 0, 1));
+    }
+
+    /// <summary>
+    /// Checks all active jump pads against the player's feet position, triggering the first reachable pad
+    /// (<c>fpsgame/entities.cpp:342 checkitems</c>).
+    /// </summary>
+    public JumpPad? CheckJumpPads(int lastMillis)
+    {
+        if (!IsAlive || Floating || JumpPads == null) return null;
+
+        Vector3 feet = Entity.FeetPos();
+        for (int i = 0; i < JumpPads.Count; i++)
+        {
+            var pad = JumpPads[i];
+            float dist = pad.Position.DistanceTo(feet);
+            if (dist < 12.0f)
+            {
+                if (ApplyJumpPad(pad, lastMillis))
+                    return pad;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Applies a jump pad impulse and sound effects (<c>fpsgame/entities.cpp:317 trypickup / jumppadeffects</c>).
+    /// Returns false if rate-limited by the 300 ms cooldown.
+    /// </summary>
+    public bool ApplyJumpPad(JumpPad pad, int lastMillis)
+    {
+        if (LastPickup == EntityType.JumpPad && lastMillis - LastPickupMillis < 300)
+            return false;
+
+        LastPickup = EntityType.JumpPad;
+        LastPickupMillis = lastMillis;
+
+        // Sound effect (fpsgame/entities.cpp:231 jumppadeffects)
+        if (pad.Sound >= 0)
+        {
+            PlaySound(GameSound.JumpPad);
+        }
+
+        Entity.Falling = Vector3.Zero;
+        Entity.PhysState = Phys.PhysFall;
+        Entity.TimeInAir = 1;
+        Entity.Vel = pad.Push;
+
+        return true;
     }
 
     /// <summary>

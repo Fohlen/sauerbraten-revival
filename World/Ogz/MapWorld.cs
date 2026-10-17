@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Godot;
 using SauerbratenRevival.World.Entities;
@@ -56,6 +57,9 @@ public partial class MapWorld : Node3D
 
     /// <summary>The item manager holding map item pickups.</summary>
     public ItemManager? Items { get; private set; }
+
+    /// <summary>Active jump pad trigger entities in this map.</summary>
+    public IReadOnlyList<JumpPad> JumpPads { get; private set; } = System.Array.Empty<JumpPad>();
 
     /// <summary>Optional settings overriding default radiance hints volume quality.</summary>
     public Lighting.RadianceSettings? RadianceSettings { get; set; }
@@ -139,7 +143,9 @@ public partial class MapWorld : Node3D
         AddChild(PlayerStartBuilder.Build(map, textures));
         AddChild(ModeEntityBuilder.Build(map, catalogue, modelCatalog, textures));
         AddChild(MonsterBuilder.Build(map, modelCatalog, textures));
-        AddChild(TriggerBuilder.Build(map, catalogue, textures));
+        var (triggers, jumpPads) = TriggerBuilder.BuildTriggers(map, catalogue, textures);
+        JumpPads = jumpPads;
+        AddChild(triggers);
         Items = ItemBuilder.Build(map, modelCatalog, textures);
         AddChild(Items);
         AddChild(ParticleBuilder.Build(map, textures));
