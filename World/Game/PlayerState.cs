@@ -1,4 +1,5 @@
 using System;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.World.Game;
@@ -64,6 +65,91 @@ public sealed class PlayerState
     /// <summary>Engine <c>hasammo(gun, exclude=-1)</c>.</summary>
     public bool HasAmmo(int gun, int exclude = -1)
         => gun >= 0 && gun < Guns.Count && gun != exclude && Ammo[gun] > 0;
+
+    /// <summary>Engine <c>hasmaxammo(type)</c> (fpsgame/game.h:390).</summary>
+    public bool HasMaxAmmo(int type)
+    {
+        if (type < ItemStats.FirstItemType || type >= ItemStats.FirstItemType + ItemStats.Count) return false;
+        ItemStat isStat = ItemStats.Get(type);
+        if (isStat.Info < 0) return false;
+        return Ammo[isStat.Info] >= isStat.Max;
+    }
+
+    /// <summary>
+    /// Engine <c>canpickup(type)</c> (fpsgame/game.h:395). Returns true if this player
+    /// can pick up the specified item type based on current health, armour or ammo.
+    /// </summary>
+    public bool CanPickup(int type)
+    {
+        if (type < ItemStats.FirstItemType || type >= ItemStats.FirstItemType + ItemStats.Count) return false;
+        ItemStat stat = ItemStats.Get(type);
+        switch (type)
+        {
+            case EntityType.HealthBoost:
+                return MaxHealth < stat.Max || Health < MaxHealth;
+            case EntityType.Health:
+                return Health < MaxHealth;
+            case EntityType.GreenArmour:
+                // (100h/100g only absorbs 200 damage)
+                if (ArmourType == ArmourType.Yellow && Armour >= 100) return false;
+                goto case EntityType.YellowArmour;
+            case EntityType.YellowArmour:
+                return ArmourType == ArmourType.Blue || Armour < stat.Max;
+            case EntityType.QuadDamage:
+                return QuadMillis < stat.Max;
+            default:
+                return Ammo[stat.Info] < stat.Max;
+        }
+    }
+
+    /// <summary>
+    /// Engine <c>pickup(type)</c> (fpsgame/game.h:412). Updates player state (health,
+    /// armour, quad duration or weapon ammo) from an item pickup.
+    /// </summary>
+    public void Pickup(int type)
+    {
+        if (type < ItemStats.FirstItemType || type >= ItemStats.FirstItemType + ItemStats.Count) return;
+        ItemStat stat = ItemStats.Get(type);
+        switch (type)
+        {
+            case EntityType.HealthBoost:
+                MaxHealth = Math.Min(MaxHealth + stat.Info, stat.Max);
+                Health = Math.Min(Health + stat.Add, MaxHealth);
+                break;
+            case EntityType.Health:
+                Health = Math.Min(Health + stat.Add, MaxHealth);
+                break;
+            case EntityType.GreenArmour:
+            case EntityType.YellowArmour:
+                Armour = Math.Min(Armour + stat.Add, stat.Max);
+                ArmourType = (ArmourType)stat.Info;
+                break;
+            case EntityType.QuadDamage:
+                QuadMillis = Math.Min(QuadMillis + stat.Add, stat.Max);
+                break;
+            default:
+                Ammo[stat.Info] = Math.Min(Ammo[stat.Info] + stat.Add, stat.Max);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Engine <c>checkquad(time, d)</c> (fpsgame/entities.cpp:348). Decrements active
+    /// quad damage countdown and returns true if quad damage expired this tick.
+    /// </summary>
+    public bool CheckQuad(int timeMillis)
+    {
+        if (QuadMillis > 0)
+        {
+            QuadMillis -= timeMillis;
+            if (QuadMillis <= 0)
+            {
+                QuadMillis = 0;
+                return true;
+            }
+        }
+        return false;
+    }
 
     /// <summary>
     /// Engine <c>fpsstate::dodamage(damage)</c>: armour absorbs <c>(damage*(armourtype+1)*25)/100</c>,

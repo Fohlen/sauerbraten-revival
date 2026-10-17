@@ -393,6 +393,10 @@ Remaining:
       - [ ] **Radial splash damage & self-push** (`radialeffect` / `explode`): distance-attenuated damage `(damage * (1 - dist / (1.5 * exprad)))`, self-damage halving (`EXP_SELFDAMDIV = 2`), self-push amplification (`EXP_SELFPUSH = 2.5`), rocket jump impulse mechanics.
       - [ ] **Rocket projectiles** (`projectile`, `projsplash`): linear flight at speed 320, dynamic collision against world octree & candidate bounding cylinders, visual fireball/spark trail and impact detonation.
       - [ ] **Grenade bouncers** (`bouncer`, `BounceBody`): wire existing `BounceBody.Kind.Grenade` physics to weapon firing, fuse timer (`ttl = 1500`), detonation on timeout or target contact, and bounce reflections.
+- [x] Item pickups & respawns.
+      - [x] **Item state and rules** (`PlayerState.CanPickup`, `Pickup`, `HasMaxAmmo`, `CheckQuad`): faithful port of `fpsgame/game.h` item mechanics (health, boost, armour absorption hierarchy, quad damage countdown, ammo caps).
+      - [x] **Item manager and respawn system** (`ItemManager`, `Item`): ports `spawntime`, `delayspawn`, `canspawnitem`, `spawnitems`, and `checkitems` (12 unit pickup radius, scaling respawn delays, delayed armour/boost/quad spawns, `NoItems`/`NoAmmo` mode filtering).
+      - [x] **Visual animation and audio** (`Item.UpdateVisual`): smooth sinusoidal vertical bobbing (`1 + sin(lastmillis/100 + x + y)/20`) and 36-degree/s yaw spinning (`lastmillis/10.0`), item pickup/spawn sounds (`S_ITEM*`, `S_ITEMSPAWN`, `S_PUPOUT`), and voice lines (`S_V_BOOST`, `S_V_QUAD`). Asserted by `test/ItemPickupTest.cs`.
 - [ ] Flags and capture logic (CTF).
 - [ ] Scoring, respawns, spawn selection.
 - [ ] HUD.

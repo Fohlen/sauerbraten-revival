@@ -13,9 +13,9 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 public static class ItemBuilder
 {
-    public static Node3D Build(OgzMap map, ModelCatalog? models = null, ITextureSource? textures = null)
+    public static ItemManager Build(OgzMap map, ModelCatalog? models = null, ITextureSource? textures = null)
     {
-        var root = new Node3D { Name = "Items" };
+        var root = new ItemManager { Name = "Items" };
         var skinCache = new Dictionary<string, Material>();
 
         foreach (var (i, e) in map.Where(e => ModelName(e.Type) != null))
@@ -27,7 +27,9 @@ public static class ItemBuilder
             {
                 Name = $"Item_{i}",
                 Position = e.Position,
+                BasePosition = e.Position,
                 ItemType = e.Type,
+                ItemIndex = i,
                 ItemName = EntityType.Name(e.Type),
                 GlbPath = info?.GlbPath,
                 GlbOsPath = info?.GlbOsPath,
@@ -36,7 +38,7 @@ public static class ItemBuilder
                 SkinMaterial = ModelSkin.Build(info, textures, skinCache),
             };
             EntityFacing.ApplyYaw(item, 0);
-            root.AddChild(item);
+            root.AddItem(item);
             EntityMarker.Add(item, textures);
         }
         return root;

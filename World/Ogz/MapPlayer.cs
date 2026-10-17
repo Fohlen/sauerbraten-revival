@@ -98,18 +98,30 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public bool HidePlaceholderBody { get; set; }
 
-    /// <summary>When true, ammo is not consumed when firing and weapons always have ammo.</summary>
-    [Export] public bool UnlimitedAmmo { get; set; } = false;
+    /// <summary>Active game mode info for this player.</summary>
+    public GameModeInfo? Mode { get; set; }
+
+    /// <summary>Saved spawn position at player's feet (physics.cpp entinmap).</summary>
+    public Vector3 SpawnFeet { get; set; }
+
+    /// <summary>Saved spawn yaw in degrees.</summary>
+    public float SpawnYaw { get; set; }
+
+    /// <summary>Minimum wait (ms) after death before respawn is allowed (fpsgame/fps.cpp:354).</summary>
+    [Export] public int SpawnWaitMillis { get; set; } = 500;
 
     /// <summary>Default weapon selected on spawn/respawn.</summary>
     [Export] public Gun DefaultGun { get; set; } = Gun.Pistol;
 
+    /// <summary>Active item pickups manager for this map/session.</summary>
+    public ItemManager? Items { get; set; }
+
     /// <summary>
     /// The visible body model, if any. It must be a <b>sibling</b> of this node (a child
     /// of the same Z-up world node), so that it can be placed at the feet and kept
-	/// upright independently of the camera's view pitch.
-	/// </summary>
-	public PlayerModel? PlayerModel { get; set; }
+    /// upright independently of the camera's view pitch.
+    /// </summary>
+    public PlayerModel? PlayerModel { get; set; }
 
     /// <summary>The local player's first-person hands/weapon, hidden outside first person.</summary>
     public HudgunModel? Hudgun { get; set; }
@@ -205,10 +217,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>
-    /// Port the original's horizontal <see cref="Fov"/> onto the Godot camera as a
-    /// vertical FOV (Godot <c>Fov</c> is vertical under the default KeepHeight mode).
-    /// </summary>
-    public void ApplyFov(Camera3D camera)
+	/// Port the original's horizontal <see cref="Fov"/> onto the Godot camera as a
+	/// vertical FOV (Godot <c>Fov</c> is vertical under the default KeepHeight mode).
+	/// </summary>
+	public void ApplyFov(Camera3D camera)
     {
         float aspect = (float)camera.GetViewport().GetVisibleRect().Size.X
                      / (float)camera.GetViewport().GetVisibleRect().Size.Y;
@@ -231,6 +243,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public void Setup(Octa octa, Vector3 spawnFeet, float yawDegrees)
     {
         _phys = new OctaPhysics(octa);
+        SpawnFeet = spawnFeet;
+        SpawnYaw = yawDegrees;
         Entity.Type = Phys.EntPlayer;
         Entity.O = spawnFeet with { Z = spawnFeet.Z + EyeHeight };
         Entity.Yaw = yawDegrees;
@@ -238,7 +252,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         LastMillis = (int)Time.GetTicksMsec();
         Initialized = true;
         _phys.DynEnts.Add(Entity);
-        SelectWeapon(DefaultGun);
+        Combat.Spawn(Mode ?? GameModeCatalog.Get("ffa"));
+        SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
         if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
     }
@@ -264,6 +279,11 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             {
                 if (mb.ButtonIndex == MouseButton.Left)
                 {
+                    if (mb.Pressed && Entity.State == PhysEnt.CsDead)
+                    {
+                        TryRespawn();
+                        return;
+                    }
                     Combat.Attacking = mb.Pressed;
                     if (mb.Pressed) TryAttack();
                 }
@@ -310,9 +330,19 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         // NOTE: strafe is negated relative to dir() because the same Godot/macOS
         // screen-X handedness that flips mouse yaw (see ApplyMouse) also flips the
         // engine's strafe sign, so A/D would otherwise be swapped.
-        Entity.Move = (Input.IsActionPressed("move_forward") ? 1 : 0) - (Input.IsActionPressed("move_back") ? 1 : 0);
-        Entity.Strafe = (Input.IsActionPressed("strafe_right") ? 1 : 0) - (Input.IsActionPressed("strafe_left") ? 1 : 0);
-        Entity.Jumping = Input.IsActionPressed("jump");
+        if (Entity.State != PhysEnt.CsDead)
+        {
+            Entity.Move = (Input.IsActionPressed("move_forward") ? 1 : 0) - (Input.IsActionPressed("move_back") ? 1 : 0);
+            Entity.Strafe = (Input.IsActionPressed("strafe_right") ? 1 : 0) - (Input.IsActionPressed("strafe_left") ? 1 : 0);
+            Entity.Jumping = Input.IsActionPressed("jump");
+        }
+        else
+        {
+            Entity.Move = 0;
+            Entity.Strafe = 0;
+            Entity.Jumping = false;
+            if (Input.IsActionJustPressed("jump")) TryRespawn();
+        }
 
         // Toggle spectator/edit float (physics.cpp:5682 — CS_EDITING/CS_SPECTATOR
         // make moveplayer() fly). pitch feeds movement while floating (see
@@ -339,10 +369,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     private int _lastPainSeen = -1;
 
     /// <summary>
-	/// Play the body clip matching the current state, mirroring the engine's
-	/// <c>renderclient</c> animation selection (rendermodel.cpp:1060-1110).
-	/// </summary>
-	private void UpdateBodyAnim()
+    /// Play the body clip matching the current state, mirroring the engine's
+    /// <c>renderclient</c> animation selection (rendermodel.cpp:1060-1110).
+    /// </summary>
+    private void UpdateBodyAnim()
     {
         if (PlayerModel is not { } model) return;
         string name = SelectBodyAnim();
@@ -470,7 +500,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             int next = (current + i * step) % count;
             if (next < 0) next += count;
-            if (UnlimitedAmmo || Combat.HasAmmo(next) || next == (int)Gun.Fist)
+            if (Combat.HasAmmo(next) || next == (int)Gun.Fist)
             {
                 SelectWeapon((Gun)next);
                 return;
@@ -483,20 +513,20 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public bool TryAttack(int? nowMillis = null, IReadOnlyList<IHitscanTarget>? targets = null)
     {
+        int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
         if (Entity.State != PhysEnt.CsAlive)
         {
             // If dead, pressing attack triggers respawn (fps.cpp:376)
             if (Entity.State == PhysEnt.CsDead)
-                Respawn();
+                TryRespawn(now);
             return false;
         }
 
-        int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
         LastMillis = now;
         if (now - Combat.LastAction < Combat.GunWait) return false;
 
         var weapon = WeaponCatalog.Get((Gun)Combat.GunSelect);
-        if (!UnlimitedAmmo && Combat.GunSelect != (int)Gun.Fist && !Combat.HasAmmo(Combat.GunSelect))
+        if (Combat.GunSelect != (int)Gun.Fist && !Combat.HasAmmo(Combat.GunSelect))
         {
             Combat.GunWait = 600; // weapon.cpp:788 msgsound(S_NOAMMO); d->gunwait = 600;
             PlaySound(GameSound.NoAmmo);
@@ -507,7 +537,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Combat.LastAction = now;
         Combat.LastAttackGun = Combat.GunSelect;
         Combat.GunWait = weapon.AttackDelay;
-        if (!UnlimitedAmmo && Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
+        if (Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
             Combat.Ammo[Combat.GunSelect]--;
 
         // Play weapon firing sound (weapon.cpp:672 playsound(sound))
@@ -706,28 +736,80 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Apply damage to the player, updating health and lastpain timestamp.</summary>
     public void TakeDamage(int damage, int? nowMillis = null)
     {
+        if (Entity.State == PhysEnt.CsDead) return;
+
         int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
         LastMillis = now;
         Combat.LastPain = now;
         Combat.DoDamage(damage);
         if (Combat.Health <= 0)
         {
-            Combat.Health = 0;
-            Entity.State = PhysEnt.CsDead;
-            Entity.Dead = true;
+            Die(now);
         }
+        else
+        {
+            UpdateBodyAnim();
+        }
+    }
+
+    /// <summary>Kill the player (engine <c>deathstate</c>, fpsgame/fps.cpp:425).</summary>
+    public void Die(int? nowMillis = null)
+    {
+        int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
+        LastMillis = now;
+        Combat.Health = 0;
+        Combat.LastPain = now;
+        Combat.Attacking = false;
+        Entity.State = PhysEnt.CsDead;
+        Entity.Dead = true;
+        Entity.Move = 0;
+        Entity.Strafe = 0;
+        Entity.Jumping = false;
+
+        PlaySound(Random.Shared.Next(2) == 0 ? GameSound.Die1 : GameSound.Die2);
         UpdateBodyAnim();
     }
 
-    /// <summary>Respawn the player after death.</summary>
-    public void Respawn()
+    /// <summary>
+    /// Attempt to respawn after death if the required minimum delay has elapsed
+    /// (<c>fpsgame/fps.cpp:354</c>).
+    /// </summary>
+    public bool TryRespawn(int? nowMillis = null)
     {
-        Combat.Respawn();
+        if (Entity.State != PhysEnt.CsDead) return false;
+
+        int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
+        if (now - Combat.LastPain < SpawnWaitMillis) return false;
+
+        Respawn();
+        return true;
+    }
+
+    /// <summary>
+    /// Respawn the player after death, resetting combat state, loadout, position,
+    /// and velocity to the spawn point (<c>fpsgame/fps.cpp:350 respawnself</c>).
+    /// </summary>
+    public void Respawn(Vector3? spawnFeet = null, float? yawDegrees = null)
+    {
+        Vector3 feet = spawnFeet ?? SpawnFeet;
+        float yaw = yawDegrees ?? SpawnYaw;
+
+        Entity.O = feet with { Z = feet.Z + EyeHeight };
+        Entity.Yaw = yaw;
+        Entity.Vel = Vector3.Zero;
+        Entity.Falling = Vector3.Zero;
+        Entity.Floor = new Vector3(0, 0, 1);
+        Entity.PhysState = Phys.PhysFall;
+        Entity.TimeInAir = 0;
         Entity.State = PhysEnt.CsAlive;
         Entity.Dead = false;
+        Entity.Blocked = false;
+
+        Combat.Spawn(Mode ?? GameModeCatalog.Get("ffa"));
         LastHit = 0;
         _bodyAnim = "";
-        SelectWeapon(DefaultGun);
+        SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
+        SyncTransform();
         UpdateBodyAnim();
         UpdateHudgunAnim();
     }
@@ -750,6 +832,18 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             _phys.MovePlayer(Entity, Phys.MoveRes, Phys.PhysFrameTime);
             LastMillis += Phys.PhysFrameTime;
             _accum -= StepSeconds;
+
+            if (Entity.Dead && Entity.State != PhysEnt.CsDead)
+            {
+                Die(LastMillis);
+            }
+
+            if (Combat.CheckQuad(Phys.PhysFrameTime))
+            {
+                PlaySound(GameSound.PupOut);
+            }
+
+            Items?.CheckPickups(this, LastMillis);
 
             // Advance active flying rockets (weapon.cpp:523 updateprojectiles)
             for (int i = ActiveRockets.Count - 1; i >= 0; i--)
@@ -785,10 +879,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>
     /// Toggle the spectator/edit floating state (<c>CS_SPECTATOR</c>). While floating
     /// the player ignores gravity and collision and flies along the view direction,
-	/// exactly like the engine's <c>moveplayer()</c> floating branch. Bound to
-	/// <c>spectate</c> (F1).
-	/// </summary>
-	public void ToggleFloat()
+    /// exactly like the engine's <c>moveplayer()</c> floating branch. Bound to
+    /// <c>spectate</c> (F1).
+    /// </summary>
+    public void ToggleFloat()
     {
         Entity.State = Entity.State == PhysEnt.CsSpectator ? PhysEnt.CsAlive : PhysEnt.CsSpectator;
         if (Entity.State == PhysEnt.CsSpectator) Entity.Jumping = false;
@@ -800,11 +894,11 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>
     /// Place the nested <c>Camera3D</c> for the current view mode. In first person it sits
     /// at the eye (the node origin); in third person it is offset <b>backwards</b> along the
-    /// view direction and <b>up</b> from the eye, matching the engine's detached camera
-    /// (rendergl.cpp <c>recomputecamera</c>: <c>camera1->o += -dir*dist + up*up</c>). This is
-    /// a pure camera offset — the player node stays at the eye and physics is untouched.
-    /// </summary>
-    private void SyncCamera()
+	/// view direction and <b>up</b> from the eye, matching the engine's detached camera
+	/// (rendergl.cpp <c>recomputecamera</c>: <c>camera1->o += -dir*dist + up*up</c>). This is
+	/// a pure camera offset — the player node stays at the eye and physics is untouched.
+	/// </summary>
+	private void SyncCamera()
     {
         if (GetNodeOrNull<Camera3D>("Camera3D") is not { } cam) return;
 
@@ -908,12 +1002,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>
-	/// Place the visible <see cref="PlayerModel"/> at the player's <b>feet</b> and
-	/// orient it by yaw only, upright — the engine renders the body model at
-	/// <c>d->feetpos()</c> with <c>yaw+90</c> and ignores the view pitch
-	/// (rendermodel.cpp <c>renderclient</c>). This node stays at the eye, so the model
-	/// is offset down by the eye height. The model is a <b>sibling</b> in the same Z-up
-	/// world node, so local coordinates match this node's own <c>Position</c>/<c>Basis</c>.
+    /// Place the visible <see cref="PlayerModel"/> at the player's <b>feet</b> and
+    /// orient it by yaw only, upright — the engine renders the body model at
+    /// <c>d->feetpos()</c> with <c>yaw+90</c> and ignores the view pitch
+    /// (rendermodel.cpp <c>renderclient</c>). This node stays at the eye, so the model
+    /// is offset down by the eye height. The model is a <b>sibling</b> in the same Z-up
+    /// world node, so local coordinates match this node's own <c>Position</c>/<c>Basis</c>.
     /// </summary>
     private void SyncBodyModel()
     {

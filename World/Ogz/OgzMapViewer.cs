@@ -122,6 +122,8 @@ public partial class OgzMapViewer : Node3D
         var effects = new Effects.WeaponEffectsRenderer { Name = "WeaponEffects" };
         World.AddChild(effects);
         player.WeaponEffects = effects;
+        player.Items = World.Items;
+        World.Items?.SpawnItems(Game.GameModeCatalog.Get("ffa"), force: true);
 
         // Attach CanvasLayer and HUD controller
         var canvas = new CanvasLayer { Name = "HudCanvas" };

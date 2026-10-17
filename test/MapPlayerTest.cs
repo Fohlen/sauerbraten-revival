@@ -443,4 +443,93 @@ public class MapPlayerTest : GoTestBase
 
         shooter.Free();
     }
+
+    [Test]
+    public void FiringConsumesAmmoAndEmptyGunCannotFire()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040));
+        player.SelectWeapon(Gun.Pistol);
+        player.Combat.Ammo[(int)Gun.Pistol] = 2;
+
+        bool fired = player.TryAttack(nowMillis: 1000);
+        TestAssert.True(fired, "pistol fired with ammo");
+        TestAssert.Equal(1, player.Combat.Ammo[(int)Gun.Pistol], "pistol ammo decremented to 1");
+
+        fired = player.TryAttack(nowMillis: 1500);
+        TestAssert.True(fired, "pistol fired second shot");
+        TestAssert.Equal(0, player.Combat.Ammo[(int)Gun.Pistol], "pistol ammo decremented to 0");
+
+        // Firing with 0 ammo fails, triggers gunwait = 600, and does not fire
+        fired = player.TryAttack(nowMillis: 2000);
+        TestAssert.False(fired, "pistol cannot fire with 0 ammo");
+        TestAssert.Equal(600, player.Combat.GunWait, "gunwait set to 600 ms on dry fire");
+
+        player.Free();
+    }
+
+    [Test]
+    public void LethalDamageKillsPlayerAndHaltsMovement()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040));
+        player.Combat.Health = 100;
+        player.Combat.Armour = 0;
+        player.Entity.Vel = new Vector3(50, 50, 0);
+
+        player.TakeDamage(100, nowMillis: 1000);
+
+        TestAssert.Equal(0, player.Combat.Health, "health reduced to 0");
+        TestAssert.False(player.IsAlive, "player is dead");
+        TestAssert.Equal(PhysEnt.CsDead, player.Entity.State, "state is CsDead");
+        TestAssert.Equal(0, player.Entity.Move, "move input halted on death");
+        TestAssert.Equal(0, player.Entity.Strafe, "strafe input halted on death");
+        TestAssert.False(player.Entity.Jumping, "jumping halted on death");
+        TestAssert.Equal(new Vector3(50, 50, 0), player.Entity.Vel, "velocity/knockback preserved on death");
+        TestAssert.Equal("dying", player.SelectBodyAnim(nowMillis: 1200), "anim is dying within 1000ms");
+        TestAssert.Equal("dead", player.SelectBodyAnim(nowMillis: 2500), "anim is dead after 1000ms");
+
+        // Cannot attack while dead
+        bool fired = player.TryAttack(nowMillis: 1100);
+        TestAssert.False(fired, "cannot attack while dead");
+
+        player.Free();
+    }
+
+    [Test]
+    public void ClickToRespawnAfterDelayRestoresPlayer()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040));
+        player.SpawnFeet = new Vector3(3000, 946, 3040);
+        player.SpawnYaw = 90f;
+        player.SpawnWaitMillis = 500;
+
+        // Player dies at t = 1000
+        player.Combat.Armour = 0;
+        player.TakeDamage(100, nowMillis: 1000);
+        TestAssert.Equal(PhysEnt.CsDead, player.Entity.State, "player died");
+
+        // Move away from spawn position while dead (ragdoll/fall)
+        player.Entity.O = new Vector3(500, 500, 500);
+
+        // Click to respawn before SpawnWaitMillis (t = 1200, only 200 ms passed)
+        bool respawned = player.TryRespawn(nowMillis: 1200);
+        TestAssert.False(respawned, "cannot respawn before spawn wait delay");
+        TestAssert.Equal(PhysEnt.CsDead, player.Entity.State, "still dead");
+
+        // Click to respawn after SpawnWaitMillis (t = 1600, 600 ms passed > 500 ms)
+        respawned = player.TryRespawn(nowMillis: 1600);
+        TestAssert.True(respawned, "respawn succeeded after spawn wait delay");
+        TestAssert.Equal(PhysEnt.CsAlive, player.Entity.State, "state restored to CsAlive");
+        TestAssert.True(player.IsAlive, "player is alive");
+        TestAssert.Equal(100, player.Combat.Health, "health restored to 100");
+        TestAssert.Equal(25, player.Combat.Armour, "FFA blue armour restored to 25");
+        TestAssert.Equal(40, player.Combat.Ammo[(int)Gun.Pistol], "FFA pistol ammo restored to 40");
+        TestAssert.Equal(player.SpawnFeet with { Z = player.SpawnFeet.Z + MapPlayer.EyeHeight }, player.Entity.O,
+            "position restored to spawn point");
+        TestAssert.Equal(90f, player.Entity.Yaw, "yaw restored to spawn yaw");
+
+        player.Free();
+    }
 }

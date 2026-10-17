@@ -50,6 +50,9 @@ public sealed class PhysEnt
     public float Radius = 4.1f;                  // ents.h:91
     public float EyeHeight = 14.0f;
     public float AboveEye = 1.0f;
+
+    /// <summary>ents.h:114 <c>feetpos(offset = 0)</c>: origin offset by <c>offset - eyeheight</c> along Z.</summary>
+    public Vector3 FeetPos(float offset = 0.0f) => new(O.X, O.Y, O.Z + offset - EyeHeight);
     public float XRadius = 4.1f;                 // ents.h:92 (ellipse collision pair)
     public float YRadius = 4.1f;
     public float Zmargin = 0.0f;

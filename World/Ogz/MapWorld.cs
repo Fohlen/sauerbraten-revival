@@ -55,6 +55,9 @@ public partial class MapWorld : Node3D
     /// <summary>The converted-model catalogue (glTF paths + Cube2 parameters), if present.</summary>
     public ModelCatalog? Models { get; private set; }
 
+    /// <summary>The item manager holding map item pickups.</summary>
+    public ItemManager? Items { get; private set; }
+
     /// <summary>Optional settings overriding default radiance hints volume quality.</summary>
     public Lighting.RadianceSettings? RadianceSettings { get; set; }
 
@@ -138,7 +141,8 @@ public partial class MapWorld : Node3D
         AddChild(ModeEntityBuilder.Build(map, catalogue, modelCatalog, textures));
         AddChild(MonsterBuilder.Build(map, modelCatalog, textures));
         AddChild(TriggerBuilder.Build(map, catalogue, textures));
-        AddChild(ItemBuilder.Build(map, modelCatalog, textures));
+        Items = ItemBuilder.Build(map, modelCatalog, textures);
+        AddChild(Items);
         AddChild(ParticleBuilder.Build(map, textures));
         AddChild(SoundBuilder.Build(map, catalogue, MapRoots.ReferenceRoot));
         var mapModels = MapModelBuilder.Build(map, catalogue, modelCatalog, textures);
