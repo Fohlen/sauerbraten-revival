@@ -345,6 +345,7 @@ public class MapPlayerTest : GoTestBase
     {
         var octa = TestData.ReadMap().ToOcta();
         var shooter = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        TestScene.AddChild(shooter); // grenades are parented to the shooter; without a parent they leak
         shooter.SelectWeapon(Gun.GrenadeLauncher);
         shooter.Combat.Ammo[(int)Gun.GrenadeLauncher] = 5;
 
@@ -366,6 +367,7 @@ public class MapPlayerTest : GoTestBase
     {
         var octa = TestData.ReadMap().ToOcta();
         var shooter = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        TestScene.AddChild(shooter); // grenades are parented to the shooter; without a parent they leak
         shooter.SelectWeapon(Gun.GrenadeLauncher);
         shooter.Combat.Ammo[(int)Gun.GrenadeLauncher] = 5;
         shooter.Combat.Health = 100;
@@ -403,6 +405,7 @@ public class MapPlayerTest : GoTestBase
     {
         var octa = TestData.ReadMap().ToOcta();
         var shooter = MakePlayer(octa, new Vector3(3000, 946, 3040), yaw: 0f);
+        TestScene.AddChild(shooter); // grenades are parented to the shooter; without a parent they leak
         shooter.SelectWeapon(Gun.GrenadeLauncher);
         shooter.Combat.Ammo[(int)Gun.GrenadeLauncher] = 5;
         shooter.Combat.Health = 100;

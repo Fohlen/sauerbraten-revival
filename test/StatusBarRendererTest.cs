@@ -75,7 +75,8 @@ public class StatusBarRendererTest : GoTestBase
     [Test]
     public void HudControllerInitializesTextureAndChildren()
     {
-        var hud = new HudController { Player = new MapPlayer() };
+        var player = new MapPlayer();
+        var hud = new HudController { Player = player };
         var canvas = new CanvasLayer();
         TestScene.AddChild(canvas);
         canvas.AddChild(hud);
@@ -94,6 +95,7 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.True(label!.Text == "100", $"health text is 100, got {label.Text}");
 
         canvas.Free();
+        player.Free();
     }
 
     [Test]
@@ -171,6 +173,7 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.False(armorLabel.Visible, "armor label hidden when dead");
 
         canvas.Free();
+        player.Free();
     }
 
     [Test]
@@ -262,6 +265,7 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.False(ammoLabel.Visible, "ammo label hidden when dead");
 
         canvas.Free();
+        player.Free();
     }
 
     [Test]
@@ -376,6 +380,7 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.False(flagLabel.Visible, "flag label hidden when dead");
 
         canvas.Free();
+        player.Free();
     }
 
     [Test]
@@ -534,6 +539,7 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.False(ammoBarRoot.Visible, "AmmoBar hidden in insta mode");
 
         canvas.Free();
+        player.Free();
     }
 
     [Test]
@@ -640,6 +646,7 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.False(clockLabel.Visible, "Game clock hidden when GameClock is false");
 
         canvas.Free();
+        player.Free();
     }
 
     [Test]
@@ -781,6 +788,7 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.True(statsLabel!.Text.Contains("allfaces"), "Stats label contains allfaces");
 
         canvas.Free();
+        player.Free();
     }
 }
 
