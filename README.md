@@ -10,7 +10,7 @@ editor (a defining feature) and the game on top of it.
 - Classic maps ship as original `.ogz` files and are read at load time; there is
   **no CubeScript** and no offline converter. Maps made in the editor use a new, versioned, native format.
 
-The project's ultimate goal is to make a Garry's Mod style, fully customizable game  on top of Godot. Its default will be the Sauerbraten we know and love, including the current assets, with deep support for Steam (lobbies, matchmaking, workshop out of the box).
+The project's ultimate goal is to make a Garry's Mod style, fully customizable game on top of Godot. Its default will be the Sauerbraten we know and love, including the current assets, with deep support for Steam (lobbies, matchmaking, workshop out of the box).
 
 ## Playing with the project
 
