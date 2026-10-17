@@ -534,5 +534,111 @@ public class StatusBarRendererTest : GoTestBase
 
         canvas.Free();
     }
+
+    [Test]
+    public void GameClockFormatMatchesEngine()
+    {
+        // 10 minutes remaining: maplimit = 600,000, lastmillis = 0 -> secs = (600000 + 999)/1000 = 600 -> 10:00
+        var (mins10, secs10, str10) = StatusBarRenderer.FormatGameClock(600000, 0);
+        TestAssert.True(mins10 == 10 && secs10 == 0, "10 mins 0 secs");
+        TestAssert.True(str10 == "10:00", $"Expected 10:00, got {str10}");
+
+        // 1 minute remaining: 60,000 millis -> 1:00
+        var (mins1, secs1, str1) = StatusBarRenderer.FormatGameClock(60000, 0);
+        TestAssert.True(mins1 == 1 && secs1 == 0, "1 min 0 secs");
+        TestAssert.True(str1 == "1:00", $"Expected 1:00, got {str1}");
+
+        // 59 seconds remaining: 59,000 millis -> 0:59
+        var (mins0, secs59, str59) = StatusBarRenderer.FormatGameClock(59000, 0);
+        TestAssert.True(mins0 == 0 && secs59 == 59, "0 min 59 secs");
+        TestAssert.True(str59 == "0:59", $"Expected 0:59, got {str59}");
+
+        // Overtime / expired (lastmillis > maplimit) clamps to 0:00
+        var (mins00, secs00, str00) = StatusBarRenderer.FormatGameClock(10000, 20000);
+        TestAssert.True(mins00 == 0 && secs00 == 0, "expired is 0 mins 0 secs");
+        TestAssert.True(str00 == "0:00", $"Expected 0:00, got {str00}");
+    }
+
+    [Test]
+    public void GameClockColorWarningUnderOneMinute()
+    {
+        // >= 1 min: normal colour (default white 0xFFFFFF)
+        Color normalColor = StatusBarRenderer.GetGameClockColor(1);
+        TestAssert.True(normalColor == Colors.White, "1 min remaining is white");
+
+        Color normal10Color = StatusBarRenderer.GetGameClockColor(10);
+        TestAssert.True(normal10Color == Colors.White, "10 mins remaining is white");
+
+        // < 1 min: low colour (default 0xFFA050 orange warning)
+        Color lowColor = StatusBarRenderer.GetGameClockColor(0);
+        Color expectedLow = new Color(1f, 160f / 255f, 80f / 255f, 1f);
+        TestAssert.True(Mathf.IsEqualApprox(lowColor.R, expectedLow.R) &&
+                        Mathf.IsEqualApprox(lowColor.G, expectedLow.G) &&
+                        Mathf.IsEqualApprox(lowColor.B, expectedLow.B),
+                        $"0 mins is orange warning color (0xFFA050), got {lowColor}");
+    }
+
+    [Test]
+    public void GameClockLayoutCalculatesTopCenterOffset()
+    {
+        // 1920x1080 screen, text "10:00", scale 1.0, align 0 (center), x=0.50, y=0.03
+        var (pos, size) = StatusBarRenderer.LayoutGameClock(1920f, 1080f, "10:00", 0.50f, 0.03f, 1.0f, 0);
+
+        // Text bounds: '10:00' -> 30 + 30 + 16 + 30 + 30 = 136, height = 64
+        TestAssert.True(Mathf.IsEqualApprox(size.X, 136f), $"size X is 136, got {size.X}");
+        TestAssert.True(Mathf.IsEqualApprox(size.Y, 64f), $"size Y is 64, got {size.Y}");
+
+        // Center X = 0.50 * 1920 = 960 -> pos.X = 960 - 136 / 2 = 892
+        TestAssert.Near(892f, pos.X, 0.01f, "pos X is 892");
+        // Center Y = 0.03 * 1080 = 32.4 -> pos.Y = 32.4 - 64 / 2 = 0.4
+        TestAssert.Near(0.4f, pos.Y, 0.01f, "pos Y is 0.4");
+    }
+
+    [Test]
+    public void HudControllerUpdatesGameClockNode()
+    {
+        var player = new MapPlayer();
+        var hud = new HudController
+        {
+            Player = player,
+            GameClock = true,
+            MapLimit = 600000, // 10 minutes
+            LastMillis = 0
+        };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        hud.UpdateGameClock();
+
+        var clockLabel = hud.GetNodeOrNull<Label>("GameClockLabel");
+        TestAssert.True(clockLabel != null, "GameClockLabel node exists");
+        TestAssert.True(clockLabel!.Visible, "GameClockLabel is visible when MapLimit >= 0");
+        TestAssert.True(clockLabel.Text == "10:00", $"Clock text is 10:00, got {clockLabel.Text}");
+        TestAssert.True(clockLabel.Modulate == Colors.White, "Clock text is white for >= 1 min");
+
+        // Fast forward to 30 seconds remaining (570,000 millis passed)
+        hud.LastMillis = 570000;
+        hud.UpdateGameClock();
+        TestAssert.True(clockLabel.Text == "0:30", $"Clock text is 0:30, got {clockLabel.Text}");
+        Color expectedLow = StatusBarRenderer.GetGameClockColor(0);
+        TestAssert.True(Mathf.IsEqualApprox(clockLabel.Modulate.R, expectedLow.R) &&
+                        Mathf.IsEqualApprox(clockLabel.Modulate.G, expectedLow.G) &&
+                        Mathf.IsEqualApprox(clockLabel.Modulate.B, expectedLow.B),
+                        "Clock text turns orange warning color under 1 minute");
+
+        // Negative MapLimit hides the game clock (untimed mode)
+        hud.MapLimit = -1;
+        hud.UpdateGameClock();
+        TestAssert.False(clockLabel.Visible, "Game clock hidden when MapLimit is negative");
+
+        // Disabling GameClock hides the label even if MapLimit is set
+        hud.MapLimit = 600000;
+        hud.GameClock = false;
+        hud.UpdateGameClock();
+        TestAssert.False(clockLabel.Visible, "Game clock hidden when GameClock is false");
+
+        canvas.Free();
+    }
 }
 

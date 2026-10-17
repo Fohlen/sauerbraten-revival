@@ -308,5 +308,100 @@ public static class StatusBarRenderer
 
         return items;
     }
+
+    /// <summary>
+    /// Formats the remaining match time as "mins:secs" (e.g. "10:00", "0:59")
+    /// matching engine <c>fps.cpp:955-957: drawgameclock</c>:
+    /// <c>int secs = max(maplimit-lastmillis + 999, 0)/1000, mins = secs/60; secs %= 60;</c>
+    /// </summary>
+    public static (int Minutes, int Seconds, string Formatted) FormatGameClock(int mapLimitMillis, int lastMillis)
+    {
+        int remainingSecs = Math.Max(mapLimitMillis - lastMillis + 999, 0) / 1000;
+        int mins = remainingSecs / 60;
+        int secs = remainingSecs % 60;
+        return (mins, secs, $"{mins}:{secs:D2}");
+    }
+
+    /// <summary>
+    /// Computes the color for the game clock matching engine <c>fps.cpp:946-948, 968</c>:
+    /// <c>mins &lt; 1 ? gameclocklowcolour (0xFFA050) : gameclockcolour (0xFFFFFF)</c>.
+    /// </summary>
+    public static Color GetGameClockColor(int minutes, uint regularRgb = 0xFFFFFF, uint lowRgb = 0xFFA050, int alpha = 255)
+    {
+        uint rgb = minutes < 1 ? lowRgb : regularRgb;
+        float r = ((rgb >> 16) & 0xFF) / 255.0f;
+        float g = ((rgb >> 8) & 0xFF) / 255.0f;
+        float b = (rgb & 0xFF) / 255.0f;
+        float a = Mathf.Clamp(alpha, 0, 255) / 255.0f;
+        return new Color(r, g, b, a);
+    }
+
+    /// <summary>
+    /// Measures the bounds of a clock string formatted as "%d:%02d" using the default Sauerbraten font metrics.
+    /// In Sauerbraten's default font:
+    /// digits '0'-'9' have advance 30, ':' has advance 16, height FONTH is 64.
+    /// </summary>
+    public static Vector2 MeasureGameClockText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return new Vector2(0f, DefaultFontHeight);
+
+        float width = 0f;
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (c == ':')
+                width += 16f;
+            else if (c >= '0' && c <= '9')
+                width += DefaultFontCharWidth;
+            else
+                width += DefaultFontCharWidth;
+        }
+
+        return new Vector2(width, DefaultFontHeight);
+    }
+
+    /// <summary>
+    /// Computes the draw offset and dimensions for the game clock matching engine <c>fps.cpp:959-971</c>:
+    /// <c>vec2 offset = vec2(gameclockx, gameclocky).mul(vec2(w, h).div(gameclockscale));</c>
+    /// <c>if(gameclockalign == 1) offset.x -= tw; else if(gameclockalign == 0) offset.x -= tw/2.0f; offset.y -= th/2.0f;</c>
+    /// Returns unscaled text bounds and position in scaled matrix space, as well as final screen position and size.
+    /// </summary>
+    public static (Vector2 ScreenPos, Vector2 ScreenSize) LayoutGameClock(
+        float screenW,
+        float screenH,
+        string text,
+        float clockX = 0.50f,
+        float clockY = 0.03f,
+        float clockScale = 1.0f,
+        int clockAlign = 0)
+    {
+        Vector2 twth = MeasureGameClockText(text);
+        float effectiveScale = Math.Max(0.001f, clockScale);
+
+        // In original engine (fps.cpp:959-966):
+        // vec2 offset = vec2(gameclockx, gameclocky).mul(vec2(w, h).div(gameclockscale));
+        // if(gameclockalign == 1) offset.x -= tw;
+        // else if(gameclockalign == 0) offset.x -= tw/2.0f;
+        // offset.y -= th/2.0f;
+        // hudmatrix.scale(gameclockscale, gameclockscale, 1);
+        // draw_text(buf, int(offset.x), int(offset.y), ...);
+        //
+        // In screen coordinates (multiplying offset by gameclockscale):
+        // screenX = gameclockx * w + (align_offset) * gameclockscale;
+        // screenY = gameclocky * h - (th / 2.0f) * gameclockscale;
+        float ox = (clockX * screenW) / effectiveScale;
+        if (clockAlign == 1)
+            ox -= twth.X;
+        else if (clockAlign == 0)
+            ox -= twth.X / 2.0f;
+
+        float oy = (clockY * screenH) / effectiveScale - twth.Y / 2.0f;
+
+        Vector2 screenPos = new Vector2(ox * effectiveScale, oy * effectiveScale);
+        Vector2 screenSize = new Vector2(twth.X * effectiveScale, twth.Y * effectiveScale);
+        return (screenPos, screenSize);
+    }
 }
+
 

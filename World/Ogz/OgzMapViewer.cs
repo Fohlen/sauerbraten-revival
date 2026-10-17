@@ -125,7 +125,13 @@ public partial class OgzMapViewer : Node3D
 
         // Attach CanvasLayer and HUD controller
         var canvas = new CanvasLayer { Name = "HudCanvas" };
-        var hud = new World.Hud.HudController { Name = "HUD", Player = player };
+        var hud = new World.Hud.HudController
+        {
+            Name = "HUD",
+            Player = player,
+            // Default 10 minute match timer (10 * 60 * 1000 = 600000 ms) matching Sauerbraten standard maplimit
+            MapLimit = (int)Time.GetTicksMsec() + 10 * 60 * 1000
+        };
         hud.SetupTextures(World.Textures ?? new Materials.ResourceTextureSource());
         canvas.AddChild(hud);
         AddChild(canvas);

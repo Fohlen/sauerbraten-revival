@@ -116,6 +116,36 @@ public partial class HudController : Control
     /// <summary>Weapon layout for ammo hud 'cycle' row (7 weapons).</summary>
     public int[] AmmoHudCycle { get; set; } = new int[] { -1, -1, -1, -1, -1, -1, -1 };
 
+    /// <summary>Whether the match clock / game timer is displayed (VARP gameclock in fps.cpp:944).</summary>
+    public bool GameClock { get; set; } = true;
+
+    /// <summary>Game clock scale multiplier (FVARP gameclockscale in fps.cpp:945, default 1.0).</summary>
+    public float GameClockScale { get; set; } = 1.0f;
+
+    /// <summary>Game clock text color (HVARP gameclockcolour in fps.cpp:946, default 0xFFFFFF).</summary>
+    public uint GameClockColour { get; set; } = 0xFFFFFF;
+
+    /// <summary>Game clock alpha transparency (VARP gameclockalpha in fps.cpp:947, default 255).</summary>
+    public int GameClockAlpha { get; set; } = 255;
+
+    /// <summary>Game clock warning color when time is under 1 minute (HVARP gameclocklowcolour in fps.cpp:948, default 0xFFA050).</summary>
+    public uint GameClockLowColour { get; set; } = 0xFFA050;
+
+    /// <summary>Game clock horizontal alignment (-1 = left, 0 = center, 1 = right) (VARP gameclockalign in fps.cpp:949, default 0).</summary>
+    public int GameClockAlign { get; set; } = 0;
+
+    /// <summary>Game clock normalized screen X position (FVARP gameclockx in fps.cpp:950, default 0.50).</summary>
+    public float GameClockX { get; set; } = 0.50f;
+
+    /// <summary>Game clock normalized screen Y position (FVARP gameclocky in fps.cpp:951, default 0.03).</summary>
+    public float GameClockY { get; set; } = 0.03f;
+
+    /// <summary>Match expiration timestamp in milliseconds (engine maplimit in fps.cpp:6, client.cpp:564). Negative if untimed/infinite.</summary>
+    public int MapLimit { get; set; } = -1;
+
+    /// <summary>Current match/engine elapsed timestamp in milliseconds (engine lastmillis). If negative, falls back to Player.LastMillis or Time.GetTicksMsec().</summary>
+    public int LastMillis { get; set; } = -1;
+
     // Quick ammo hud nodes container
     private Control? _ammoHudRoot;
     private readonly System.Collections.Generic.List<TextureRect> _ammoHudIcons = new();
@@ -123,6 +153,9 @@ public partial class HudController : Control
     // Ammo bar nodes container
     private Control? _ammoBarRoot;
     private readonly System.Collections.Generic.List<(TextureRect Icon, Label Label)> _ammoBarSlots = new();
+
+    // Game clock / match timer node
+    private Label? _gameClockLabel;
 
     public override void _Ready()
     {
@@ -146,7 +179,18 @@ public partial class HudController : Control
         SetupStatusBarNodes();
         SetupAmmoHudNodes();
         SetupAmmoBarNodes();
+        SetupGameClockNode();
         UpdateAtlasTextures();
+    }
+
+    private void SetupGameClockNode()
+    {
+        _gameClockLabel = new Label
+        {
+            Name = "GameClockLabel",
+            MouseFilter = MouseFilterEnum.Ignore
+        };
+        AddChild(_gameClockLabel);
     }
 
     private void SetupStatusBarNodes()
@@ -383,6 +427,7 @@ public partial class HudController : Control
     {
         UpdateCrosshair();
         UpdateStatusBar();
+        UpdateGameClock();
     }
 
     /// <summary>Updates crosshair position, texture, size and modulation.</summary>
@@ -773,6 +818,57 @@ public partial class HudController : Control
                 label.Visible = false;
             }
         }
+    }
+
+    /// <summary>
+    /// Updates the game clock and match timer (engine <c>fps.cpp:953-971: drawgameclock</c>).
+    /// </summary>
+    public void UpdateGameClock()
+    {
+        if (_gameClockLabel == null) return;
+
+        // In Sauerbraten: if(gameclock) drawgameclock(w, h);
+        // Only drawn if gameclock is enabled and MapLimit is active (>= 0).
+        if (!GameClock || MapLimit < 0)
+        {
+            _gameClockLabel.Visible = false;
+            return;
+        }
+
+        Vector2 viewportSize = GetViewportRect().Size;
+        if (viewportSize.X <= 0 || viewportSize.Y <= 0) return;
+
+        int currentMillis = LastMillis >= 0
+            ? LastMillis
+            : (Player != null && Player.LastMillis > 0 ? Player.LastMillis : (int)Time.GetTicksMsec());
+
+        var (mins, secs, formatted) = StatusBarRenderer.FormatGameClock(MapLimit, currentMillis);
+        Color clockColor = StatusBarRenderer.GetGameClockColor(mins, GameClockColour, GameClockLowColour, GameClockAlpha);
+
+        _gameClockLabel.Visible = true;
+        _gameClockLabel.Text = formatted;
+        _gameClockLabel.Modulate = clockColor;
+
+        var (screenPos, screenSize) = StatusBarRenderer.LayoutGameClock(
+            viewportSize.X,
+            viewportSize.Y,
+            formatted,
+            GameClockX,
+            GameClockY,
+            GameClockScale,
+            GameClockAlign);
+
+        int fontSize = Mathf.Max(12, (int)(StatusBarRenderer.DefaultFontHeight * GameClockScale));
+        _gameClockLabel.AddThemeFontSizeOverride("font_size", fontSize);
+        _gameClockLabel.Position = screenPos;
+        _gameClockLabel.Size = screenSize;
+        _gameClockLabel.HorizontalAlignment = GameClockAlign switch
+        {
+            -1 => HorizontalAlignment.Left,
+            1 => HorizontalAlignment.Right,
+            _ => HorizontalAlignment.Center
+        };
+        _gameClockLabel.VerticalAlignment = VerticalAlignment.Center;
     }
 }
 
