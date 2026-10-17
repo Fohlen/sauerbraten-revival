@@ -390,5 +390,80 @@ class CliSubcommandTest(unittest.TestCase):
         self.assertEqual("custom/cat", args.catalogues_dir)
 
 
+class AnimMergeTest(unittest.TestCase):
+    """The multi-clip merge must not carry each clip's mesh as dead bytes."""
+
+    def _write_clip(self, path: str, mesh: bytes, anim_in: bytes, anim_out: bytes) -> None:
+        import gltf_anim_merge
+
+        binary = mesh + anim_in + anim_out
+        in_off = len(mesh)
+        out_off = in_off + len(anim_in)
+        doc = {
+            "asset": {"version": "2.0"},
+            "nodes": [{"name": "Root"}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "accessors": [
+                {"bufferView": 0, "componentType": 5126, "type": "VEC3",
+                 "count": len(mesh) // 12},
+                {"bufferView": 1, "componentType": 5126, "type": "SCALAR",
+                 "count": len(anim_in) // 4},
+                {"bufferView": 2, "componentType": 5126, "type": "VEC4",
+                 "count": len(anim_out) // 16},
+            ],
+            "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": len(mesh)},
+                {"buffer": 0, "byteOffset": in_off, "byteLength": len(anim_in)},
+                {"buffer": 0, "byteOffset": out_off, "byteLength": len(anim_out)},
+            ],
+            "animations": [{"name": "x", "samplers": [{"input": 1, "output": 2}],
+                            "channels": []}],
+            "buffers": [{"byteLength": len(binary)}],
+        }
+        gltf_anim_merge.write_glb(path, doc, binary)
+
+    def test_later_clips_contribute_only_referenced_accessors(self):
+        import gltf_anim_merge
+
+        with tempfile.TemporaryDirectory() as d:
+            base = os.path.join(d, "base.glb")
+            clip = os.path.join(d, "clip.glb")
+            out = os.path.join(d, "merged.glb")
+            self._write_clip(base, b"a" * 12, b"b" * 4, b"c" * 16)
+            self._write_clip(clip, b"d" * 24, b"e" * 8, b"f" * 32)
+
+            gltf_anim_merge.merge_animations([("idle", base), ("run", clip)], out)
+            doc, binary = gltf_anim_merge.read_glb(out)
+
+        # Base has 3 accessors; the clip only contributes its sampler input/output (2).
+        self.assertEqual(5, len(doc["accessors"]))
+        self.assertEqual(5, len(doc["bufferViews"]))
+        self.assertEqual(["idle", "run"], [a["name"] for a in doc["animations"]])
+
+        merged_run = doc["animations"][1]
+        sampler = merged_run["samplers"][0]
+        self.assertEqual(3, sampler["input"])
+        self.assertEqual(4, sampler["output"])
+
+        # Every accessor must be referenced by the mesh or an animation (no orphans).
+        referenced = set()
+        for mesh in doc["meshes"]:
+            for prim in mesh["primitives"]:
+                referenced.update(prim["attributes"].values())
+                if "indices" in prim:
+                    referenced.add(prim["indices"])
+        for anim in doc["animations"]:
+            for s in anim["samplers"]:
+                referenced.add(s["input"])
+                referenced.add(s["output"])
+        self.assertEqual(set(range(len(doc["accessors"]))), referenced)
+
+        # The carried-over bytes are the clip's animation data, at the remapped views.
+        for acc_idx, expected in ((3, b"e" * 8), (4, b"f" * 32)):
+            view = doc["bufferViews"][doc["accessors"][acc_idx]["bufferView"]]
+            self.assertEqual(expected, binary[view["byteOffset"]:view["byteOffset"] + view["byteLength"]])
+            self.assertEqual(0, view["byteOffset"] % 4)
+
+
 if __name__ == "__main__":
     unittest.main()

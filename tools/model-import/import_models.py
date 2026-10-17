@@ -404,6 +404,23 @@ def sanitize(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("_")
 
 
+def glb_cache_key(source: str, anims: dict | None = None, adjusts: list[dict] | None = None) -> str:
+    """Identity of an exported glb: two models sharing this resolve to identical bytes.
+
+    Cube2 team/FFA skins are applied at runtime from the manifest, so reskin variants
+    (``inky``/``inky/blue``/``inky/red``) and shared linked parts (the weapon half of
+    every player's hudguns) never need their own export. Geometry is fixed by
+    ``source``; baked animation clips (``anims``) and the ``md5adjust`` corrections
+    baked into them (``adjusts``) are the only other inputs to the glb.
+    """
+    key = [os.path.normpath(source)]
+    if anims:
+        key.append(json.dumps(anims, sort_keys=True))
+    if adjusts:
+        key.append(json.dumps(adjusts, sort_keys=True))
+    return "|".join(key)
+
+
 def strip_glb_materials(path: str) -> None:
     """Drop materials/textures from a .glb (we apply the Cube2 skin ourselves).
 
@@ -923,8 +940,14 @@ def parse_linked_parts(model_name: str, models_root: str, packages_root: str) ->
 
 
 def build_linked_record(name: str, parts: list[dict], model: dict, packages: str,
-                        assimp: str, out_dir: str) -> dict | None:
-    """Export a linked multi-part model: one glb per part plus a ``link`` map."""
+                        assimp: str, out_dir: str,
+                        glb_cache: dict[str, tuple[str, bool]] | None = None) -> dict | None:
+    """Export a linked multi-part model: one glb per part plus a ``link`` map.
+
+    ``glb_cache`` (keyed by :func:`glb_cache_key`) lets a part whose geometry and
+    animation already exist be reused instead of re-exported -- the weapon half of
+    every player's hudguns is the same mesh, only the hands differ.
+    """
     if len(parts) < 2 or not model.get("links"):
         return None
     # animmodel::loaded() does `scale /= 4`: Cube2 model units are 4x world units.
@@ -964,22 +987,28 @@ def build_linked_record(name: str, parts: list[dict], model: dict, packages: str
             entry["pitch"] = part["pitches"]
 
         glb = os.path.join(out_dir, sanitize(name) + f"_part{i}.glb")
-        baked = False
-        if anims:
-            baked = bake_animated_glb(assimp, source, anims, packages, glb,
-                                      adjusts=part.get("adjusts"))
-        if not baked:
-            proc = subprocess.run([assimp, "export", source, glb, "-cfast"], capture_output=True, text=True)
-            if proc.returncode == 0 and os.path.isfile(glb):
-                strip_glb_materials(glb)
-            else:
-                print(f"FAIL  {name} part {i}: assimp failed\n{proc.stdout}\n{proc.stderr}", file=sys.stderr)
-                glb = None
-        if glb and os.path.isfile(glb):
+        key = glb_cache_key(source, anims, part.get("adjusts"))
+        cached = glb_cache.get(key) if glb_cache is not None else None
+        if cached is not None:
+            entry["glb"], entry["animated"] = cached
+        else:
+            baked = False
+            if anims:
+                baked = bake_animated_glb(assimp, source, anims, packages, glb,
+                                          adjusts=part.get("adjusts"))
+            if not baked:
+                proc = subprocess.run([assimp, "export", source, glb, "-cfast"], capture_output=True, text=True)
+                if proc.returncode == 0 and os.path.isfile(glb):
+                    strip_glb_materials(glb)
+                else:
+                    print(f"FAIL  {name} part {i}: assimp failed\n{proc.stdout}\n{proc.stderr}", file=sys.stderr)
+                    glb = None
+            if not glb or not os.path.isfile(glb):
+                return None
             entry["glb"] = os.path.basename(glb)
             entry["animated"] = baked
-        else:
-            return None
+            if glb_cache is not None:
+                glb_cache[key] = (entry["glb"], baked)
         record["parts"].append(entry)
 
     for link in model.get("links", []):
@@ -1113,9 +1142,14 @@ def main(argv: list[str] | None = None) -> int:
                 seen.add(entry["path"])
 
     hudgun_names = list(STATIC_HUDGUNS)
+    # Shared export cache: reskin variants and shared linked parts resolve to the
+    # same source/anims/adjusts, so they reuse the first export's glb (the runtime
+    # applies their distinct skin from the manifest).
+    glb_cache: dict[str, tuple[str, bool]] = {}
     for name in hudgun_names:
         parts, model = parse_linked_parts(name, models_root, packages)
-        record = build_linked_record(name, parts, model, packages, args.assimp, args.out)
+        record = build_linked_record(name, parts, model, packages, args.assimp, args.out,
+                                     glb_cache)
         if record is None:
             print(f"MISS  {name}: no linked parts")
             manifest["models"][name] = {"index": -1, "linked": True, "parts": []}
@@ -1177,24 +1211,31 @@ def main(argv: list[str] | None = None) -> int:
                 record.update(build_anim_metadata(params, packages, cfg_dir, mesh_dir))
 
             glb = os.path.join(args.out, sanitize(name) + ".glb")
-            # Skeletal MD5: bake every clip into the glb so Godot's own importer can
-            # play them (assimp drops separately-named .md5anim files otherwise; see
-            # (docs/adr/0004-character-animation.md)).
-            baked = False
-            if ext == ".md5mesh" and record.get("anims"):
-                baked = bake_animated_glb(args.assimp, source, record["anims"], packages, glb)
-            if not baked:
-                proc = subprocess.run([args.assimp, "export", source, glb, "-cfast"], capture_output=True, text=True)
-                if proc.returncode == 0 and os.path.isfile(glb):
-                    strip_glb_materials(glb)
-                else:
-                    print(f"FAIL  {name}: assimp failed\n{proc.stdout}\n{proc.stderr}", file=sys.stderr)
-                    glb = None
-            if glb and os.path.isfile(glb):
-                record["glb"] = os.path.basename(glb)
-                record["animated"] = baked
-                print(f"OK    {name} -> {os.path.basename(glb)} (scale={record['scale']}"
-                      + (", animated" if baked else "") + ")")
+            key = glb_cache_key(source, record.get("anims"), None)
+            cached = glb_cache.get(key)
+            if cached is not None:
+                record["glb"], record["animated"] = cached
+                print(f"OK    {name} -> {record['glb']} (reused, scale={record['scale']})")
+            else:
+                # Skeletal MD5: bake every clip into the glb so Godot's own importer can
+                # play them (assimp drops separately-named .md5anim files otherwise; see
+                # (docs/adr/0004-character-animation.md)).
+                baked = False
+                if ext == ".md5mesh" and record.get("anims"):
+                    baked = bake_animated_glb(args.assimp, source, record["anims"], packages, glb)
+                if not baked:
+                    proc = subprocess.run([args.assimp, "export", source, glb, "-cfast"], capture_output=True, text=True)
+                    if proc.returncode == 0 and os.path.isfile(glb):
+                        strip_glb_materials(glb)
+                    else:
+                        print(f"FAIL  {name}: assimp failed\n{proc.stdout}\n{proc.stderr}", file=sys.stderr)
+                        glb = None
+                if glb and os.path.isfile(glb):
+                    record["glb"] = os.path.basename(glb)
+                    record["animated"] = baked
+                    glb_cache[key] = (record["glb"], baked)
+                    print(f"OK    {name} -> {os.path.basename(glb)} (scale={record['scale']}"
+                          + (", animated" if baked else "") + ")")
         else:
             print(f"MISS  {name}: no source geometry")
         manifest["models"][name] = record

@@ -53,49 +53,74 @@ def merge_animations(clip_glbs: list[tuple[str, str]], out_path: str) -> None:
 
     The first entry provides the mesh/nodes/skin; every entry contributes its
     animations (renamed to its clip name).
+
+    assimp re-exports the whole mesh for every clip, but the base file already
+    provides it: only the accessors/bufferViews a later clip's animations actually
+    reference are copied over. Copying the rest would leave each clip's geometry
+    and inverse-bind matrix as unreferenced dead bytes in the merged binary (the
+    bulk of a baked player model).
     """
     base_doc, base_bin = read_glb(clip_glbs[0][1])
-    # Drop the base file's own single animation; we re-add every clip by name below.
-    base_doc["animations"] = []
 
-    for clip_name, glb_path in clip_glbs:
+    # Re-add the base file's own animation under its clip name. Its accessors are
+    # already in the base document, so no remapping is needed.
+    base_anims = base_doc.get("animations", [])
+    base_doc["animations"] = []
+    for anim in base_anims:
+        base_doc["animations"].append({
+            "name": clip_glbs[0][0],
+            "samplers": anim.get("samplers", []),
+            "channels": anim.get("channels", []),
+        })
+
+    for clip_name, glb_path in clip_glbs[1:]:
         doc, binary = read_glb(glb_path)
 
         # Node indices must match the base (identical mesh input), or channels break.
         if [n.get("name") for n in doc.get("nodes", [])] != [n.get("name") for n in base_doc.get("nodes", [])]:
             raise ValueError(f"{glb_path}: node hierarchy differs from base")
 
-        acc_off = len(base_doc.get("accessors", []))
-        bv_off = len(base_doc.get("bufferViews", []))
-        bin_off = len(base_bin)
-        base_bin += binary
+        # Only the accessors this clip's animations reference are carried over.
+        needed: set[int] = set()
+        for anim in doc.get("animations", []):
+            for s in anim.get("samplers", []):
+                needed.add(s["input"])
+                needed.add(s["output"])
 
-        # Append this file's accessors/bufferViews, remapping indices and offsets.
         base_doc.setdefault("accessors", [])
-        for acc in doc.get("accessors", []):
-            a = dict(acc)
-            if "bufferView" in a:
-                a["bufferView"] += bv_off
-            base_doc["accessors"].append(a)
         base_doc.setdefault("bufferViews", [])
-        for bv in doc.get("bufferViews", []):
-            v = dict(bv)
-            v["byteOffset"] = v.get("byteOffset", 0) + bin_off
-            v["buffer"] = 0
-            base_doc["bufferViews"].append(v)
+        acc_map: dict[int, int] = {}
+        bv_map: dict[int, int] = {}
+        appended = b""
+        for acc_idx in sorted(needed):
+            acc = dict(doc["accessors"][acc_idx])
+            if "bufferView" in acc:
+                old_bv = acc["bufferView"]
+                if old_bv not in bv_map:
+                    view = doc["bufferViews"][old_bv]
+                    offset = view.get("byteOffset", 0)
+                    length = view["byteLength"]
+                    # Keep every appended view 4-byte aligned (largest component size).
+                    appended += b"\0" * ((4 - (len(base_bin) + len(appended)) % 4) % 4)
+                    new_view = dict(view)
+                    new_view["byteOffset"] = len(base_bin) + len(appended)
+                    new_view["buffer"] = 0
+                    bv_map[old_bv] = len(base_doc["bufferViews"])
+                    base_doc["bufferViews"].append(new_view)
+                    appended += binary[offset:offset + length]
+                acc["bufferView"] = bv_map[old_bv]
+            acc_map[acc_idx] = len(base_doc["accessors"])
+            base_doc["accessors"].append(acc)
+        base_bin += appended
 
         for anim in doc.get("animations", []):
             samplers = []
             for s in anim.get("samplers", []):
                 s = dict(s)
-                s["input"] = s["input"] + acc_off
-                s["output"] = s["output"] + acc_off
+                s["input"] = acc_map[s["input"]]
+                s["output"] = acc_map[s["output"]]
                 samplers.append(s)
-            channels = []
-            for c in anim.get("channels", []):
-                c = dict(c)
-                c["sampler"] = c["sampler"] + 0  # local to this animation
-                channels.append(c)
+            channels = [dict(c) for c in anim.get("channels", [])]
             base_doc["animations"].append({
                 "name": clip_name,
                 "samplers": samplers,
