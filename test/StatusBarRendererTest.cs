@@ -376,5 +376,163 @@ public class StatusBarRendererTest : GoTestBase
 
         canvas.Free();
     }
+
+    [Test]
+    public void AmmoBarGunVisibleFiltersByGameMode()
+    {
+        // Selected gun is always visible
+        TestAssert.True(StatusBarRenderer.IsAmmoBarGunVisible(0, (int)Gun.Shotgun, (int)Gun.Shotgun, hideEmpty: true, isInsta: false, isEfficiency: false), "selected gun visible even if 0 ammo");
+
+        // Guns with ammo are always visible
+        TestAssert.True(StatusBarRenderer.IsAmmoBarGunVisible(10, (int)Gun.Rifle, (int)Gun.Shotgun, hideEmpty: true, isInsta: false, isEfficiency: false), "gun with ammo visible");
+
+        // HideEmpty hides guns with 0 ammo if not selected
+        TestAssert.False(StatusBarRenderer.IsAmmoBarGunVisible(0, (int)Gun.Rifle, (int)Gun.Shotgun, hideEmpty: true, isInsta: false, isEfficiency: false), "0 ammo hidden when hideEmpty=true");
+
+        // Efficiency mode: hides pistol (even if hideEmpty=false)
+        TestAssert.False(StatusBarRenderer.IsAmmoBarGunVisible(0, (int)Gun.Rifle, (int)Gun.Pistol, hideEmpty: false, isInsta: false, isEfficiency: true), "pistol hidden in efficiency mode");
+        TestAssert.True(StatusBarRenderer.IsAmmoBarGunVisible(0, (int)Gun.Rifle, (int)Gun.RocketLauncher, hideEmpty: false, isInsta: false, isEfficiency: true), "rocket launcher visible in efficiency mode");
+
+        // Insta mode: only rifle is visible
+        TestAssert.True(StatusBarRenderer.IsAmmoBarGunVisible(0, (int)Gun.Shotgun, (int)Gun.Rifle, hideEmpty: false, isInsta: true, isEfficiency: false), "rifle visible in insta mode");
+        TestAssert.False(StatusBarRenderer.IsAmmoBarGunVisible(0, (int)Gun.Rifle, (int)Gun.Shotgun, hideEmpty: false, isInsta: true, isEfficiency: false), "shotgun hidden in insta mode");
+    }
+
+    [Test]
+    public void AmmoBarColorMatchesAmmoRatios()
+    {
+        // 0 ammo -> white
+        Color emptyColor = StatusBarRenderer.GetAmmoBarColor(0, 10);
+        TestAssert.True(emptyColor == Colors.White, "0 ammo is white");
+
+        // Full ammo (>= add stat, i.e. ammoratio >= 1.0f) -> white
+        Color fullColor = StatusBarRenderer.GetAmmoBarColor(10, 10);
+        TestAssert.True(fullColor == Colors.White, "ammo >= add is white");
+
+        // Half ammo (ammoratio >= 0.5f) -> yellow / gold (0xFFC040)
+        Color halfColor = StatusBarRenderer.GetAmmoBarColor(5, 10);
+        TestAssert.True(halfColor == new Color(1f, 0.75294f, 0.25098f), "half ammo is yellow 0xFFC040");
+
+        // Low ammo (ammoratio < 0.5f) -> red (0xFF0000)
+        Color lowColor = StatusBarRenderer.GetAmmoBarColor(4, 10);
+        TestAssert.True(lowColor == new Color(1f, 0f, 0f), "low ammo is red 0xFF0000");
+    }
+
+    [Test]
+    public void AmmoBarLayoutMatchesEngineMath()
+    {
+        int[] ammo = new int[Guns.Count];
+        ammo[(int)Gun.Shotgun] = 10;
+        ammo[(int)Gun.Chaingun] = 20;
+
+        var items = StatusBarRenderer.LayoutAmmoBar(
+            ammo,
+            (int)Gun.Shotgun,
+            1920,
+            1080,
+            isInsta: false,
+            isEfficiency: false,
+            align: 0,
+            horizontal: false,
+            flip: false,
+            hideEmpty: true,
+            sep: 20f,
+            countSep: 20f,
+            countScale: 1.5f,
+            barX: 0.025f,
+            barY: 0.5f,
+            barScale: 0.5f);
+
+        TestAssert.True(items.Count == 2, $"two visible guns in ammo bar, got {items.Count}");
+        TestAssert.True(items[0].Gun == Gun.Shotgun, "first item is shotgun");
+        TestAssert.True(items[1].Gun == Gun.Chaingun, "second item is chaingun");
+        TestAssert.True(items[0].Color == Colors.White, "shotgun has full ammo -> white");
+        TestAssert.True(Mathf.IsEqualApprox(items[0].Alpha, 1.0f), "shotgun with ammo -> alpha 1.0");
+
+        // Insta mode returns empty list
+        var instaItems = StatusBarRenderer.LayoutAmmoBar(
+            ammo,
+            (int)Gun.Shotgun,
+            1920,
+            1080,
+            isInsta: true,
+            isEfficiency: false);
+        TestAssert.True(instaItems.Count == 0, "ammobar empty in insta mode");
+    }
+
+    [Test]
+    public void AmmoHudQuickSelectorLayoutCalculatesCorrectPositions()
+    {
+        int[] ammo = new int[Guns.Count];
+        ammo[(int)Gun.Chaingun] = 20;
+        ammo[(int)Gun.Rifle] = 5;
+
+        // Up stack has chaingun (GUN_CG); down stack has rifle (GUN_RIFLE)
+        var items = StatusBarRenderer.LayoutAmmoHud(
+            ammo,
+            selectedGun: (int)Gun.Shotgun,
+            upConfig: new int[] { (int)Gun.Chaingun, (int)Gun.RocketLauncher, (int)Gun.GrenadeLauncher },
+            downConfig: new int[] { (int)Gun.Rifle, (int)Gun.Shotgun, (int)Gun.Pistol });
+
+        TestAssert.True(items.Count == 2, $"2 items in quick ammo hud, got {items.Count}");
+        TestAssert.True(items[0].Gun == Gun.Chaingun, "first item is CG in up stack");
+        TestAssert.True(items[1].Gun == Gun.Rifle, "second item is rifle in down stack");
+
+        // Verify size is HICON_SIZE / 3.2f
+        float expectedSize = StatusBarRenderer.IconSize / 3.2f;
+        TestAssert.True(Mathf.IsEqualApprox(items[0].Size, expectedSize), "icon size scaled by 1/3.2");
+    }
+
+    [Test]
+    public void HudControllerUpdatesAmmoBarAndAmmoHudNodes()
+    {
+        var player = new MapPlayer();
+        player.Combat.GunSelect = (int)Gun.Shotgun;
+        player.Combat.Ammo[(int)Gun.Shotgun] = 10;
+        player.Combat.Ammo[(int)Gun.Chaingun] = 5; // Half of 20 -> low (< 0.5f add) -> red
+        player.Combat.Ammo[(int)Gun.RocketLauncher] = 0;
+
+        var hud = new HudController
+        {
+            Player = player,
+            AmmoHud = true,
+            AmmoBar = true,
+            AmmoBarHideEmpty = true
+        };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        var texSource = new SauerbratenRevival.World.Materials.ResourceTextureSource();
+        hud.SetupTextures(texSource);
+
+        hud.UpdateStatusBar();
+
+        var ammoHudRoot = hud.GetNodeOrNull<Control>("AmmoHud");
+        TestAssert.True(ammoHudRoot != null, "AmmoHud root exists");
+        TestAssert.True(ammoHudRoot!.Visible, "AmmoHud is visible");
+
+        var ammoBarRoot = hud.GetNodeOrNull<Control>("AmmoBar");
+        TestAssert.True(ammoBarRoot != null, "AmmoBar root exists");
+        TestAssert.True(ammoBarRoot!.Visible, "AmmoBar is visible");
+
+        var barIcon0 = hud.GetNodeOrNull<TextureRect>("AmmoBar/AmmoBarIcon_0");
+        var barLabel0 = hud.GetNodeOrNull<Label>("AmmoBar/AmmoBarLabel_0");
+        TestAssert.True(barIcon0 != null && barIcon0.Visible, "AmmoBar icon 0 visible");
+        TestAssert.True(barLabel0 != null && barLabel0.Visible, "AmmoBar label 0 visible");
+        TestAssert.True(barLabel0!.Text == "10", $"AmmoBar label 0 text is 10, got {barLabel0.Text}");
+
+        var barLabel1 = hud.GetNodeOrNull<Label>("AmmoBar/AmmoBarLabel_1");
+        TestAssert.True(barLabel1 != null && barLabel1.Visible, "AmmoBar label 1 visible");
+        TestAssert.True(barLabel1!.Text == "5", $"AmmoBar label 1 text is 5, got {barLabel1.Text}");
+        TestAssert.True(barLabel1.Modulate == new Color(1f, 0f, 0f), "AmmoBar label 1 is red for low ammo (< 0.5f)");
+
+        // Insta mode disables ammo bar
+        hud.IsInsta = true;
+        hud.UpdateStatusBar();
+        TestAssert.False(ammoBarRoot.Visible, "AmmoBar hidden in insta mode");
+
+        canvas.Free();
+    }
 }
 

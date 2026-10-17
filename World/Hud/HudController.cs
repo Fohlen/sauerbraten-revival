@@ -68,6 +68,62 @@ public partial class HudController : Control
     /// <summary>Remaining hold seconds countdown for hold mode (max(HOLDSECS - counter/1000, 0)).</summary>
     public int HoldRemainingSeconds { get; set; }
 
+    /// <summary>Whether current mode is efficiency mode (no pistol).</summary>
+    public bool IsEfficiency { get; set; }
+
+    /// <summary>Whether quick weapon cycling HUD is enabled (VARP ammohud in fps.cpp).</summary>
+    public bool AmmoHud { get; set; } = true;
+
+    /// <summary>Whether full ammo bar strip is enabled (VARP ammobar in fps.cpp).</summary>
+    public bool AmmoBar { get; set; } = false;
+
+    /// <summary>Ammo bar alignment (-1 = left/top, 0 = center, 1 = right/bottom) (VARP ammobaralign).</summary>
+    public int AmmoBarAlign { get; set; } = 0;
+
+    /// <summary>Ammo bar orientation (horizontal vs vertical) (VARP ammobarhorizontal).</summary>
+    public bool AmmoBarHorizontal { get; set; } = false;
+
+    /// <summary>Ammo bar flip offset direction (VARP ammobarflip).</summary>
+    public bool AmmoBarFlip { get; set; } = false;
+
+    /// <summary>Ammo bar hide empty weapons (VARP ammobarhideempty).</summary>
+    public bool AmmoBarHideEmpty { get; set; } = true;
+
+    /// <summary>Ammo bar spacing between weapon icons (VARP ammobarsep).</summary>
+    public float AmmoBarSep { get; set; } = 20.0f;
+
+    /// <summary>Ammo bar spacing between icon and counter text (VARP ammobarcountsep).</summary>
+    public float AmmoBarCountSep { get; set; } = 20.0f;
+
+    /// <summary>Ammo bar counter font scale multiplier (FVARP ammobarcountscale).</summary>
+    public float AmmoBarCountScale { get; set; } = 1.5f;
+
+    /// <summary>Ammo bar normalized screen X position (FVARP ammobarx).</summary>
+    public float AmmoBarX { get; set; } = 0.025f;
+
+    /// <summary>Ammo bar normalized screen Y position (FVARP ammobary).</summary>
+    public float AmmoBarY { get; set; } = 0.5f;
+
+    /// <summary>Ammo bar overall scale multiplier (FVARP ammobarscale).</summary>
+    public float AmmoBarScale { get; set; } = 0.5f;
+
+    /// <summary>Weapon layout for ammo hud 'up' stack (3 weapons).</summary>
+    public int[] AmmoHudUp { get; set; } = new int[] { (int)Gun.Chaingun, (int)Gun.RocketLauncher, (int)Gun.GrenadeLauncher };
+
+    /// <summary>Weapon layout for ammo hud 'down' stack (3 weapons).</summary>
+    public int[] AmmoHudDown { get; set; } = new int[] { (int)Gun.Rifle, (int)Gun.Shotgun, (int)Gun.Pistol };
+
+    /// <summary>Weapon layout for ammo hud 'cycle' row (7 weapons).</summary>
+    public int[] AmmoHudCycle { get; set; } = new int[] { -1, -1, -1, -1, -1, -1, -1 };
+
+    // Quick ammo hud nodes container
+    private Control? _ammoHudRoot;
+    private readonly System.Collections.Generic.List<TextureRect> _ammoHudIcons = new();
+
+    // Ammo bar nodes container
+    private Control? _ammoBarRoot;
+    private readonly System.Collections.Generic.List<(TextureRect Icon, Label Label)> _ammoBarSlots = new();
+
     public override void _Ready()
     {
         // Full screen root layout
@@ -88,6 +144,8 @@ public partial class HudController : Control
         }
 
         SetupStatusBarNodes();
+        SetupAmmoHudNodes();
+        SetupAmmoBarNodes();
         UpdateAtlasTextures();
     }
 
@@ -201,6 +259,68 @@ public partial class HudController : Control
             Visible = false
         };
         _statusBarRoot.AddChild(_flagLabel);
+    }
+
+    private void SetupAmmoHudNodes()
+    {
+        _ammoHudRoot = new Control
+        {
+            Name = "AmmoHud",
+            MouseFilter = MouseFilterEnum.Ignore
+        };
+        AddChild(_ammoHudRoot);
+
+        // Pool up to 13 possible ammohud icons (3 up + 3 down + 7 cycle)
+        for (int i = 0; i < 16; i++)
+        {
+            var iconRect = new TextureRect
+            {
+                Name = $"AmmoHudIcon_{i}",
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.Scale,
+                MouseFilter = MouseFilterEnum.Ignore,
+                Visible = false
+            };
+            _ammoHudRoot.AddChild(iconRect);
+            _ammoHudIcons.Add(iconRect);
+        }
+    }
+
+    private void SetupAmmoBarNodes()
+    {
+        _ammoBarRoot = new Control
+        {
+            Name = "AmmoBar",
+            MouseFilter = MouseFilterEnum.Ignore
+        };
+        AddChild(_ammoBarRoot);
+
+        // Pool slots for all 6 player guns (SG through Pistol)
+        int numPlayerGuns = (int)Gun.Pistol - (int)Gun.Shotgun + 1;
+        for (int i = 0; i < numPlayerGuns; i++)
+        {
+            var iconRect = new TextureRect
+            {
+                Name = $"AmmoBarIcon_{i}",
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.Scale,
+                MouseFilter = MouseFilterEnum.Ignore,
+                Visible = false
+            };
+            _ammoBarRoot.AddChild(iconRect);
+
+            var label = new Label
+            {
+                Name = $"AmmoBarLabel_{i}",
+                MouseFilter = MouseFilterEnum.Ignore,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Visible = false
+            };
+            _ammoBarRoot.AddChild(label);
+
+            _ammoBarSlots.Add((iconRect, label));
+        }
     }
 
     /// <summary>Initialize textures using the project's texture source.</summary>
@@ -523,6 +643,135 @@ public partial class HudController : Control
             if (_quadIcon != null) _quadIcon.Visible = false;
             if (_flagIcon != null) _flagIcon.Visible = false;
             if (_flagLabel != null) _flagLabel.Visible = false;
+        }
+
+        UpdateAmmoHud(scale, isDead);
+        UpdateAmmoBar(viewportSize, isDead);
+    }
+
+    /// <summary>
+    /// Updates the quick weapon selector / cycling HUD (drawammohud in fps.cpp:860-899).
+    /// </summary>
+    public void UpdateAmmoHud(float scale, bool isDead)
+    {
+        if (_ammoHudRoot == null) return;
+
+        if (isDead || !AmmoHud || Player == null)
+        {
+            _ammoHudRoot.Visible = false;
+            return;
+        }
+
+        _ammoHudRoot.Visible = true;
+        var items = StatusBarRenderer.LayoutAmmoHud(
+            Player.Combat.Ammo,
+            Player.Combat.GunSelect,
+            AmmoHudUp,
+            AmmoHudDown,
+            AmmoHudCycle);
+
+        for (int i = 0; i < _ammoHudIcons.Count; i++)
+        {
+            var iconRect = _ammoHudIcons[i];
+            if (i < items.Count)
+            {
+                var item = items[i];
+                iconRect.Visible = true;
+                iconRect.Texture = CreateAtlasTexture(StatusBarRenderer.GetGunIcon(item.Gun));
+                iconRect.Position = item.Position * scale;
+                iconRect.Size = new Vector2(item.Size * scale, item.Size * scale);
+                iconRect.Modulate = Colors.White;
+            }
+            else
+            {
+                iconRect.Visible = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Updates the full ammo bar strip (drawammobar in fps.cpp:1028-1055).
+    /// </summary>
+    public void UpdateAmmoBar(Vector2 viewportSize, bool isDead)
+    {
+        if (_ammoBarRoot == null) return;
+
+        if (isDead || !AmmoBar || IsInsta || Player == null)
+        {
+            _ammoBarRoot.Visible = false;
+            return;
+        }
+
+        _ammoBarRoot.Visible = true;
+        var items = StatusBarRenderer.LayoutAmmoBar(
+            Player.Combat.Ammo,
+            Player.Combat.GunSelect,
+            viewportSize.X,
+            viewportSize.Y,
+            IsInsta,
+            IsEfficiency,
+            AmmoBarAlign,
+            AmmoBarHorizontal,
+            AmmoBarFlip,
+            AmmoBarHideEmpty,
+            AmmoBarSep,
+            AmmoBarCountSep,
+            AmmoBarCountScale,
+            AmmoBarX,
+            AmmoBarY,
+            AmmoBarScale);
+
+        // In Sauerbraten:
+        // text_bounds("000", fw, fh) -> fw = 3 * 30 = 90, fh = 64
+        // labeloffset = HICON_SIZE / 2.0f + ammobarcountsep + ammobarcountscale * (ammobarhorizontal ? fh : fw) / 2.0f;
+        // offsetdir = (ammobarhorizontal ? vec2(0, 1) : vec2(1, 0)).mul(ammobarflip ? -1 : 1);
+        // labelorigin = vec2(offsetdir).mul(labeloffset).add(center);
+        // pushhudmatrix(); hudmatrix.translate(labelorigin.x, labelorigin.y, 0); hudmatrix.scale(ammobarcountscale, ammobarcountscale, 1);
+        // textdrawpos = vec2(-tw, -th).div(2);
+        // All of drawammobar is wrapped in hudmatrix.scale(ammobarscale, ammobarscale, 1).
+        float fw = 3.0f * StatusBarRenderer.DefaultFontCharWidth;
+        float fh = StatusBarRenderer.DefaultFontHeight;
+        float labelOffset = (StatusBarRenderer.IconSize / 2f + AmmoBarCountSep + AmmoBarCountScale * (AmmoBarHorizontal ? fh : fw) / 2f);
+        Vector2 offsetDir = (AmmoBarHorizontal ? new Vector2(0, 1) : new Vector2(1, 0)) * (AmmoBarFlip ? -1f : 1f);
+
+        for (int i = 0; i < _ammoBarSlots.Count; i++)
+        {
+            var (iconRect, label) = _ammoBarSlots[i];
+            if (i < items.Count)
+            {
+                var item = items[i];
+                iconRect.Visible = true;
+                label.Visible = true;
+
+                // Center in bar-space -> scaled to screen coordinates
+                Vector2 screenCenter = item.Center * AmmoBarScale;
+                float iconSize = StatusBarRenderer.IconSize * AmmoBarScale;
+                Vector2 iconDrawPos = screenCenter - new Vector2(iconSize / 2f, iconSize / 2f);
+
+                iconRect.Texture = CreateAtlasTexture(StatusBarRenderer.GetGunIcon(item.Gun));
+                iconRect.Position = iconDrawPos;
+                iconRect.Size = new Vector2(iconSize, iconSize);
+                iconRect.Modulate = new Color(1f, 1f, 1f, item.Alpha);
+
+                // Label origin:
+                Vector2 labelOrigin = (item.Center + offsetDir * labelOffset) * AmmoBarScale;
+                // Font size scales with AmmoBarScale * AmmoBarCountScale
+                float totalCountScale = AmmoBarScale * AmmoBarCountScale;
+                int fontSize = Mathf.Max(10, (int)(StatusBarRenderer.DefaultFontHeight * totalCountScale));
+                label.AddThemeFontSizeOverride("font_size", fontSize);
+                label.Text = item.Ammo.ToString();
+                label.Modulate = new Color(item.Color.R, item.Color.G, item.Color.B, item.Alpha);
+
+                // Center label over labelOrigin
+                Vector2 textSize = label.GetCombinedMinimumSize();
+                label.Position = labelOrigin - textSize / 2f;
+                label.Size = textSize;
+            }
+            else
+            {
+                iconRect.Visible = false;
+                label.Visible = false;
+            }
         }
     }
 }
