@@ -109,4 +109,19 @@ public static class StatusBarRenderer
         Gun.Pistol => HudIcon.Pistol,
         _ => HudIcon.Fist
     };
+
+    /// <summary>
+    /// Determines which flag icon to show based on game mode and team.
+    /// Port of <c>ctf.h:555</c>:
+    /// <c>drawicon(m_hold ? HICON_NEUTRAL_FLAG : (f.team==ctfteamflag(player1->team) ? HICON_BLUE_FLAG : HICON_RED_FLAG), x, HICON_Y);</c>
+    /// </summary>
+    public static HudIcon GetFlagIcon(bool isHold, int flagTeam, int playerTeam)
+    {
+        if (isHold)
+            return HudIcon.NeutralFlag;
+
+        // In Sauerbraten CTF: team == ctfteamflag(player1->team) ? HICON_BLUE_FLAG : HICON_RED_FLAG
+        return flagTeam == playerTeam ? HudIcon.BlueFlag : HudIcon.RedFlag;
+    }
 }
+

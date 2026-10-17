@@ -29,9 +29,15 @@ public partial class HudController : Control
     private TextureRect? _weaponIcon;
     private Label? _ammoLabel;
 
+    private TextureRect? _quadIcon;
+
+    private TextureRect? _flagIcon;
+    private Label? _flagLabel;
+
     private Texture2D? _itemsTexture;
     private ArmourType? _lastArmourType;
     private Gun? _lastGun;
+    private HudIcon? _lastFlagIcon;
 
     public CrosshairRenderer Crosshair => _crosshairRenderer;
 
@@ -49,6 +55,18 @@ public partial class HudController : Control
 
     /// <summary>Whether current mode is insta-gib (disables low-health coloring).</summary>
     public bool IsInsta { get; set; }
+
+    /// <summary>Whether the current player is carrying a flag (CTF/Hold).</summary>
+    public bool HasFlag { get; set; }
+
+    /// <summary>Whether current mode is hold mode (m_hold in Sauerbraten).</summary>
+    public bool IsHoldMode { get; set; }
+
+    /// <summary>The team ID of the flag currently held (1 = good/blue, 2 = evil/red, 0 = neutral).</summary>
+    public int HeldFlagTeam { get; set; }
+
+    /// <summary>Remaining hold seconds countdown for hold mode (max(HOLDSECS - counter/1000, 0)).</summary>
+    public int HoldRemainingSeconds { get; set; }
 
     public override void _Ready()
     {
@@ -151,6 +169,38 @@ public partial class HudController : Control
             Visible = false
         };
         _statusBarRoot.AddChild(_ammoLabel);
+
+        // Quad Damage Icon
+        _quadIcon = new TextureRect
+        {
+            Name = "QuadIcon",
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = MouseFilterEnum.Ignore,
+            Visible = false
+        };
+        _statusBarRoot.AddChild(_quadIcon);
+
+        // Flag Indicator Icon
+        _flagIcon = new TextureRect
+        {
+            Name = "FlagIcon",
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = MouseFilterEnum.Ignore,
+            Visible = false
+        };
+        _statusBarRoot.AddChild(_flagIcon);
+
+        // Flag Hold Counter Number
+        _flagLabel = new Label
+        {
+            Name = "FlagLabel",
+            MouseFilter = MouseFilterEnum.Ignore,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visible = false
+        };
+        _statusBarRoot.AddChild(_flagLabel);
     }
 
     /// <summary>Initialize textures using the project's texture source.</summary>
@@ -178,6 +228,16 @@ public partial class HudController : Control
         if (_weaponIcon != null && _lastGun.HasValue)
         {
             _weaponIcon.Texture = CreateAtlasTexture(StatusBarRenderer.GetGunIcon(_lastGun.Value));
+        }
+
+        if (_quadIcon != null)
+        {
+            _quadIcon.Texture = CreateAtlasTexture(HudIcon.Quad);
+        }
+
+        if (_flagIcon != null && _lastFlagIcon.HasValue)
+        {
+            _flagIcon.Texture = CreateAtlasTexture(_lastFlagIcon.Value);
         }
     }
 
@@ -383,11 +443,87 @@ public partial class HudController : Control
                 int fontSize = Mathf.Max(12, (int)(64f * scale));
                 _ammoLabel.AddThemeFontSizeOverride("font_size", fontSize);
             }
+
+            // Quad Damage Icon (fps.cpp:939: if(d->quadmillis) drawicon(HICON_QUAD, HICON_X + 3*HICON_STEP, HICON_Y))
+            bool hasQuad = Player.Combat.QuadMillis > 0;
+            if (hasQuad)
+            {
+                if (_quadIcon != null)
+                {
+                    if (_quadIcon.Texture == null)
+                    {
+                        _quadIcon.Texture = CreateAtlasTexture(HudIcon.Quad);
+                    }
+                    _quadIcon.Visible = true;
+                    _quadIcon.Position = new Vector2((StatusBarRenderer.IconX + 3 * StatusBarRenderer.IconStep) * scale, StatusBarRenderer.IconY * scale);
+                    _quadIcon.Size = new Vector2(StatusBarRenderer.IconSize * scale, StatusBarRenderer.IconSize * scale);
+                }
+            }
+            else
+            {
+                if (_quadIcon != null) _quadIcon.Visible = false;
+            }
+
+            // CTF / Mode flag: flag indicator icon with hold counter or carrier status
+            // (ctf.h:547-565: drawhud in ctfmode)
+            // Position: int x = HICON_X + 3*HICON_STEP + (d->quadmillis ? HICON_SIZE + HICON_SPACE : 0);
+            // drawicon(m_hold ? HICON_NEUTRAL_FLAG : (f.team==ctfteamflag(player1->team) ? HICON_BLUE_FLAG : HICON_RED_FLAG), x, HICON_Y);
+            if (HasFlag)
+            {
+                HudIcon flagIconType = StatusBarRenderer.GetFlagIcon(IsHoldMode, HeldFlagTeam, Player.Team);
+                if (_flagIcon != null)
+                {
+                    if (_lastFlagIcon != flagIconType || _flagIcon.Texture == null)
+                    {
+                        _lastFlagIcon = flagIconType;
+                        _flagIcon.Texture = CreateAtlasTexture(flagIconType);
+                    }
+                    _flagIcon.Visible = true;
+
+                    float flagX = StatusBarRenderer.IconX + 3 * StatusBarRenderer.IconStep + (hasQuad ? StatusBarRenderer.IconSize + StatusBarRenderer.IconSpace : 0f);
+                    _flagIcon.Position = new Vector2(flagX * scale, StatusBarRenderer.IconY * scale);
+                    _flagIcon.Size = new Vector2(StatusBarRenderer.IconSize * scale, StatusBarRenderer.IconSize * scale);
+                }
+
+                if (_flagLabel != null)
+                {
+                    if (IsHoldMode)
+                    {
+                        // In Sauerbraten hold mode: draw_textf("%d", (x + HICON_SIZE + HICON_SPACE)/2, HICON_TEXTY/2, max(HOLDSECS - f.holdcounter()/1000, 0));
+                        _flagLabel.Visible = true;
+                        _flagLabel.Text = Math.Max(0, HoldRemainingSeconds).ToString();
+                        _flagLabel.Modulate = Colors.White;
+
+                        float flagX = StatusBarRenderer.IconX + 3 * StatusBarRenderer.IconStep + (hasQuad ? StatusBarRenderer.IconSize + StatusBarRenderer.IconSpace : 0f);
+                        float flagTextX = (flagX + StatusBarRenderer.IconSize + StatusBarRenderer.IconSpace) * scale;
+                        float iconY = StatusBarRenderer.IconY * scale;
+                        float iconHeight = StatusBarRenderer.IconSize * scale;
+                        _flagLabel.Position = new Vector2(flagTextX, iconY);
+                        _flagLabel.Size = new Vector2(200f * scale, iconHeight);
+                        _flagLabel.VerticalAlignment = VerticalAlignment.Center;
+                        int fontSize = Mathf.Max(12, (int)(64f * scale));
+                        _flagLabel.AddThemeFontSizeOverride("font_size", fontSize);
+                    }
+                    else
+                    {
+                        _flagLabel.Visible = false;
+                    }
+                }
+            }
+            else
+            {
+                if (_flagIcon != null) _flagIcon.Visible = false;
+                if (_flagLabel != null) _flagLabel.Visible = false;
+            }
         }
         else
         {
             if (_weaponIcon != null) _weaponIcon.Visible = false;
             if (_ammoLabel != null) _ammoLabel.Visible = false;
+            if (_quadIcon != null) _quadIcon.Visible = false;
+            if (_flagIcon != null) _flagIcon.Visible = false;
+            if (_flagLabel != null) _flagLabel.Visible = false;
         }
     }
 }
+

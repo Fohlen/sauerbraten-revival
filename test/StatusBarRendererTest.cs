@@ -262,4 +262,119 @@ public class StatusBarRendererTest : GoTestBase
 
         canvas.Free();
     }
+
+    [Test]
+    public void HudControllerUpdatesQuadDamageAndFlagStatusCorrectly()
+    {
+        var player = new MapPlayer();
+        var hud = new HudController { Player = player };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        var texSource = new SauerbratenRevival.World.Materials.ResourceTextureSource();
+        hud.SetupTextures(texSource);
+
+        var quadIcon = hud.GetNodeOrNull<TextureRect>("StatusBar/QuadIcon");
+        var flagIcon = hud.GetNodeOrNull<TextureRect>("StatusBar/FlagIcon");
+        var flagLabel = hud.GetNodeOrNull<Label>("StatusBar/FlagLabel");
+
+        TestAssert.True(quadIcon != null, "quad icon node exists");
+        TestAssert.True(flagIcon != null, "flag icon node exists");
+        TestAssert.True(flagLabel != null, "flag label node exists");
+
+        // Initially no quad and no flag
+        player.Combat.QuadMillis = 0;
+        hud.HasFlag = false;
+        hud.UpdateStatusBar();
+
+        TestAssert.False(quadIcon!.Visible, "quad icon hidden when quadmillis is 0");
+        TestAssert.False(flagIcon!.Visible, "flag icon hidden when hasflag is false");
+        TestAssert.False(flagLabel!.Visible, "flag label hidden when hasflag is false");
+
+        // Activate Quad Damage
+        player.Combat.QuadMillis = 15000;
+        hud.UpdateStatusBar();
+
+        TestAssert.True(quadIcon.Visible, "quad icon visible when quadmillis > 0");
+        var quadAtlas = (AtlasTexture)quadIcon.Texture;
+        Rect2 quadUv = StatusBarRenderer.GetIconUv(HudIcon.Quad);
+        Vector2 texSize = quadAtlas.Atlas?.GetSize() ?? Vector2.Zero;
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            TestAssert.True(Mathf.IsEqualApprox(quadAtlas.Region.Position.X, quadUv.Position.X * texSize.X), "correct atlas X offset for quad");
+            TestAssert.True(Mathf.IsEqualApprox(quadAtlas.Region.Position.Y, quadUv.Position.Y * texSize.Y), "correct atlas Y offset for quad");
+        }
+
+        Vector2 viewportSize = hud.GetViewportRect().Size;
+        float scale = viewportSize.Y / StatusBarRenderer.ReferenceHeight;
+        float expectedQuadX = (StatusBarRenderer.IconX + 3 * StatusBarRenderer.IconStep) * scale;
+        TestAssert.True(Mathf.IsEqualApprox(quadIcon.Position.X, expectedQuadX), $"quad X matches 3 * HICON_STEP, got {quadIcon.Position.X} expected {expectedQuadX}");
+
+        // CTF Flag Carrier: blue team holding enemy red flag (flagTeam 2, playerTeam 1)
+        player.Team = 1;
+        hud.HeldFlagTeam = 2;
+        hud.HasFlag = true;
+        hud.IsHoldMode = false;
+        hud.UpdateStatusBar();
+
+        TestAssert.True(flagIcon.Visible, "flag icon visible when carrying flag");
+        TestAssert.False(flagLabel.Visible, "flag label hidden in standard CTF");
+
+        var flagAtlas = (AtlasTexture)flagIcon.Texture;
+        Rect2 redFlagUv = StatusBarRenderer.GetIconUv(HudIcon.RedFlag);
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            TestAssert.True(Mathf.IsEqualApprox(flagAtlas.Region.Position.X, redFlagUv.Position.X * texSize.X), "enemy flag shows red flag icon");
+            TestAssert.True(Mathf.IsEqualApprox(flagAtlas.Region.Position.Y, redFlagUv.Position.Y * texSize.Y), "enemy flag shows red flag icon Y");
+        }
+
+        // Flag position with quad active: offset by HICON_SIZE + HICON_SPACE
+        float expectedFlagXWithQuad = (StatusBarRenderer.IconX + 3 * StatusBarRenderer.IconStep + StatusBarRenderer.IconSize + StatusBarRenderer.IconSpace) * scale;
+        TestAssert.True(Mathf.IsEqualApprox(flagIcon.Position.X, expectedFlagXWithQuad), $"flag X offset by quad size + space when quad is active");
+
+        // Player team holding own blue flag (e.g. dropped & returned / protect mode)
+        hud.HeldFlagTeam = 1;
+        hud.UpdateStatusBar();
+        flagAtlas = (AtlasTexture)flagIcon.Texture;
+        Rect2 blueFlagUv = StatusBarRenderer.GetIconUv(HudIcon.BlueFlag);
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            TestAssert.True(Mathf.IsEqualApprox(flagAtlas.Region.Position.X, blueFlagUv.Position.X * texSize.X), "own flag shows blue flag icon");
+            TestAssert.True(Mathf.IsEqualApprox(flagAtlas.Region.Position.Y, blueFlagUv.Position.Y * texSize.Y), "own flag shows blue flag icon Y");
+        }
+
+        // Hold Mode: neutral flag with hold counter countdown
+        hud.IsHoldMode = true;
+        hud.HoldRemainingSeconds = 14;
+        hud.UpdateStatusBar();
+
+        TestAssert.True(flagLabel.Visible, "flag label visible in hold mode");
+        TestAssert.True(flagLabel.Text == "14", $"flag label shows remaining hold seconds, got {flagLabel.Text}");
+        flagAtlas = (AtlasTexture)flagIcon.Texture;
+        Rect2 neutralFlagUv = StatusBarRenderer.GetIconUv(HudIcon.NeutralFlag);
+        if (texSize.X > 0 && texSize.Y > 0)
+        {
+            TestAssert.True(Mathf.IsEqualApprox(flagAtlas.Region.Position.X, neutralFlagUv.Position.X * texSize.X), "hold mode shows neutral flag icon");
+            TestAssert.True(Mathf.IsEqualApprox(flagAtlas.Region.Position.Y, neutralFlagUv.Position.Y * texSize.Y), "hold mode shows neutral flag icon Y");
+        }
+
+        // When quad expires, flag position shifts left to 3 * HICON_STEP
+        player.Combat.QuadMillis = 0;
+        hud.UpdateStatusBar();
+        TestAssert.False(quadIcon.Visible, "quad icon hidden when quad expired");
+        float expectedFlagXNoQuad = (StatusBarRenderer.IconX + 3 * StatusBarRenderer.IconStep) * scale;
+        TestAssert.True(Mathf.IsEqualApprox(flagIcon.Position.X, expectedFlagXNoQuad), "flag X shifts to 3 * HICON_STEP when no quad");
+
+        // When dead, both quad and flag are hidden
+        player.Entity.Dead = true;
+        player.Combat.QuadMillis = 10000;
+        hud.UpdateStatusBar();
+        TestAssert.False(quadIcon.Visible, "quad hidden when dead");
+        TestAssert.False(flagIcon.Visible, "flag icon hidden when dead");
+        TestAssert.False(flagLabel.Visible, "flag label hidden when dead");
+
+        canvas.Free();
+    }
 }
+
