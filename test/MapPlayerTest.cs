@@ -633,4 +633,77 @@ public class MapPlayerTest : GoTestBase
 
         player.Free();
     }
+
+    [Test]
+    public void CheckTeleportsMovesPlayerToDestination()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040));
+        Step(player, 200);
+
+        Vector3 feet = player.Entity.FeetPos();
+        var dest = new TeleDest
+        {
+            Position = new Vector3(1000, 1000, 500),
+            Yaw = 90f,
+            Pushed = false,
+        };
+        var tp = new Teleport
+        {
+            Position = feet,
+            BasePosition = feet,
+            Destination = dest,
+            Sound = 0,
+        };
+        player.Teleports = new[] { tp };
+        player.Entity.Vel = new Vector3(50, 50, 0);
+
+        var hit = player.CheckTeleports(lastMillis: 1000);
+        TestAssert.True(hit == tp, "teleport triggered");
+        TestAssert.True(Mathf.Abs(player.Entity.O.X - 1000f) < 0.01f, "pos X matches dest");
+        TestAssert.True(Mathf.Abs(player.Entity.O.Y - 1000f) < 0.01f, "pos Y matches dest");
+        TestAssert.True(Mathf.Abs(player.Entity.O.Z - (500f + MapPlayer.EyeHeight)) < 0.01f, "pos Z has eye height added");
+        TestAssert.True(Mathf.Abs(player.Entity.Yaw - 90f) < 0.01f, "yaw updated to dest yaw");
+        TestAssert.Equal(Vector3.Zero, player.Entity.Vel, "vel reset to zero when not pushed");
+
+        player.Free();
+    }
+
+    [Test]
+    public void TeleportPreservesVelocityWhenPushed()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = MakePlayer(octa, new Vector3(3000, 946, 3040));
+        Step(player, 200);
+
+        Vector3 feet = player.Entity.FeetPos();
+        var dest = new TeleDest
+        {
+            Position = new Vector3(1000, 1000, 500),
+            Yaw = 0f, // facing +Y
+            Pushed = true,
+        };
+        var tp = new Teleport
+        {
+            Position = feet,
+            BasePosition = feet,
+            Destination = dest,
+            Sound = 0,
+        };
+        player.Teleports = new[] { tp };
+        player.Entity.Vel = new Vector3(30, 40, 15); // horizontal speed = 50
+
+        var hit = player.CheckTeleports(lastMillis: 1000);
+        TestAssert.True(hit == tp, "teleport triggered");
+        // Yaw 0 has dir = (0, 1, 0). Speed 50 -> vel should be (0, 50, 15)
+        TestAssert.True(Mathf.Abs(player.Entity.Vel.X) < 0.01f, "vel X redirected");
+        TestAssert.True(Mathf.Abs(player.Entity.Vel.Y - 50f) < 0.01f, "vel Y redirected with horizontal speed");
+        TestAssert.True(Mathf.Abs(player.Entity.Vel.Z - 15f) < 0.01f, "vel Z preserved");
+
+        // Cooldown check (500ms)
+        var hitCooldown = player.CheckTeleports(lastMillis: 1200);
+        TestAssert.True(hitCooldown == null, "rate limited by 500ms cooldown");
+
+        player.Free();
+    }
 }

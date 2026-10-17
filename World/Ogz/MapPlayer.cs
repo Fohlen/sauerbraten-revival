@@ -118,6 +118,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>Active jump pad trigger entities in this map/session.</summary>
     public IReadOnlyList<JumpPad>? JumpPads { get; set; }
+    public IReadOnlyList<Teleport>? Teleports { get; set; }
 
     /// <summary>
     /// The visible body model, if any. It must be a <b>sibling</b> of this node (a child
@@ -856,6 +857,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
             Items?.CheckPickups(this, LastMillis);
             CheckJumpPads(LastMillis);
+            CheckTeleports(LastMillis);
 
             // Advance active flying rockets (weapon.cpp:523 updateprojectiles)
             for (int i = ActiveRockets.Count - 1; i >= 0; i--)
@@ -1079,6 +1081,69 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.TimeInAir = 1;
         Entity.Vel = pad.Push;
 
+        return true;
+    }
+
+    /// <summary>
+    /// Checks all teleporters against the player's feet position (<c>fpsgame/entities.cpp:334 checkitems</c>).
+    /// Teleporters use radius 16.
+    /// </summary>
+    public Teleport? CheckTeleports(int lastMillis)
+    {
+        if (!IsAlive || Floating || Teleports == null) return null;
+
+        Vector3 feet = Entity.FeetPos();
+        for (int i = 0; i < Teleports.Count; i++)
+        {
+            var teleport = Teleports[i];
+            float dist = teleport.BasePosition.DistanceTo(feet);
+            if (dist < 16.0f)
+            {
+                if (ApplyTeleport(teleport, lastMillis))
+                    return teleport;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Applies teleportation, destination positioning, yaw orientation, velocity preservation, and sound effects
+    /// (<c>fpsgame/entities.cpp:253-281 teleport, 202-227 teleporteffects, 296-308 trypickup</c>).
+    /// Returns false if rate-limited (500 ms cooldown) or missing destination.
+    /// </summary>
+    public bool ApplyTeleport(Teleport teleport, int lastMillis)
+    {
+        if (LastPickup == EntityType.Teleport && lastMillis - LastPickupMillis < 500)
+            return false;
+
+        var dest = teleport.Destination;
+        if (dest == null) return false;
+
+        LastPickup = EntityType.Teleport;
+        LastPickupMillis = lastMillis;
+
+        // Sound effect (fpsgame/entities.cpp:202 teleporteffects)
+        if (teleport.Sound >= 0)
+        {
+            PlaySound(GameSound.Teleport);
+        }
+
+        // Apply position: dest is ground level; eye pos = dest + eyeheight
+        Entity.O = new Vector3(dest.Position.X, dest.Position.Y, dest.Position.Z + EyeHeight);
+        Entity.Yaw = dest.Yaw;
+
+        if (dest.Pushed)
+        {
+            Vector3 dir = Movement.VecFromYawPitch(Entity.Yaw, 0f, 1, 0);
+            float speed = new Vector2(Entity.Vel.X, Entity.Vel.Y).Length();
+            Entity.Vel = new Vector3(dir.X * speed, dir.Y * speed, Entity.Vel.Z);
+        }
+        else
+        {
+            Entity.Vel = Vector3.Zero;
+        }
+
+        SyncTransform();
         return true;
     }
 

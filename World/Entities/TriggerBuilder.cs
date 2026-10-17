@@ -12,12 +12,17 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 public static class TriggerBuilder
 {
-    public static (Node3D Root, List<JumpPad> JumpPads) BuildTriggers(OgzMap map, MetadataCatalogue? catalogue = null, ITextureSource? textures = null)
+    public static (Node3D Root, List<JumpPad> JumpPads, List<Teleport> Teleports) BuildTriggers(
+        OgzMap map,
+        MetadataCatalogue? catalogue = null,
+        ModelCatalog? models = null,
+        ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "Triggers" };
         var teleports = new List<Teleport>();
         var destinations = new List<TeleDest>();
         var jumpPads = new List<JumpPad>();
+        var skinCache = new Dictionary<string, Material>();
 
         for (int i = 0; i < map.Entities.Count; i++)
         {
@@ -25,15 +30,23 @@ public static class TriggerBuilder
             switch (e.Type)
             {
                 case EntityType.Teleport:
+                    string? modelName = ResolveModel(e.Attr2, catalogue);
+                    var modelInfo = modelName != null ? models?.Get(modelName) : null;
                     var teleport = new Teleport
                     {
                         Name = $"Teleport_{i}",
                         Position = e.Position,
+                        BasePosition = e.Position,
                         Tag = e.Attr1,
                         ModelIndex = e.Attr2,
                         Hook = e.Attr3,
                         Sound = e.Attr4,
-                        ModelPath = ResolveModel(e.Attr2, catalogue),
+                        ModelPath = modelName,
+                        GlbPath = modelInfo?.GlbPath,
+                        GlbOsPath = modelInfo?.GlbOsPath,
+                        ModelScale = modelInfo?.Scale ?? 1.0f,
+                        ModelTranslation = modelInfo?.Translation ?? Vector3.Zero,
+                        SkinMaterial = ModelSkin.Build(modelInfo, textures, skinCache),
                     };
                     teleports.Add(teleport);
                     root.AddChild(teleport);
@@ -79,11 +92,15 @@ public static class TriggerBuilder
             }
         }
 
-        return (root, jumpPads);
+        return (root, jumpPads, teleports);
     }
 
-    public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue = null, ITextureSource? textures = null)
-        => BuildTriggers(map, catalogue, textures).Root;
+    public static Node3D Build(
+        OgzMap map,
+        MetadataCatalogue? catalogue = null,
+        ModelCatalog? models = null,
+        ITextureSource? textures = null)
+        => BuildTriggers(map, catalogue, models, textures).Root;
 
     /// <summary>fpsgame/entities.cpp JUMPPAD: <c>((sbyte)attr3*10, (sbyte)attr2*10, attr1*12.5)</c>.</summary>
     public static Vector3 Push(OgzEntity e) =>

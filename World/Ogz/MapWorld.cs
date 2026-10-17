@@ -61,6 +61,9 @@ public partial class MapWorld : Node3D
     /// <summary>Active jump pad trigger entities in this map.</summary>
     public IReadOnlyList<JumpPad> JumpPads { get; private set; } = System.Array.Empty<JumpPad>();
 
+    /// <summary>Active teleporter trigger entities in this map.</summary>
+    public IReadOnlyList<Teleport> Teleports { get; private set; } = System.Array.Empty<Teleport>();
+
     /// <summary>Optional settings overriding default radiance hints volume quality.</summary>
     public Lighting.RadianceSettings? RadianceSettings { get; set; }
 
@@ -143,8 +146,9 @@ public partial class MapWorld : Node3D
         AddChild(PlayerStartBuilder.Build(map, textures));
         AddChild(ModeEntityBuilder.Build(map, catalogue, modelCatalog, textures));
         AddChild(MonsterBuilder.Build(map, modelCatalog, textures));
-        var (triggers, jumpPads) = TriggerBuilder.BuildTriggers(map, catalogue, textures);
+        var (triggers, jumpPads, teleports) = TriggerBuilder.BuildTriggers(map, catalogue, modelCatalog, textures);
         JumpPads = jumpPads;
+        Teleports = teleports;
         AddChild(triggers);
         Items = ItemBuilder.Build(map, modelCatalog, textures);
         AddChild(Items);
@@ -206,6 +210,16 @@ public partial class MapWorld : Node3D
         Radius = Mathf.Max(Bounds.Size.Length() * 0.5f, 1.0f);
 
         GD.Print($"[world] {path}: chunks={chunked.Chunks.Count} triangles={chunked.TriangleCount}");
+    }
+
+    public override void _Process(double delta)
+    {
+        if (Engine.IsEditorHint() || Teleports == null || Teleports.Count == 0) return;
+        int lastMillis = (int)Time.GetTicksMsec();
+        for (int i = 0; i < Teleports.Count; i++)
+        {
+            Teleports[i].UpdateVisual(lastMillis);
+        }
     }
 
     private static string DefaultPath() => MapRoots.Resolve("base/church51");
