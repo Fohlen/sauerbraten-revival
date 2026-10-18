@@ -1,3 +1,4 @@
+using System;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Game;
@@ -150,12 +151,101 @@ public class PlayerStateTest : GoTestBase
     }
 
     [Test]
-    public void CatalogExposesTheFourMvpModes()
+    public void CatalogExposesAllModes()
     {
-        TestAssert.Equal(4, GameModeCatalog.All.Length, "MVP mode count");
-        foreach (string id in new[] { "ffa", "coop_edit", "insta_ctf", "effic_ctf" })
+        TestAssert.Equal(20, GameModeCatalog.All.Length, "All 20 mode count");
+        string[] expected =
+        {
+            "ffa", "coop_edit", "teamplay", "insta", "instateam", "effic", "efficteam",
+            "tactics", "tactics_team", "capture", "regen_capture", "ctf", "insta_ctf",
+            "effic_ctf", "protect", "insta_protect", "effic_protect", "hold", "insta_hold", "effic_hold"
+        };
+        foreach (string id in expected)
             TestAssert.True(GameModeCatalog.TryGet(id) != null, $"mode '{id}' present");
+
+        // Flexible lookups
+        TestAssert.True(GameModeCatalog.TryGet("instaCTF") != null, "instaCTF lookup");
+        TestAssert.True(GameModeCatalog.TryGet("efficCTF") != null, "efficCTF lookup");
+        TestAssert.True(GameModeCatalog.TryGet("instateam") != null, "instateam lookup");
+        TestAssert.True(GameModeCatalog.TryGet("efficteam") != null, "efficteam lookup");
+        TestAssert.True(GameModeCatalog.TryGet("tactics team") != null, "tactics team lookup");
+        TestAssert.True(GameModeCatalog.TryGet("tac team") != null, "tac team lookup");
+        TestAssert.True(GameModeCatalog.TryGet("regen capture") != null, "regen capture lookup");
+        TestAssert.True(GameModeCatalog.TryGet("instagib") != null, "instagib alias");
+        TestAssert.True(GameModeCatalog.TryGet("efficiency") != null, "efficiency alias");
         TestAssert.True(GameModeCatalog.TryGet("nope") == null, "unknown mode is null");
+    }
+
+    [Test]
+    public void TacticsAndCaptureLoadouts()
+    {
+        var s = Fresh();
+        // SequenceRandom returning 1 (Shotgun) then 4 (Rifle)
+        s.Spawn(GameModeCatalog.Get("tactics"), new SequenceRandom(1, 4));
+
+        TestAssert.Equal(100, s.Health, "tactics health");
+        TestAssert.Equal(100, s.Armour, "tactics armour");
+        TestAssert.Equal(ArmourType.Green, s.ArmourType, "tactics armourtype");
+        TestAssert.Equal((int)Gun.Shotgun, s.GunSelect, "tactics gunselect");
+        TestAssert.Equal(20, s.Ammo[(int)Gun.Shotgun], "SG baseammo*2");
+        TestAssert.Equal(10, s.Ammo[(int)Gun.Rifle], "Rifle baseammo*2");
+        TestAssert.Equal(1, s.Ammo[(int)Gun.GrenadeLauncher], "GL +1 for noitems");
+        TestAssert.Equal(40, s.Ammo[(int)Gun.Pistol], "Pistol 40");
+
+        // Capture (tactics without NoItems): baseammo is scaled by 1, and no GL bonus
+        s = Fresh();
+        s.Spawn(GameModeCatalog.Get("capture"), new SequenceRandom(2, 3));
+        TestAssert.Equal((int)Gun.Chaingun, s.GunSelect, "capture gunselect");
+        TestAssert.Equal(20, s.Ammo[(int)Gun.Chaingun], "CG baseammo*1");
+        TestAssert.Equal(5, s.Ammo[(int)Gun.RocketLauncher], "RL baseammo*1");
+        TestAssert.Equal(0, s.Ammo[(int)Gun.GrenadeLauncher], "GL 0 (no bonus without noitems)");
+    }
+
+    [Test]
+    public void RegenCaptureAndCtfFamilyLoadouts()
+    {
+        var s = Fresh();
+        s.Spawn(GameModeCatalog.Get("regen_capture"));
+        TestAssert.Equal(25, s.Armour, "regen capture armour");
+        TestAssert.Equal(ArmourType.Blue, s.ArmourType, "regen capture blue armour");
+        TestAssert.Equal(40, s.Ammo[(int)Gun.Pistol], "regen capture pistol");
+        TestAssert.Equal(1, s.Ammo[(int)Gun.GrenadeLauncher], "regen capture gl");
+
+        foreach (string id in new[] { "ctf", "protect", "hold" })
+        {
+            s = Fresh();
+            s.Spawn(GameModeCatalog.Get(id));
+            TestAssert.Equal(50, s.Armour, $"{id} armour");
+            TestAssert.Equal(ArmourType.Blue, s.ArmourType, $"{id} blue armour");
+            TestAssert.Equal(40, s.Ammo[(int)Gun.Pistol], $"{id} pistol");
+            TestAssert.Equal(1, s.Ammo[(int)Gun.GrenadeLauncher], $"{id} gl");
+        }
+    }
+
+    [Test]
+    public void TeamTrackingAndHelpers()
+    {
+        var s = Fresh();
+        s.Team = "good";
+        TestAssert.Equal(1, PlayerState.TeamFlag("good"), "teamflag good");
+        TestAssert.Equal(2, PlayerState.TeamFlag("evil"), "teamflag evil");
+        TestAssert.Equal(0, PlayerState.TeamFlag("neutral"), "teamflag neutral");
+        TestAssert.Equal("good", PlayerState.FlagTeam(1), "flagteam 1");
+        TestAssert.Equal("evil", PlayerState.FlagTeam(2), "flagteam 2");
+
+        var ctfMode = GameModeCatalog.Get("ctf");
+        var ffaMode = GameModeCatalog.Get("ffa");
+        TestAssert.True(s.IsTeam("good", ctfMode), "is team good in ctf");
+        TestAssert.True(!s.IsTeam("evil", ctfMode), "is not evil in ctf");
+        TestAssert.True(!s.IsTeam("good", ffaMode), "isTeam is false in non-team mode");
+    }
+
+    private sealed class SequenceRandom : Random
+    {
+        private readonly int[] _seq;
+        private int _idx;
+        public SequenceRandom(params int[] seq) => _seq = seq;
+        public override int Next(int minValue, int maxValue) => _seq[_idx++];
     }
 
     [Test]
@@ -214,16 +304,41 @@ public class PlayerStateTest : GoTestBase
     {
         TestAssert.Equal(ModeFlags.Lobby, GameModeCatalog.Get("ffa").Flags, "ffa flags");
         TestAssert.Equal(ModeFlags.Edit, GameModeCatalog.Get("coop_edit").Flags, "coop edit flags");
+        TestAssert.Equal(ModeFlags.Team, GameModeCatalog.Get("teamplay").Flags, "teamplay flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Insta, GameModeCatalog.Get("insta").Flags, "insta flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Team, GameModeCatalog.Get("instateam").Flags, "instateam flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Efficiency, GameModeCatalog.Get("effic").Flags, "effic flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Team, GameModeCatalog.Get("efficteam").Flags, "efficteam flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Tactics, GameModeCatalog.Get("tactics").Flags, "tactics flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Tactics | ModeFlags.Team, GameModeCatalog.Get("tactics_team").Flags, "tactics_team flags");
+        TestAssert.Equal(ModeFlags.NoAmmo | ModeFlags.Tactics | ModeFlags.Capture | ModeFlags.Team, GameModeCatalog.Get("capture").Flags, "capture flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Capture | ModeFlags.Regen | ModeFlags.Team, GameModeCatalog.Get("regen_capture").Flags, "regen_capture flags");
+        TestAssert.Equal(ModeFlags.Ctf | ModeFlags.Team, GameModeCatalog.Get("ctf").Flags, "ctf flags");
         TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Ctf | ModeFlags.Team,
             GameModeCatalog.Get("insta_ctf").Flags, "insta ctf flags");
         TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Ctf | ModeFlags.Team,
             GameModeCatalog.Get("effic_ctf").Flags, "effic ctf flags");
+        TestAssert.Equal(ModeFlags.Ctf | ModeFlags.Protect | ModeFlags.Team, GameModeCatalog.Get("protect").Flags, "protect flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Ctf | ModeFlags.Protect | ModeFlags.Team,
+            GameModeCatalog.Get("insta_protect").Flags, "insta protect flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Ctf | ModeFlags.Protect | ModeFlags.Team,
+            GameModeCatalog.Get("effic_protect").Flags, "effic protect flags");
+        TestAssert.Equal(ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team, GameModeCatalog.Get("hold").Flags, "hold flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team,
+            GameModeCatalog.Get("insta_hold").Flags, "insta hold flags");
+        TestAssert.Equal(ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team,
+            GameModeCatalog.Get("effic_hold").Flags, "effic hold flags");
 
         // Bit positions are the engine's; bit 11 is unused.
         TestAssert.Equal(1 << 0, (int)ModeFlags.Team, "M_TEAM");
         TestAssert.Equal(1 << 3, (int)ModeFlags.Insta, "M_INSTA");
         TestAssert.Equal(1 << 4, (int)ModeFlags.Efficiency, "M_EFFICIENCY");
+        TestAssert.Equal(1 << 5, (int)ModeFlags.Tactics, "M_TACTICS");
+        TestAssert.Equal(1 << 6, (int)ModeFlags.Capture, "M_CAPTURE");
+        TestAssert.Equal(1 << 7, (int)ModeFlags.Regen, "M_REGEN");
         TestAssert.Equal(1 << 8, (int)ModeFlags.Ctf, "M_CTF");
+        TestAssert.Equal(1 << 9, (int)ModeFlags.Protect, "M_PROTECT");
+        TestAssert.Equal(1 << 10, (int)ModeFlags.Hold, "M_HOLD");
         TestAssert.Equal(1 << 12, (int)ModeFlags.Edit, "M_EDIT");
         TestAssert.Equal(1 << 15, (int)ModeFlags.Lobby, "M_LOBBY");
     }

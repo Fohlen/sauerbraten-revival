@@ -166,7 +166,19 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public PlayerState Combat { get; } = new();
 
     /// <summary>Player team index (0 = FFA, 1 = blue, 2 = red).</summary>
-    [Export] public int Team { get; set; } = 0;
+    [Export]
+    public int Team
+    {
+        get => PlayerState.TeamFlag(Combat.Team);
+        set => Combat.Team = PlayerState.FlagTeam(value);
+    }
+
+    /// <summary>Player team name (e.g. "good" or "evil"). Delegates to Combat.Team.</summary>
+    public string TeamName
+    {
+        get => Combat.Team;
+        set => Combat.Team = value;
+    }
 
     /// <summary>Timestamp (ms) of the last successful hit on an enemy (engine <c>lasthit</c> in fps.cpp).</summary>
     public int LastHit { get; set; }

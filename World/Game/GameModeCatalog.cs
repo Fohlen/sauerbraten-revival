@@ -24,10 +24,26 @@ public static class GameModeCatalog
     /// </summary>
     public static readonly GameModeInfo[] Defaults =
     {
-        new() { Id = "ffa",       Name = "ffa",       Flags = ModeFlags.Lobby },
-        new() { Id = "coop_edit", Name = "coop edit", Flags = ModeFlags.Edit },
-        new() { Id = "insta_ctf", Name = "insta ctf", Flags = ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Ctf | ModeFlags.Team },
-        new() { Id = "effic_ctf", Name = "effic ctf", Flags = ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Ctf | ModeFlags.Team },
+        new() { Id = "ffa",            Name = "ffa",            Flags = ModeFlags.Lobby },
+        new() { Id = "coop_edit",      Name = "coop edit",      Flags = ModeFlags.Edit },
+        new() { Id = "teamplay",       Name = "teamplay",       Flags = ModeFlags.Team },
+        new() { Id = "insta",          Name = "instagib",       Flags = ModeFlags.NoItems | ModeFlags.Insta },
+        new() { Id = "instateam",      Name = "insta team",     Flags = ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Team },
+        new() { Id = "effic",          Name = "efficiency",     Flags = ModeFlags.NoItems | ModeFlags.Efficiency },
+        new() { Id = "efficteam",      Name = "effic team",     Flags = ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Team },
+        new() { Id = "tactics",        Name = "tactics",        Flags = ModeFlags.NoItems | ModeFlags.Tactics },
+        new() { Id = "tactics_team",   Name = "tac team",       Flags = ModeFlags.NoItems | ModeFlags.Tactics | ModeFlags.Team },
+        new() { Id = "capture",        Name = "capture",        Flags = ModeFlags.NoAmmo | ModeFlags.Tactics | ModeFlags.Capture | ModeFlags.Team },
+        new() { Id = "regen_capture",  Name = "regen capture",  Flags = ModeFlags.NoItems | ModeFlags.Capture | ModeFlags.Regen | ModeFlags.Team },
+        new() { Id = "ctf",            Name = "ctf",            Flags = ModeFlags.Ctf | ModeFlags.Team },
+        new() { Id = "insta_ctf",      Name = "insta ctf",      Flags = ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Ctf | ModeFlags.Team },
+        new() { Id = "effic_ctf",      Name = "effic ctf",      Flags = ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Ctf | ModeFlags.Team },
+        new() { Id = "protect",        Name = "protect",        Flags = ModeFlags.Ctf | ModeFlags.Protect | ModeFlags.Team },
+        new() { Id = "insta_protect",  Name = "insta protect",  Flags = ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Ctf | ModeFlags.Protect | ModeFlags.Team },
+        new() { Id = "effic_protect",  Name = "effic protect",  Flags = ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Ctf | ModeFlags.Protect | ModeFlags.Team },
+        new() { Id = "hold",           Name = "hold",           Flags = ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team },
+        new() { Id = "insta_hold",     Name = "insta hold",     Flags = ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team },
+        new() { Id = "effic_hold",     Name = "effic hold",     Flags = ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team },
     };
 
     private static GameModeInfo[]? _all;
@@ -39,12 +55,57 @@ public static class GameModeCatalog
     /// </summary>
     public static GameModeInfo[] All => _all ??= Load();
 
-    /// <summary>Look up a mode by its stable id, or null when unknown.</summary>
-    public static GameModeInfo? TryGet(string id)
+    /// <summary>Look up a mode by its stable id or name, or null when unknown.</summary>
+    public static GameModeInfo? TryGet(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+
+        foreach (var mode in All)
+        {
+            if (string.Equals(mode.Id, id, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(mode.Name, id, System.StringComparison.OrdinalIgnoreCase))
+                return mode;
+        }
+
+        string norm = Normalize(id);
+        foreach (var mode in All)
+        {
+            if (Normalize(mode.Id) == norm || Normalize(mode.Name) == norm)
+                return mode;
+        }
+
+        if (norm is "instagib" or "insta")
+            return FindById("insta");
+        if (norm is "efficiency" or "effic")
+            return FindById("effic");
+        if (norm is "instateam" or "instagibteam")
+            return FindById("instateam");
+        if (norm is "efficteam" or "efficiencyteam")
+            return FindById("efficteam");
+        if (norm is "tacteam" or "tacticsteam" or "tactics_team")
+            return FindById("tactics_team");
+
+        return null;
+    }
+
+    private static GameModeInfo? FindById(string id)
     {
         foreach (var mode in All)
+        {
             if (mode.Id == id) return mode;
+        }
         return null;
+    }
+
+    private static string Normalize(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (char c in s)
+        {
+            if (char.IsLetterOrDigit(c))
+                sb.Append(char.ToLowerInvariant(c));
+        }
+        return sb.ToString();
     }
 
     /// <summary>Look up a mode by its stable id; throws when unknown.</summary>

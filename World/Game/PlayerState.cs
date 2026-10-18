@@ -42,6 +42,32 @@ public sealed class PlayerState
     /// <summary>Timestamp (ms) of last damage taken or death (engine <c>fpsent::lastpain</c>).</summary>
     public int LastPain;
 
+    /// <summary>Player team name (engine <c>team</c>, e.g. "good" or "evil").</summary>
+    public string Team = "good";
+
+    /// <summary>Engine <c>ctfteamflag(s)</c>: "good" -> 1, "evil" -> 2, otherwise 0.</summary>
+    public static int TeamFlag(string? team) => team?.ToLowerInvariant() switch
+    {
+        "good" => 1,
+        "evil" => 2,
+        _ => 0,
+    };
+
+    /// <summary>Engine <c>ctfflagteam(i)</c>: 1 -> "good", 2 -> "evil", otherwise "".</summary>
+    public static string FlagTeam(int team) => team switch
+    {
+        1 => "good",
+        2 => "evil",
+        _ => "",
+    };
+
+    /// <summary>Engine <c>isteam(a, b)</c>: true if mode is team mode and teams match.</summary>
+    public bool IsTeam(string? otherTeam, GameModeInfo? mode = null)
+    {
+        if (mode != null && !mode.Has(ModeFlags.Team)) return false;
+        return string.Equals(Team, otherTeam, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>True while the attack button is held down (engine <c>fpsent::attacking</c>).</summary>
     public bool Attacking;
 
@@ -190,13 +216,10 @@ public sealed class PlayerState
     /// <summary>
     /// Engine <c>fpsstate::spawnstate(gamemode)</c>: apply the mode's loadout on top
     /// of a fresh <see cref="Respawn"/>. Branches are tested in the engine's order
-    /// (insta before ctf, efficiency before ctf), so "insta ctf"/"effic ctf" resolve
-    /// to the insta/effic loadouts. Behaviour is keyed on <see cref="GameModeInfo.Flags"/>,
-    /// not on a mode identity, so a modded mode that sets the same flags gets the same
-    /// loadout. Only the MVP branches are ported; the SP/demo/tactics/capture branches
-    /// are out of scope and deliberately absent.
+    /// (insta before regen before tactics before efficiency before ctf before else). Behaviour is keyed on <see cref="GameModeInfo.Flags"/>,
+    /// not on a mode identity, so a modded mode that sets the same flags gets the same loadout.
     /// </summary>
-    public void SpawnState(GameModeInfo mode)
+    public void SpawnState(GameModeInfo mode, Random? rng = null)
     {
         if (mode.Has(ModeFlags.Insta))
         {
@@ -205,6 +228,39 @@ public sealed class PlayerState
             Health = 1;
             GunSelect = (int)Gun.Rifle;
             Ammo[(int)Gun.Rifle] = 100;
+        }
+        else if (mode.Has(ModeFlags.Regen) && mode.Has(ModeFlags.Capture))
+        {
+            // Regen capture: blue armour 25, pistol 40, grenade 1.
+            ArmourType = ArmourType.Blue;
+            Armour = 25;
+            GunSelect = (int)Gun.Pistol;
+            Ammo[(int)Gun.Pistol] = 40;
+            Ammo[(int)Gun.GrenadeLauncher] = 1;
+        }
+        else if (mode.Has(ModeFlags.Tactics))
+        {
+            // Tactics: green armour 100, pistol 40, two random guns with baseammo, grenade+1 if noitems.
+            ArmourType = ArmourType.Green;
+            Armour = 100;
+            Ammo[(int)Gun.Pistol] = 40;
+
+            rng ??= Random.Shared;
+            int spawngun1 = rng.Next(1, 6);
+            GunSelect = spawngun1;
+            BaseAmmo(spawngun1, mode.Has(ModeFlags.NoItems) ? 2 : 1);
+
+            int spawngun2;
+            do
+            {
+                spawngun2 = rng.Next(1, 6);
+            } while (spawngun1 == spawngun2);
+            BaseAmmo(spawngun2, mode.Has(ModeFlags.NoItems) ? 2 : 1);
+
+            if (mode.Has(ModeFlags.NoItems))
+            {
+                Ammo[(int)Gun.GrenadeLauncher] += 1;
+            }
         }
         else if (mode.Has(ModeFlags.Efficiency))
         {
@@ -215,21 +271,31 @@ public sealed class PlayerState
             GunSelect = (int)Gun.Chaingun;
             Ammo[(int)Gun.Chaingun] /= 2;
         }
+        else if (mode.Has(ModeFlags.Ctf) || mode.Has(ModeFlags.Collect))
+        {
+            // CTF / Protect / Hold: blue armour 50, pistol 40, grenade 1.
+            ArmourType = ArmourType.Blue;
+            Armour = 50;
+            GunSelect = (int)Gun.Pistol;
+            Ammo[(int)Gun.Pistol] = 40;
+            Ammo[(int)Gun.GrenadeLauncher] = 1;
+        }
         else
         {
-            // Engine else branch: ffa (and the modes we route here).
+            // Engine else branch: ffa, teamplay, and coop edit.
             ArmourType = ArmourType.Blue;
             Armour = 25;
+            GunSelect = (int)Gun.Pistol;
             Ammo[(int)Gun.Pistol] = 40;
             Ammo[(int)Gun.GrenadeLauncher] = 1;
         }
     }
 
     /// <summary>fps.cpp <c>spawnstate()</c> wrapper: <see cref="Respawn"/> then <see cref="SpawnState"/>.</summary>
-    public void Spawn(GameModeInfo mode)
+    public void Spawn(GameModeInfo mode, Random? rng = null)
     {
         Respawn();
-        SpawnState(mode);
+        SpawnState(mode, rng);
     }
 
     /// <summary>Convenience read of the current gun's ammo.</summary>

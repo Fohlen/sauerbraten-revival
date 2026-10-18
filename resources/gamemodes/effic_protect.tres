@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="GameModeInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Game/GameModeInfo.cs" id="1_effic_protect"]
+
+[resource]
+script = ExtResource("1_effic_protect")
+Id = "effic_protect"
+Name = "effic protect"
+Flags = 787
