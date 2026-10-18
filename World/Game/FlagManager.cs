@@ -1,0 +1,415 @@
+using System;
+using System.Collections.Generic;
+using Godot;
+using SauerbratenRevival.World.Weapons;
+
+namespace SauerbratenRevival.World.Game;
+
+/// <summary>
+/// Unified Flag and CTF state machine managing flags, hold spawns, carrier tracking,
+/// scoring, timeouts, and rules for CTF, Protect, and Hold modes.
+/// Port of <c>fpsgame/ctf.h</c> (r6889).
+/// </summary>
+public sealed class FlagManager
+{
+    public const int BaseRadius = 64;
+    public const int BaseHeight = 24;
+    public const int MaxFlags = 20;
+    public const int FlagRadius = 16;
+    public const int FlagLimit = 10;
+    public const int MaxHoldSpawns = 100;
+    public const int HoldSecs = 20;
+    public const int HoldFlags = 1;
+    public const int HoldDeathPenalty = 5;
+    public const int RespawnSecs = 5;
+
+    public const int ResetFlagTime = 10000;
+    public const int HoldResetFlagTime = 30000;
+    public const int InvisFlagTime = 20000;
+
+    private readonly List<FlagState> _flags = new();
+    private readonly List<Vector3> _holdSpawns = new();
+    private readonly int[] _scores = new int[2]; // Index 0 = good (team 1), Index 1 = evil (team 2)
+
+    public IReadOnlyList<FlagState> Flags => _flags;
+    public IReadOnlyList<Vector3> HoldSpawns => _holdSpawns;
+
+    /// <summary>Invoked whenever an audio event occurs.</summary>
+    public event Action<FlagAudioEvent>? OnAudioEvent;
+
+    public int GetScore(int team) => team is >= 1 and <= 2 ? _scores[team - 1] : 0;
+
+    public int SetScore(int team, int score)
+    {
+        if (team is >= 1 and <= 2)
+            return _scores[team - 1] = score;
+        return 0;
+    }
+
+    public int AddScore(int team, int delta)
+    {
+        if (team is >= 1 and <= 2)
+            return _scores[team - 1] += delta;
+        return 0;
+    }
+
+    public void ResetFlags()
+    {
+        _holdSpawns.Clear();
+        _flags.Clear();
+        _scores[0] = 0;
+        _scores[1] = 0;
+    }
+
+    public bool AddFlag(int id, Vector3 spawnLoc, int team, int lastMillis = 0, bool isProtect = false)
+    {
+        if (id < 0 || id >= MaxFlags) return false;
+        while (_flags.Count <= id)
+        {
+            _flags.Add(new FlagState { Id = _flags.Count });
+        }
+        var f = _flags[id];
+        f.Reset();
+        f.Id = id;
+        f.Team = team;
+        f.SpawnLoc = spawnLoc;
+        f.InvisTime = isProtect ? lastMillis : 0;
+        return true;
+    }
+
+    public bool AddHoldSpawn(Vector3 pos)
+    {
+        if (_holdSpawns.Count >= MaxHoldSpawns) return false;
+        _holdSpawns.Add(pos);
+        return true;
+    }
+
+    public void SetupHoldSpawns(Random? rng = null)
+    {
+        if (_holdSpawns.Count == 0) return;
+        while (_flags.Count < HoldFlags)
+        {
+            int i = _flags.Count;
+            if (!AddFlag(i, Vector3.Zero, 0, 0, false)) break;
+            SpawnHoldFlag(i, rng);
+            _flags[i].Version++;
+        }
+    }
+
+    public void SpawnHoldFlag(int flagId, Random? rng = null)
+    {
+        if (_holdSpawns.Count == 0 || flagId < 0 || flagId >= _flags.Count) return;
+        var f = _flags[flagId];
+        int spawnIndex = f.SpawnIndex;
+        rng ??= Random.Shared;
+        for (int j = 0; j < 4; j++)
+        {
+            spawnIndex = rng.Next(_holdSpawns.Count);
+            if (spawnIndex != f.SpawnIndex) break;
+        }
+        f.SpawnIndex = spawnIndex;
+        f.SpawnLoc = _holdSpawns[spawnIndex];
+    }
+
+    public static bool InsideBase(FlagState f, Vector3 o)
+    {
+        float dx = f.SpawnLoc.X - o.X;
+        float dy = f.SpawnLoc.Y - o.Y;
+        float dz = f.SpawnLoc.Z - o.Z;
+        return dx * dx + dy * dy <= BaseRadius * BaseRadius && Math.Abs(dz) <= BaseHeight;
+    }
+
+    public void OwnFlag(int flagId, int ownerId, int nowMillis, int ownTeam = -1)
+    {
+        if (flagId < 0 || flagId >= _flags.Count) return;
+        var f = _flags[flagId];
+        f.Owner = ownerId;
+        f.OwnTime = nowMillis;
+
+        if (f.HoldTime > 0 && f.Team == ownTeam)
+        {
+            if (f.DropTime > 0 && f.DropTime < nowMillis)
+                f.HoldTime += 2 * (nowMillis - f.DropTime);
+            f.HoldTime = Math.Min(f.HoldTime, nowMillis);
+        }
+        else
+        {
+            f.HoldTime = nowMillis;
+            if (ownTeam >= 0) f.Team = ownTeam;
+        }
+
+        if (ownerId == f.Dropper)
+        {
+            if (f.DropCount < int.MaxValue) f.DropCount++;
+        }
+        else
+        {
+            f.DropCount = 0;
+        }
+        f.Dropper = -1;
+        f.InvisTime = 0;
+    }
+
+    public void DropFlag(int flagId, Vector3 dropLoc, int nowMillis, int dropperId = -1, bool penalty = false)
+    {
+        if (flagId < 0 || flagId >= _flags.Count) return;
+        var f = _flags[flagId];
+        f.DropLoc = dropLoc;
+        f.DropTime = nowMillis;
+        if (dropperId < 0) f.DropCount = 0;
+        else if (penalty) f.DropCount = int.MaxValue;
+        f.Dropper = dropperId;
+        f.Owner = null;
+        f.InvisTime = 0;
+    }
+
+    public void ReturnFlag(int flagId, int invisTime = 0)
+    {
+        if (flagId < 0 || flagId >= _flags.Count) return;
+        var f = _flags[flagId];
+        f.DropTime = 0;
+        f.HoldTime = 0;
+        f.DropCount = 0;
+        f.Owner = null;
+        f.Dropper = -1;
+        f.InvisTime = invisTime;
+    }
+
+    public void DeadFlag(int flagId, int nowMillis)
+    {
+        if (flagId < 0 || flagId >= _flags.Count) return;
+        var f = _flags[flagId];
+        if (f.HoldTime > 0)
+        {
+            int limit = !f.HasOwner && f.DropTime > 0 && f.DropTime >= f.HoldTime ? f.DropTime : nowMillis;
+            f.HoldTime += HoldDeathPenalty * 1000;
+            if (f.HoldTime >= limit) f.HoldTime = 0;
+        }
+    }
+
+    /// <summary>
+    /// Processes a player attempting to take/touch a flag.
+    /// Handles CTF steals, CTF captures at base, CTF returns of dropped friendly flags,
+    /// Protect pickups, Protect scoring touches, and Hold pickups.
+    /// </summary>
+    public bool TakeFlag(int playerId, int playerTeam, Vector3 playerPos, int flagId, int version, GameModeInfo mode, int nowMillis, Action<int, int>? onPlayerScore = null, Random? rng = null)
+    {
+        if (flagId < 0 || flagId >= _flags.Count || playerTeam is < 1 or > 2) return false;
+        var f = _flags[flagId];
+
+        bool isHold = mode.Has(ModeFlags.Hold);
+        bool isProtect = mode.Has(ModeFlags.Protect);
+
+        if ((isHold ? f.SpawnIndex < 0 : f.Team is < 1 or > 2) ||
+            f.Owner.HasValue ||
+            f.Version != version ||
+            (f.DropTime > 0 && f.Dropper == playerId && f.DropCount >= 3))
+        {
+            return false;
+        }
+
+        if (isHold || (isProtect == (f.Team == playerTeam)))
+        {
+            // Cannot take if already carrying any flag
+            foreach (var flag in _flags)
+            {
+                if (flag.Owner == playerId) return false;
+            }
+
+            OwnFlag(flagId, playerId, nowMillis, isHold ? playerTeam : -1);
+            f.Version++;
+            DispatchAudio(GameSound.FlagPickup, flagId, f.Team, playerId, playerPos);
+            return true;
+        }
+        else if (isProtect)
+        {
+            // Protect: touch enemy flag to score and reset it
+            if (f.InvisTime == 0 || nowMillis >= f.InvisTime + InvisFlagTime)
+            {
+                ScoreFlag(playerId, playerTeam, flagId, -1, mode, nowMillis, onPlayerScore, rng);
+                return true;
+            }
+            return false;
+        }
+        else if (f.DropTime > 0)
+        {
+            // CTF: touch dropped friendly flag to return it (must be near dropped location, not base)
+            if (playerPos.DistanceTo(f.DropLoc) > FlagRadius)
+            {
+                return false;
+            }
+            ReturnFlag(flagId);
+            f.Version++;
+            DispatchAudio(GameSound.FlagReturn, flagId, f.Team, playerId, playerPos);
+            return true;
+        }
+        else
+        {
+            // CTF: friendly flag is home; check if player is carrying enemy flag to capture
+            // and ensure friendly flag is not currently dropped
+            if (f.DropTime > 0) return false;
+            for (int j = 0; j < _flags.Count; j++)
+            {
+                if (_flags[j].Owner == playerId)
+                {
+                    ScoreFlag(playerId, playerTeam, flagId, j, mode, nowMillis, onPlayerScore, rng);
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Scores a flag: returns the relay flag (or goal flag in Protect/Hold), awards point to team and player,
+    /// updates scores and dispatches audio event.
+    /// </summary>
+    public void ScoreFlag(int playerId, int playerTeam, int goalFlagId, int relayFlagId, GameModeInfo mode, int nowMillis, Action<int, int>? onPlayerScore = null, Random? rng = null)
+    {
+        bool isHold = mode.Has(ModeFlags.Hold);
+        bool isProtect = mode.Has(ModeFlags.Protect);
+
+        int flagToReturn = relayFlagId >= 0 ? relayFlagId : goalFlagId;
+        ReturnFlag(flagToReturn, isProtect ? nowMillis : 0);
+
+        int teamScore = AddScore(playerTeam, 1);
+        onPlayerScore?.Invoke(playerId, 1);
+
+        if (relayFlagId >= 0 && relayFlagId < _flags.Count)
+        {
+            _flags[relayFlagId].Version++;
+        }
+        if (goalFlagId >= 0 && goalFlagId < _flags.Count)
+        {
+            _flags[goalFlagId].Version++;
+            if (isHold)
+            {
+                SpawnHoldFlag(goalFlagId, rng);
+            }
+        }
+
+        Vector3 pos = goalFlagId >= 0 && goalFlagId < _flags.Count ? _flags[goalFlagId].SpawnLoc : Vector3.Zero;
+        DispatchAudio(GameSound.FlagScore, goalFlagId, playerTeam, playerId, pos);
+    }
+
+    /// <summary>
+    /// Drops any flag currently carried by the player.
+    /// In Protect mode, if dropped inside its own base, it returns instead.
+    /// </summary>
+    public void DropPlayerFlag(int playerId, Vector3 playerPos, GameModeInfo mode, int nowMillis, int dropperId = -1, bool tkPenalty = false)
+    {
+        bool isProtect = mode.Has(ModeFlags.Protect);
+        foreach (var f in _flags)
+        {
+            if (f.Owner == playerId)
+            {
+                if (isProtect && InsideBase(f, playerPos))
+                {
+                    ReturnFlag(f.Id);
+                    f.Version++;
+                    DispatchAudio(GameSound.FlagReturn, f.Id, f.Team, playerId, playerPos);
+                }
+                else
+                {
+                    f.Version++;
+                    DropFlag(f.Id, playerPos, nowMillis, dropperId >= 0 ? dropperId : playerId, tkPenalty);
+                    DispatchAudio(GameSound.FlagDrop, f.Id, f.Team, playerId, playerPos);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Player died: handles hold mode death penalty, drops carried flags, and cleans up dropper references.
+    /// </summary>
+    public void OnPlayerDied(int victimId, int? actorId, bool isTeammate, Vector3 victimPos, GameModeInfo mode, int nowMillis)
+    {
+        bool isHold = mode.Has(ModeFlags.Hold);
+        if (isHold)
+        {
+            foreach (var f in _flags)
+            {
+                if (f.Owner == victimId)
+                {
+                    DeadFlag(f.Id, nowMillis);
+                }
+            }
+        }
+
+        bool tkPenalty = actorId.HasValue && actorId.Value != victimId && isTeammate;
+        int dropper = tkPenalty ? actorId!.Value : victimId;
+        DropPlayerFlag(victimId, victimPos, mode, nowMillis, dropper, tkPenalty);
+
+        foreach (var f in _flags)
+        {
+            if (f.Dropper == victimId)
+            {
+                f.Dropper = -1;
+                f.DropCount = 0;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Regular tick update for flags: handles drop reset timeouts, invis timeouts, and hold 20s score countdown.
+    /// </summary>
+    public void Update(GameModeInfo mode, int nowMillis, Func<int, (int team, Vector3 pos)?>? getPlayerInfo = null, Action<int, int>? onPlayerScore = null, Random? rng = null)
+    {
+        bool isHold = mode.Has(ModeFlags.Hold);
+        bool isProtect = mode.Has(ModeFlags.Protect);
+
+        for (int i = 0; i < _flags.Count; i++)
+        {
+            var f = _flags[i];
+            int timeout = isHold ? HoldResetFlagTime : ResetFlagTime;
+
+            // Reset dropped flag after timeout
+            if (!f.HasOwner && f.DropTime > 0 && nowMillis - f.DropTime >= timeout)
+            {
+                ReturnFlag(i, isProtect ? nowMillis : 0);
+                if (isHold)
+                {
+                    SpawnHoldFlag(i, rng);
+                }
+                f.Version++;
+
+                int penaltyTeam = isHold ? 0 : f.Team;
+                if (!isHold && isProtect)
+                {
+                    AddScore(f.Team, -1);
+                }
+
+                DispatchAudio(GameSound.FlagReset, i, penaltyTeam, null, f.SpawnLoc);
+            }
+
+            // Clear invis time after INVISFLAGTIME (protect score cooldown)
+            if (f.InvisTime > 0 && nowMillis - f.InvisTime >= InvisFlagTime)
+            {
+                f.InvisTime = 0;
+            }
+
+            // Hold mode 20s score check
+            if (isHold && f.HasOwner && nowMillis - f.HoldTime >= HoldSecs * 1000)
+            {
+                int ownerId = f.Owner!.Value;
+                var pinfo = getPlayerInfo?.Invoke(ownerId);
+                if (pinfo.HasValue)
+                {
+                    ScoreFlag(ownerId, pinfo.Value.team, i, -1, mode, nowMillis, onPlayerScore, rng);
+                }
+                else
+                {
+                    SpawnHoldFlag(i, rng);
+                    f.Version++;
+                    ReturnFlag(i, 0);
+                    DispatchAudio(GameSound.FlagReset, i, 0, null, f.SpawnLoc);
+                }
+            }
+        }
+    }
+
+    private void DispatchAudio(GameSound sound, int flagId, int team, int? playerId, Vector3? pos)
+    {
+        OnAudioEvent?.Invoke(new FlagAudioEvent(sound, flagId, team, playerId, pos));
+    }
+}
