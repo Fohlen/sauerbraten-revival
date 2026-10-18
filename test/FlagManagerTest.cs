@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.Tests;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.Test;
@@ -227,5 +230,77 @@ public class FlagManagerTest : TestClass
         fm.Update(holdMode, 32000 + FlagManager.HoldResetFlagTime);
         TestAssert.Equal(0, f.DropTime, "flag reset on 30s drop timeout");
         TestAssert.Equal(GameSound.FlagReset, audioEvents[^1].Sound, "reset sound");
+    }
+
+    [Test]
+    public void MapPlayerCheckFlagsProximityAndDebounce()
+    {
+        var player = new MapPlayer
+        {
+            PlayerId = 1,
+            Team = 1, // Blue team
+            Mode = GetMode("ctf")
+        };
+        player.Entity.O = new Vector3(0, 0, 14); // Eye position, feet is at (0, 0, 0)
+        player.Entity.State = PhysEnt.CsAlive;
+
+        var fm = new FlagManager();
+        player.Flags = fm;
+
+        // Flag 0: Blue flag at (0, 0, 0)
+        // Flag 1: Red flag at (100, 0, 0)
+        fm.AddFlag(0, new Vector3(0, 0, 0), 1, 0, false);
+        fm.AddFlag(1, new Vector3(100, 0, 0), 2, 0, false);
+
+        // Player is at (0, 0, 0) - friendly flag is at (0, 0, 0), but player is not carrying red flag, so no capture
+        player.CheckFlags(1000);
+        TestAssert.False(fm.Flags[0].HasOwner, "friendly flag not taken");
+        TestAssert.False(fm.Flags[1].HasOwner, "enemy flag not taken yet");
+
+        // Move player close to red flag (100, 0, 0) within FlagRadius (16)
+        player.Entity.O = new Vector3(95, 0, 14);
+        player.CheckFlags(1100);
+
+        TestAssert.True(fm.Flags[1].HasOwner, "red flag taken by blue player");
+        TestAssert.Equal(player.PlayerId, fm.Flags[1].Owner, "carrier is blue player");
+
+        // Calling CheckFlags again while in radius should debounce
+        player.CheckFlags(1200);
+        TestAssert.Equal(player.PlayerId, fm.Flags[1].Owner, "flag still owned");
+
+        // Move player back to friendly base (0, 0, 0) to capture!
+        player.Entity.O = new Vector3(5, 0, 14);
+        player.CheckFlags(2000);
+
+        TestAssert.Equal(1, fm.GetScore(1), "blue team scored capture");
+        TestAssert.False(fm.Flags[1].HasOwner, "red flag returned home after capture");
+        player.Dispose();
+    }
+
+    [Test]
+    public void FlagNodeVisualUpdates()
+    {
+        var node = new FlagNode
+        {
+            FlagId = 0,
+            Team = 2 // Red flag
+        };
+
+        var flag = new FlagState
+        {
+            Id = 0,
+            Team = 2,
+            SpawnLoc = new Vector3(50, 60, 10),
+            SpawnAngle = 90f
+        };
+
+        var ctfMode = GetMode("ctf");
+
+        // Local player is team 1 (blue). Enemy flag (red) should select flags/red
+        node.UpdateVisual(flag, ctfMode, 1000, localPlayerTeam: 1);
+
+        TestAssert.True(node.Visible, "node is visible");
+        TestAssert.Equal(flag.SpawnLoc, node.Position, "node position matches flag position");
+        node.Dispose();
     }
 }

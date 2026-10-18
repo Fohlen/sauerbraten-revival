@@ -116,6 +116,15 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Active item pickups manager for this map/session.</summary>
     public ItemManager? Items { get; set; }
 
+    /// <summary>Active flag manager for CTF / Protect / Hold modes.</summary>
+    public Game.FlagManager? Flags { get; set; }
+
+    /// <summary>Local player/client ID (default 0).</summary>
+    public int PlayerId { get; set; } = 0;
+
+    /// <summary>Bitmask of flag pickups currently debounced for this player (ctf.h flagpickup).</summary>
+    private int _flagPickup;
+
     /// <summary>Active jump pad trigger entities in this map/session.</summary>
     public IReadOnlyList<JumpPad>? JumpPads { get; set; }
     public IReadOnlyList<Teleport>? Teleports { get; set; }
@@ -790,6 +799,11 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         PlaySound(Random.Shared.Next(2) == 0 ? GameSound.Die1 : GameSound.Die2);
         UpdateBodyAnim();
+
+        if (Flags != null && Mode != null)
+        {
+            Flags.OnPlayerDied(PlayerId, null, false, Entity.FeetPos(), Mode, now, Entity.Yaw);
+        }
     }
 
     /// <summary>
@@ -831,6 +845,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         LastHit = 0;
         LastPickup = -1;
         LastPickupMillis = 0;
+        _flagPickup = 0;
         _bodyAnim = "";
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
@@ -870,6 +885,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             Items?.CheckPickups(this, LastMillis);
             CheckJumpPads(LastMillis);
             CheckTeleports(LastMillis);
+            CheckFlags(LastMillis);
 
             // Advance active flying rockets (weapon.cpp:523 updateprojectiles)
             for (int i = ActiveRockets.Count - 1; i >= 0; i--)
@@ -1173,6 +1189,70 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         else if (AudioPlayer != null)
         {
             AudioPlayer.Play3D(sound);
+        }
+    }
+
+    /// <summary>
+    /// Checks proximity to flags for pickup, steal, return, or score
+    /// (matching engine <c>fpsgame/ctf.h:980-1014: checkitems</c>).
+    /// </summary>
+    public void CheckFlags(int lastMillis)
+    {
+        if (Flags == null || Mode == null || Entity.State != PhysEnt.CsAlive) return;
+
+        bool isHold = Mode.Has(ModeFlags.Hold);
+        Vector3 o = Entity.FeetPos();
+        bool tookFlag = false;
+
+        // Pass 1: Enemy flags (in CTF/Protect) or neutral flags (in Hold)
+        for (int i = 0; i < Flags.Flags.Count; i++)
+        {
+            var f = Flags.Flags[i];
+            if ((isHold ? f.SpawnIndex < 0 : f.Team is < 1 or > 2 || f.Team == Team) ||
+                f.Owner.HasValue ||
+                (f.DropTime > 0 && f.DropLoc.X < 0))
+            {
+                continue;
+            }
+
+            Vector3 loc = f.DropTime > 0 ? f.DropLoc : f.SpawnLoc;
+            if (o.DistanceTo(loc) < Game.FlagManager.FlagRadius)
+            {
+                if ((_flagPickup & (1 << f.Id)) != 0) continue;
+
+                tookFlag = true;
+                Flags.TakeFlag(PlayerId, Team, o, f.Id, f.Version, Mode, lastMillis);
+                _flagPickup |= (1 << f.Id);
+            }
+            else
+            {
+                _flagPickup &= ~(1 << f.Id);
+            }
+        }
+
+        if (isHold) return;
+
+        // Pass 2: Friendly flags (return dropped friendly flag, or touch base to capture carried enemy flag)
+        for (int i = 0; i < Flags.Flags.Count; i++)
+        {
+            var f = Flags.Flags[i];
+            if (f.Team is < 1 or > 2 || f.Team != Team || f.Owner.HasValue || (f.DropTime > 0 && f.DropLoc.X < 0))
+            {
+                continue;
+            }
+
+            Vector3 loc = f.DropTime > 0 ? f.DropLoc : f.SpawnLoc;
+            if (o.DistanceTo(loc) < Game.FlagManager.FlagRadius)
+            {
+                if (!tookFlag && (_flagPickup & (1 << f.Id)) != 0) continue;
+
+                Flags.TakeFlag(PlayerId, Team, o, f.Id, f.Version, Mode, lastMillis);
+                _flagPickup |= (1 << f.Id);
+            }
+            else
+            {
+                _flagPickup &= ~(1 << f.Id);
+            }
         }
     }
 }

@@ -554,6 +554,62 @@ public static class StatusBarRenderer
         if (selPos.HasValue) text += $"  pos ({selPos.Value.X} {selPos.Value.Y} {selPos.Value.Z})";
         return text;
     }
+
+    /// <summary>
+    /// Computes layout positions and bounds for the HUD score display.
+    /// Port of <c>scoreboard.cpp:494-568: drawhudscore</c>.
+    /// </summary>
+    public static (Vector2 Pos1, Vector2 Size1, Vector2 Pos2, Vector2 Size2) LayoutHudScore(
+        float screenW,
+        float screenH,
+        string text1,
+        string text2,
+        float scoreX = 0.50f,
+        float scoreY = 0.03f,
+        float scoreScale = 1.0f,
+        int scoreAlign = 0,
+        float scoreSep = 200.0f)
+    {
+        float effectiveScale = Math.Max(0.001f, scoreScale);
+        Vector2 twth1 = MeasureGameClockText(text1);
+        Vector2 twth2 = string.IsNullOrEmpty(text2) ? Vector2.Zero : MeasureGameClockText(text2);
+
+        Vector2 fwfh = MeasureGameClockText("00");
+        float fw = Math.Max(fwfh.X, Math.Max(twth1.X, twth2.X));
+
+        float ox = (scoreX * screenW) / effectiveScale;
+        if (scoreAlign == 1)
+            ox -= 2 * fw + scoreSep;
+        else if (scoreAlign == 0)
+            ox -= (2 * fw + scoreSep) / 2.0f;
+
+        float ox2 = ox;
+        float ox1 = ox + (fw - twth1.X) / 2.0f;
+        float oy1 = (scoreY * screenH) / effectiveScale - twth1.Y / 2.0f;
+
+        ox2 += fw + scoreSep + (fw - twth2.X) / 2.0f;
+        float oy2 = (scoreY * screenH) / effectiveScale - twth2.Y / 2.0f;
+
+        Vector2 pos1 = new Vector2(ox1 * effectiveScale, oy1 * effectiveScale);
+        Vector2 size1 = new Vector2(twth1.X * effectiveScale, twth1.Y * effectiveScale);
+
+        Vector2 pos2 = new Vector2(ox2 * effectiveScale, oy2 * effectiveScale);
+        Vector2 size2 = new Vector2(twth2.X * effectiveScale, twth2.Y * effectiveScale);
+
+        return (pos1, size1, pos2, size2);
+    }
+
+    /// <summary>
+    /// Computes HUD score text color from 0xRRGGBB and alpha (0..255).
+    /// </summary>
+    public static Color GetHudScoreColor(uint rgb, int alpha = 255)
+    {
+        float r = ((rgb >> 16) & 0xFF) / 255.0f;
+        float g = ((rgb >> 8) & 0xFF) / 255.0f;
+        float b = (rgb & 0xFF) / 255.0f;
+        float a = Mathf.Clamp(alpha, 0, 255) / 255.0f;
+        return new Color(r, g, b, a);
+    }
 }
 
 

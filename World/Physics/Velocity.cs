@@ -32,6 +32,20 @@ public static class Movement
         return m;
     }
 
+    /// <summary>physics.cpp:1572 <c>vectoyawpitch</c>.</summary>
+    public static void VecToYawPitch(Vector3 v, out float yaw, out float pitch)
+    {
+        if (v == Vector3.Zero)
+        {
+            yaw = pitch = 0f;
+        }
+        else
+        {
+            yaw = -Mathf.RadToDeg(Mathf.Atan2(v.X, v.Y));
+            pitch = Mathf.RadToDeg(Mathf.Asin(v.Z / v.Length()));
+        }
+    }
+
     /// <summary>physics.cpp:1589 <c>modifyvelocity</c> (allowmove() assumed true).</summary>
     public static void ModifyVelocity(PhysEnt pl, bool water, bool floating, int curtime)
     {

@@ -146,6 +146,44 @@ public partial class HudController : Control
     /// <summary>Current match/engine elapsed timestamp in milliseconds (engine lastmillis). If negative, falls back to Player.LastMillis or Time.GetTicksMsec().</summary>
     public int LastMillis { get; set; } = -1;
 
+    // --- HUD Score Display (fpsgame/scoreboard.cpp:484-568) ---
+
+    /// <summary>Whether the in-game HUD score is displayed (VARP hudscore in scoreboard.cpp:484).</summary>
+    public bool HudScore { get; set; } = true;
+
+    /// <summary>HUD score scale multiplier (FVARP hudscorescale in scoreboard.cpp:485, default 1.0).</summary>
+    public float HudScoreScale { get; set; } = 1.0f;
+
+    /// <summary>HUD score horizontal alignment (-1 = left, 0 = center, 1 = right) (VARP hudscorealign in scoreboard.cpp:486, default 0).</summary>
+    public int HudScoreAlign { get; set; } = 0;
+
+    /// <summary>HUD score normalized screen X position (FVARP hudscorex in scoreboard.cpp:487, default 0.50).</summary>
+    public float HudScoreX { get; set; } = 0.50f;
+
+    /// <summary>HUD score normalized screen Y position (FVARP hudscorey in scoreboard.cpp:488, default 0.03).</summary>
+    public float HudScoreY { get; set; } = 0.03f;
+
+    /// <summary>HUD score player/friendly team color (HVARP hudscoreplayercolour in scoreboard.cpp:489, default 0x60A0FF).</summary>
+    public uint HudScorePlayerColour { get; set; } = 0x60A0FF;
+
+    /// <summary>HUD score enemy team color (HVARP hudscoreenemycolour in scoreboard.cpp:490, default 0xFF4040).</summary>
+    public uint HudScoreEnemyColour { get; set; } = 0xFF4040;
+
+    /// <summary>HUD score alpha transparency (VARP hudscorealpha in scoreboard.cpp:491, default 255).</summary>
+    public int HudScoreAlpha { get; set; } = 255;
+
+    /// <summary>HUD score separation spacing between scores (VARP hudscoresep in scoreboard.cpp:492, default 200).</summary>
+    public float HudScoreSep { get; set; } = 200.0f;
+
+    /// <summary>Primary score to display (player's team or best score).</summary>
+    public int Score1 { get; set; } = int.MinValue;
+
+    /// <summary>Secondary score to display (enemy team or 2nd best score).</summary>
+    public int Score2 { get; set; } = int.MinValue;
+
+    /// <summary>Whether Score1 is the local player's / friendly team's score.</summary>
+    public bool Score1IsPlayer { get; set; } = true;
+
     // --- Spectator & Edit Mode HUD ---
 
     /// <summary>Whether spectator overlay should be drawn (or driven by Player.Entity.State == CsSpectator).</summary>
@@ -201,6 +239,10 @@ public partial class HudController : Control
     // Game clock / match timer node
     private Label? _gameClockLabel;
 
+    // HUD score nodes
+    private Label? _hudScoreLabel1;
+    private Label? _hudScoreLabel2;
+
     // Spectator overlay nodes
     private Control? _spectatorRoot;
     private Label? _spectatorLabel;
@@ -234,6 +276,7 @@ public partial class HudController : Control
         SetupAmmoHudNodes();
         SetupAmmoBarNodes();
         SetupGameClockNode();
+        SetupHudScoreNodes();
         SetupSpectatorNodes();
         SetupEditHudNodes();
         UpdateAtlasTextures();
@@ -247,6 +290,25 @@ public partial class HudController : Control
             MouseFilter = MouseFilterEnum.Ignore
         };
         AddChild(_gameClockLabel);
+    }
+
+    private void SetupHudScoreNodes()
+    {
+        _hudScoreLabel1 = new Label
+        {
+            Name = "HudScoreLabel1",
+            MouseFilter = MouseFilterEnum.Ignore,
+            Visible = false
+        };
+        AddChild(_hudScoreLabel1);
+
+        _hudScoreLabel2 = new Label
+        {
+            Name = "HudScoreLabel2",
+            MouseFilter = MouseFilterEnum.Ignore,
+            Visible = false
+        };
+        AddChild(_hudScoreLabel2);
     }
 
     private void SetupSpectatorNodes()
@@ -543,6 +605,7 @@ public partial class HudController : Control
         UpdateCrosshair();
         UpdateStatusBar();
         UpdateGameClock();
+        UpdateHudScore();
         UpdateSpectatorOverlay();
         UpdateEditHud();
     }
@@ -744,6 +807,32 @@ public partial class HudController : Control
             else
             {
                 if (_quadIcon != null) _quadIcon.Visible = false;
+            }
+
+            if (Player.Flags != null)
+            {
+                bool carrying = false;
+                int heldTeam = 0;
+                int holdRemaining = 0;
+                for (int i = 0; i < Player.Flags.Flags.Count; i++)
+                {
+                    var f = Player.Flags.Flags[i];
+                    if (f.Owner == Player.PlayerId)
+                    {
+                        carrying = true;
+                        heldTeam = f.Team;
+                        int now = Player.LastMillis > 0 ? Player.LastMillis : (int)Time.GetTicksMsec();
+                        holdRemaining = Math.Max(0, Game.FlagManager.HoldSecs - f.HoldCounter(now) / 1000);
+                        break;
+                    }
+                }
+                HasFlag = carrying;
+                HeldFlagTeam = heldTeam;
+                HoldRemainingSeconds = holdRemaining;
+                if (Player.Mode != null)
+                {
+                    IsHoldMode = Player.Mode.Has(Game.ModeFlags.Hold);
+                }
             }
 
             // CTF / Mode flag: flag indicator icon with hold counter or carrier status
@@ -986,6 +1075,78 @@ public partial class HudController : Control
             _ => HorizontalAlignment.Center
         };
         _gameClockLabel.VerticalAlignment = VerticalAlignment.Center;
+    }
+
+    /// <summary>
+    /// Updates the top HUD team/match score display (engine <c>fpsgame/scoreboard.cpp:484-568: drawhudscore</c>).
+    /// </summary>
+    public void UpdateHudScore()
+    {
+        if (_hudScoreLabel1 == null || _hudScoreLabel2 == null) return;
+
+        if (Player?.Flags != null)
+        {
+            int playerTeam = Player.Team;
+            int enemyTeam = playerTeam == 1 ? 2 : 1;
+            Score1 = Player.Flags.GetScore(playerTeam);
+            Score2 = Player.Flags.GetScore(enemyTeam);
+            Score1IsPlayer = true;
+        }
+
+        if (!HudScore || Score1 == int.MinValue)
+        {
+            _hudScoreLabel1.Visible = false;
+            _hudScoreLabel2.Visible = false;
+            return;
+        }
+
+        Vector2 viewportSize = GetViewportRect().Size;
+        if (viewportSize.X <= 0 || viewportSize.Y <= 0) return;
+
+        string text1 = Score1.ToString();
+        string text2 = Score2 != int.MinValue ? Score2.ToString() : "";
+
+        var (pos1, size1, pos2, size2) = StatusBarRenderer.LayoutHudScore(
+            viewportSize.X,
+            viewportSize.Y,
+            text1,
+            text2,
+            HudScoreX,
+            HudScoreY,
+            HudScoreScale,
+            HudScoreAlign,
+            HudScoreSep);
+
+        int fontSize = Mathf.Max(12, (int)(StatusBarRenderer.DefaultFontHeight * HudScoreScale));
+
+        uint rgb1 = Score1IsPlayer ? HudScorePlayerColour : HudScoreEnemyColour;
+        Color col1 = StatusBarRenderer.GetHudScoreColor(rgb1, HudScoreAlpha);
+        _hudScoreLabel1.Visible = true;
+        _hudScoreLabel1.Text = text1;
+        _hudScoreLabel1.Modulate = col1;
+        _hudScoreLabel1.Position = pos1;
+        _hudScoreLabel1.Size = size1;
+        _hudScoreLabel1.AddThemeFontSizeOverride("font_size", fontSize);
+        _hudScoreLabel1.HorizontalAlignment = HorizontalAlignment.Center;
+        _hudScoreLabel1.VerticalAlignment = VerticalAlignment.Center;
+
+        if (Score2 != int.MinValue)
+        {
+            uint rgb2 = !Score1IsPlayer ? HudScorePlayerColour : HudScoreEnemyColour;
+            Color col2 = StatusBarRenderer.GetHudScoreColor(rgb2, HudScoreAlpha);
+            _hudScoreLabel2.Visible = true;
+            _hudScoreLabel2.Text = text2;
+            _hudScoreLabel2.Modulate = col2;
+            _hudScoreLabel2.Position = pos2;
+            _hudScoreLabel2.Size = size2;
+            _hudScoreLabel2.AddThemeFontSizeOverride("font_size", fontSize);
+            _hudScoreLabel2.HorizontalAlignment = HorizontalAlignment.Center;
+            _hudScoreLabel2.VerticalAlignment = VerticalAlignment.Center;
+        }
+        else
+        {
+            _hudScoreLabel2.Visible = false;
+        }
     }
 
     /// <summary>

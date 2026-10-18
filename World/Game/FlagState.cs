@@ -43,6 +43,12 @@ public sealed class FlagState
     /// <summary>Timestamp (ms) until which flag is invisible/unscoreable (protect mode score cooldown).</summary>
     public int InvisTime { get; set; }
 
+    /// <summary>Facing angle in degrees at spawn location (ctf.h:34 spawnangle).</summary>
+    public float SpawnAngle { get; set; }
+
+    /// <summary>Facing angle in degrees at drop location (ctf.h:34 dropangle).</summary>
+    public float DropAngle { get; set; }
+
     public bool HasOwner => Owner.HasValue;
 
     public void Reset()
@@ -50,6 +56,7 @@ public sealed class FlagState
         Version = 0;
         SpawnIndex = -1;
         DropLoc = SpawnLoc = Vector3.Zero;
+        DropAngle = SpawnAngle = 0;
         DropCount = 0;
         Owner = null;
         Dropper = -1;
@@ -80,5 +87,40 @@ public sealed class FlagState
         if (!HasOwner && DropTime > 0 && DropTime >= HoldTime)
             return Math.Max((DropTime - HoldTime) - (lastMillis - DropTime), 0);
         return lastMillis - HoldTime;
+    }
+
+    /// <summary>
+    /// Calculates visual interpolated flag position and facing angle in world space.
+    /// Port of <c>ctf.h:637: interpflagpos</c>.
+    /// When carried, positioned above carrier's head (+1 Z above AboveHead).
+    /// </summary>
+    public Vector3 InterpFlagPos(
+        out float angle,
+        bool isHold,
+        Vector3? cameraPos = null,
+        Func<int, (Vector3 pos, float yaw, float aboveEye)>? getOwnerInfo = null)
+    {
+        Vector3 pos;
+        if (Owner.HasValue && getOwnerInfo != null)
+        {
+            var info = getOwnerInfo(Owner.Value);
+            // abovehead() = o.z + aboveeye + 4; then + 1
+            pos = new Vector3(info.pos.X, info.pos.Y, info.pos.Z + info.aboveEye + 4f + 1f);
+            angle = info.yaw;
+        }
+        else
+        {
+            pos = DropTime > 0 ? DropLoc : SpawnLoc;
+            if (isHold && cameraPos.HasValue)
+            {
+                Physics.Movement.VecToYawPitch(pos - cameraPos.Value, out float yaw, out _);
+                angle = yaw + 180f;
+            }
+            else
+            {
+                angle = DropTime > 0 ? DropAngle : SpawnAngle;
+            }
+        }
+        return pos;
     }
 }

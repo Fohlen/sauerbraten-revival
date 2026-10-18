@@ -58,6 +58,12 @@ public partial class MapWorld : Node3D
     /// <summary>The item manager holding map item pickups.</summary>
     public ItemManager? Items { get; private set; }
 
+    /// <summary>Flag manager tracking CTF / Protect / Hold state.</summary>
+    public Game.FlagManager? Flags { get; private set; }
+
+    private readonly List<FlagNode> _flagNodes = new();
+    public IReadOnlyList<FlagNode> FlagNodes => _flagNodes;
+
     /// <summary>Active jump pad trigger entities in this map.</summary>
     public IReadOnlyList<JumpPad> JumpPads { get; private set; } = System.Array.Empty<JumpPad>();
 
@@ -152,6 +158,35 @@ public partial class MapWorld : Node3D
         AddChild(triggers);
         Items = ItemBuilder.Build(map, modelCatalog, textures);
         AddChild(Items);
+
+        // Flag manager and visual flag nodes (ctf.h:731 setup)
+        Flags = new Game.FlagManager();
+        var flagsRoot = new Node3D { Name = "Flags" };
+        _flagNodes.Clear();
+        foreach (var (i, e) in map.OfType(EntityType.Flag))
+        {
+            if (e.Attr2 < 1 || e.Attr2 > 2) continue;
+            int flagId = Flags.Flags.Count;
+            Flags.AddFlag(flagId, e.Position, e.Attr2, 0, isProtect: false, spawnAngle: e.Attr1);
+            var flagNode = new FlagNode
+            {
+                Name = $"Flag_{flagId}",
+                FlagId = flagId,
+                Team = e.Attr2,
+                Models = modelCatalog,
+                Textures = textures,
+                Position = e.Position
+            };
+            EntityFacing.ApplyYaw(flagNode, e.Attr1);
+            _flagNodes.Add(flagNode);
+            flagsRoot.AddChild(flagNode);
+        }
+        foreach (var (i, e) in map.OfType(EntityType.Base))
+        {
+            Flags.AddHoldSpawn(e.Position);
+        }
+        AddChild(flagsRoot);
+
         AddChild(ParticleBuilder.Build(map, textures));
         AddChild(SoundBuilder.Build(map, catalogue, MapRoots.ReferenceRoot));
         var mapModels = MapModelBuilder.Build(map, catalogue, modelCatalog, textures);
@@ -214,11 +249,26 @@ public partial class MapWorld : Node3D
 
     public override void _Process(double delta)
     {
-        if (Engine.IsEditorHint() || Teleports == null || Teleports.Count == 0) return;
+        if (Engine.IsEditorHint()) return;
         int lastMillis = (int)Time.GetTicksMsec();
-        for (int i = 0; i < Teleports.Count; i++)
+        if (Teleports != null)
         {
-            Teleports[i].UpdateVisual(lastMillis);
+            for (int i = 0; i < Teleports.Count; i++)
+            {
+                Teleports[i].UpdateVisual(lastMillis);
+            }
+        }
+
+        if (Flags != null && _flagNodes.Count > 0)
+        {
+            var mode = Game.GameModeCatalog.Get("ctf");
+            for (int i = 0; i < _flagNodes.Count; i++)
+            {
+                if (i < Flags.Flags.Count)
+                {
+                    _flagNodes[i].UpdateVisual(Flags.Flags[i], mode, lastMillis, localPlayerTeam: 1);
+                }
+            }
         }
     }
 

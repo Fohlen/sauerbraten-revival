@@ -19,7 +19,7 @@ height = 15.0
 
 [node name="PlayerScene" type="Node3D" unique_id=50973792]
 script = ExtResource("1_viewer")
-OgzPath = "base/church51.ogz"
+OgzPath = "base/bt_falls.ogz"
 FrameCamera = false
 SpawnPlayer = true
 PlayerModelIndex = 0

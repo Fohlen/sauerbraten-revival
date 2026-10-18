@@ -61,7 +61,7 @@ public sealed class FlagManager
         _scores[1] = 0;
     }
 
-    public bool AddFlag(int id, Vector3 spawnLoc, int team, int lastMillis = 0, bool isProtect = false)
+    public bool AddFlag(int id, Vector3 spawnLoc, int team, int lastMillis = 0, bool isProtect = false, float spawnAngle = 0f)
     {
         if (id < 0 || id >= MaxFlags) return false;
         while (_flags.Count <= id)
@@ -73,6 +73,7 @@ public sealed class FlagManager
         f.Id = id;
         f.Team = team;
         f.SpawnLoc = spawnLoc;
+        f.SpawnAngle = spawnAngle;
         f.InvisTime = isProtect ? lastMillis : 0;
         return true;
     }
@@ -150,12 +151,13 @@ public sealed class FlagManager
         f.InvisTime = 0;
     }
 
-    public void DropFlag(int flagId, Vector3 dropLoc, int nowMillis, int dropperId = -1, bool penalty = false)
+    public void DropFlag(int flagId, Vector3 dropLoc, int nowMillis, int dropperId = -1, bool penalty = false, float dropAngle = 0f)
     {
         if (flagId < 0 || flagId >= _flags.Count) return;
         var f = _flags[flagId];
         f.DropLoc = dropLoc;
         f.DropTime = nowMillis;
+        f.DropAngle = dropAngle;
         if (dropperId < 0) f.DropCount = 0;
         else if (penalty) f.DropCount = int.MaxValue;
         f.Dropper = dropperId;
@@ -296,7 +298,7 @@ public sealed class FlagManager
     /// Drops any flag currently carried by the player.
     /// In Protect mode, if dropped inside its own base, it returns instead.
     /// </summary>
-    public void DropPlayerFlag(int playerId, Vector3 playerPos, GameModeInfo mode, int nowMillis, int dropperId = -1, bool tkPenalty = false)
+    public void DropPlayerFlag(int playerId, Vector3 playerPos, GameModeInfo mode, int nowMillis, int dropperId = -1, bool tkPenalty = false, float dropAngle = 0f)
     {
         bool isProtect = mode.Has(ModeFlags.Protect);
         foreach (var f in _flags)
@@ -312,7 +314,7 @@ public sealed class FlagManager
                 else
                 {
                     f.Version++;
-                    DropFlag(f.Id, playerPos, nowMillis, dropperId >= 0 ? dropperId : playerId, tkPenalty);
+                    DropFlag(f.Id, playerPos, nowMillis, dropperId >= 0 ? dropperId : playerId, tkPenalty, dropAngle);
                     DispatchAudio(GameSound.FlagDrop, f.Id, f.Team, playerId, playerPos);
                 }
             }
@@ -322,7 +324,7 @@ public sealed class FlagManager
     /// <summary>
     /// Player died: handles hold mode death penalty, drops carried flags, and cleans up dropper references.
     /// </summary>
-    public void OnPlayerDied(int victimId, int? actorId, bool isTeammate, Vector3 victimPos, GameModeInfo mode, int nowMillis)
+    public void OnPlayerDied(int victimId, int? actorId, bool isTeammate, Vector3 victimPos, GameModeInfo mode, int nowMillis, float dropAngle = 0f)
     {
         bool isHold = mode.Has(ModeFlags.Hold);
         if (isHold)
@@ -338,7 +340,7 @@ public sealed class FlagManager
 
         bool tkPenalty = actorId.HasValue && actorId.Value != victimId && isTeammate;
         int dropper = tkPenalty ? actorId!.Value : victimId;
-        DropPlayerFlag(victimId, victimPos, mode, nowMillis, dropper, tkPenalty);
+        DropPlayerFlag(victimId, victimPos, mode, nowMillis, dropper, tkPenalty, dropAngle);
 
         foreach (var f in _flags)
         {
