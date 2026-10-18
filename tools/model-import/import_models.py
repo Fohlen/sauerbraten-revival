@@ -421,11 +421,17 @@ def glb_cache_key(source: str, anims: dict | None = None, adjusts: list[dict] | 
     return "|".join(key)
 
 
-def strip_glb_materials(path: str) -> None:
+def strip_glb_materials(path: str, flip_winding: bool = False) -> None:
     """Drop materials/textures from a .glb (we apply the Cube2 skin ourselves).
 
     Assimp references the source model's internal texture names (e.g. a dangling
     skin.tga), which Godot then tries to open and logs errors for.
+
+    When ``flip_winding`` is set (for MD2 models), also reverse each triangle's
+    index order ``(i0, i1, i2) -> (i0, i2, i1)`` in the binary buffer so the
+    exported glTF matches Sauerbraten's MD2 winding (Assimp's MD2 importer runs
+    ``MakeLeftHandedProcess`` without ``FlipWindingOrderProcess``, inverting
+    every triangle relative to ``md2.h`` + ``glFrontFace(GL_CW)``).
     """
     with open(path, "rb") as f:
         data = f.read()
@@ -451,6 +457,37 @@ def strip_glb_materials(path: str) -> None:
     for mesh in doc.get("meshes", []):
         for prim in mesh.get("primitives", []):
             prim.pop("material", None)
+
+    if flip_winding:
+        for i, (ctype, chunk) in enumerate(chunks):
+            if ctype == 0x004E4942:  # 'BIN\0'
+                buf = bytearray(chunk)
+                seen_acc: set[int] = set()
+                for mesh in doc.get("meshes", []):
+                    for prim in mesh.get("primitives", []):
+                        if prim.get("mode", 4) != 4 or "indices" not in prim:
+                            continue
+                        acc_idx = prim["indices"]
+                        if acc_idx in seen_acc:
+                            continue
+                        seen_acc.add(acc_idx)
+                        acc = doc["accessors"][acc_idx]
+                        bv = doc["bufferViews"][acc["bufferView"]]
+                        base = bv.get("byteOffset", 0) + acc.get("byteOffset", 0)
+                        count = acc["count"]
+                        comp = acc["componentType"]
+                        step = {5121: 1, 5123: 2, 5125: 4}.get(comp)
+                        if step is None:
+                            continue
+                        for t in range(0, count - 2, 3):
+                            p1 = base + (t + 1) * step
+                            p2 = base + (t + 2) * step
+                            buf[p1:p1 + step], buf[p2:p2 + step] = (
+                                bytes(buf[p2:p2 + step]),
+                                bytes(buf[p1:p1 + step]),
+                            )
+                chunks[i] = (ctype, bytes(buf))
+                break
 
     new_json = json.dumps(doc, separators=(",", ":")).encode("utf-8")
     new_json += b" " * ((4 - len(new_json) % 4) % 4)
@@ -1226,7 +1263,7 @@ def main(argv: list[str] | None = None) -> int:
                 if not baked:
                     proc = subprocess.run([args.assimp, "export", source, glb, "-cfast"], capture_output=True, text=True)
                     if proc.returncode == 0 and os.path.isfile(glb):
-                        strip_glb_materials(glb)
+                        strip_glb_materials(glb, flip_winding=(ext == ".md2"))
                     else:
                         print(f"FAIL  {name}: assimp failed\n{proc.stdout}\n{proc.stderr}", file=sys.stderr)
                         glb = None
