@@ -567,6 +567,7 @@ public class MapPlayerTest : GoTestBase
         TestAssert.Equal(1350, player.LastPickupMillis, "lastpickupmillis updated");
 
         player.Free();
+        pad.Free();
     }
 
     [Test]
@@ -599,6 +600,8 @@ public class MapPlayerTest : GoTestBase
         TestAssert.Equal(new Vector3(0, 0, 200f), player.Entity.Vel, "velocity set by close pad");
 
         player.Free();
+        farPad.Free();
+        closePad.Free();
     }
 
     [Test]
@@ -632,6 +635,7 @@ public class MapPlayerTest : GoTestBase
         TestAssert.True(hit == null, "floating player does not trigger jump pad");
 
         player.Free();
+        pad.Free();
     }
 
     [Test]
@@ -667,6 +671,8 @@ public class MapPlayerTest : GoTestBase
         TestAssert.Equal(Vector3.Zero, player.Entity.Vel, "vel reset to zero when not pushed");
 
         player.Free();
+        dest.Free();
+        tp.Free();
     }
 
     [Test]
@@ -705,5 +711,7 @@ public class MapPlayerTest : GoTestBase
         TestAssert.True(hitCooldown == null, "rate limited by 500ms cooldown");
 
         player.Free();
+        dest.Free();
+        tp.Free();
     }
 }
