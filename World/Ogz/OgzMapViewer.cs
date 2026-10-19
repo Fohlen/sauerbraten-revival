@@ -80,12 +80,17 @@ public partial class OgzMapViewer : Node3D
         _built = true;
 
         UserSettings userSettings = UserSettings.Load();
+        // The game mode only applies to an actual play session; the edit viewer
+        // leaves Mode unset so the raw mode-entity representation is shown (see
+        // ModeEntityBuilder.AppliesToMode).
+        Game.GameModeInfo? modeInfo = SpawnPlayer ? Game.GameModeCatalog.Get(GameMode) : null;
         World = new MapWorld
         {
             Name = "MapWorld",
             OgzPath = OgzPath,
             ChunkSize = ChunkSize,
             ShowEntityMarkers = ShowEntityMarkers,
+            Mode = modeInfo,
             // Lighting quality is a user setting (`user://settings.cfg`).
             RadianceSettings = new Lighting.RadianceSettings { Mode = userSettings.LightingMode },
         };
@@ -94,7 +99,7 @@ public partial class OgzMapViewer : Node3D
         if (!World.Built) return; // missing map, error already pushed
 
         ApplySky(World.Map!, World.Textures!);
-        if (SpawnPlayer) AttachPlayer(userSettings);
+        if (SpawnPlayer) AttachPlayer(userSettings, modeInfo!);
         if (FrameCamera) FrameSceneCamera(World.Centre, World.Radius);
     }
 
@@ -103,7 +108,7 @@ public partial class OgzMapViewer : Node3D
     /// initialise it against the octree at the map's first <c>ET_PLAYERSTART</c>
     /// (falling back to the map centre). Physics then owns its position/orientation.
     /// </summary>
-    private void AttachPlayer(UserSettings userSettings)
+    private void AttachPlayer(UserSettings userSettings, Game.GameModeInfo modeInfo)
     {
         MapPlayer? player = null;
         foreach (var child in GetChildren())
@@ -117,8 +122,6 @@ public partial class OgzMapViewer : Node3D
         player.Reparent(World!); // into the rotated Z-up world
 
         (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
-        var modeInfo = Game.GameModeCatalog.Get(GameMode);
-        World!.Mode = modeInfo;
         World.LocalPlayerTeam = PlayerTeam > 0 ? PlayerTeam : 1;
         World.PlayerProvider = pid => (player.Entity.O, player.Entity.Yaw, player.Entity.AboveEye);
         player.Mode = modeInfo;

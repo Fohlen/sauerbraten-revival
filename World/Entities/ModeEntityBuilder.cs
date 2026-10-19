@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 
@@ -35,12 +36,13 @@ public static class ModeEntityBuilder
     public const float PlatformSpeed = 8.0f;
 
     public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue = null,
-                               ModelCatalog? models = null, ITextureSource? textures = null)
+                               ModelCatalog? models = null, ITextureSource? textures = null,
+                               GameModeInfo? mode = null)
     {
         var root = new Node3D { Name = "ModeEntities" };
         var skinCache = new Dictionary<string, Material>();
 
-        foreach (var (i, e) in map.Where(IsModeEntity))
+        foreach (var (i, e) in map.Where(e => IsModeEntity(e) && AppliesToMode(e, mode)))
         {
             string? modelName = ModelName(e, catalogue);
             var info = modelName != null ? models?.Get(modelName) : null;
@@ -89,6 +91,28 @@ public static class ModeEntityBuilder
         EntityType.Elevator or EntityType.Flag => true,
         _ => false,
     };
+
+    /// <summary>
+    /// Whether an entity is drawn for the active <paramref name="mode"/>. FLAG and
+    /// BASE are not generic entities — <c>entities.cpp entmdlname</c> returns NULL
+    /// for both and they are drawn by the mode code instead. The engine picks that
+    /// code in <c>client.cpp setclientmode</c>: <c>m_capture</c> owns BASE,
+    /// <c>m_ctf</c> owns FLAG (Hold uses BASE as (invisible) hold spawns and creates
+    /// its flag dynamically, so neither map entity is drawn). Any other mode draws
+    /// neither. A null <paramref name="mode"/> is the edit/inspection view and keeps
+    /// the raw representation of every type.
+    /// </summary>
+    public static bool AppliesToMode(OgzEntity e, GameModeInfo? mode)
+    {
+        if (mode == null) return true;
+        return e.Type switch
+        {
+            // FlagNode renders flags for live ctf state; never duplicate them here.
+            EntityType.Flag => false,
+            EntityType.Base => mode.Has(ModeFlags.Capture),
+            _ => true,
+        };
+    }
 
     /// <summary>entities.cpp <c>entradius</c>: types that get a yaw arrow.</summary>
     public static bool DrawsFacingArrow(byte type) => type switch

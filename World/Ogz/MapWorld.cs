@@ -159,7 +159,7 @@ public partial class MapWorld : Node3D
         AddChild(LightBuilder.Build(map));
         AddChild(EnvMapBuilder.Build(map));
         AddChild(PlayerStartBuilder.Build(map, textures));
-        AddChild(ModeEntityBuilder.Build(map, catalogue, modelCatalog, textures));
+        AddChild(ModeEntityBuilder.Build(map, catalogue, modelCatalog, textures, Mode));
         AddChild(MonsterBuilder.Build(map, modelCatalog, textures));
         var (triggers, jumpPads, teleports) = TriggerBuilder.BuildTriggers(map, catalogue, modelCatalog, textures);
         JumpPads = jumpPads;
@@ -168,31 +168,43 @@ public partial class MapWorld : Node3D
         Items = ItemBuilder.Build(map, modelCatalog, textures);
         AddChild(Items);
 
-        // Flag manager and visual flag nodes (ctf.h:731 setup)
+        // Flag manager and visual flag nodes (ctf.h setup). Flags are a ctf-mode
+        // concept: the engine selects ctf/capture mode code from the flags
+        // (client.cpp setclientmode), and only m_ctf builds flag state. Other modes
+        // get an empty manager so player/HUD code can keep a stable reference.
         Flags = new Game.FlagManager();
         var flagsRoot = new Node3D { Name = "Flags" };
         _flagNodes.Clear();
-        foreach (var (i, e) in map.OfType(EntityType.Flag))
+        if (Mode == null || Mode.Has(Game.ModeFlags.Ctf))
         {
-            if (e.Attr2 < 1 || e.Attr2 > 2) continue;
-            int flagId = Flags.Flags.Count;
-            Flags.AddFlag(flagId, e.Position, e.Attr2, 0, isProtect: false, spawnAngle: e.Attr1);
-            var flagNode = new FlagNode
+            bool isHold = Mode != null && Mode.Has(Game.ModeFlags.Hold);
+            if (isHold)
             {
-                Name = $"Flag_{flagId}",
-                FlagId = flagId,
-                Team = e.Attr2,
-                Models = modelCatalog,
-                Textures = textures,
-                Position = e.Position
-            };
-            EntityFacing.ApplyYaw(flagNode, e.Attr1);
-            _flagNodes.Add(flagNode);
-            flagsRoot.AddChild(flagNode);
-        }
-        foreach (var (i, e) in map.OfType(EntityType.Base))
-        {
-            Flags.AddHoldSpawn(e.Position);
+                // ctf.h:729: BASE entities are hold spawns; HOLDFLAGS neutral flags
+                // are created dynamically, not baked from the map's FLAG entities.
+                foreach (var (_, e) in map.OfType(EntityType.Base))
+                    Flags.AddHoldSpawn(e.Position);
+                Flags.SetupHoldSpawns();
+                foreach (var flag in Flags.Flags)
+                {
+                    var flagNode = CreateFlagNode(flag.Id, flag.Team, flag.SpawnLoc, 0f, modelCatalog, textures);
+                    _flagNodes.Add(flagNode);
+                    flagsRoot.AddChild(flagNode);
+                }
+            }
+            else
+            {
+                // ctf.h:311: one flag per team-coloured map FLAG entity.
+                foreach (var (_, e) in map.OfType(EntityType.Flag))
+                {
+                    if (e.Attr2 < 1 || e.Attr2 > 2) continue;
+                    int flagId = Flags.Flags.Count;
+                    Flags.AddFlag(flagId, e.Position, e.Attr2, 0, isProtect: false, spawnAngle: e.Attr1);
+                    var flagNode = CreateFlagNode(flagId, e.Attr2, e.Position, e.Attr1, modelCatalog, textures);
+                    _flagNodes.Add(flagNode);
+                    flagsRoot.AddChild(flagNode);
+                }
+            }
         }
         AddChild(flagsRoot);
 
@@ -268,7 +280,7 @@ public partial class MapWorld : Node3D
             }
         }
 
-        if (Flags != null && _flagNodes.Count > 0)
+        if (Flags != null && _flagNodes.Count > 0 && (Mode == null || Mode.Has(Game.ModeFlags.Ctf)))
         {
             var mode = Mode ?? Game.GameModeCatalog.Get("ctf");
             Flags.Update(mode, lastMillis);
@@ -283,6 +295,23 @@ public partial class MapWorld : Node3D
     }
 
     private static string DefaultPath() => MapRoots.Resolve("base/church51");
+
+    /// <summary>Creates the visual node for one flag, oriented by its spawn yaw.</summary>
+    private static FlagNode CreateFlagNode(int flagId, int team, Vector3 position, float yaw,
+                                           ModelCatalog? models, ITextureSource textures)
+    {
+        var flagNode = new FlagNode
+        {
+            Name = $"Flag_{flagId}",
+            FlagId = flagId,
+            Team = team,
+            Models = models,
+            Textures = textures,
+            Position = position,
+        };
+        EntityFacing.ApplyYaw(flagNode, yaw);
+        return flagNode;
+    }
 
     private static string ResolvePath(string ogzPath) => MapRoots.Resolve(ogzPath);
 }

@@ -1,6 +1,7 @@
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 
@@ -61,6 +62,67 @@ public class EntityModeTest : GoTestBase
         }
 
         TestAssert.Equal(5, bases, "bases on bt_falls");
+        root.Free();
+    }
+
+    // FLAG/BASE are mode-owned: entities.cpp entmodel() returns NULL for both and
+    // client.cpp setclientmode() picks capture (bases) or ctf (flags), so other
+    // modes must not draw them. A null mode keeps the raw representation (above).
+
+    [Test]
+    public void FfaDrawsNeitherFlagsNorBases()
+    {
+        var map = TestData.ReadMap("bt_falls");
+        var root = ModeEntityBuilder.Build(map, mode: GameModeCatalog.Get("ffa"));
+
+        TestAssert.Equal(0, CountType(root, EntityType.Flag), "flags in ffa");
+        TestAssert.Equal(0, CountType(root, EntityType.Base), "bases in ffa");
+        root.Free();
+    }
+
+    [Test]
+    public void CtfDrawsNoBasesAndLeavesFlagsToFlagNode()
+    {
+        var map = TestData.ReadMap("bt_falls");
+        var root = ModeEntityBuilder.Build(map, mode: GameModeCatalog.Get("effic_ctf"));
+
+        TestAssert.Equal(0, CountType(root, EntityType.Base), "bases in effic ctf");
+        TestAssert.Equal(0, CountType(root, EntityType.Flag), "static flags in effic ctf (FlagNode owns them)");
+        root.Free();
+    }
+
+    [Test]
+    public void CaptureDrawsBasesOnly()
+    {
+        var map = TestData.ReadMap("bt_falls");
+        var root = ModeEntityBuilder.Build(map, mode: GameModeCatalog.Get("capture"));
+
+        TestAssert.Equal(5, CountType(root, EntityType.Base), "bases in capture");
+        TestAssert.Equal(0, CountType(root, EntityType.Flag), "flags in capture");
+        root.Free();
+    }
+
+    [Test]
+    public void HoldDrawsNeitherBasesNorFlags()
+    {
+        // Hold turns BASE entities into (invisible) hold spawns and creates its
+        // single neutral flag dynamically (ctf.h:729).
+        var map = TestData.ReadMap("bt_falls");
+        var root = ModeEntityBuilder.Build(map, mode: GameModeCatalog.Get("hold"));
+
+        TestAssert.Equal(0, CountType(root, EntityType.Base), "bases in hold");
+        TestAssert.Equal(0, CountType(root, EntityType.Flag), "flags in hold");
+        root.Free();
+    }
+
+    [Test]
+    public void ActiveModeKeepsGenericModeEntities()
+    {
+        var map = TestData.ReadMap("lost");
+        var root = ModeEntityBuilder.Build(map, mode: GameModeCatalog.Get("ffa"));
+
+        TestAssert.Equal(57, CountType(root, EntityType.Box), "boxes in ffa");
+        TestAssert.Equal(114, CountType(root, EntityType.Barrel), "barrels in ffa");
         root.Free();
     }
 
@@ -164,5 +226,13 @@ public class EntityModeTest : GoTestBase
 
         TestAssert.True(!ModeEntityBuilder.DrawsFacingArrow(EntityType.Base), "base has no arrow");
         TestAssert.True(!ModeEntityBuilder.DrawsFacingArrow(EntityType.Carrot), "carrot has no arrow");
+    }
+
+    private static int CountType(Node root, byte type)
+    {
+        int count = 0;
+        foreach (var child in root.GetChildren())
+            if (child is ModeEntity m && m.ModeType == type) count++;
+        return count;
     }
 }
