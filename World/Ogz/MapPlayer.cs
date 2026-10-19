@@ -116,8 +116,35 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Active item pickups manager for this map/session.</summary>
     public ItemManager? Items { get; set; }
 
+    private Game.FlagManager? _flags;
+
     /// <summary>Active flag manager for CTF / Protect / Hold modes.</summary>
-    public Game.FlagManager? Flags { get; set; }
+    public Game.FlagManager? Flags
+    {
+        get => _flags;
+        set
+        {
+            if (ReferenceEquals(_flags, value)) return;
+            if (_flags != null) _flags.OnAudioEvent -= OnFlagAudioEvent;
+            _flags = value;
+            if (_flags != null) _flags.OnAudioEvent += OnFlagAudioEvent;
+        }
+    }
+
+    /// <summary>
+    /// Plays flag state-machine audio for the local player (ctf.h:852-968
+    /// <c>teamsound</c> / <c>playsound</c>). Every flag sound is non-positional in
+    /// the original (no location is passed), so it is played straight to the ears.
+    /// A flag scored by the enemy team is heard as <see cref="GameSound.FlagFail"/>
+    /// rather than <see cref="GameSound.FlagScore"/> (ctf.h:952).
+    /// </summary>
+    private void OnFlagAudioEvent(FlagAudioEvent evt)
+    {
+        GameSound sound = evt.Sound;
+        if (sound == GameSound.FlagScore && evt.Team != Team)
+            sound = GameSound.FlagFail;
+        PlaySound(sound);
+    }
 
     /// <summary>Local player/client ID (default 0).</summary>
     public int PlayerId { get; set; } = 0;
@@ -1179,7 +1206,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// Play a game sound. If local player, uses non-positional <see cref="AudioPlayer2D"/>;
     /// otherwise plays through 3D <see cref="AudioPlayer"/>.
     /// </summary>
-    public void PlaySound(GameSound sound)
+    public virtual void PlaySound(GameSound sound)
     {
         if (sound == GameSound.None) return;
         if (AudioPlayer2D != null)

@@ -11,7 +11,7 @@ using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.Test;
 
-public class FlagManagerTest : TestClass
+public partial class FlagManagerTest : TestClass
 {
     public FlagManagerTest(Node testScene) : base(testScene) { }
 
@@ -275,6 +275,48 @@ public class FlagManagerTest : TestClass
         TestAssert.Equal(1, fm.GetScore(1), "blue team scored capture");
         TestAssert.False(fm.Flags[1].HasOwner, "red flag returned home after capture");
         player.Dispose();
+    }
+
+    [Test]
+    public void FlagAudioPlaysThroughLocalPlayer()
+    {
+        var player = new SoundCapturingPlayer
+        {
+            PlayerId = 1,
+            Team = 1, // Blue team
+            Mode = GetMode("ctf")
+        };
+        var fm = new FlagManager();
+        fm.AddFlag(0, new Vector3(0, 0, 0), 1);   // Blue flag (local team)
+        fm.AddFlag(1, new Vector3(100, 0, 0), 2); // Red flag (enemy)
+        player.Flags = fm;
+
+        // Blue steals the red flag -> flag pickup is heard.
+        fm.TakeFlag(1, 1, new Vector3(100, 0, 0), 1, fm.Flags[1].Version, GetMode("ctf"), 1000);
+        TestAssert.Equal(GameSound.FlagPickup, player.Played[^1], "steal plays pickup sound");
+
+        // Blue carries it home and captures at the blue base -> local team scores.
+        fm.TakeFlag(1, 1, Vector3.Zero, 0, fm.Flags[0].Version, GetMode("ctf"), 1100);
+        TestAssert.Equal(GameSound.FlagScore, player.Played[^1], "own score plays FlagScore");
+
+        // The enemy team scores -> the local player hears the failure cue instead.
+        fm.ScoreFlag(2, 2, 0, -1, GetMode("ctf"), 2000);
+        TestAssert.Equal(GameSound.FlagFail, player.Played[^1], "enemy score plays FlagFail");
+
+        // Reassigning the manager must not double-subscribe (one event, one sound).
+        int played = player.Played.Count;
+        player.Flags = fm;
+        fm.TakeFlag(2, 2, Vector3.Zero, 0, fm.Flags[0].Version, GetMode("ctf"), 3000);
+        TestAssert.Equal(played + 1, player.Played.Count, "no duplicate audio after reassigning the manager");
+
+        player.Dispose();
+    }
+
+    /// <summary>Captures played sounds instead of driving the audio backend.</summary>
+    private sealed partial class SoundCapturingPlayer : MapPlayer
+    {
+        public List<GameSound> Played { get; } = new();
+        public override void PlaySound(GameSound sound) => Played.Add(sound);
     }
 
     [Test]
