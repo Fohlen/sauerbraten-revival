@@ -43,6 +43,9 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Team skin for the player model (0 = FFA, 1 = blue, 2 = red).</summary>
     [Export] public int PlayerTeam { get; set; } = 0;
 
+    /// <summary>Active game mode identifier (e.g. "ffa", "ctf", "effic_ctf", "insta_ctf").</summary>
+    [Export] public string GameMode { get; set; } = "ffa";
+
     /// <summary>
     /// Show edit-mode blue entity markers and facing arrows. When false (e.g. in
     /// player/game scenes), all <see cref="EntityMarker"/> nodes are hidden.
@@ -114,6 +117,11 @@ public partial class OgzMapViewer : Node3D
         player.Reparent(World!); // into the rotated Z-up world
 
         (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
+        var modeInfo = Game.GameModeCatalog.Get(GameMode);
+        World!.Mode = modeInfo;
+        World.LocalPlayerTeam = PlayerTeam > 0 ? PlayerTeam : 1;
+        player.Mode = modeInfo;
+        player.Team = PlayerTeam > 0 ? PlayerTeam : 1;
         player.Setup(World.Octa!, feet, yaw);
         player.ApplyLookSettings(userSettings); // sensitivity / accel / invert / FOV
         AttachPlayerModel(player);
@@ -125,7 +133,7 @@ public partial class OgzMapViewer : Node3D
         player.Flags = World.Flags;
         player.JumpPads = World.JumpPads;
         player.Teleports = World.Teleports;
-        World.Items?.SpawnItems(Game.GameModeCatalog.Get("ffa"), force: true);
+        World.Items?.SpawnItems(modeInfo, force: true);
 
         // Attach CanvasLayer and HUD controller
         var canvas = new CanvasLayer { Name = "HudCanvas" };

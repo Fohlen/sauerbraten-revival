@@ -61,6 +61,12 @@ public partial class MapWorld : Node3D
     /// <summary>Flag manager tracking CTF / Protect / Hold state.</summary>
     public Game.FlagManager? Flags { get; private set; }
 
+    /// <summary>Active game mode info.</summary>
+    public Game.GameModeInfo? Mode { get; set; }
+
+    /// <summary>Local player team (1 = blue, 2 = red). Default 1.</summary>
+    public int LocalPlayerTeam { get; set; } = 1;
+
     private readonly List<FlagNode> _flagNodes = new();
     public IReadOnlyList<FlagNode> FlagNodes => _flagNodes;
 
@@ -261,12 +267,13 @@ public partial class MapWorld : Node3D
 
         if (Flags != null && _flagNodes.Count > 0)
         {
-            var mode = Game.GameModeCatalog.Get("ctf");
+            var mode = Mode ?? Game.GameModeCatalog.Get("ctf");
+            Flags.Update(mode, lastMillis);
             for (int i = 0; i < _flagNodes.Count; i++)
             {
                 if (i < Flags.Flags.Count)
                 {
-                    _flagNodes[i].UpdateVisual(Flags.Flags[i], mode, lastMillis, localPlayerTeam: 1);
+                    _flagNodes[i].UpdateVisual(Flags.Flags[i], mode, lastMillis, LocalPlayerTeam);
                 }
             }
         }
