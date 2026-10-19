@@ -67,6 +67,9 @@ public partial class MapWorld : Node3D
     /// <summary>Local player team (1 = blue, 2 = red). Default 1.</summary>
     public int LocalPlayerTeam { get; set; } = 1;
 
+    /// <summary>Optional provider for carrier player position and orientation.</summary>
+    public Func<int, (Vector3 pos, float yaw, float aboveEye)>? PlayerProvider { get; set; }
+
     private readonly List<FlagNode> _flagNodes = new();
     public IReadOnlyList<FlagNode> FlagNodes => _flagNodes;
 
@@ -273,7 +276,7 @@ public partial class MapWorld : Node3D
             {
                 if (i < Flags.Flags.Count)
                 {
-                    _flagNodes[i].UpdateVisual(Flags.Flags[i], mode, lastMillis, LocalPlayerTeam);
+                    _flagNodes[i].UpdateVisual(Flags.Flags[i], mode, lastMillis, LocalPlayerTeam, getOwnerInfo: PlayerProvider);
                 }
             }
         }

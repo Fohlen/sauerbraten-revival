@@ -120,6 +120,7 @@ public partial class OgzMapViewer : Node3D
         var modeInfo = Game.GameModeCatalog.Get(GameMode);
         World!.Mode = modeInfo;
         World.LocalPlayerTeam = PlayerTeam > 0 ? PlayerTeam : 1;
+        World.PlayerProvider = pid => (player.Entity.O, player.Entity.Yaw, player.Entity.AboveEye);
         player.Mode = modeInfo;
         player.Team = PlayerTeam > 0 ? PlayerTeam : 1;
         player.Setup(World.Octa!, feet, yaw);
