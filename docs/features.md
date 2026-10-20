@@ -395,16 +395,16 @@ Remaining:
       - [x] **Item state and rules** (`PlayerState.CanPickup`, `Pickup`, `HasMaxAmmo`, `CheckQuad`): faithful port of `fpsgame/game.h` item mechanics (health, boost, armour absorption hierarchy, quad damage countdown, ammo caps).
       - [x] **Item manager and respawn system** (`ItemManager`, `Item`): ports `spawntime`, `delayspawn`, `canspawnitem`, `spawnitems`, and `checkitems` (12 unit pickup radius, scaling respawn delays, delayed armour/boost/quad spawns, `NoItems`/`NoAmmo` mode filtering).
       - [x] **Visual animation and audio** (`Item.UpdateVisual`): smooth sinusoidal vertical bobbing (`1 + sin(lastmillis/100 + x + y)/20`) and 36-degree/s yaw spinning (`lastmillis/10.0`), item pickup/spawn sounds (`S_ITEM*`, `S_ITEMSPAWN`, `S_PUPOUT`), and voice lines (`S_V_BOOST`, `S_V_QUAD`). Asserted by `test/ItemPickupTest.cs`.
-- [ ] Flags and capture logic (CTF).
-- [ ] Scoring, respawns, spawn selection.
-- [ ] HUD.
+- [x] Flags and capture logic (CTF).
+- [x] Scoring, respawns, spawn selection.
+- [x] HUD.
 
 ## 6. Modes
 
-- [ ] FFA.
-- [ ] Insta CTF.
-- [ ] Effic CTF.
-- [ ] Coop edit (multiplayer editing over the command stream).
+- [x] FFA.
+- [x] Insta CTF.
+- [x] Effic CTF.
+- [x] Coop edit (multiplayer editing over the command stream).
 
 ## 7. Demos & replays
 
