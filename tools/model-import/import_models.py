@@ -451,7 +451,7 @@ def strip_glb_materials(path: str, flip_winding: bool = False) -> None:
     if json_bytes is None:
         return
 
-    doc = json.loads(json_bytes.decode("utf-8"))
+    doc = json.loads(json_bytes.decode("latin-1"))
     for key in ("materials", "textures", "images", "samplers"):
         doc.pop(key, None)
     for mesh in doc.get("meshes", []):
@@ -1171,7 +1171,7 @@ def main(argv: list[str] | None = None) -> int:
     for cat_path in catalogue_paths:
         if not os.path.isfile(cat_path):
             continue
-        with open(cat_path) as f:
+        with open(cat_path, encoding="latin-1") as f:
             catalogue = json.load(f)
         for entry in catalogue.get("mapmodels", []):
             if entry["path"] not in seen:

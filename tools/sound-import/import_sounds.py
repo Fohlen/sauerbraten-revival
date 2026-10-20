@@ -37,7 +37,7 @@ def parse_catalogues(catalogue_paths: list[str]) -> list[str]:
     for cat in catalogue_paths:
         if not os.path.isfile(cat):
             continue
-        with open(cat, "r", encoding="utf-8") as f:
+        with open(cat, "r", encoding="latin-1") as f:
             data = json.load(f)
         for s in data.get("sounds", []):
             if isinstance(s, dict) and "path" in s:

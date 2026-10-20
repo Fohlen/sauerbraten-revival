@@ -56,7 +56,7 @@ def collect_textures(catalogues: list[str], models_manifest: str | None) -> set[
     for catalogue in catalogues:
         if not os.path.isfile(catalogue):
             continue
-        with open(catalogue) as f:
+        with open(catalogue, encoding="latin-1") as f:
             data = json.load(f)
         for slot in data.get("slots", []):
             for tex in slot.get("textures", []):
