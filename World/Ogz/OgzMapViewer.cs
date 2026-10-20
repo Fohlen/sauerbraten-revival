@@ -27,7 +27,7 @@ namespace SauerbratenRevival.World.Ogz;
 [GlobalClass]
 public partial class OgzMapViewer : Node3D
 {
-    /// <summary>Override map to build. Absolute, or relative to the reference dump's <c>packages/</c> dir (e.g. <c>base/church51.ogz</c>); empty uses the default.</summary>
+    /// <summary>Override map to build. Absolute, or package-relative (e.g. <c>base/church51.ogz</c>), resolved against <c>res://assets/packages/</c> then the reference dump; empty uses the default.</summary>
     [Export] public string OgzPath { get; set; } = "";
     [Export] public int ChunkSize { get; set; } = 512;
 

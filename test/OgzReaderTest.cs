@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Text.Json;
 using Chickensoft.GoDotTest;
 using Godot;
@@ -16,7 +15,7 @@ public class OgzReaderTest : GoTestBase
 {
     private static JsonElement Catalogue()
     {
-        using var doc = JsonDocument.Parse(File.ReadAllText(TestData.CataloguePath));
+        using var doc = JsonDocument.Parse(Godot.FileAccess.GetFileAsString(TestData.CataloguePath));
         return doc.RootElement.Clone();
     }
 

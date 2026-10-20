@@ -1,14 +1,16 @@
 using System.IO;
 using Chickensoft.GoDotTest;
 using Godot;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 
 namespace SauerbratenRevival.Tests;
 
 /// <summary>
-/// The OGZ path resolver: project-owned converted maps (<c>assets/packages/</c>)
-/// take priority over the read-only reference dump (<c>$SAUER_REF/packages/</c>).
-/// See <see cref="MapRoots"/> and docs/adr/0006-ogz-import.md.
+/// The shipped-resource path resolver: project-owned converted maps
+/// (<c>res://assets/packages/</c>) take priority over the read-only reference dump
+/// (<c>$SAUER_REF/packages/</c>), and the metadata catalogue resolves through the
+/// same <c>res://</c> VFS. See <see cref="MapRoots"/> and docs/adr/0006-ogz-import.md.
 /// </summary>
 public class MapRootsTest : GoTestBase
 {
@@ -35,7 +37,7 @@ public class MapRootsTest : GoTestBase
     {
         var candidates = MapRoots.CandidatePaths("base/church51.ogz");
         TestAssert.Equal(2, candidates.Length, "two candidates");
-        TestAssert.Equal(Path.Combine(MapRoots.ProjectPackages, "base", "church51.ogz"),
+        TestAssert.Equal($"{MapRoots.ProjectPackages}/base/church51.ogz",
             candidates[0], "project assets first");
         TestAssert.Equal(Path.Combine(MapRoots.ReferencePackages, "base", "church51.ogz"),
             candidates[1], "reference dump second");
@@ -48,9 +50,9 @@ public class MapRootsTest : GoTestBase
         // assets/packages (tools/ogztool/convert-all-maps.sh), the resolver must
         // prefer it. Skip the assertion when no converted copy exists so the test
         // passes on a clean checkout.
-        string converted = Path.Combine(MapRoots.ProjectPackages, "base", "church51.ogz");
+        string converted = $"{MapRoots.ProjectPackages}/base/church51.ogz";
         string resolved = MapRoots.Resolve("base/church51");
-        if (File.Exists(converted))
+        if (Godot.FileAccess.FileExists(converted))
             TestAssert.Equal(converted, resolved, "converted copy wins");
         else
             TestAssert.Equal(Path.Combine(MapRoots.ReferencePackages, "base", "church51.ogz"),
@@ -62,7 +64,17 @@ public class MapRootsTest : GoTestBase
     {
         // A map that is v32+ in the dump and (almost certainly) not converted.
         string resolved = MapRoots.Resolve("base/bt_falls");
-        TestAssert.True(File.Exists(resolved), $"expected an existing map, got '{resolved}'");
+        TestAssert.True(Godot.FileAccess.FileExists(resolved), $"expected an existing map, got '{resolved}'");
+    }
+
+    [Test]
+    public void CatalogueIsResolvedThroughTheVfs()
+    {
+        // The metadata catalogue ships under res:// and must be read through Godot's
+        // VFS so it still loads from a packed PCK (MetadataCatalogue.TryLoadForMap).
+        TestAssert.True(MetadataCatalogue.TryLoadForMap("church51") != null, "church51 catalogue found");
+        TestAssert.Equal("res://metadata-catalogue/church51.json", TestData.CataloguePath, "res path");
+        TestAssert.True(MetadataCatalogue.TryLoadForMap("no_such_map_zzz") == null, "missing catalogue is null");
     }
 
     [Test]

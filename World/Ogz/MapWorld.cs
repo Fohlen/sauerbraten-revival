@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
@@ -26,7 +25,7 @@ namespace SauerbratenRevival.World.Ogz;
 [GlobalClass]
 public partial class MapWorld : Node3D
 {
-    /// <summary>Override map to build. Absolute, or relative to the reference dump's <c>packages/</c> dir (e.g. <c>base/church51.ogz</c>); empty uses the default.</summary>
+    /// <summary>Override map to build. Absolute, or package-relative (e.g. <c>base/church51.ogz</c>), resolved against <c>res://assets/packages/</c> then the reference dump; empty uses the default.</summary>
     [Export] public string OgzPath { get; set; } = "";
     [Export] public int ChunkSize { get; set; } = 512;
 
@@ -113,7 +112,7 @@ public partial class MapWorld : Node3D
         if (Built) return;
 
         string path = string.IsNullOrEmpty(OgzPath) ? DefaultPath() : ResolvePath(OgzPath);
-        if (!File.Exists(path))
+        if (!Godot.FileAccess.FileExists(path))
         {
             GD.PushError($"[world] OGZ not found: '{path}'. Set OgzPath or SAUER_REF.");
             return;
@@ -129,7 +128,7 @@ public partial class MapWorld : Node3D
         Map = map;
         Octa = octa;
 
-        string mapName = Path.GetFileNameWithoutExtension(path);
+        string mapName = path.GetFile().GetBaseName();
         ITextureSource textures = new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource(MapRoots.ReferenceRoot));
         Textures = textures;
         var catalogue = MetadataCatalogue.TryLoadForMap(mapName);
@@ -153,7 +152,7 @@ public partial class MapWorld : Node3D
         // Converted mapmodels (assimp), imported by Godot as Resources.
         const string modelsResDir = "res://assets/models";
         string modelsDir = ProjectSettings.GlobalizePath(modelsResDir);
-        var modelCatalog = ModelCatalog.Load(Path.Combine(modelsDir, "models.json"), modelsDir, modelsResDir);
+        var modelCatalog = ModelCatalog.Load($"{modelsResDir}/models.json", modelsDir, modelsResDir);
         Models = modelCatalog;
 
         AddChild(LightBuilder.Build(map));

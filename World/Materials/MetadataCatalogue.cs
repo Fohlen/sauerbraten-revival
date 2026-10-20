@@ -60,7 +60,10 @@ public sealed class MetadataCatalogue
 
     public static MetadataCatalogue Load(string path)
     {
-        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        string json = Godot.FileAccess.GetFileAsString(path);
+        if (string.IsNullOrEmpty(json))
+            throw new FileNotFoundException($"Metadata catalogue not found: '{path}'", path);
+        using var doc = JsonDocument.Parse(json);
         return Parse(doc.RootElement);
     }
 
@@ -146,7 +149,6 @@ public sealed class MetadataCatalogue
     public static MetadataCatalogue? TryLoadForMap(string mapName)
     {
         string resPath = $"res://metadata-catalogue/{mapName}.json";
-        string path = ProjectSettings.GlobalizePath(resPath);
-        return File.Exists(path) ? Load(path) : null;
+        return Godot.FileAccess.FileExists(resPath) ? Load(resPath) : null;
     }
 }

@@ -113,9 +113,9 @@ public sealed class ModelCatalog
 
     public static ModelCatalog? Load(string jsonPath, string glbOsDir, string glbResDir)
     {
-        if (!File.Exists(jsonPath)) return null;
+        if (!Godot.FileAccess.FileExists(jsonPath)) return null;
 
-        using var doc = JsonDocument.Parse(File.ReadAllText(jsonPath));
+        using var doc = JsonDocument.Parse(Godot.FileAccess.GetFileAsString(jsonPath));
         if (!doc.RootElement.TryGetProperty("models", out var models)) return null;
 
         var catalog = new ModelCatalog();

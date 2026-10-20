@@ -42,11 +42,20 @@ public sealed class OgzReader
         _version = version;
     }
 
-    /// <summary>Read and parse an OGZ file from disk.</summary>
+    /// <summary>
+    /// Read and parse an OGZ file through Godot's virtual filesystem, so the map
+    /// can live on disk (<c>user://</c>, an OS path) or inside a packed PCK
+    /// (<c>res://</c>). Throws <see cref="FileNotFoundException"/> if it is absent.
+    /// </summary>
     public static OgzMap Read(string path)
     {
-        using var file = File.OpenRead(path);
-        return Read(file);
+        using Godot.FileAccess file = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read)
+            ?? throw new FileNotFoundException($"OGZ file not found: '{path}'", path);
+        // Godot.FileAccess is not a System.IO.Stream; copy the compressed bytes and
+        // reuse the gzip-decompressing Stream overload below.
+        byte[] bytes = file.GetBuffer((long)file.GetLength());
+        using var stream = new MemoryStream(bytes, writable: false);
+        return Read(stream);
     }
 
     /// <summary>Read and parse an OGZ map from an already open, gzip-compressed stream.</summary>

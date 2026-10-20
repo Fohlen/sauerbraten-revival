@@ -157,8 +157,8 @@ public static class GameAudio
 
     private static AudioStream? TryLoadFile(string rel)
     {
-        // Try Godot project imported sound directory first
-        string projectPath = Path.Combine(ProjectSettings.GlobalizePath("res://assets/sounds"), rel);
+        // Try Godot project imported sound directory first (works from a packed PCK)
+        string projectPath = $"res://assets/sounds/{rel}";
         if (TryResolveStream(projectPath, out var stream)) return stream;
 
         // Try dump reference root fallback
@@ -175,7 +175,7 @@ public static class GameAudio
         foreach (var ext in exts)
         {
             string full = basePathWithoutExt + ext;
-            if (File.Exists(full))
+            if (Godot.FileAccess.FileExists(full))
             {
                 if (full.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
                 {

@@ -15,13 +15,11 @@ public static class TestData
 
     public static readonly string OgzPath = MapRoots.Resolve("base/church51");
 
-    public static readonly string CataloguePath =
-        ProjectSettings.GlobalizePath("res://metadata-catalogue/church51.json");
+    public static readonly string CataloguePath = "res://metadata-catalogue/church51.json";
 
     public static string OgzPathFor(string map) => MapRoots.Resolve(map);
 
-    public static string CataloguePathFor(string map) =>
-        ProjectSettings.GlobalizePath($"res://metadata-catalogue/{map}.json");
+    public static string CataloguePathFor(string map) => $"res://metadata-catalogue/{map}.json";
 
     public static OgzMap ReadMap() => ReadMapAt(OgzPath);
 
@@ -43,7 +41,7 @@ public static class TestData
 
     private static OgzMap ParseAt(string path)
     {
-        if (!File.Exists(path))
+        if (!Godot.FileAccess.FileExists(path))
             throw new FileNotFoundException(
                 $"OGZ test map not found at '{path}'. Run tools/ogztool/convert-all-maps.sh, or set SAUER_REF to the reference dump root.", path);
         return OgzReader.Read(path);
