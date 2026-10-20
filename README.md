@@ -1,25 +1,27 @@
 # Sauerbraten Revival
 
-A revival/port of **Cube 2: Sauerbraten** built in **Godot 4 (.NET / C#)**. The
-goal is to recreate the original's iconic movement and feel first, then the in-game
-editor (a defining feature) and the game on top of it.
+Sauerbraten Revival is an unofficial, community-driven project inspired by **Cube2: Sauerbraten**. It is built in **Godot 4 (.NET / C#)**. The project's goal is to make a Garry's Mod style, fully customizable game engine, with the following features:
 
-- MVP modes: **insta CTF**, **effic CTF**, **FFA**, **coop edit**.
+- Game modes: **insta CTF**, **effic CTF**, **FFA**, **coop edit**.
 - World: a native, **runtime-mutable octree** (live editing + dynamic geometry).
 - Modding: allow shareable, changeable data and code mods of game modes, weapons etc
 - Classic maps ship as original `.ogz` files and are read at load time; there is
   **no CubeScript** and no offline converter. Maps made in the editor use a new, versioned, native format.
+- Re-use of free and libre assets where possible
+- Deep support for Steam (lobbies, matchmaking and workshop)
 
-The project's ultimate goal is to make a Garry's Mod style, fully customizable game on top of Godot. Its default will be the Sauerbraten we know and love, including the current assets, with deep support for Steam (lobbies, matchmaking, workshop out of the box).
+The title _"Sauerbraten Revival"_ is a preliminary working title, suggestions are encouraged.
+Collaboration is welcome and a [I have compiled list of things you can help with on Riseup](https://pad.riseup.net/p/sauerbraten-revival-keep).
 
-## Playing with the project
+## Playing the game
 
-In order to work with this new engine you will need to:
+In order to try out this new engine you will need to:
 
-1. [Download Godot .NET](https://godotengine.org)
-2. Clone this repository
-3. [Download](https://drive.google.com/file/d/17UIVVnpPHoTrtI9q5V6h07SRTl0lAnGx/view?usp=share_link) and unpack the asset pack into your new repository — this holds the converted models/textures and the classic `.ogz` maps
-4. [Import the project](https://docs.godotengine.org/en/stable/engine_details/development/configuring_an_ide/visual_studio.html#importing-the-project)
+1. [Download dotnet](https://dotnet.microsoft.com/en-us/download)
+2. [Download Godot .NET](https://godotengine.org)
+3. [Clone this repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository#cloning-a-repository)
+4. [Download](https://drive.google.com/file/d/17UIVVnpPHoTrtI9q5V6h07SRTl0lAnGx/view?usp=share_link) and unpack the asset pack into your new repository — this holds the converted models/textures and the classic `.ogz` maps
+5. [Import the project](https://docs.godotengine.org/en/stable/engine_details/development/configuring_an_ide/visual_studio.html#importing-the-project)
 
 Once the project is set up you can run the `player_scene.tscn` to play the game or the `editor_scene.tscn` to start the in-game editor using the [_"Run Current Scene"_](https://docs.godotengine.org/en/stable/getting_started/step_by_step/nodes_and_scenes.html#running-the-scene) button.
 
