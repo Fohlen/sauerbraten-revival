@@ -11,6 +11,7 @@ jobs:
       # Smaller cache size
       NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      SAUER_REF: ${{ github.workspace }}/sauerbraten-code-r6889
     defaults:
       run:
         # Use bash shells on all platforms.
@@ -20,6 +21,17 @@ jobs:
         name: 🧾 Checkout
         with:
           lfs: true
+      - name: Cache Sauerbraten r6889 directory
+        id: cache-dir
+        uses: actions/cache@v4
+        with:
+          path: ./sauerbraten-code-r6889
+          key: ${{ runner.os }}-archive-v1.4.2
+      - name: Download and unpack (if not cached)
+        if: steps.cache-dir.outputs.cache-hit != 'true'
+        run: |
+          curl https://sourceforge.net/code-snapshots/svn/s/sa/sauerbraten/code/sauerbraten-code-r6889.zip -o sauerbraten-code-r6889.zip
+          unzip sauerbraten-code-r6889.zip
       - uses: actions/setup-dotnet@v4
         name: 💽 Setup .NET SDK
         with:
