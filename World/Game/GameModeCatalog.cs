@@ -137,7 +137,7 @@ public static class GameModeCatalog
         foreach (string file in files)
         {
             if (!file.EndsWith(".tres")) continue;
-            var loaded = ResourceLoader.Load<GameModeInfo>($"{dir.TrimEnd('/')}/{file}");
+            var loaded = ResourceLoader.Load($"{dir.TrimEnd('/')}/{file}") as GameModeInfo;
             if (loaded == null || string.IsNullOrEmpty(loaded.Id)) continue;
             if (byId.TryGetValue(loaded.Id, out int at)) modes[at] = loaded;
             else { byId[loaded.Id] = modes.Count; modes.Add(loaded); }

@@ -10,8 +10,15 @@ namespace SauerbratenRevival.World.Weapons;
 ///
 /// A Godot <see cref="Resource"/> so weapon defs are typed, inspector-visible and,
 /// later, overridable by a mod <c>.tres</c>. The built-in defaults are constructed
-/// by <see cref="WeaponCatalog"/>; nothing is loaded from disk yet.
+/// by <see cref="WeaponCatalog"/>; the authored <c>.tres</c> rows are loaded from
+/// <see cref="WeaponCatalog.ResourceDir"/>.
+///
+/// <c>[Tool]</c> is required for the editor to instantiate the managed type when a
+/// <c>.tres</c> is loaded from a tool/editor context (e.g. the viewer's <c>_Ready</c>);
+/// without it <see cref="Godot.ResourceLoader"/> hands back a plain
+/// <c>Godot.Resource</c> and the typed load throws.
 /// </summary>
+[Tool]
 [GlobalClass]
 public partial class WeaponInfo : Resource
 {

@@ -11,7 +11,13 @@ namespace SauerbratenRevival.World.Game;
 /// The engine's numeric <c>gamemode</c> index is deliberately not represented — it
 /// is an ordering detail of <c>gamemodes[]</c>, not an identity. The long
 /// localized description strings from the original table are not ported either.
+///
+/// <c>[Tool]</c> is required for the editor to instantiate the managed type when a
+/// <c>.tres</c> is loaded from a tool/editor context (e.g. the viewer's <c>_Ready</c>);
+/// without it <see cref="Godot.ResourceLoader"/> hands back a plain
+/// <c>Godot.Resource</c> and the typed load throws.
 /// </summary>
+[Tool]
 [GlobalClass]
 public partial class GameModeInfo : Resource
 {

@@ -89,7 +89,7 @@ public static class WeaponCatalog
         for (int i = 0; i < Defaults.Length; i++)
         {
             string path = $"{dir.TrimEnd('/')}/{Defaults[i].Name}.tres";
-            var loaded = ResourceLoader.Exists(path) ? ResourceLoader.Load<WeaponInfo>(path) : null;
+            var loaded = ResourceLoader.Exists(path) ? ResourceLoader.Load(path) as WeaponInfo : null;
             result[i] = loaded ?? Defaults[i];
         }
         return result;
