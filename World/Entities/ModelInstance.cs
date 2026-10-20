@@ -80,9 +80,17 @@ public partial class ModelInstance : Node3D
     /// holder sits *inside* that basis, so a Sauerbraten-frame offset must be pre-rotated
     /// by its inverse — otherwise a purely vertical <c>mdltrans</c> (e.g. the teleporter's
     /// <c>0 0 -7</c>) becomes horizontal and orbits as the entity yaws.
+    ///
+    /// The engine applies <c>translate</c> *after* <c>scale</c>
+    /// (<c>animmodel.h</c> <c>render</c>: <c>scale(model-&gt;scale); translate(translate)</c>),
+    /// so callers must multiply the result by <see cref="ModelScale"/> — see
+    /// <see cref="ModelOffset"/>.
     /// </summary>
     public static Vector3 OffsetToModelFrame(Vector3 translation) =>
         new(translation.X, translation.Z, -translation.Y);
+
+    /// <summary>The holder-relative position of the model, scaled like the engine's <c>mdltrans</c>.</summary>
+    private Vector3 ModelOffset() => ModelScale * OffsetToModelFrame(ModelTranslation);
 
     private bool TryLoadModel()
     {
@@ -104,7 +112,7 @@ public partial class ModelInstance : Node3D
         {
             Name = "Model",
             Scale = Vector3.One * ModelScale,
-            Position = OffsetToModelFrame(ModelTranslation),
+            Position = ModelOffset(),
             RotationDegrees = ModelRotationDegrees,
         };
         if (KeepSkeleton)

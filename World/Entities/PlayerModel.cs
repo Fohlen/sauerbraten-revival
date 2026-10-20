@@ -103,12 +103,10 @@ public partial class PlayerModel : ModelInstance
         GlbPath = info?.GlbPath;
         GlbOsPath = info?.GlbOsPath;
         ModelScale = info?.Scale ?? 1.0f;
-        // The catalog's mdltrans, plus a fixed nudge that plants the feet on the floor.
-        // Assimp's MD5 export puts the model origin at mid-height, so the body needs to
-        // be lifted by half its height: +10 in the model's local frame (before the -90
-        // about X below). The engine has no such offset — it relies on the MD5 loader's
-        // bind-pose handling, which assimp does not reproduce.
-        ModelTranslation = (info?.Translation ?? Vector3.Zero) + new Vector3(0f, 0f, 10f);
+        // The engine renders the body at the feet (render.cpp renderclient
+        // `o = d->feetpos()`) with no player mdltrans, so the holder translation is
+        // just the catalog's mdltrans (usually zero).
+        ModelTranslation = info?.Translation ?? Vector3.Zero;
         // The baked glb carries assimp's glTF root matrix (Y-up→Z-up); the full
         // node hierarchy is kept, so this correction stands the body upright in the
         // Z-up octree world (verified against the flattened reference). Facing is the
@@ -213,7 +211,10 @@ public partial class PlayerModel : ModelInstance
             GlbPath = info.GlbPath,
             GlbOsPath = info.GlbOsPath,
             ModelScale = info.Scale / bodyScale,
-            ModelTranslation = info.Translation / bodyScale,
+            // ModelInstance scales the translation by ModelScale (the engine applies
+            // mdltrans after scale); the parent body already scales by bodyScale, and the
+            // weapon's ModelScale compensates for that, so use the catalog translation as-is.
+            ModelTranslation = info.Translation,
             ModelRotationDegrees = ViewWeaponRotationDegrees,
             KeepSkeleton = true,
             SkinMaterial = ModelSkin.Build(info, _textures, _skinCache ?? new Dictionary<string, Material>()),
