@@ -1,0 +1,84 @@
+name: Release
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  release_debug:
+    name: Run checks
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+      # Smaller cache size
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      SAUER_REF: ${{ github.workspace }}/sauerbraten-code-r6889
+    defaults:
+      run:
+        # Use bash shells on all platforms.
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        name: 🧾 Checkout
+        with:
+          lfs: true
+      - name: Cache Sauerbraten r6889 directory
+        id: cache-dir
+        uses: actions/cache@v4
+        with:
+          path: ./sauerbraten-code-r6889
+          key: ${{ runner.os }}-archive-v1.4.3
+      - name: Download and unpack (if not cached)
+        if: steps.cache-dir.outputs.cache-hit != 'true'
+        run: |
+          curl https://sourceforge.net/code-snapshots/svn/s/sa/sauerbraten/code/sauerbraten-code-r6889.zip -o sauerbraten-code-r6889.zip
+          unzip sauerbraten-code-r6889.zip
+          touch sauerbraten-code-r6889/.gdignore
+      - uses: actions/setup-dotnet@v4
+        name: 💽 Setup .NET SDK
+        with:
+          # Use the .NET SDK from global.json in the root of the repository.
+          global-json-file: global.json
+      - name: 📦 Restore Dependencies
+        run: dotnet restore
+      - uses: chickensoft-games/setup-godot@v2
+        name: 🤖 Setup Godot
+        with:
+          # Version must include major, minor, and patch, and be >= 4.0.0
+          # Pre-release label is optional.
+          version: 4.7.2
+          # Use .NET-enabled version of Godot (the default is also true).
+          use-dotnet: true
+          # Include the Godot Export Templates (the default is false).
+          include-templates: true
+      - name: 🔬 Verify Setup
+        run: |
+          dotnet --version
+          godot --version
+      - name: 🧑🔬 Generate .NET Bindings
+        run: godot --headless --build-solutions --quit || exit 0
+      - name: Generate assets
+        run: |
+          python3 tools/model-import/import_models.py all-maps
+          python3 tools/texture-import/import_textures.py all-maps
+          python3 tools/sound-import/import_sounds.py all-maps
+          zip -r assets.zip assets/
+      - name: Reimport assets
+        run: |
+          godot --headless --editor --quit
+      - name: Build exports
+        run: |
+          godot --headless --export-debug "macOS" Sauerbraten_Revival.dmg
+          godot --headless --export-debug "Linux" Sauerbraten_Revival.x86_64
+          godot --headless --export-debug "Windows Desktop" Sauerbraten_Revival.exe
+      - name: Upload release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug-release
+          path: |
+            assets.zip
+            Sauerbraten_Revival.dmg
+            Sauerbraten_Revival.x86_64
+            Sauerbraten_Revival.exe
