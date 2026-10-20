@@ -71,6 +71,19 @@ public partial class ModelInstance : Node3D
         else GD.PushWarning($"[model] failed to load '{GlbPath ?? GlbOsPath}'");
     }
 
+    /// <summary>
+    /// Convert a Cube 2 <c>mdltrans</c> (<paramref name="translation"/>, Sauerbraten
+    /// Z-up) into the glTF model frame the <see cref="ModelInstance"/> holder lives in.
+    ///
+    /// Entity nodes are oriented by <see cref="EntityFacing.ApplyYaw"/>, whose basis maps
+    /// the imported model's Y-up (and -Z forward) onto the world's Z-up (and facing). The
+    /// holder sits *inside* that basis, so a Sauerbraten-frame offset must be pre-rotated
+    /// by its inverse — otherwise a purely vertical <c>mdltrans</c> (e.g. the teleporter's
+    /// <c>0 0 -7</c>) becomes horizontal and orbits as the entity yaws.
+    /// </summary>
+    public static Vector3 OffsetToModelFrame(Vector3 translation) =>
+        new(translation.X, translation.Z, -translation.Y);
+
     private bool TryLoadModel()
     {
         Node? scene = null;
@@ -91,7 +104,7 @@ public partial class ModelInstance : Node3D
         {
             Name = "Model",
             Scale = Vector3.One * ModelScale,
-            Position = ModelTranslation,
+            Position = OffsetToModelFrame(ModelTranslation),
             RotationDegrees = ModelRotationDegrees,
         };
         if (KeepSkeleton)
