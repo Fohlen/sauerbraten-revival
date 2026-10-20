@@ -22,7 +22,7 @@ public class EntitySoundTest : GoTestBase
         TestAssert.Equal(3, catalogue.Sounds.Count, "catalogue sounds");
         TestAssert.Equal("soundtransit/waterfall.ogg", catalogue.SoundPath(1), "sound 1 path");
 
-        var root = SoundBuilder.Build(map, catalogue, TestData.ReferenceRoot);
+        var root = SoundBuilder.Build(map, catalogue);
 
         int count = 0;
         foreach (var child in root.GetChildren())

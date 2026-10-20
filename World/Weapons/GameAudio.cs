@@ -38,8 +38,71 @@ public sealed class SoundConfig
 }
 
 /// <summary>
+/// Locates and loads package-relative sound files (e.g. <c>q009/rifle</c> or
+/// <c>ambience/water.ogg</c>). The shipped project copy (<c>res://assets/sounds/</c>)
+/// is preferred so playback works from a packed PCK; the reference dump
+/// (<c>$SAUER_REF/packages/sounds/</c>) is a dev-only fallback. The extension may be
+/// omitted; <c>.ogg</c> and <c>.wav</c> are probed.
+/// </summary>
+public static class SoundFiles
+{
+    private static readonly string[] Extensions = { ".ogg", ".wav", "" };
+    private static readonly Dictionary<(string Path, bool Loop), AudioStream?> Loaded = new();
+
+    /// <summary>
+    /// The first existing file for <paramref name="relative"/> — project assets
+    /// before the reference dump — or null if neither tree has it.
+    /// </summary>
+    public static string? Resolve(string relative)
+    {
+        if (string.IsNullOrEmpty(relative)) return null;
+
+        foreach (var ext in Extensions)
+        {
+            string project = $"res://assets/sounds/{relative}{ext}";
+            if (Godot.FileAccess.FileExists(project)) return project;
+        }
+        foreach (var ext in Extensions)
+        {
+            string dump = Path.Combine(MapRoots.ReferencePackages, "sounds", relative + ext);
+            if (Godot.FileAccess.FileExists(dump)) return dump;
+        }
+        return null;
+    }
+
+    /// <summary>Load a path from <see cref="Resolve"/>, applying the requested loop mode.</summary>
+    public static AudioStream? Load(string path, bool loop)
+    {
+        if (Loaded.TryGetValue((path, loop), out var cached)) return cached;
+
+        AudioStream? stream = null;
+        if (path.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
+        {
+            var ogg = AudioStreamOggVorbis.LoadFromFile(path);
+            if (ogg != null)
+            {
+                ogg.Loop = loop;
+                stream = ogg;
+            }
+        }
+        else if (path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+        {
+            var wav = AudioStreamWav.LoadFromFile(path);
+            if (wav != null)
+            {
+                wav.LoopMode = loop ? AudioStreamWav.LoopModeEnum.Forward : AudioStreamWav.LoopModeEnum.Disabled;
+                stream = wav;
+            }
+        }
+        Loaded[(path, loop)] = stream;
+        return stream;
+    }
+}
+
+/// <summary>
 /// Sound manager that resolves <see cref="GameSound"/> IDs, loads streams, and triggers playback.
-/// Checks <c>res://assets/sounds/</c> first and falls back to <see cref="MapRoots.ReferencePackages"/>/sounds.
+/// Files are located by <see cref="SoundFiles"/> (shipped <c>res://assets/sounds/</c> first,
+/// then the dev-only reference dump).
 /// </summary>
 public static class GameAudio
 {
@@ -157,49 +220,8 @@ public static class GameAudio
 
     private static AudioStream? TryLoadFile(string rel)
     {
-        // Try Godot project imported sound directory first (works from a packed PCK)
-        string projectPath = $"res://assets/sounds/{rel}";
-        if (TryResolveStream(projectPath, out var stream)) return stream;
-
-        // Try dump reference root fallback
-        string dumpPath = Path.Combine(MapRoots.ReferencePackages, "sounds", rel);
-        if (TryResolveStream(dumpPath, out stream)) return stream;
-
-        return null;
-    }
-
-    private static bool TryResolveStream(string basePathWithoutExt, out AudioStream? stream)
-    {
-        stream = null;
-        string[] exts = { ".ogg", ".wav", "" };
-        foreach (var ext in exts)
-        {
-            string full = basePathWithoutExt + ext;
-            if (Godot.FileAccess.FileExists(full))
-            {
-                if (full.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
-                {
-                    var ogg = AudioStreamOggVorbis.LoadFromFile(full);
-                    if (ogg != null)
-                    {
-                        ogg.Loop = false;
-                        stream = ogg;
-                        return true;
-                    }
-                }
-                else if (full.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
-                {
-                    var wav = AudioStreamWav.LoadFromFile(full);
-                    if (wav != null)
-                    {
-                        wav.LoopMode = AudioStreamWav.LoopModeEnum.Disabled;
-                        stream = wav;
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
+        string? path = SoundFiles.Resolve(rel);
+        return path == null ? null : SoundFiles.Load(path, loop: false);
     }
 
     /// <summary>

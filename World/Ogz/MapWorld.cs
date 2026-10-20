@@ -208,7 +208,7 @@ public partial class MapWorld : Node3D
         AddChild(flagsRoot);
 
         AddChild(ParticleBuilder.Build(map, textures));
-        AddChild(SoundBuilder.Build(map, catalogue, MapRoots.ReferenceRoot));
+        AddChild(SoundBuilder.Build(map, catalogue));
         var mapModels = MapModelBuilder.Build(map, catalogue, modelCatalog, textures);
         AddChild(mapModels);
         int loadedModels = 0, totalModels = 0;
