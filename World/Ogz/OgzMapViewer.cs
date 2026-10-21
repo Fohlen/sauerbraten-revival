@@ -40,9 +40,6 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Player model table index to load (render.cpp <c>playermodel</c> 0..4); negative keeps the placeholder body.</summary>
     [Export] public int PlayerModelIndex { get; set; } = -1;
 
-    /// <summary>Team skin for the player model (0 = FFA, 1 = blue, 2 = red).</summary>
-    [Export] public int PlayerTeam { get; set; } = 0;
-
     /// <summary>Active game mode identifier (e.g. "ffa", "ctf", "effic_ctf", "insta_ctf").</summary>
     [Export] public string GameMode { get; set; } = "ffa";
 
@@ -122,8 +119,9 @@ public partial class OgzMapViewer : Node3D
         player.Reparent(World!); // into the rotated Z-up world
 
         (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
-        World.LocalPlayerTeam = PlayerTeam > 0 ? PlayerTeam : 1;
-        player.Team = PlayerTeam > 0 ? PlayerTeam : 1;
+        // The player node owns its team (set in the scene); the world only needs a
+        // reference to it so flag visuals can colour relative to the local team.
+        World.LocalPlayer = player;
         player.Setup(World.Physics!, feet, yaw);
         World.RegisterPlayer(player);
         player.ApplyLookSettings(userSettings); // sensitivity / accel / invert / FOV
@@ -178,7 +176,7 @@ public partial class OgzMapViewer : Node3D
         // <mdl.hudguns>/<guns[].file> and the third-person view weapon is vweps[]
         // (render.cpp:425, :158). SelectWeapon then keeps them in sync for the rest of
         // the session — it is the single source of truth for the equipped gun.
-        body.Configure(World.Models, World.Textures, PlayerModelIndex, PlayerTeam,
+        body.Configure(World.Models, World.Textures, PlayerModelIndex, player.Team,
             viewWeapon: WeaponCatalog.Vwep(gun));
         player.SyncBodyModelNow();
         var hudgun = new HudgunModel { Name = "Hudgun" };
@@ -189,7 +187,7 @@ public partial class OgzMapViewer : Node3D
             player.Hudgun = hudgun;
         }
         player.SelectWeapon(gun);
-        GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {PlayerTeam}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
+        GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {player.Team}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
     }
 
     private (Vector3 Feet, float Yaw) FindSpawn(OgzMap map)

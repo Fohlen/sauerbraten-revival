@@ -74,6 +74,13 @@ public partial class MapWorld : Node3D
     /// <summary>Active players stepped by this world's physics loop.</summary>
     public IReadOnlyList<MapPlayer> Players => _players;
 
+    /// <summary>
+    /// The local player, whose <see cref="MapPlayer.Team"/> drives local-only
+    /// presentation (flag colours). Set by the scene that spawns it; null in
+    /// world-only contexts such as the edit viewer or tests.
+    /// </summary>
+    public MapPlayer? LocalPlayer { get; set; }
+
     /// <summary>Active flying projectiles (rockets) stepped centrally by this world's physics loop.</summary>
     public List<Weapons.RocketProjectile> ActiveRockets { get; } = new();
 
@@ -98,6 +105,7 @@ public partial class MapWorld : Node3D
     public void UnregisterPlayer(MapPlayer player)
     {
         if (_players.Remove(player)) player.DetachClock();
+        if (ReferenceEquals(LocalPlayer, player)) LocalPlayer = null;
     }
 
     /// <summary>Registers a bouncer to be stepped by the world's physics loop.</summary>
@@ -192,9 +200,6 @@ public partial class MapWorld : Node3D
             }
         }
     }
-
-    /// <summary>Local player team (1 = blue, 2 = red). Default 1.</summary>
-    public int LocalPlayerTeam { get; set; } = 1;
 
     /// <summary>Resolves carrier player position and orientation by player ID from registered players.</summary>
     public (Vector3 pos, float yaw, float aboveEye) GetPlayerOwnerInfo(int playerId)
@@ -491,7 +496,7 @@ public partial class MapWorld : Node3D
             {
                 if (i < Flags.Flags.Count)
                 {
-                    _flagNodes[i].UpdateVisual(Flags.Flags[i], lastMillis, LocalPlayerTeam, getOwnerInfo: GetPlayerOwnerInfo);
+                    _flagNodes[i].UpdateVisual(Flags.Flags[i], lastMillis, LocalPlayer?.Team ?? 1, getOwnerInfo: GetPlayerOwnerInfo);
                 }
             }
         }
