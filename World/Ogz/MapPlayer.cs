@@ -73,6 +73,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
     }
 
+    /// <summary>Whether this player steps itself in _PhysicsProcess. False when managed by MapWorld or world runner.</summary>
+    [Export] public bool AutoAdvance { get; set; } = true;
+
     /// <summary>Spawn eye offset above the spawn point's feet (ents.h <c>eyeheight</c>).</summary>
     public const float EyeHeight = 14.0f;
 
@@ -300,14 +303,22 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public void Setup(Octa octa, Vector3 spawnFeet, float yawDegrees)
     {
-        _phys = new OctaPhysics(octa);
+        Setup(new OctaPhysics(octa), spawnFeet, yawDegrees);
+    }
+
+    /// <summary>
+    /// Initialise against an existing world physics instance and place at spawn point.
+    /// </summary>
+    public void Setup(OctaPhysics phys, Vector3 spawnFeet, float yawDegrees)
+    {
+        _phys = phys;
         SpawnFeet = spawnFeet;
         SpawnYaw = yawDegrees;
         Entity.Type = Phys.EntPlayer;
         Entity.O = spawnFeet with { Z = spawnFeet.Z + EyeHeight };
         Entity.Yaw = yawDegrees;
         Pitch = 0f;
-        LastMillis = (int)Time.GetTicksMsec();
+        if (LastMillis == 0) LastMillis = (int)Time.GetTicksMsec();
         Initialized = true;
         _phys.DynEnts.Add(Entity);
         Combat.Spawn(Mode ?? GameModeCatalog.Get("ffa"));
@@ -319,6 +330,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public override void _ExitTree()
     {
         _phys?.DynEnts.Remove(Entity);
+        if (GetParent() is MapWorld mw)
+        {
+            mw.UnregisterPlayer(this);
+        }
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -376,10 +391,13 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         ApplyMouse();
     }
 
-    public override void _PhysicsProcess(double delta)
+    /// <summary>
+    /// Gathers input and applies mouse look prior to stepping physics.
+    /// Called either from <see cref="_PhysicsProcess"/> when <see cref="AutoAdvance"/> is true,
+    /// or from <see cref="MapWorld._PhysicsProcess"/> when centrally managed.
+    /// </summary>
+    public void PrePhysicsStep()
     {
-        if (!Initialized || _phys == null) return;
-
         // Mouse: the whole frame's accumulated delta is applied once, before stepping
         // (rendergl.cpp mousemove). Every step this frame then sees the same yaw/pitch.
         ApplyMouse();
@@ -409,9 +427,13 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         // Toggle the detached third-person camera (engine `thirdperson`, rendergl.cpp).
         if (Input.IsActionJustPressed("third_person")) ToggleThirdPerson();
+    }
 
-        Advance(delta);
-
+    /// <summary>
+    /// Checks attack cooldowns and updates body/hudgun animations after stepping physics.
+    /// </summary>
+    public void PostPhysicsStep()
+    {
         if (Combat.Attacking && Entity.State == PhysEnt.CsAlive)
         {
             if (LastMillis - Combat.LastAction >= Combat.GunWait)
@@ -420,6 +442,15 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         UpdateBodyAnim();
         UpdateHudgunAnim();
+    }
+
+    public override void _PhysicsProcess(double delta)
+    {
+        if (!Initialized || _phys == null || !AutoAdvance) return;
+
+        PrePhysicsStep();
+        Advance(delta);
+        PostPhysicsStep();
     }
 
     private string _bodyAnim = "";
@@ -881,6 +912,64 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>
+    /// Executes a single discrete physics simulation step of <paramref name="stepMillis"/> milliseconds.
+    /// Input is taken from <see cref="Entity"/> — set it first (or call <see cref="PrePhysicsStep"/>).
+    /// Advances player movement, pickups, teleports, rockets, and grenades.
+    /// </summary>
+    public void Step(int stepMillis, IReadOnlyList<IExplosionTarget>? candidates = null)
+    {
+        if (!Initialized || _phys == null) return;
+        Entity.Pitch = Pitch; // pitch feeds movement only while floating (vecfromyawpitch)
+        _phys.MovePlayer(Entity, Phys.MoveRes, stepMillis);
+        LastMillis += stepMillis;
+
+        if (Entity.Dead && Entity.State != PhysEnt.CsDead)
+        {
+            Die(LastMillis);
+        }
+
+        if (Combat.CheckQuad(stepMillis))
+        {
+            PlaySound(GameSound.PupOut);
+        }
+
+        Items?.CheckPickups(this, LastMillis);
+        CheckJumpPads(LastMillis);
+        CheckTeleports(LastMillis);
+        CheckFlags(LastMillis);
+
+        var explosionCandidates = candidates ?? new IExplosionTarget[] { this };
+
+        // Advance active flying rockets (weapon.cpp:523 updateprojectiles)
+        for (int i = ActiveRockets.Count - 1; i >= 0; i--)
+        {
+            var rocket = ActiveRockets[i];
+            if (rocket.Advance(stepMillis, _phys.Octa, explosionCandidates))
+            {
+                ActiveRockets.RemoveAt(i);
+            }
+        }
+
+        // Advance active grenades (weapon.cpp:243 updatebouncers)
+        for (int i = ActiveGrenades.Count - 1; i >= 0; i--)
+        {
+            var grenade = ActiveGrenades[i];
+            if (grenade.Exploded)
+            {
+                ActiveGrenades.RemoveAt(i);
+            }
+            else
+            {
+                grenade.Step(stepMillis, explosionCandidates);
+                if (grenade.Exploded)
+                {
+                    ActiveGrenades.RemoveAt(i);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Advance the simulation by <paramref name="delta"/> seconds of real time,
     /// running whole fixed 5 ms steps caught up by count (a partial step is kept
     /// in the accumulator). Input is taken from <see cref="Entity"/> — set it first.
@@ -889,58 +978,13 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public void Advance(double delta, IReadOnlyList<IExplosionTarget>? targets = null)
     {
         if (!Initialized || _phys == null) return;
-        Entity.Pitch = Pitch; // pitch feeds movement only while floating (vecfromyawpitch)
         _accum += delta;
         int guard = 0;
         var candidates = targets ?? new IExplosionTarget[] { this };
         while (_accum >= StepSeconds && guard++ < 100)
         {
-            _phys.MovePlayer(Entity, Phys.MoveRes, Phys.PhysFrameTime);
-            LastMillis += Phys.PhysFrameTime;
+            Step(Phys.PhysFrameTime, candidates);
             _accum -= StepSeconds;
-
-            if (Entity.Dead && Entity.State != PhysEnt.CsDead)
-            {
-                Die(LastMillis);
-            }
-
-            if (Combat.CheckQuad(Phys.PhysFrameTime))
-            {
-                PlaySound(GameSound.PupOut);
-            }
-
-            Items?.CheckPickups(this, LastMillis);
-            CheckJumpPads(LastMillis);
-            CheckTeleports(LastMillis);
-            CheckFlags(LastMillis);
-
-            // Advance active flying rockets (weapon.cpp:523 updateprojectiles)
-            for (int i = ActiveRockets.Count - 1; i >= 0; i--)
-            {
-                var rocket = ActiveRockets[i];
-                if (rocket.Advance(Phys.PhysFrameTime, _phys.Octa, candidates))
-                {
-                    ActiveRockets.RemoveAt(i);
-                }
-            }
-
-            // Advance active grenades (weapon.cpp:243 updatebouncers)
-            for (int i = ActiveGrenades.Count - 1; i >= 0; i--)
-            {
-                var grenade = ActiveGrenades[i];
-                if (grenade.Exploded)
-                {
-                    ActiveGrenades.RemoveAt(i);
-                }
-                else
-                {
-                    grenade.Advance(StepSeconds, candidates);
-                    if (grenade.Exploded)
-                    {
-                        ActiveGrenades.RemoveAt(i);
-                    }
-                }
-            }
         }
         SyncTransform();
     }
@@ -1052,7 +1096,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>Copy the simulated entity into the node transform (Sauerbraten Z-up).</summary>
-    private void SyncTransform()
+    public void SyncTransform()
     {
         Position = Entity.O;
         Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, Pitch, 1, 0);

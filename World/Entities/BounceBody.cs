@@ -182,6 +182,7 @@ public partial class BounceBody : Node3D
         _phys?.DynEnts.Remove(Entity);
         Bodies.Remove(Entity);
         if (Bodies.Count == 0) Unhook();
+        if (GetParent() is Ogz.MapWorld mw) mw.UnregisterBouncer(this);
     }
 
     /// <summary>newbouncer: set the collision volume for the kind.</summary>
@@ -217,6 +218,28 @@ public partial class BounceBody : Node3D
     }
 
     /// <summary>
+    /// Executes a single discrete physics simulation step of <paramref name="stepMillis"/> milliseconds.
+    /// Does not clear or repopulate the dynent cache (the caller or world runner manages that).
+    /// </summary>
+    public void Step(int stepMillis, IReadOnlyList<IExplosionTarget>? candidates = null)
+    {
+        if (!Initialized || _phys == null || Exploded) return;
+
+        bool hitPlayer = _phys.Bounce(Entity, Elasticity, WaterFric, Grav, 1, stepMillis);
+        OffsetMillis = System.Math.Max(0, OffsetMillis - stepMillis);
+
+        if (BodyKind == Kind.Grenade)
+        {
+            LifeTime -= stepMillis;
+            bool stopped = hitPlayer || LifeTime < 0;
+            if (stopped)
+            {
+                Detonate(candidates);
+            }
+        }
+    }
+
+    /// <summary>
     /// Advance by <paramref name="delta"/> seconds, running whole fixed 5 ms steps
     /// caught up by count (the engine's <c>physsteps</c>). Each step is one
     /// <see cref="OctaPhysics.Bounce(PhysEnt, float, float, float, float)"/> substep.
@@ -235,20 +258,9 @@ public partial class BounceBody : Node3D
             _phys.ClearDynentCache();
             foreach (var dynent in _phys.DynEnts) _phys.UpdateDynentCache(dynent);
 
-            bool hitPlayer = _phys.Bounce(Entity, Elasticity, WaterFric, Grav, 1, Phys.PhysFrameTime);
+            Step(Phys.PhysFrameTime, candidates);
             _accum -= StepSeconds;
-            OffsetMillis = System.Math.Max(0, OffsetMillis - Phys.PhysFrameTime);
-
-            if (BodyKind == Kind.Grenade)
-            {
-                LifeTime -= Phys.PhysFrameTime;
-                bool stopped = hitPlayer || LifeTime < 0;
-                if (stopped)
-                {
-                    Detonate(candidates);
-                    break;
-                }
-            }
+            if (Exploded) break;
         }
         SyncTransform();
     }
@@ -342,7 +354,7 @@ public partial class BounceBody : Node3D
         return Entity.O;
     }
 
-    private void SyncTransform()
+    public void SyncTransform()
     {
         Position = GetVisualPosition();
         Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, 0f, 1, 0);

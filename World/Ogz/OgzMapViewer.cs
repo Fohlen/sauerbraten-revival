@@ -126,7 +126,8 @@ public partial class OgzMapViewer : Node3D
         World.PlayerProvider = pid => (player.Entity.O, player.Entity.Yaw, player.Entity.AboveEye);
         player.Mode = modeInfo;
         player.Team = PlayerTeam > 0 ? PlayerTeam : 1;
-        player.Setup(World.Octa!, feet, yaw);
+        player.Setup(World.Physics!, feet, yaw);
+        World.RegisterPlayer(player);
         player.ApplyLookSettings(userSettings); // sensitivity / accel / invert / FOV
         AttachPlayerModel(player);
 

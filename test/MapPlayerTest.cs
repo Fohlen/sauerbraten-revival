@@ -714,4 +714,77 @@ public class MapPlayerTest : GoTestBase
         dest.Free();
         tp.Free();
     }
+
+    [Test]
+    public void WorldPhysicsProcessStepsRegisteredPlayersAndClock()
+    {
+        var world = new MapWorld { OgzPath = "base/church51.ogz" };
+        world.Build();
+        TestAssert.True(world.Physics != null, "world physics initialized");
+
+        int initialMillis = world.LastMillis;
+        var player = new MapPlayer();
+        world.RegisterPlayer(player);
+        player.Setup(world.Physics!, new Vector3(3000, 946, 3040), 0f);
+
+        TestAssert.False(player.AutoAdvance, "registered player AutoAdvance is false");
+        TestAssert.Equal(initialMillis, player.LastMillis, "player LastMillis initialized to world clock");
+
+        // Advance world physics by 10 ms (two 5 ms substeps)
+        world._PhysicsProcess(0.010);
+
+        TestAssert.Equal(initialMillis + 10, world.LastMillis, "world clock advanced by 10 ms");
+        TestAssert.Equal(world.LastMillis, player.LastMillis, "player clock matches world clock");
+
+        world.UnregisterPlayer(player);
+        player.Free();
+        world.Free();
+    }
+
+    [Test]
+    public void WorldPhysicsProcessStepsFlagsInSync()
+    {
+        var world = new MapWorld { OgzPath = "base/church51.ogz" };
+        world.Build();
+
+        var fm = world.Flags;
+        TestAssert.True(fm != null, "flags manager present");
+
+        fm!.AddFlag(0, new Vector3(100, 100, 100), 1);
+        // Drop a flag
+        fm.DropFlag(0, new Vector3(100, 100, 100), world.LastMillis);
+        TestAssert.Equal(world.LastMillis, fm.Flags[0].DropTime, "flag drop time recorded");
+
+        // Advance world by 100 ms
+        int before = world.LastMillis;
+        for (int i = 0; i < 10; i++)
+        {
+            world._PhysicsProcess(0.010);
+        }
+
+        TestAssert.Equal(before + 100, world.LastMillis, "clock advanced by 100 ms");
+        world.Free();
+    }
+
+    [Test]
+    public void WorldPhysicsProcessStepsRegisteredBouncer()
+    {
+        var world = new MapWorld { OgzPath = "base/church51.ogz" };
+        world.Build();
+
+        var bouncer = new BounceBody { BodyKind = BounceBody.Kind.Debris };
+        world.RegisterBouncer(bouncer);
+        bouncer.Setup(world.Physics!, new Vector3(3000, 946, 3040), new Vector3(0, 0, 50));
+
+        TestAssert.False(bouncer.AutoAdvance, "registered bouncer AutoAdvance is false");
+
+        Vector3 startPos = bouncer.Entity.O;
+        world._PhysicsProcess(0.020); // 4 substeps (20 ms)
+
+        TestAssert.True(bouncer.Entity.O != startPos, "bouncer position updated by world physics");
+
+        world.UnregisterBouncer(bouncer);
+        bouncer.Free();
+        world.Free();
+    }
 }

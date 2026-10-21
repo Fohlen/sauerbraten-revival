@@ -4,6 +4,7 @@ using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
+using SauerbratenRevival.World.Physics;
 
 namespace SauerbratenRevival.World.Ogz;
 
@@ -47,6 +48,53 @@ public partial class MapWorld : Node3D
 
     /// <summary>The runtime octree — the collision authority. Null until <see cref="Build"/>.</summary>
     public Octa? Octa { get; private set; }
+
+    /// <summary>The shared octree physics simulation authority for this world.</summary>
+    public OctaPhysics? Physics { get; private set; }
+
+    /// <summary>Master simulation clock in milliseconds for this world.</summary>
+    public int LastMillis { get; set; }
+
+    private readonly List<MapPlayer> _players = new();
+    /// <summary>Active players stepped by this world's physics loop.</summary>
+    public IReadOnlyList<MapPlayer> Players => _players;
+
+    private readonly List<BounceBody> _bouncers = new();
+    /// <summary>Active standalone bouncers (grenades/debris) stepped by this world's physics loop.</summary>
+    public IReadOnlyList<BounceBody> Bouncers => _bouncers;
+
+    /// <summary>Registers a player to be stepped by the world's physics loop.</summary>
+    public void RegisterPlayer(MapPlayer player)
+    {
+        if (!_players.Contains(player))
+        {
+            _players.Add(player);
+            player.AutoAdvance = false;
+            player.LastMillis = LastMillis;
+        }
+    }
+
+    /// <summary>Unregisters a player from the world's physics loop.</summary>
+    public void UnregisterPlayer(MapPlayer player)
+    {
+        _players.Remove(player);
+    }
+
+    /// <summary>Registers a standalone bouncer to be stepped by the world's physics loop.</summary>
+    public void RegisterBouncer(BounceBody bouncer)
+    {
+        if (!_bouncers.Contains(bouncer))
+        {
+            _bouncers.Add(bouncer);
+            bouncer.AutoAdvance = false;
+        }
+    }
+
+    /// <summary>Unregisters a standalone bouncer from the world's physics loop.</summary>
+    public void UnregisterBouncer(BounceBody bouncer)
+    {
+        _bouncers.Remove(bouncer);
+    }
 
     /// <summary>The texture source used while building (for later sky/material use).</summary>
     public ITextureSource? Textures { get; private set; }
@@ -127,6 +175,8 @@ public partial class MapWorld : Node3D
         var octa = map.ToOcta();
         Map = map;
         Octa = octa;
+        Physics = new OctaPhysics(octa);
+        LastMillis = (int)Time.GetTicksMsec();
 
         string mapName = path.GetFile().GetBaseName();
         ITextureSource textures = new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource(MapRoots.ReferenceRoot));
@@ -165,6 +215,7 @@ public partial class MapWorld : Node3D
         Teleports = teleports;
         AddChild(triggers);
         Items = ItemBuilder.Build(map, modelCatalog, textures);
+        Items.AutoAdvance = false;
         AddChild(Items);
 
         // Flag manager and visual flag nodes (ctf.h setup). Flags are a ctf-mode
@@ -267,10 +318,86 @@ public partial class MapWorld : Node3D
         GD.Print($"[world] {path}: chunks={chunked.Chunks.Count} triangles={chunked.TriangleCount}");
     }
 
+    private double _physicsAccum;
+    private const double StepSeconds = Phys.PhysFrameTime / 1000.0;
+
+    public override void _PhysicsProcess(double delta)
+    {
+        if (Engine.IsEditorHint() || Octa == null || Physics == null) return;
+
+        _physicsAccum += delta;
+        int guard = 0;
+        while (_physicsAccum >= StepSeconds && guard++ < 100)
+        {
+            _physicsAccum -= StepSeconds;
+            LastMillis += Phys.PhysFrameTime;
+
+            // 1. Gather player inputs before stepping physics
+            for (int i = 0; i < _players.Count; i++)
+            {
+                _players[i].PrePhysicsStep();
+            }
+
+            // 2. Clear and update dynent cache once per 5 ms substep
+            Physics.ClearDynentCache();
+            foreach (var dynent in Physics.DynEnts)
+            {
+                Physics.UpdateDynentCache(dynent);
+            }
+
+            // 3. Step registered players
+            for (int i = 0; i < _players.Count; i++)
+            {
+                _players[i].Step(Phys.PhysFrameTime);
+            }
+
+            // 4. Step standalone registered bouncers (grenades/debris)
+            for (int i = _bouncers.Count - 1; i >= 0; i--)
+            {
+                var bouncer = _bouncers[i];
+                if (bouncer.Exploded || !GodotObject.IsInstanceValid(bouncer) || bouncer.IsQueuedForDeletion())
+                {
+                    _bouncers.RemoveAt(i);
+                    continue;
+                }
+                bouncer.Step(Phys.PhysFrameTime);
+                if (bouncer.Exploded)
+                {
+                    _bouncers.RemoveAt(i);
+                }
+            }
+
+            // 5. Update game mode flag rules with synchronized simulation clock
+            if (Flags != null && (Mode == null || Mode.Has(Game.ModeFlags.Ctf)))
+            {
+                var mode = Mode ?? Game.GameModeCatalog.Get("ctf");
+                Flags.Update(mode, LastMillis);
+            }
+
+            // 6. Update item respawns with synchronized simulation clock
+            Items?.Advance(Phys.PhysFrameTime, LastMillis);
+
+            // 7. Post physics step for players (attack cooldowns, animations)
+            for (int i = 0; i < _players.Count; i++)
+            {
+                _players[i].PostPhysicsStep();
+            }
+        }
+
+        for (int i = 0; i < _players.Count; i++)
+        {
+            _players[i].SyncTransform();
+        }
+        for (int i = 0; i < _bouncers.Count; i++)
+        {
+            _bouncers[i].SyncTransform();
+        }
+    }
+
     public override void _Process(double delta)
     {
         if (Engine.IsEditorHint()) return;
-        int lastMillis = (int)Time.GetTicksMsec();
+        int lastMillis = LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec();
         if (Teleports != null)
         {
             for (int i = 0; i < Teleports.Count; i++)
@@ -282,7 +409,6 @@ public partial class MapWorld : Node3D
         if (Flags != null && _flagNodes.Count > 0 && (Mode == null || Mode.Has(Game.ModeFlags.Ctf)))
         {
             var mode = Mode ?? Game.GameModeCatalog.Get("ctf");
-            Flags.Update(mode, lastMillis);
             for (int i = 0; i < _flagNodes.Count; i++)
             {
                 if (i < Flags.Flags.Count)
