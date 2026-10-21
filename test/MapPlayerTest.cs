@@ -893,4 +893,33 @@ public class MapPlayerTest : GoTestBase
 
         world.Free();
     }
+
+    [Test]
+    public void ProjectileDetonationAndWeaponEffectsDispatchWithoutClosures()
+    {
+        var world = new MapWorld();
+        var effects = new World.Effects.WeaponEffectsRenderer { Name = "WeaponEffects" };
+        world.AddChild(effects);
+        world.WeaponEffects = effects;
+
+        var player = new MapPlayer();
+        world.AddChild(player);
+        world.RegisterPlayer(player);
+
+        TestAssert.Equal(effects, player.WeaponEffects, "player resolves WeaponEffects from parent MapWorld");
+        TestAssert.True(ReferenceEquals(world.ActiveRockets, effects.ActiveRockets),
+            "WeaponEffectsRenderer reads parent MapWorld.ActiveRockets directly");
+
+        world.Clock.Set(2500);
+        var rl = WeaponCatalog.Get(Gun.RocketLauncher);
+        var rocket = new RocketProjectile(Vector3.Zero, new Vector3(0, 10, 0), rl, owner: player);
+        var candidates = new IExplosionTarget[] { player };
+        rocket.Advance(50, world: null, candidates: candidates);
+        rocket.Advance(50, world: null, candidates: candidates);
+
+        TestAssert.True(rocket.Exploded, "rocket exploded");
+        TestAssert.Equal(2500, player.LastHit, "OnRocketDetonated updated player.LastHit");
+
+        world.Free();
+    }
 }

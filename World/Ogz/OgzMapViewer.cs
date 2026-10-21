@@ -123,7 +123,6 @@ public partial class OgzMapViewer : Node3D
 
         (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
         World.LocalPlayerTeam = PlayerTeam > 0 ? PlayerTeam : 1;
-        World.PlayerProvider = pid => (player.Entity.O, player.Entity.Yaw, player.Entity.AboveEye);
         player.Team = PlayerTeam > 0 ? PlayerTeam : 1;
         player.Setup(World.Physics!, feet, yaw);
         World.RegisterPlayer(player);
@@ -132,6 +131,7 @@ public partial class OgzMapViewer : Node3D
 
         var effects = new Effects.WeaponEffectsRenderer { Name = "WeaponEffects" };
         World.AddChild(effects);
+        World.WeaponEffects = effects;
         player.WeaponEffects = effects;
         player.Items = World.Items;
         player.Flags = World.Flags;

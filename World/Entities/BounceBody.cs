@@ -288,7 +288,13 @@ public partial class BounceBody : Node3D
             hit.Target.TakeDamage(hit.Damage);
         }
 
+        if (ShooterOwner is Ogz.MapPlayer ownerPlayer)
+        {
+            ownerPlayer.OnGrenadeDetonated(this, Entity.O, result);
+        }
+
         Detonated?.Invoke(Entity.O, result);
+        Detonated = null;
 
         if (IsInsideTree())
         {

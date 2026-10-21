@@ -166,14 +166,35 @@ public partial class MapWorld : Node3D
     /// <summary>Flag manager tracking CTF / Protect / Hold state.</summary>
     public Game.FlagManager? Flags { get; private set; }
 
+    /// <summary>Shared weapon tracer and explosion effects renderer for this world.</summary>
+    public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
+
     /// <summary>Active game mode info.</summary>
     public Game.GameModeInfo? Mode { get; set; }
 
     /// <summary>Local player team (1 = blue, 2 = red). Default 1.</summary>
     public int LocalPlayerTeam { get; set; } = 1;
 
-    /// <summary>Optional provider for carrier player position and orientation.</summary>
+    /// <summary>Optional override for carrier player position and orientation.</summary>
     public Func<int, (Vector3 pos, float yaw, float aboveEye)>? PlayerProvider { get; set; }
+
+    /// <summary>Resolves carrier player position and orientation by player ID from registered players.</summary>
+    public (Vector3 pos, float yaw, float aboveEye) GetPlayerOwnerInfo(int playerId)
+    {
+        if (PlayerProvider != null) return PlayerProvider(playerId);
+        for (int i = 0; i < _players.Count; i++)
+        {
+            var p = _players[i];
+            if (p.PlayerId == playerId)
+                return (p.Entity.O, p.Entity.Yaw, p.Entity.AboveEye);
+        }
+        if (_players.Count > 0)
+        {
+            var p = _players[0];
+            return (p.Entity.O, p.Entity.Yaw, p.Entity.AboveEye);
+        }
+        return default;
+    }
 
     private readonly List<FlagNode> _flagNodes = new();
     public IReadOnlyList<FlagNode> FlagNodes => _flagNodes;
@@ -463,7 +484,7 @@ public partial class MapWorld : Node3D
             {
                 if (i < Flags.Flags.Count)
                 {
-                    _flagNodes[i].UpdateVisual(Flags.Flags[i], mode, lastMillis, LocalPlayerTeam, getOwnerInfo: PlayerProvider);
+                    _flagNodes[i].UpdateVisual(Flags.Flags[i], mode, lastMillis, LocalPlayerTeam, getOwnerInfo: GetPlayerOwnerInfo);
                 }
             }
         }

@@ -54,8 +54,18 @@ public partial class WeaponEffectsRenderer : Node3D
     // (weapon.cpp:910 `v.mul(3); v.add(pos)`).
     private const float RocketVisualLead = 3f;
 
-    /// <summary>Optional provider for active flying rockets to render visual rocket trails.</summary>
-    public Func<IEnumerable<RocketProjectile>>? ActiveRocketsProvider { get; set; }
+    private IReadOnlyList<RocketProjectile>? _standaloneRockets;
+
+    /// <summary>
+    /// Active flying rockets rendered by this effects node. Reads the parent
+    /// <see cref="Ogz.MapWorld.ActiveRockets"/> when attached to a world, or an explicit
+    /// list assigned for standalone testing.
+    /// </summary>
+    public IReadOnlyList<RocketProjectile>? ActiveRockets
+    {
+        get => (GetParent() as Ogz.MapWorld)?.ActiveRockets ?? _standaloneRockets;
+        set => _standaloneRockets = value;
+    }
 
     private readonly List<ActiveBeam> _beams = new();
     private readonly List<ActiveExplosion> _explosions = new();
@@ -264,9 +274,9 @@ public partial class WeaponEffectsRenderer : Node3D
     public void AddBulletHole(Vector3 pos, Vector3 dir, float radius)
     {
         if (dir.IsZeroApprox()) return;
+        if (_decalPool[_decalIndex] is not { } entry) return;
 
         float now = (float)Time.GetTicksMsec() / 1000f;
-        var entry = _decalPool[_decalIndex];
         _decalIndex = (_decalIndex + 1) % MaxDecals;
 
         var meshInst = entry.MeshInstance;
@@ -311,9 +321,9 @@ public partial class WeaponEffectsRenderer : Node3D
     public void AddScorchMark(Vector3 pos, Vector3 dir, float radius)
     {
         if (dir.IsZeroApprox()) dir = new Vector3(0f, 0f, 1f);
+        if (_decalPool[_decalIndex] is not { } entry) return;
 
         float now = (float)Time.GetTicksMsec() / 1000f;
-        var entry = _decalPool[_decalIndex];
         _decalIndex = (_decalIndex + 1) % MaxDecals;
 
         var meshInst = entry.MeshInstance;
@@ -480,10 +490,11 @@ public partial class WeaponEffectsRenderer : Node3D
         }
 
         _activeRocketsScratch.Clear();
-        if (ActiveRocketsProvider?.Invoke() is { } rockets)
+        if (ActiveRockets is { } rockets)
         {
-            foreach (var rocket in rockets)
+            for (int i = 0; i < rockets.Count; i++)
             {
+                var rocket = rockets[i];
                 if (rocket.Exploded) continue;
                 _activeRocketsScratch.Add(rocket);
 

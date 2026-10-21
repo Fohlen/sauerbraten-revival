@@ -228,6 +228,12 @@ public sealed class RocketProjectile
             directHitVictim.TakeDamage(qdam);
         }
 
+        if (Owner is Ogz.MapPlayer ownerPlayer)
+        {
+            ownerPlayer.OnRocketDetonated(this, impactPos, directHitVictim, explosionResult);
+        }
+
         Detonated?.Invoke(impactPos, directHitVictim, explosionResult);
+        Detonated = null;
     }
 }

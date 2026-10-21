@@ -175,16 +175,20 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     private Effects.WeaponEffectsRenderer? _weaponEffects;
 
-    /// <summary>Weapon tracer and particle effect renderer.</summary>
+    /// <summary>
+    /// Weapon tracer and particle effect renderer. Reads the parent
+    /// <see cref="MapWorld.WeaponEffects"/> when attached to a world, or a standalone
+    /// instance assigned directly.
+    /// </summary>
     public Effects.WeaponEffectsRenderer? WeaponEffects
     {
-        get => _weaponEffects;
+        get => (GetParent() as MapWorld)?.WeaponEffects ?? _weaponEffects;
         set
         {
             _weaponEffects = value;
             if (_weaponEffects != null)
             {
-                _weaponEffects.ActiveRocketsProvider = () => ActiveRockets;
+                _weaponEffects.ActiveRockets = _standaloneRockets;
             }
         }
     }
@@ -772,18 +776,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 world: _phys?.Octa,
                 quadDamage: Combat.QuadMillis > 0);
 
-            rocket.Detonated += (impactPos, directVictim, splashResult) =>
-            {
-                if (splashResult.Hits.Count > 0 || directVictim != null)
-                {
-                    LastHit = LastMillis;
-                    PlaySound(GameSound.Hit);
-                }
-                PlaySound(GameSound.RlHit);
-                WeaponEffects?.AddExplosionEffect(Gun.RocketLauncher, impactPos, weapon.ExpRad);
-                WeaponEffects?.AddScorchMark(impactPos, -rocket.Dir, weapon.ExpRad * 0.5f);
-            };
-
             ActiveRockets.Add(rocket);
         }
         else if ((Gun)Combat.GunSelect == Gun.GrenadeLauncher)
@@ -840,18 +832,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                     quadDamage: Combat.QuadMillis > 0,
                     lifeTime: weapon.Ttl > 0 ? weapon.Ttl : 1500);
 
-                grenade.Detonated += (impactPos, splashResult) =>
-                {
-                    if (splashResult.Hits.Count > 0)
-                    {
-                        LastHit = LastMillis;
-                        PlaySound(GameSound.Hit);
-                    }
-                    PlaySound(GameSound.FExplode);
-                    WeaponEffects?.AddExplosionEffect(Gun.GrenadeLauncher, impactPos, weapon.ExpRad);
-                    WeaponEffects?.AddScorchMark(impactPos, new Vector3(0f, 0f, 1f), weapon.ExpRad * 0.5f);
-                };
-
                 GetParent()?.AddChild(grenade);
                 ActiveGrenades.Add(grenade);
             }
@@ -860,6 +840,49 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         UpdateBodyAnim();
         UpdateHudgunAnim();
         return true;
+    }
+
+    /// <summary>
+    /// Handles detonation effects and hit confirmation for a rocket fired by this player
+    /// (<c>fpsgame/weapon.cpp:428 explode</c>).
+    /// </summary>
+    public void OnRocketDetonated(
+        RocketProjectile rocket,
+        Vector3 impactPos,
+        IExplosionTarget? directVictim,
+        ExplosionResult<IExplosionTarget> splashResult)
+    {
+        if (!IsInstanceValid(this)) return;
+        if (splashResult.Hits.Count > 0 || directVictim != null)
+        {
+            LastHit = LastMillis;
+            PlaySound(GameSound.Hit);
+        }
+        PlaySound(GameSound.RlHit);
+        float expRad = rocket.Gun.ExpRad;
+        WeaponEffects?.AddExplosionEffect(Gun.RocketLauncher, impactPos, expRad);
+        WeaponEffects?.AddScorchMark(impactPos, -rocket.Dir, expRad * 0.5f);
+    }
+
+    /// <summary>
+    /// Handles detonation effects and hit confirmation for a grenade fired by this player
+    /// (<c>fpsgame/weapon.cpp:428 explode</c>).
+    /// </summary>
+    public void OnGrenadeDetonated(
+        BounceBody grenade,
+        Vector3 impactPos,
+        ExplosionResult<IExplosionTarget> splashResult)
+    {
+        if (!IsInstanceValid(this)) return;
+        if (splashResult.Hits.Count > 0)
+        {
+            LastHit = LastMillis;
+            PlaySound(GameSound.Hit);
+        }
+        PlaySound(GameSound.FExplode);
+        float expRad = (grenade.GunInfo ?? WeaponCatalog.Get(Gun.GrenadeLauncher)).ExpRad;
+        WeaponEffects?.AddExplosionEffect(Gun.GrenadeLauncher, impactPos, expRad);
+        WeaponEffects?.AddScorchMark(impactPos, new Vector3(0f, 0f, 1f), expRad * 0.5f);
     }
 
     /// <summary>Apply damage to the player, updating health and lastpain timestamp.</summary>
