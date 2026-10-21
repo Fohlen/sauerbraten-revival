@@ -19,6 +19,10 @@ public partial class ItemManager : Node3D
 {
     private readonly List<Item> _items = new();
 
+    // Standalone-only clock for when an ItemManager runs outside a MapWorld
+    // (the world owns the shared SimClock in normal play).
+    private readonly SimClock _standaloneClock = new();
+
     /// <summary>List of all item pickups registered with this manager.</summary>
     public IReadOnlyList<Item> Items => _items;
 
@@ -249,6 +253,7 @@ public partial class ItemManager : Node3D
         if (!AutoAdvance || GetParent() is MapWorld) return;
 
         int deltaMillis = (int)System.Math.Round(delta * 1000.0);
+        _standaloneClock.Advance(deltaMillis);
         UpdateRespawns(deltaMillis);
     }
 
@@ -257,7 +262,6 @@ public partial class ItemManager : Node3D
         if (Engine.IsEditorHint()) return;
         if (!AutoAdvance || GetParent() is MapWorld) return;
 
-        int lastMillis = (int)Time.GetTicksMsec();
-        UpdateVisual(lastMillis);
+        UpdateVisual(_standaloneClock.NowMillis);
     }
 }

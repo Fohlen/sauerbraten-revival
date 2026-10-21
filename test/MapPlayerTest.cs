@@ -743,6 +743,61 @@ public class MapPlayerTest : GoTestBase
     }
 
     [Test]
+    public void RegisteredPlayersDoNotAdvanceWorldClock()
+    {
+        var world = new MapWorld { OgzPath = "base/church51.ogz" };
+        world.Build();
+
+        var a = new MapPlayer();
+        var b = new MapPlayer();
+        world.RegisterPlayer(a);
+        world.RegisterPlayer(b);
+        a.Setup(world.Physics!, new Vector3(3000, 946, 3040), 0f);
+        b.Setup(world.Physics!, new Vector3(3000, 946, 3050), 0f);
+
+        int before = world.LastMillis;
+        world._PhysicsProcess(0.010);
+
+        // Two players, but the clock must advance exactly once per 5 ms substep.
+        TestAssert.Equal(before + 10, world.LastMillis, "world clock advanced once per substep, not once per player");
+        TestAssert.Equal(world.LastMillis, a.LastMillis, "player A reads the shared clock");
+        TestAssert.Equal(world.LastMillis, b.LastMillis, "player B reads the shared clock");
+
+        // Detaching preserves the last value so a standalone player does not jump.
+        world.UnregisterPlayer(a);
+        TestAssert.Equal(world.LastMillis, a.LastMillis, "detached player keeps the final shared value");
+
+        world.UnregisterPlayer(b);
+        a.Free();
+        b.Free();
+        world.Free();
+    }
+
+    [Test]
+    public void WorldBuildKeepsPreexistingSessionClock()
+    {
+        var sessionClock = new SimClock(12345);
+        var world = new MapWorld { OgzPath = "base/church51.ogz", Clock = sessionClock };
+        world.Build();
+
+        TestAssert.Equal(12345, world.LastMillis, "session clock value is preserved across world build");
+        TestAssert.True(ReferenceEquals(sessionClock, world.Clock), "world uses the assigned session clock resource");
+
+        world.Free();
+    }
+
+    [Test]
+    public void SimClockAdvanceAndSet()
+    {
+        var clock = new SimClock(100);
+        TestAssert.Equal(100, clock.NowMillis, "seeded clock");
+        clock.Advance(5);
+        TestAssert.Equal(105, clock.NowMillis, "advance adds");
+        clock.Set(0);
+        TestAssert.Equal(0, clock.NowMillis, "set overrides");
+    }
+
+    [Test]
     public void WorldPhysicsProcessStepsFlagsInSync()
     {
         var world = new MapWorld { OgzPath = "base/church51.ogz" };

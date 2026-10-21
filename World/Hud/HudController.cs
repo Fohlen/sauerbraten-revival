@@ -143,7 +143,7 @@ public partial class HudController : Control
     /// <summary>Match expiration timestamp in milliseconds (engine maplimit in fps.cpp:6, client.cpp:564). Negative if untimed/infinite.</summary>
     public int MapLimit { get; set; } = -1;
 
-    /// <summary>Current match/engine elapsed timestamp in milliseconds (engine lastmillis). If negative, falls back to Player.LastMillis or Time.GetTicksMsec().</summary>
+    /// <summary>Current match/engine elapsed timestamp in milliseconds (engine lastmillis). If negative, falls back to Player.LastMillis (the shared world clock).</summary>
     public int LastMillis { get; set; } = -1;
 
     // --- HUD Score Display (fpsgame/scoreboard.cpp:484-568) ---
@@ -618,7 +618,7 @@ public partial class HudController : Control
         Vector2 viewportSize = GetViewportRect().Size;
         if (viewportSize.X <= 0 || viewportSize.Y <= 0) return;
 
-        int nowMillis = Player.LastMillis > 0 ? Player.LastMillis : (int)Time.GetTicksMsec();
+        int nowMillis = Player.LastMillis;
 
         // Check if player is aiming directly at a candidate target
         IHitscanTarget? aimedTarget = null;
@@ -821,7 +821,7 @@ public partial class HudController : Control
                     {
                         carrying = true;
                         heldTeam = f.Team;
-                        int now = Player.LastMillis > 0 ? Player.LastMillis : (int)Time.GetTicksMsec();
+                        int now = Player.LastMillis;
                         holdRemaining = Math.Max(0, Game.FlagManager.HoldSecs - f.HoldCounter(now) / 1000);
                         break;
                     }
@@ -1046,7 +1046,7 @@ public partial class HudController : Control
 
         int currentMillis = LastMillis >= 0
             ? LastMillis
-            : (Player != null && Player.LastMillis > 0 ? Player.LastMillis : (int)Time.GetTicksMsec());
+            : (Player?.LastMillis ?? 0);
 
         var (mins, secs, formatted) = StatusBarRenderer.FormatGameClock(MapLimit, currentMillis);
         Color clockColor = StatusBarRenderer.GetGameClockColor(mins, GameClockColour, GameClockLowColour, GameClockAlpha);

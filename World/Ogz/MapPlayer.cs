@@ -219,8 +219,35 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Timestamp (ms) of the last successful hit on an enemy (engine <c>lasthit</c> in fps.cpp).</summary>
     public int LastHit { get; set; }
 
-    /// <summary>Simulation clock in milliseconds (engine <c>lastmillis</c>).</summary>
-    public int LastMillis { get; set; }
+    private readonly SimClock _standaloneClock = new();
+
+    /// <summary>
+    /// Shared simulation clock when this player is registered with a
+    /// <see cref="MapWorld"/>; null when running standalone (tests/harness).
+    /// </summary>
+    public SimClock? Clock { get; private set; }
+
+    /// <summary>
+    /// Simulation clock in milliseconds (engine <c>lastmillis</c>). Reads the shared
+    /// world clock when registered, otherwise a private standalone clock so isolated
+    /// tests can still drive time explicitly. The setter only drives the standalone
+    /// clock — an attached player can never move the world's clock.
+    /// </summary>
+    public int LastMillis
+    {
+        get => (Clock ?? _standaloneClock).NowMillis;
+        set => _standaloneClock.Set(value);
+    }
+
+    /// <summary>Attach this player to the shared world clock (called on registration).</summary>
+    public void AttachClock(SimClock clock) => Clock = clock;
+
+    /// <summary>Detach from the shared world clock, preserving its current value.</summary>
+    public void DetachClock()
+    {
+        if (Clock is { } clock) _standaloneClock.Set(clock.NowMillis);
+        Clock = null;
+    }
 
     /// <summary>Last entity type picked up or triggered (fpsgame/game.h:549 <c>lastpickup</c>).</summary>
     public int LastPickup { get; set; } = -1;
@@ -314,7 +341,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.O = spawnFeet with { Z = spawnFeet.Z + EyeHeight };
         Entity.Yaw = yawDegrees;
         Pitch = 0f;
-        if (LastMillis == 0) LastMillis = (int)Time.GetTicksMsec();
         Initialized = true;
         _phys.DynEnts.Add(Entity);
         Combat.Spawn(Mode ?? GameModeCatalog.Get("ffa"));
@@ -597,7 +623,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public bool TryAttack(int? nowMillis = null, IReadOnlyList<IHitscanTarget>? targets = null)
     {
-        int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
+        int now = nowMillis ?? LastMillis;
         if (Entity.State != PhysEnt.CsAlive)
         {
             // If dead, pressing attack triggers respawn (fps.cpp:376)
@@ -606,7 +632,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             return false;
         }
 
-        LastMillis = now;
         if (now - Combat.LastAction < Combat.GunWait) return false;
 
         var weapon = WeaponCatalog.Get((Gun)Combat.GunSelect);
@@ -821,8 +846,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     {
         if (Entity.State == PhysEnt.CsDead) return;
 
-        int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
-        LastMillis = now;
+        int now = nowMillis ?? LastMillis;
         Combat.LastPain = now;
         Combat.DoDamage(damage);
         if (Combat.Health <= 0)
@@ -838,8 +862,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Kill the player (engine <c>deathstate</c>, fpsgame/fps.cpp:425).</summary>
     public void Die(int? nowMillis = null)
     {
-        int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
-        LastMillis = now;
+        int now = nowMillis ?? LastMillis;
         Combat.Health = 0;
         Combat.LastPain = now;
         Combat.Attacking = false;
@@ -866,7 +889,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     {
         if (Entity.State != PhysEnt.CsDead) return false;
 
-        int now = nowMillis ?? (LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec());
+        int now = nowMillis ?? LastMillis;
         if (now - Combat.LastPain < SpawnWaitMillis) return false;
 
         Respawn();
@@ -915,7 +938,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         if (!Initialized || _phys == null) return;
         Entity.Pitch = Pitch; // pitch feeds movement only while floating (vecfromyawpitch)
         _phys.MovePlayer(Entity, Phys.MoveRes, stepMillis);
-        LastMillis += stepMillis;
+        // The world advances the shared clock once per substep; only a standalone
+        // player owns and advances its private clock.
+        if (Clock == null) _standaloneClock.Advance(stepMillis);
 
         if (Entity.Dead && Entity.State != PhysEnt.CsDead)
         {

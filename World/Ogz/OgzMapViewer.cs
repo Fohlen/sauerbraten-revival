@@ -146,8 +146,9 @@ public partial class OgzMapViewer : Node3D
         {
             Name = "HUD",
             Player = player,
-            // Default 10 minute match timer (10 * 60 * 1000 = 600000 ms) matching Sauerbraten standard maplimit
-            MapLimit = (int)Time.GetTicksMsec() + 10 * 60 * 1000
+            // Default 10 minute match timer (10 * 60 * 1000 = 600000 ms) matching Sauerbraten standard maplimit.
+            // Seeded from the world's simulation clock, which the game clock is compared against.
+            MapLimit = World.LastMillis + 10 * 60 * 1000
         };
         hud.SetupTextures(World.Textures ?? new Materials.ResourceTextureSource());
         canvas.AddChild(hud);

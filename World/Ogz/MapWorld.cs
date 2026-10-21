@@ -52,8 +52,23 @@ public partial class MapWorld : Node3D
     /// <summary>The shared octree physics simulation authority for this world.</summary>
     public OctaPhysics? Physics { get; private set; }
 
-    /// <summary>Master simulation clock in milliseconds for this world.</summary>
-    public int LastMillis { get; set; }
+    private SimClock _clock = new();
+
+    /// <summary>
+    /// The simulation clock for this world (engine <c>lastmillis</c>). Exported so a
+    /// scene or session can assign and persist one; assigning null falls back to a
+    /// fresh clock. Per-world/per-session by design — never a process-wide autoload —
+    /// so hosting two sessions in one process keeps independent time bases.
+    /// </summary>
+    [Export]
+    public SimClock Clock
+    {
+        get => _clock;
+        set => _clock = value ?? new SimClock();
+    }
+
+    /// <summary>Current simulation time in milliseconds.</summary>
+    public int LastMillis => Clock.NowMillis;
 
     private readonly List<MapPlayer> _players = new();
     /// <summary>Active players stepped by this world's physics loop.</summary>
@@ -74,14 +89,14 @@ public partial class MapWorld : Node3D
         if (!_players.Contains(player))
         {
             _players.Add(player);
-            player.LastMillis = LastMillis;
+            player.AttachClock(Clock);
         }
     }
 
     /// <summary>Unregisters a player from the world's physics loop.</summary>
     public void UnregisterPlayer(MapPlayer player)
     {
-        _players.Remove(player);
+        if (_players.Remove(player)) player.DetachClock();
     }
 
     /// <summary>Registers a bouncer to be stepped by the world's physics loop.</summary>
@@ -219,7 +234,9 @@ public partial class MapWorld : Node3D
         Map = map;
         Octa = octa;
         Physics = new OctaPhysics(octa);
-        LastMillis = (int)Time.GetTicksMsec();
+        // Bootstrap a fresh clock. A session-assigned clock (nonzero) keeps its value
+        // so the same session can carry time across worlds.
+        if (Clock.NowMillis == 0) Clock.Set((int)Time.GetTicksMsec());
 
         string mapName = path.GetFile().GetBaseName();
         ITextureSource textures = new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource(MapRoots.ReferenceRoot));
@@ -373,7 +390,7 @@ public partial class MapWorld : Node3D
         while (_physicsAccum >= StepSeconds && guard++ < 100)
         {
             _physicsAccum -= StepSeconds;
-            LastMillis += Phys.PhysFrameTime;
+            Clock.Advance(Phys.PhysFrameTime);
 
             // 1. Gather player inputs before stepping physics
             for (int i = 0; i < _players.Count; i++)
@@ -430,7 +447,7 @@ public partial class MapWorld : Node3D
     public override void _Process(double delta)
     {
         if (Engine.IsEditorHint()) return;
-        int lastMillis = LastMillis > 0 ? LastMillis : (int)Time.GetTicksMsec();
+        int lastMillis = LastMillis;
         if (Teleports != null)
         {
             for (int i = 0; i < Teleports.Count; i++)
