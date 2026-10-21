@@ -74,7 +74,6 @@ public partial class MapWorld : Node3D
         if (!_players.Contains(player))
         {
             _players.Add(player);
-            player.AutoAdvance = false;
             player.LastMillis = LastMillis;
         }
     }

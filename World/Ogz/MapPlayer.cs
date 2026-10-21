@@ -73,9 +73,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
     }
 
-    /// <summary>Whether this player steps itself in _PhysicsProcess. False when managed by MapWorld or world runner.</summary>
-    [Export] public bool AutoAdvance { get; set; } = true;
-
     /// <summary>Spawn eye offset above the spawn point's feet (ents.h <c>eyeheight</c>).</summary>
     public const float EyeHeight = 14.0f;
 
@@ -237,10 +234,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     private OctaPhysics? _phys;
     private Vector2 _mouseDelta; // pending frame delta (screen px)
 
-    // Fixed-step accumulator (seconds of un-simulated time).
-    private double _accum;
-    private const double StepSeconds = Phys.PhysFrameTime / 1000.0;
-
     private readonly List<RocketProjectile> _standaloneRockets = new();
     private readonly List<BounceBody> _standaloneGrenades = new();
 
@@ -328,6 +321,14 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
         if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
+    }
+
+    public override void _EnterTree()
+    {
+        if (GetParent() is MapWorld mw)
+        {
+            mw.RegisterPlayer(this);
+        }
     }
 
     public override void _ExitTree()
@@ -445,15 +446,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         UpdateBodyAnim();
         UpdateHudgunAnim();
-    }
-
-    public override void _PhysicsProcess(double delta)
-    {
-        if (!Initialized || _phys == null || !AutoAdvance) return;
-
-        PrePhysicsStep();
-        Advance(delta);
-        PostPhysicsStep();
     }
 
     private string _bodyAnim = "";
@@ -975,21 +967,18 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>
-    /// Advance the simulation by <paramref name="delta"/> seconds of real time,
-    /// running whole fixed 5 ms steps caught up by count (a partial step is kept
-    /// in the accumulator). Input is taken from <see cref="Entity"/> — set it first.
-    /// Also advances active projectiles (rockets and grenades).
+    /// Advance the simulation by <paramref name="delta"/> seconds in discrete 5 ms steps.
+    /// Input is taken from <see cref="Entity"/> — set it first.
+    /// Intended for isolated testing; active gameplay players are stepped centrally by MapWorld.
     /// </summary>
     public void Advance(double delta, IReadOnlyList<IExplosionTarget>? targets = null)
     {
         if (!Initialized || _phys == null) return;
-        _accum += delta;
-        int guard = 0;
+        int steps = System.Math.Max(1, (int)System.Math.Round(delta * 1000.0 / Phys.PhysFrameTime));
         var candidates = targets ?? new IExplosionTarget[] { this };
-        while (_accum >= StepSeconds && guard++ < 100)
+        for (int i = 0; i < steps; i++)
         {
             Step(Phys.PhysFrameTime, candidates);
-            _accum -= StepSeconds;
         }
         SyncTransform();
     }

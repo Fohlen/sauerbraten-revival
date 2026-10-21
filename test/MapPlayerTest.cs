@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
@@ -727,7 +728,7 @@ public class MapPlayerTest : GoTestBase
         world.RegisterPlayer(player);
         player.Setup(world.Physics!, new Vector3(3000, 946, 3040), 0f);
 
-        TestAssert.False(player.AutoAdvance, "registered player AutoAdvance is false");
+        TestAssert.True(world.Players.Contains(player), "registered player is in world Players");
         TestAssert.Equal(initialMillis, player.LastMillis, "player LastMillis initialized to world clock");
 
         // Advance world physics by 10 ms (two 5 ms substeps)
