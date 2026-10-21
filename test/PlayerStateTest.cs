@@ -362,4 +362,66 @@ public class PlayerStateTest : GoTestBase
         TestAssert.Equal(20000, ItemStats.Get(18).Add, "quad add");
         TestAssert.Equal(30000, ItemStats.Get(18).Max, "quad max");
     }
+
+    [Test]
+    public void SignalsEmitDirectlyFromPlayerState()
+    {
+        var s = Fresh();
+        int healthChangedCount = 0;
+        int lastOldHealth = -1, lastNewHealth = -1;
+        int armourChangedCount = 0;
+        int lastOldArmour = -1, lastNewArmour = -1;
+        int weaponChangedCount = 0;
+        int lastWeapon = -1;
+
+        s.HealthChanged += (oldH, newH) =>
+        {
+            healthChangedCount++;
+            lastOldHealth = oldH;
+            lastNewHealth = newH;
+        };
+        s.ArmourChanged += (oldA, newA) =>
+        {
+            armourChangedCount++;
+            lastOldArmour = oldA;
+            lastNewArmour = newA;
+        };
+        s.WeaponChanged += gunId =>
+        {
+            weaponChangedCount++;
+            lastWeapon = gunId;
+        };
+
+        // 1. Direct property sets emit
+        s.Health = 100;
+        TestAssert.Equal(1, healthChangedCount, "HealthChanged emitted on set");
+        TestAssert.Equal(0, lastOldHealth, "old health 0");
+        TestAssert.Equal(100, lastNewHealth, "new health 100");
+
+        s.Armour = 50;
+        TestAssert.Equal(1, armourChangedCount, "ArmourChanged emitted on set");
+        TestAssert.Equal(0, lastOldArmour, "old armour 0");
+        TestAssert.Equal(50, lastNewArmour, "new armour 50");
+
+        s.GunSelect = (int)Gun.Rifle;
+        TestAssert.Equal(1, weaponChangedCount, "WeaponChanged emitted on set");
+        TestAssert.Equal((int)Gun.Rifle, lastWeapon, "weapon id Rifle");
+
+        // 2. Setting same value does not emit duplicate
+        s.Health = 100;
+        TestAssert.Equal(1, healthChangedCount, "no duplicate on same Health");
+
+        // 3. DoDamage emits both ArmourChanged and HealthChanged
+        s.ArmourType = ArmourType.Blue; // absorbs 25%
+        s.DoDamage(40); // 10 absorbed by armour, 30 damage to health
+        TestAssert.Equal(2, armourChangedCount, "ArmourChanged emitted on DoDamage");
+        TestAssert.Equal(40, s.Armour, "armour reduced to 40");
+        TestAssert.Equal(2, healthChangedCount, "HealthChanged emitted on DoDamage");
+        TestAssert.Equal(70, s.Health, "health reduced to 70");
+
+        // 4. Spawn emits state transition
+        s.Spawn(GameModeCatalog.Get("insta_ctf"));
+        TestAssert.Equal(1, s.Health, "health is 1 in insta");
+        TestAssert.Equal((int)Gun.Rifle, s.GunSelect, "selected rifle in insta");
+    }
 }

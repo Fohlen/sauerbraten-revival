@@ -1,4 +1,5 @@
 using System;
+using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Weapons;
 
@@ -16,19 +17,64 @@ namespace SauerbratenRevival.World.Game;
 /// fresh <see cref="Respawn"/> already ran — use <see cref="Spawn"/> (the
 /// <c>fps.cpp spawnstate()</c> wrapper) to get both.
 /// </summary>
-public sealed class PlayerState
+[GlobalClass]
+public partial class PlayerState : RefCounted
 {
+    [Signal]
+    public delegate void HealthChangedEventHandler(int oldHealth, int newHealth);
+
+    [Signal]
+    public delegate void ArmourChangedEventHandler(int oldArmour, int newArmour);
+
+    [Signal]
+    public delegate void WeaponChangedEventHandler(int gunId);
+
     /// <summary>Engine <c>fpsstate::maxhealth</c> initial value.</summary>
     public const int DefaultMaxHealth = 100;
 
-    public int Health;
+    private int _health;
+    public int Health
+    {
+        get => _health;
+        set
+        {
+            if (_health == value) return;
+            int old = _health;
+            _health = value;
+            EmitSignal(SignalName.HealthChanged, old, value);
+        }
+    }
+
     public int MaxHealth = DefaultMaxHealth;
-    public int Armour;
+
+    private int _armour;
+    public int Armour
+    {
+        get => _armour;
+        set
+        {
+            if (_armour == value) return;
+            int old = _armour;
+            _armour = value;
+            EmitSignal(SignalName.ArmourChanged, old, value);
+        }
+    }
+
     public ArmourType ArmourType = ArmourType.Blue;
     public int QuadMillis;
 
+    private int _gunSelect;
     /// <summary>Currently selected gun id (engine <c>gunselect</c>, a <see cref="Gun"/> value).</summary>
-    public int GunSelect;
+    public int GunSelect
+    {
+        get => _gunSelect;
+        set
+        {
+            if (_gunSelect == value) return;
+            _gunSelect = value;
+            EmitSignal(SignalName.WeaponChanged, value);
+        }
+    }
 
     /// <summary>Milliseconds left before the next shot (engine <c>gunwait</c>).</summary>
     public int GunWait;
@@ -208,14 +254,14 @@ public sealed class PlayerState
     /// spawns. Note the <c>GUN_FIST</c> ammo of 1 — the engine always keeps the fist
     /// "loaded" so it is selectable when everything else is dry.
     /// </summary>
-    public void Respawn()
+    private void RespawnInternal()
     {
         MaxHealth = DefaultMaxHealth;
-        Health = MaxHealth;
-        Armour = 0;
+        _health = MaxHealth;
+        _armour = 0;
         ArmourType = ArmourType.Blue;
         QuadMillis = 0;
-        GunSelect = (int)Gun.Pistol;
+        _gunSelect = (int)Gun.Pistol;
         GunWait = 0;
         LastAction = 0;
         LastAttackGun = (int)Gun.Pistol;
@@ -229,28 +275,41 @@ public sealed class PlayerState
         Ammo[(int)Gun.Fist] = 1;
     }
 
+    public void Respawn()
+    {
+        int prevHealth = _health;
+        int prevArmour = _armour;
+        int prevGun = _gunSelect;
+
+        RespawnInternal();
+
+        if (_health != prevHealth) EmitSignal(SignalName.HealthChanged, prevHealth, _health);
+        if (_armour != prevArmour) EmitSignal(SignalName.ArmourChanged, prevArmour, _armour);
+        if (_gunSelect != prevGun) EmitSignal(SignalName.WeaponChanged, _gunSelect);
+    }
+
     /// <summary>
     /// Engine <c>fpsstate::spawnstate(gamemode)</c>: apply the mode's loadout on top
     /// of a fresh <see cref="Respawn"/>. Branches are tested in the engine's order
     /// (insta before regen before tactics before efficiency before ctf before else). Behaviour is keyed on <see cref="GameModeInfo.Flags"/>,
     /// not on a mode identity, so a modded mode that sets the same flags gets the same loadout.
     /// </summary>
-    public void SpawnState(GameModeInfo mode, Random? rng = null)
+    private void SpawnStateInternal(GameModeInfo mode, Random? rng = null)
     {
         if (mode.Has(ModeFlags.Insta))
         {
             // Instagib: full rifle, one-shot kills.
-            Armour = 0;
-            Health = 1;
-            GunSelect = (int)Gun.Rifle;
+            _armour = 0;
+            _health = 1;
+            _gunSelect = (int)Gun.Rifle;
             Ammo[(int)Gun.Rifle] = 100;
         }
         else if (mode.Has(ModeFlags.Regen) && mode.Has(ModeFlags.Capture))
         {
             // Regen capture: blue armour 25, pistol 40, grenade 1.
             ArmourType = ArmourType.Blue;
-            Armour = 25;
-            GunSelect = (int)Gun.Pistol;
+            _armour = 25;
+            _gunSelect = (int)Gun.Pistol;
             Ammo[(int)Gun.Pistol] = 40;
             Ammo[(int)Gun.GrenadeLauncher] = 1;
         }
@@ -258,12 +317,12 @@ public sealed class PlayerState
         {
             // Tactics: green armour 100, pistol 40, two random guns with baseammo, grenade+1 if noitems.
             ArmourType = ArmourType.Green;
-            Armour = 100;
+            _armour = 100;
             Ammo[(int)Gun.Pistol] = 40;
 
             rng ??= Random.Shared;
             int spawngun1 = rng.Next(1, 6);
-            GunSelect = spawngun1;
+            _gunSelect = spawngun1;
             BaseAmmo(spawngun1, mode.Has(ModeFlags.NoItems) ? 2 : 1);
 
             int spawngun2;
@@ -282,17 +341,17 @@ public sealed class PlayerState
         {
             // Efficiency: armour + a base load for SG..GL, then halve the chaingun.
             ArmourType = ArmourType.Green;
-            Armour = 100;
+            _armour = 100;
             for (int gun = (int)Gun.Shotgun; gun <= (int)Gun.GrenadeLauncher; gun++) BaseAmmo(gun);
-            GunSelect = (int)Gun.Chaingun;
+            _gunSelect = (int)Gun.Chaingun;
             Ammo[(int)Gun.Chaingun] /= 2;
         }
         else if (mode.Has(ModeFlags.Ctf) || mode.Has(ModeFlags.Collect))
         {
             // CTF / Protect / Hold: blue armour 50, pistol 40, grenade 1.
             ArmourType = ArmourType.Blue;
-            Armour = 50;
-            GunSelect = (int)Gun.Pistol;
+            _armour = 50;
+            _gunSelect = (int)Gun.Pistol;
             Ammo[(int)Gun.Pistol] = 40;
             Ammo[(int)Gun.GrenadeLauncher] = 1;
         }
@@ -300,18 +359,39 @@ public sealed class PlayerState
         {
             // Engine else branch: ffa, teamplay, and coop edit.
             ArmourType = ArmourType.Blue;
-            Armour = 25;
-            GunSelect = (int)Gun.Pistol;
+            _armour = 25;
+            _gunSelect = (int)Gun.Pistol;
             Ammo[(int)Gun.Pistol] = 40;
             Ammo[(int)Gun.GrenadeLauncher] = 1;
         }
     }
 
+    public void SpawnState(GameModeInfo mode, Random? rng = null)
+    {
+        int prevHealth = _health;
+        int prevArmour = _armour;
+        int prevGun = _gunSelect;
+
+        SpawnStateInternal(mode, rng);
+
+        if (_health != prevHealth) EmitSignal(SignalName.HealthChanged, prevHealth, _health);
+        if (_armour != prevArmour) EmitSignal(SignalName.ArmourChanged, prevArmour, _armour);
+        if (_gunSelect != prevGun) EmitSignal(SignalName.WeaponChanged, _gunSelect);
+    }
+
     /// <summary>fps.cpp <c>spawnstate()</c> wrapper: <see cref="Respawn"/> then <see cref="SpawnState"/>.</summary>
     public void Spawn(GameModeInfo mode, Random? rng = null)
     {
-        Respawn();
-        SpawnState(mode, rng);
+        int prevHealth = _health;
+        int prevArmour = _armour;
+        int prevGun = _gunSelect;
+
+        RespawnInternal();
+        SpawnStateInternal(mode, rng);
+
+        if (_health != prevHealth) EmitSignal(SignalName.HealthChanged, prevHealth, _health);
+        if (_armour != prevArmour) EmitSignal(SignalName.ArmourChanged, prevArmour, _armour);
+        if (_gunSelect != prevGun) EmitSignal(SignalName.WeaponChanged, _gunSelect);
     }
 
     /// <summary>Convenience read of the current gun's ammo.</summary>

@@ -77,6 +77,7 @@ public partial class HudController : Control
         _observedDead = player.Entity.Dead;
         _observedGun = (Gun)player.GunSelect;
         player.HealthChanged += OnPlayerHealthChanged;
+        player.Combat.ArmourChanged += OnPlayerArmourChanged;
         player.Died += OnPlayerDied;
         player.Respawned += OnPlayerRespawned;
         player.WeaponChanged += OnPlayerWeaponChanged;
@@ -87,10 +88,18 @@ public partial class HudController : Control
     {
         if (player == null || !IsInstanceValid(player)) return;
         player.HealthChanged -= OnPlayerHealthChanged;
+        player.Combat.ArmourChanged -= OnPlayerArmourChanged;
         player.Died -= OnPlayerDied;
         player.Respawned -= OnPlayerRespawned;
         player.WeaponChanged -= OnPlayerWeaponChanged;
         player.DamageDealt -= OnPlayerDamageDealt;
+    }
+
+    private void OnPlayerArmourChanged(int oldArmour, int newArmour)
+    {
+        _statusBarDirty = true;
+        if (!IsInstanceValid(this) || !IsInsideTree() || _statusBarRoot == null) return;
+        UpdateStatusBar();
     }
 
     private void OnPlayerHealthChanged(int oldHealth, int newHealth)

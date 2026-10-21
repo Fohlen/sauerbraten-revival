@@ -276,13 +276,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public int Health
     {
         get => Combat.Health;
-        set
-        {
-            int oldHealth = Combat.Health;
-            if (oldHealth == value) return;
-            Combat.Health = value;
-            EmitSignal(SignalName.HealthChanged, oldHealth, value);
-        }
+        set => Combat.Health = value;
     }
 
     /// <summary>
@@ -298,10 +292,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             {
                 SelectWeapon((Gun)value);
             }
-            else if (Combat.GunSelect != value)
+            else
             {
                 Combat.GunSelect = value;
-                EmitSignal(SignalName.WeaponChanged, value);
             }
         }
     }
@@ -398,7 +391,19 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     public MapPlayer()
     {
+        Combat.HealthChanged += OnCombatHealthChanged;
+        Combat.WeaponChanged += OnCombatWeaponChanged;
         Combat.Respawn();
+    }
+
+    private void OnCombatHealthChanged(int oldHealth, int newHealth)
+    {
+        EmitSignal(SignalName.HealthChanged, oldHealth, newHealth);
+    }
+
+    private void OnCombatWeaponChanged(int gunId)
+    {
+        EmitSignal(SignalName.WeaponChanged, gunId);
     }
 
     public override void _Ready()
@@ -692,7 +697,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         PlayerModel?.SetViewWeapon(WeaponCatalog.Vwep(gun));
         Hudgun?.SetGun(WeaponCatalog.Get(gun).File);
         UpdateBodyAnim();
-        EmitSignal(SignalName.WeaponChanged, g);
     }
 
     /// <summary>Cycle to next/previous selectable weapon with ammo (weapon.cpp <c>nextweapon</c>).</summary>
@@ -984,10 +988,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     {
         int oldHealth = Combat.Health;
         Combat.Pickup(itemType);
-        if (Combat.Health != oldHealth)
-        {
-            EmitSignal(SignalName.HealthChanged, oldHealth, Combat.Health);
-        }
     }
 
     /// <summary>Apply damage to the player, updating health and lastpain timestamp.</summary>
@@ -997,19 +997,20 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         int now = nowMillis ?? LastMillis;
         Combat.LastPain = now;
-        int oldHealth = Combat.Health;
-        Combat.DoDamage(damage);
-        if (Combat.Health <= 0)
+
+        int ad = (damage * ((int)Combat.ArmourType + 1) * 25) / 100;
+        if (ad > Combat.Armour) ad = Combat.Armour;
+        int healthDamage = damage - ad;
+
+        if (Combat.Health - healthDamage <= 0)
         {
-            Combat.Health = oldHealth;
+            Combat.Armour -= ad;
+            Combat.Health = 0;
             Die(now);
         }
         else
         {
-            if (Combat.Health != oldHealth)
-            {
-                EmitSignal(SignalName.HealthChanged, oldHealth, Combat.Health);
-            }
+            Combat.DoDamage(damage);
             UpdateBodyAnim();
         }
     }
@@ -1071,12 +1072,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.State = PhysEnt.CsAlive;
         Entity.Blocked = false;
 
-        int oldHealth = Combat.Health;
         Combat.Spawn(Mode ?? GameModeCatalog.Default);
-        if (Combat.Health != oldHealth)
-        {
-            EmitSignal(SignalName.HealthChanged, oldHealth, Combat.Health);
-        }
         View.ResetAnimState();
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
