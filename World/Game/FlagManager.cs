@@ -34,6 +34,9 @@ public sealed class FlagManager
     public IReadOnlyList<FlagState> Flags => _flags;
     public IReadOnlyList<Vector3> HoldSpawns => _holdSpawns;
 
+    /// <summary>Active game mode info governing flag rules.</summary>
+    public GameModeInfo Mode { get; set; } = GameModeCatalog.Get("ctf");
+
     /// <summary>Invoked whenever an audio event occurs.</summary>
     public event Action<FlagAudioEvent>? OnAudioEvent;
 
@@ -190,6 +193,12 @@ public sealed class FlagManager
     }
 
     /// <summary>
+    /// Processes a player attempting to take/touch a flag using the manager's active <see cref="Mode"/>.
+    /// </summary>
+    public bool TakeFlag(int playerId, int playerTeam, Vector3 playerPos, int flagId, int version, int nowMillis, Action<int, int>? onPlayerScore = null, Random? rng = null)
+        => TakeFlag(playerId, playerTeam, playerPos, flagId, version, Mode, nowMillis, onPlayerScore, rng);
+
+    /// <summary>
     /// Processes a player attempting to take/touch a flag.
     /// Handles CTF steals, CTF captures at base, CTF returns of dropped friendly flags,
     /// Protect pickups, Protect scoring touches, and Hold pickups.
@@ -263,6 +272,12 @@ public sealed class FlagManager
     }
 
     /// <summary>
+    /// Scores a flag using the manager's active <see cref="Mode"/>.
+    /// </summary>
+    public void ScoreFlag(int playerId, int playerTeam, int goalFlagId, int relayFlagId, int nowMillis, Action<int, int>? onPlayerScore = null, Random? rng = null)
+        => ScoreFlag(playerId, playerTeam, goalFlagId, relayFlagId, Mode, nowMillis, onPlayerScore, rng);
+
+    /// <summary>
     /// Scores a flag: returns the relay flag (or goal flag in Protect/Hold), awards point to team and player,
     /// updates scores and dispatches audio event.
     /// </summary>
@@ -295,6 +310,12 @@ public sealed class FlagManager
     }
 
     /// <summary>
+    /// Drops any flag currently carried by the player using the manager's active <see cref="Mode"/>.
+    /// </summary>
+    public void DropPlayerFlag(int playerId, Vector3 playerPos, int nowMillis, int dropperId = -1, bool tkPenalty = false, float dropAngle = 0f)
+        => DropPlayerFlag(playerId, playerPos, Mode, nowMillis, dropperId, tkPenalty, dropAngle);
+
+    /// <summary>
     /// Drops any flag currently carried by the player.
     /// In Protect mode, if dropped inside its own base, it returns instead.
     /// </summary>
@@ -320,6 +341,12 @@ public sealed class FlagManager
             }
         }
     }
+
+    /// <summary>
+    /// Player died: handles hold mode death penalty, drops carried flags, and cleans up dropper references using active <see cref="Mode"/>.
+    /// </summary>
+    public void OnPlayerDied(int victimId, int? actorId, bool isTeammate, Vector3 victimPos, int nowMillis, float dropAngle = 0f)
+        => OnPlayerDied(victimId, actorId, isTeammate, victimPos, Mode, nowMillis, dropAngle);
 
     /// <summary>
     /// Player died: handles hold mode death penalty, drops carried flags, and cleans up dropper references.
@@ -351,6 +378,12 @@ public sealed class FlagManager
             }
         }
     }
+
+    /// <summary>
+    /// Regular tick update for flags using active <see cref="Mode"/>.
+    /// </summary>
+    public void Update(int nowMillis, Func<int, (int team, Vector3 pos)?>? getPlayerInfo = null, Action<int, int>? onPlayerScore = null, Random? rng = null)
+        => Update(Mode, nowMillis, getPlayerInfo, onPlayerScore, rng);
 
     /// <summary>
     /// Regular tick update for flags: handles drop reset timeouts, invis timeouts, and hold 20s score countdown.

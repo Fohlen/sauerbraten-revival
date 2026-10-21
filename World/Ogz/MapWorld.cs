@@ -88,6 +88,7 @@ public partial class MapWorld : Node3D
     {
         if (!_players.Contains(player))
         {
+            if (Mode != null) player.Mode = Mode;
             _players.Add(player);
             player.AttachClock(Clock);
         }
@@ -169,8 +170,28 @@ public partial class MapWorld : Node3D
     /// <summary>Shared weapon tracer and explosion effects renderer for this world.</summary>
     public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
 
+    private Game.GameModeInfo? _mode;
+
     /// <summary>Active game mode info.</summary>
-    public Game.GameModeInfo? Mode { get; set; }
+    public Game.GameModeInfo? Mode
+    {
+        get => _mode;
+        set
+        {
+            _mode = value;
+            if (value != null)
+            {
+                if (Items != null) Items.Mode = value;
+                if (Flags != null) Flags.Mode = value;
+                for (int i = 0; i < _players.Count; i++) _players[i].Mode = value;
+                foreach (var child in GetChildren())
+                {
+                    if (child is MapPlayer p) p.Mode = value;
+                    else if (child is ItemManager im) im.Mode = value;
+                }
+            }
+        }
+    }
 
     /// <summary>Local player team (1 = blue, 2 = red). Default 1.</summary>
     public int LocalPlayerTeam { get; set; } = 1;
@@ -295,11 +316,12 @@ public partial class MapWorld : Node3D
         // (client.cpp setclientmode), and only m_ctf builds flag state. Other modes
         // get an empty manager so player/HUD code can keep a stable reference.
         Flags = new Game.FlagManager();
+        if (Mode != null) Flags.Mode = Mode;
         var flagsRoot = new Node3D { Name = "Flags" };
         _flagNodes.Clear();
-        if (Mode == null || Mode.Has(Game.ModeFlags.Ctf))
+        if (Mode != null && Mode.Has(Game.ModeFlags.Ctf))
         {
-            bool isHold = Mode != null && Mode.Has(Game.ModeFlags.Hold);
+            bool isHold = Mode.Has(Game.ModeFlags.Hold);
             if (isHold)
             {
                 // ctf.h:729: BASE entities are hold spawns; HOLDFLAGS neutral flags
@@ -309,7 +331,7 @@ public partial class MapWorld : Node3D
                 Flags.SetupHoldSpawns();
                 foreach (var flag in Flags.Flags)
                 {
-                    var flagNode = CreateFlagNode(flag.Id, flag.Team, flag.SpawnLoc, 0f, modelCatalog, textures);
+                    var flagNode = CreateFlagNode(flag.Id, flag.Team, flag.SpawnLoc, 0f, modelCatalog, textures, Mode);
                     _flagNodes.Add(flagNode);
                     flagsRoot.AddChild(flagNode);
                 }
@@ -322,7 +344,7 @@ public partial class MapWorld : Node3D
                     if (e.Attr2 < 1 || e.Attr2 > 2) continue;
                     int flagId = Flags.Flags.Count;
                     Flags.AddFlag(flagId, e.Position, e.Attr2, 0, isProtect: false, spawnAngle: e.Attr1);
-                    var flagNode = CreateFlagNode(flagId, e.Attr2, e.Position, e.Attr1, modelCatalog, textures);
+                    var flagNode = CreateFlagNode(flagId, e.Attr2, e.Position, e.Attr1, modelCatalog, textures, Mode);
                     _flagNodes.Add(flagNode);
                     flagsRoot.AddChild(flagNode);
                 }
@@ -430,10 +452,9 @@ public partial class MapWorld : Node3D
             UpdateBouncers(Phys.PhysFrameTime);
 
             // 6. Update game mode flag rules with synchronized simulation clock
-            if (Flags != null && (Mode == null || Mode.Has(Game.ModeFlags.Ctf)))
+            if (Flags != null && Mode != null && Mode.Has(Game.ModeFlags.Ctf))
             {
-                var mode = Mode ?? Game.GameModeCatalog.Get("ctf");
-                Flags.Update(mode, LastMillis);
+                Flags.Update(LastMillis);
             }
 
             // 7. Update item respawns with synchronized simulation clock
@@ -464,14 +485,13 @@ public partial class MapWorld : Node3D
             }
         }
 
-        if (Flags != null && _flagNodes.Count > 0 && (Mode == null || Mode.Has(Game.ModeFlags.Ctf)))
+        if (Flags != null && _flagNodes.Count > 0 && Mode != null && Mode.Has(Game.ModeFlags.Ctf))
         {
-            var mode = Mode ?? Game.GameModeCatalog.Get("ctf");
             for (int i = 0; i < _flagNodes.Count; i++)
             {
                 if (i < Flags.Flags.Count)
                 {
-                    _flagNodes[i].UpdateVisual(Flags.Flags[i], mode, lastMillis, LocalPlayerTeam, getOwnerInfo: GetPlayerOwnerInfo);
+                    _flagNodes[i].UpdateVisual(Flags.Flags[i], lastMillis, LocalPlayerTeam, getOwnerInfo: GetPlayerOwnerInfo);
                 }
             }
         }
@@ -483,7 +503,7 @@ public partial class MapWorld : Node3D
 
     /// <summary>Creates the visual node for one flag, oriented by its spawn yaw.</summary>
     private static FlagNode CreateFlagNode(int flagId, int team, Vector3 position, float yaw,
-                                           ModelCatalog? models, ITextureSource textures)
+                                           ModelCatalog? models, ITextureSource textures, Game.GameModeInfo? mode = null)
     {
         var flagNode = new FlagNode
         {
@@ -493,6 +513,7 @@ public partial class MapWorld : Node3D
             Models = models,
             Textures = textures,
             Position = position,
+            Mode = mode ?? Game.GameModeCatalog.Get("ctf"),
         };
         EntityFacing.ApplyYaw(flagNode, yaw);
         return flagNode;

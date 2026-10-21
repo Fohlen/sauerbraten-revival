@@ -26,18 +26,8 @@ public partial class ItemManager : Node3D
     /// <summary>List of all item pickups registered with this manager.</summary>
     public IReadOnlyList<Item> Items => _items;
 
-    private GameModeInfo? _standaloneMode;
-
-    /// <summary>
-    /// Current active gamemode info. Reads the parent <see cref="MapWorld"/>'s
-    /// <see cref="MapWorld.Mode"/> when attached to a world, falling back to a standalone
-    /// mode when running isolated in tests.
-    /// </summary>
-    public GameModeInfo? Mode
-    {
-        get => (GetParent() as MapWorld)?.Mode ?? _standaloneMode;
-        set => _standaloneMode = value;
-    }
+    /// <summary>Current active gamemode info.</summary>
+    public GameModeInfo Mode { get; set; } = GameModeCatalog.Default;
 
     /// <summary>Number of players used to calculate item respawn delays (fpsgame/server.cpp spawntime).</summary>
     public int NumPlayers { get; set; } = 1;
@@ -105,10 +95,15 @@ public partial class ItemManager : Node3D
     /// Engine <c>spawnitems(force)</c> (fpsgame/entities.cpp:372). Initialises or resets item spawns
     /// according to the active game mode and delay rules.
     /// </summary>
-    public void SpawnItems(GameModeInfo? mode = null, bool force = false)
+    public void SpawnItems(bool force = false) => SpawnItems(Mode, force);
+
+    /// <summary>
+    /// Engine <c>spawnitems(force)</c> with an explicit mode override.
+    /// </summary>
+    public void SpawnItems(GameModeInfo? mode, bool force = false)
     {
         if (mode != null) Mode = mode;
-        ModeFlags flags = Mode?.Flags ?? ModeFlags.None;
+        ModeFlags flags = Mode.Flags;
 
         if (flags.HasFlag(ModeFlags.NoItems))
         {
@@ -249,11 +244,24 @@ public partial class ItemManager : Node3D
         return null;
     }
 
+    public override void _Notification(int what)
+    {
+        if (what == NotificationParented)
+        {
+            if (GetParent() is MapWorld mw)
+            {
+                AutoAdvance = false;
+                if (mw.Mode != null) Mode = mw.Mode;
+            }
+        }
+    }
+
     public override void _EnterTree()
     {
-        if (GetParent() is MapWorld)
+        if (GetParent() is MapWorld mw)
         {
             AutoAdvance = false;
+            if (mw.Mode != null) Mode = mw.Mode;
         }
     }
 

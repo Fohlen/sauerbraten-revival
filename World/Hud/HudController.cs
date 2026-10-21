@@ -82,6 +82,7 @@ public partial class HudController : Control
         player.Respawned += OnPlayerRespawned;
         player.WeaponChanged += OnPlayerWeaponChanged;
         player.DamageDealt += OnPlayerDamageDealt;
+        player.ModeChanged += OnPlayerModeChanged;
     }
 
     private void DisconnectPlayerSignals(MapPlayer? player)
@@ -93,6 +94,14 @@ public partial class HudController : Control
         player.Respawned -= OnPlayerRespawned;
         player.WeaponChanged -= OnPlayerWeaponChanged;
         player.DamageDealt -= OnPlayerDamageDealt;
+        player.ModeChanged -= OnPlayerModeChanged;
+    }
+
+    private void OnPlayerModeChanged(Game.GameModeInfo newMode)
+    {
+        _statusBarDirty = true;
+        if (!IsInstanceValid(this) || !IsInsideTree() || _statusBarRoot == null) return;
+        UpdateStatusBar();
     }
 
     private void OnPlayerArmourChanged(int oldArmour, int newArmour)
@@ -152,20 +161,35 @@ public partial class HudController : Control
     /// <summary>Candidate targets in the world (for teammate and hit detection).</summary>
     public System.Collections.Generic.IReadOnlyList<IHitscanTarget>? Targets { get; set; }
 
-    /// <summary>Whether the current game mode is team-based.</summary>
-    public bool IsTeamPlay { get; set; }
+    private bool? _isTeamPlay;
+    /// <summary>Whether the current game mode is team-based. Derived from <see cref="Player.Mode"/> by default.</summary>
+    public bool IsTeamPlay
+    {
+        get => _isTeamPlay ?? (Player?.Mode.Has(Game.ModeFlags.Team) ?? false);
+        set => _isTeamPlay = value;
+    }
 
     /// <summary>Whether health numbers change color with low health (VARP healthcolors in fps.cpp).</summary>
     public bool HealthColors { get; set; } = true;
 
-    /// <summary>Whether current mode is insta-gib (disables low-health coloring).</summary>
-    public bool IsInsta { get; set; }
+    private bool? _isInsta;
+    /// <summary>Whether current mode is insta-gib (disables low-health coloring). Derived from <see cref="Player.Mode"/> by default.</summary>
+    public bool IsInsta
+    {
+        get => _isInsta ?? (Player?.Mode.Has(Game.ModeFlags.Insta) ?? false);
+        set => _isInsta = value;
+    }
 
     /// <summary>Whether the current player is carrying a flag (CTF/Hold).</summary>
     public bool HasFlag { get; set; }
 
-    /// <summary>Whether current mode is hold mode (m_hold in Sauerbraten).</summary>
-    public bool IsHoldMode { get; set; }
+    private bool? _isHoldMode;
+    /// <summary>Whether current mode is hold mode (m_hold in Sauerbraten). Derived from <see cref="Player.Mode"/> by default.</summary>
+    public bool IsHoldMode
+    {
+        get => _isHoldMode ?? (Player?.Mode.Has(Game.ModeFlags.Hold) ?? false);
+        set => _isHoldMode = value;
+    }
 
     /// <summary>The team ID of the flag currently held (1 = good/blue, 2 = evil/red, 0 = neutral).</summary>
     public int HeldFlagTeam { get; set; }
@@ -173,8 +197,13 @@ public partial class HudController : Control
     /// <summary>Remaining hold seconds countdown for hold mode (max(HOLDSECS - counter/1000, 0)).</summary>
     public int HoldRemainingSeconds { get; set; }
 
-    /// <summary>Whether current mode is efficiency mode (no pistol).</summary>
-    public bool IsEfficiency { get; set; }
+    private bool? _isEfficiency;
+    /// <summary>Whether current mode is efficiency mode (no pistol). Derived from <see cref="Player.Mode"/> by default.</summary>
+    public bool IsEfficiency
+    {
+        get => _isEfficiency ?? (Player?.Mode.Has(Game.ModeFlags.Efficiency) ?? false);
+        set => _isEfficiency = value;
+    }
 
     /// <summary>Whether quick weapon cycling HUD is enabled (VARP ammohud in fps.cpp).</summary>
     public bool AmmoHud { get; set; } = true;
@@ -959,10 +988,6 @@ public partial class HudController : Control
                 HasFlag = carrying;
                 HeldFlagTeam = heldTeam;
                 HoldRemainingSeconds = holdRemaining;
-                if (Player.Mode != null)
-                {
-                    IsHoldMode = Player.Mode.Has(Game.ModeFlags.Hold);
-                }
             }
 
             // CTF / Mode flag: flag indicator icon with hold counter or carrier status

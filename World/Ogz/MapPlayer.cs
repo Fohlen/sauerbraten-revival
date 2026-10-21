@@ -43,6 +43,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     [Signal]
     public delegate void DamageDealtEventHandler(int targetId, int damage);
 
+    [Signal]
+    public delegate void ModeChangedEventHandler(GameModeInfo newMode);
+
     public PhysEnt CollisionEntity => Entity;
     public bool IsAlive => Entity.State == PhysEnt.CsAlive;
     public int Weight => 100;
@@ -151,17 +154,20 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         set => View.HidePlaceholderBody = value;
     }
 
-    private GameModeInfo? _standaloneMode;
+    private GameModeInfo _mode = GameModeCatalog.Default;
 
     /// <summary>
-    /// Active game mode info for this player. Reads the parent <see cref="MapWorld"/>'s
-    /// <see cref="MapWorld.Mode"/> when attached to a world, falling back to a standalone
-    /// mode when running isolated in tests.
+    /// Active game mode info for this player.
     /// </summary>
-    public GameModeInfo? Mode
+    public GameModeInfo Mode
     {
-        get => (GetParent() as MapWorld)?.Mode ?? _standaloneMode;
-        set => _standaloneMode = value;
+        get => _mode;
+        set
+        {
+            if (_mode == value) return;
+            _mode = value;
+            EmitSignal(SignalName.ModeChanged, value);
+        }
     }
 
     /// <summary>Saved spawn position at player's feet (physics.cpp entinmap).</summary>
@@ -471,15 +477,21 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Pitch = 0f;
         Initialized = true;
         _phys.DynEnts.Add(Entity);
-        int oldHealth = Combat.Health;
-        Combat.Spawn(Mode ?? GameModeCatalog.Default);
-        if (Combat.Health != oldHealth)
-        {
-            EmitSignal(SignalName.HealthChanged, oldHealth, Combat.Health);
-        }
+        Combat.Spawn(Mode);
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
         if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationParented)
+        {
+            if (GetParent() is MapWorld mw && mw.Mode != null)
+            {
+                Mode = mw.Mode;
+            }
+        }
     }
 
     public override void _EnterTree()
@@ -1030,9 +1042,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         PlaySound(Random.Shared.Next(2) == 0 ? GameSound.Die1 : GameSound.Die2);
         UpdateBodyAnim();
 
-        if (Flags != null && Mode != null)
+        if (Flags != null)
         {
-            Flags.OnPlayerDied(PlayerId, null, false, Entity.FeetPos(), Mode, now, Entity.Yaw);
+            Flags.OnPlayerDied(PlayerId, null, false, Entity.FeetPos(), now, Entity.Yaw);
         }
 
         EmitSignal(SignalName.Died);
@@ -1072,7 +1084,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.State = PhysEnt.CsAlive;
         Entity.Blocked = false;
 
-        Combat.Spawn(Mode ?? GameModeCatalog.Default);
+        Combat.Spawn(Mode);
         View.ResetAnimState();
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
@@ -1398,7 +1410,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 if ((Combat.FlagPickup & (1 << f.Id)) != 0) continue;
 
                 tookFlag = true;
-                Flags.TakeFlag(PlayerId, Team, o, f.Id, f.Version, Mode, lastMillis);
+                Flags.TakeFlag(PlayerId, Team, o, f.Id, f.Version, lastMillis);
                 Combat.FlagPickup |= (1 << f.Id);
             }
             else
@@ -1423,7 +1435,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             {
                 if (!tookFlag && (Combat.FlagPickup & (1 << f.Id)) != 0) continue;
 
-                Flags.TakeFlag(PlayerId, Team, o, f.Id, f.Version, Mode, lastMillis);
+                Flags.TakeFlag(PlayerId, Team, o, f.Id, f.Version, lastMillis);
                 Combat.FlagPickup |= (1 << f.Id);
             }
             else

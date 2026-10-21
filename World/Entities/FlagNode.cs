@@ -50,6 +50,14 @@ public partial class FlagNode : ModelInstance
         Reload();
     }
 
+    public Game.GameModeInfo Mode { get; set; } = Game.GameModeCatalog.Get("ctf");
+
+    /// <summary>
+    /// Updates visual position using the node's configured <see cref="Mode"/>.
+    /// </summary>
+    public void UpdateVisual(FlagState flag, int lastMillis, int localPlayerTeam, Vector3? cameraPos = null, Func<int, (Vector3 pos, float yaw, float aboveEye)>? getOwnerInfo = null)
+        => UpdateVisual(flag, Mode, lastMillis, localPlayerTeam, cameraPos, getOwnerInfo);
+
     /// <summary>
     /// Updates the visual position, facing yaw, and model variant according to flag state.
     /// </summary>
