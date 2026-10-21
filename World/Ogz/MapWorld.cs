@@ -59,9 +59,14 @@ public partial class MapWorld : Node3D
     /// <summary>Active players stepped by this world's physics loop.</summary>
     public IReadOnlyList<MapPlayer> Players => _players;
 
-    private readonly List<BounceBody> _bouncers = new();
-    /// <summary>Active standalone bouncers (grenades/debris) stepped by this world's physics loop.</summary>
-    public IReadOnlyList<BounceBody> Bouncers => _bouncers;
+    /// <summary>Active flying projectiles (rockets) stepped centrally by this world's physics loop.</summary>
+    public List<Weapons.RocketProjectile> ActiveRockets { get; } = new();
+
+    /// <summary>Active bouncers (grenades, debris, gibs) stepped centrally by this world's physics loop.</summary>
+    public List<BounceBody> ActiveBouncers { get; } = new();
+
+    /// <summary>Backing read-only list for active bouncers.</summary>
+    public IReadOnlyList<BounceBody> Bouncers => ActiveBouncers;
 
     /// <summary>Registers a player to be stepped by the world's physics loop.</summary>
     public void RegisterPlayer(MapPlayer player)
@@ -80,20 +85,59 @@ public partial class MapWorld : Node3D
         _players.Remove(player);
     }
 
-    /// <summary>Registers a standalone bouncer to be stepped by the world's physics loop.</summary>
+    /// <summary>Registers a bouncer to be stepped by the world's physics loop.</summary>
     public void RegisterBouncer(BounceBody bouncer)
     {
-        if (!_bouncers.Contains(bouncer))
+        if (!ActiveBouncers.Contains(bouncer))
         {
-            _bouncers.Add(bouncer);
-            bouncer.AutoAdvance = false;
+            ActiveBouncers.Add(bouncer);
         }
     }
 
-    /// <summary>Unregisters a standalone bouncer from the world's physics loop.</summary>
+    /// <summary>Unregisters a bouncer from the world's physics loop.</summary>
     public void UnregisterBouncer(BounceBody bouncer)
     {
-        _bouncers.Remove(bouncer);
+        ActiveBouncers.Remove(bouncer);
+    }
+
+    /// <summary>
+    /// Updates all active flying projectiles (rockets) in the world.
+    /// Port of <c>fpsgame/weapon.cpp:523 updateprojectiles</c>.
+    /// </summary>
+    public void UpdateProjectiles(int timeMillis, IReadOnlyList<Weapons.IExplosionTarget>? candidates = null)
+    {
+        var targets = candidates ?? (IReadOnlyList<Weapons.IExplosionTarget>)_players;
+        for (int i = ActiveRockets.Count - 1; i >= 0; i--)
+        {
+            var rocket = ActiveRockets[i];
+            if (rocket.Advance(timeMillis, Octa, targets))
+            {
+                ActiveRockets.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Updates all active bouncers (grenades, debris, gibs) in the world.
+    /// Port of <c>fpsgame/weapon.cpp:231 updatebouncers</c>.
+    /// </summary>
+    public void UpdateBouncers(int timeMillis, IReadOnlyList<Weapons.IExplosionTarget>? candidates = null)
+    {
+        var targets = candidates ?? (IReadOnlyList<Weapons.IExplosionTarget>)_players;
+        for (int i = ActiveBouncers.Count - 1; i >= 0; i--)
+        {
+            var bouncer = ActiveBouncers[i];
+            if (bouncer.Exploded || !GodotObject.IsInstanceValid(bouncer) || bouncer.IsQueuedForDeletion())
+            {
+                ActiveBouncers.RemoveAt(i);
+                continue;
+            }
+            bouncer.Step(timeMillis, targets);
+            if (bouncer.Exploded)
+            {
+                ActiveBouncers.RemoveAt(i);
+            }
+        }
     }
 
     /// <summary>The texture source used while building (for later sky/material use).</summary>
@@ -351,33 +395,23 @@ public partial class MapWorld : Node3D
                 _players[i].Step(Phys.PhysFrameTime);
             }
 
-            // 4. Step standalone registered bouncers (grenades/debris)
-            for (int i = _bouncers.Count - 1; i >= 0; i--)
-            {
-                var bouncer = _bouncers[i];
-                if (bouncer.Exploded || !GodotObject.IsInstanceValid(bouncer) || bouncer.IsQueuedForDeletion())
-                {
-                    _bouncers.RemoveAt(i);
-                    continue;
-                }
-                bouncer.Step(Phys.PhysFrameTime);
-                if (bouncer.Exploded)
-                {
-                    _bouncers.RemoveAt(i);
-                }
-            }
+            // 4. Update active projectiles (weapon.cpp:523 updateprojectiles)
+            UpdateProjectiles(Phys.PhysFrameTime);
 
-            // 5. Update game mode flag rules with synchronized simulation clock
+            // 5. Update active bouncers (weapon.cpp:231 updatebouncers)
+            UpdateBouncers(Phys.PhysFrameTime);
+
+            // 6. Update game mode flag rules with synchronized simulation clock
             if (Flags != null && (Mode == null || Mode.Has(Game.ModeFlags.Ctf)))
             {
                 var mode = Mode ?? Game.GameModeCatalog.Get("ctf");
                 Flags.Update(mode, LastMillis);
             }
 
-            // 6. Update item respawns with synchronized simulation clock
+            // 7. Update item respawns with synchronized simulation clock
             Items?.Advance(Phys.PhysFrameTime, LastMillis);
 
-            // 7. Post physics step for players (attack cooldowns, animations)
+            // 8. Post physics step for players (attack cooldowns, animations)
             for (int i = 0; i < _players.Count; i++)
             {
                 _players[i].PostPhysicsStep();
@@ -388,9 +422,9 @@ public partial class MapWorld : Node3D
         {
             _players[i].SyncTransform();
         }
-        for (int i = 0; i < _bouncers.Count; i++)
+        for (int i = 0; i < ActiveBouncers.Count; i++)
         {
-            _bouncers[i].SyncTransform();
+            ActiveBouncers[i].SyncTransform();
         }
     }
 

@@ -776,7 +776,7 @@ public class MapPlayerTest : GoTestBase
         world.RegisterBouncer(bouncer);
         bouncer.Setup(world.Physics!, new Vector3(3000, 946, 3040), new Vector3(0, 0, 50));
 
-        TestAssert.False(bouncer.AutoAdvance, "registered bouncer AutoAdvance is false");
+        TestAssert.True(world.ActiveBouncers.Contains(bouncer), "registered bouncer in world ActiveBouncers");
 
         Vector3 startPos = bouncer.Entity.O;
         world._PhysicsProcess(0.020); // 4 substeps (20 ms)
@@ -785,6 +785,29 @@ public class MapPlayerTest : GoTestBase
 
         world.UnregisterBouncer(bouncer);
         bouncer.Free();
+        world.Free();
+    }
+
+    [Test]
+    public void WorldPhysicsProcessStepsActiveRockets()
+    {
+        var world = new MapWorld { OgzPath = "base/church51.ogz" };
+        world.Build();
+
+        var rl = WeaponCatalog.Get(Gun.RocketLauncher);
+        Vector3 from = new(3000, 946, 3040);
+        Vector3 target = new(3000, 1946, 3040);
+        var rocket = new RocketProjectile(from, target, rl, owner: null, world: world.Octa);
+
+        world.ActiveRockets.Add(rocket);
+        TestAssert.Equal(1, world.ActiveRockets.Count, "one active rocket in world");
+
+        Vector3 startPos = rocket.O;
+        world._PhysicsProcess(0.020); // 4 substeps (20 ms)
+
+        TestAssert.True(rocket.O != startPos, "rocket advanced by world physics");
+        TestAssert.True(rocket.O.Y > startPos.Y, "rocket moved toward target");
+
         world.Free();
     }
 }

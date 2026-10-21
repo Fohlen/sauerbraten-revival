@@ -25,9 +25,6 @@ public partial class BounceBody : Node3D
 
     [Export] public Kind BodyKind { get; set; } = Kind.Grenade;
 
-    /// <summary>Whether this body steps itself in _PhysicsProcess. False when managed by MapPlayer or world runner.</summary>
-    [Export] public bool AutoAdvance { get; set; } = true;
-
     /// <summary>Facing yaw (degrees) — only affects the ellipse collision shape.</summary>
     [Export] public float Yaw { get; set; }
 
@@ -66,8 +63,6 @@ public partial class BounceBody : Node3D
     public event System.Action<Vector3, Weapons.ExplosionResult<IExplosionTarget>>? Detonated;
 
     private OctaPhysics? _phys;
-    private double _accum;
-    private const double StepSeconds = Phys.PhysFrameTime / 1000.0;
 
     public bool Initialized { get; private set; }
 
@@ -177,6 +172,11 @@ public partial class BounceBody : Node3D
         SyncTransform();
     }
 
+    public override void _EnterTree()
+    {
+        if (GetParent() is Ogz.MapWorld mw) mw.RegisterBouncer(this);
+    }
+
     public override void _ExitTree()
     {
         _phys?.DynEnts.Remove(Entity);
@@ -211,12 +211,6 @@ public partial class BounceBody : Node3D
     private float WaterFric => 0.5f;
     private float Grav => BodyKind == Kind.Grenade ? 0.8f : 1.0f;
 
-    public override void _PhysicsProcess(double delta)
-    {
-        if (!Initialized || _phys == null || !AutoAdvance) return;
-        Advance(delta);
-    }
-
     /// <summary>
     /// Executes a single discrete physics simulation step of <paramref name="stepMillis"/> milliseconds.
     /// Does not clear or repopulate the dynent cache (the caller or world runner manages that).
@@ -240,26 +234,19 @@ public partial class BounceBody : Node3D
     }
 
     /// <summary>
-    /// Advance by <paramref name="delta"/> seconds, running whole fixed 5 ms steps
-    /// caught up by count (the engine's <c>physsteps</c>). Each step is one
-    /// <see cref="OctaPhysics.Bounce(PhysEnt, float, float, float, float)"/> substep.
-    /// In weapon.cpp:243, a grenade stops and detonates when bounce returns true (hit live player)
-    /// or when lifetime expires (<c>(bnc.lifetime -= time) &lt; 0</c>).
+    /// Advance by <paramref name="delta"/> seconds in discrete 5 ms steps.
+    /// Intended for isolated testing; active gameplay bouncers are stepped centrally by MapWorld.
     /// </summary>
     public void Advance(double delta, IReadOnlyList<IExplosionTarget>? candidates = null)
     {
         if (!Initialized || _phys == null || Exploded) return;
-        _accum += delta;
-        int guard = 0;
-        while (_accum >= StepSeconds && guard++ < 100)
+        int steps = System.Math.Max(1, (int)System.Math.Round(delta * 1000.0 / Phys.PhysFrameTime));
+        for (int i = 0; i < steps; i++)
         {
-            // Populate the dynent cache for this frame so plcollide sees everyone
-            // (physics.cpp physicsframe() -> cleardynentcache()).
             _phys.ClearDynentCache();
             foreach (var dynent in _phys.DynEnts) _phys.UpdateDynentCache(dynent);
 
             Step(Phys.PhysFrameTime, candidates);
-            _accum -= StepSeconds;
             if (Exploded) break;
         }
         SyncTransform();

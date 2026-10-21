@@ -241,11 +241,14 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     private double _accum;
     private const double StepSeconds = Phys.PhysFrameTime / 1000.0;
 
+    private readonly List<RocketProjectile> _standaloneRockets = new();
+    private readonly List<BounceBody> _standaloneGrenades = new();
+
     /// <summary>Active flying rocket projectiles fired by or tracked by this player/scene.</summary>
-    public List<RocketProjectile> ActiveRockets { get; } = new();
+    public List<RocketProjectile> ActiveRockets => (GetParent() as MapWorld)?.ActiveRockets ?? _standaloneRockets;
 
     /// <summary>Active bounce grenades fired by or tracked by this player/scene.</summary>
-    public List<BounceBody> ActiveGrenades { get; } = new();
+    public List<BounceBody> ActiveGrenades => (GetParent() as MapWorld)?.ActiveBouncers ?? _standaloneGrenades;
 
     /// <summary>True once <see cref="Setup"/> has run.</summary>
     public bool Initialized { get; private set; }
@@ -787,8 +790,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             {
                 var grenade = new BounceBody
                 {
-                    BodyKind = BounceBody.Kind.Grenade,
-                    AutoAdvance = false
+                    BodyKind = BounceBody.Kind.Grenade
                 };
                 grenade.Setup(
                     _phys,
@@ -940,30 +942,33 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         var explosionCandidates = candidates ?? new IExplosionTarget[] { this };
 
-        // Advance active flying rockets (weapon.cpp:523 updateprojectiles)
-        for (int i = ActiveRockets.Count - 1; i >= 0; i--)
+        // When running standalone (not under MapWorld), advance own active projectiles & bouncers.
+        // Under MapWorld, UpdateProjectiles and UpdateBouncers are called centrally once per substep.
+        if (GetParent() is not MapWorld)
         {
-            var rocket = ActiveRockets[i];
-            if (rocket.Advance(stepMillis, _phys.Octa, explosionCandidates))
+            for (int i = _standaloneRockets.Count - 1; i >= 0; i--)
             {
-                ActiveRockets.RemoveAt(i);
+                var rocket = _standaloneRockets[i];
+                if (rocket.Advance(stepMillis, _phys.Octa, explosionCandidates))
+                {
+                    _standaloneRockets.RemoveAt(i);
+                }
             }
-        }
 
-        // Advance active grenades (weapon.cpp:243 updatebouncers)
-        for (int i = ActiveGrenades.Count - 1; i >= 0; i--)
-        {
-            var grenade = ActiveGrenades[i];
-            if (grenade.Exploded)
+            for (int i = _standaloneGrenades.Count - 1; i >= 0; i--)
             {
-                ActiveGrenades.RemoveAt(i);
-            }
-            else
-            {
-                grenade.Step(stepMillis, explosionCandidates);
+                var grenade = _standaloneGrenades[i];
                 if (grenade.Exploded)
                 {
-                    ActiveGrenades.RemoveAt(i);
+                    _standaloneGrenades.RemoveAt(i);
+                }
+                else
+                {
+                    grenade.Step(stepMillis, explosionCandidates);
+                    if (grenade.Exploded)
+                    {
+                        _standaloneGrenades.RemoveAt(i);
+                    }
                 }
             }
         }
