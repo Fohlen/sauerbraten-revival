@@ -53,12 +53,37 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         return damage;
     }
 
+    private PlayerView? _view;
+
+    /// <summary>Presentation controller managing camera, view offsets, and animations.</summary>
+    public PlayerView View
+    {
+        get
+        {
+            if (_view == null)
+            {
+                _view = GetNodeOrNull<PlayerView>("PlayerView") ?? new PlayerView(this);
+                if (_view.GetParent() == null)
+                {
+                    AddChild(_view);
+                }
+            }
+            return _view;
+        }
+        set => _view = value;
+    }
+
     /// <summary>
     /// Original <c>fov</c> (rendergl.cpp VARP, default 100). This is the
 	/// <b>horizontal</b> field of view; it is converted to Godot's vertical FOV via
 	/// the engine's <c>fovy = 2*atan(tan(fov/2)/aspect)</c> (rendergl.cpp:1872).
     /// </summary>
-    [Export] public float Fov { get; set; } = 100.0f;
+    [Export]
+    public float Fov
+    {
+        get => View.Fov;
+        set => View.Fov = value;
+    }
 
     /// <summary>Original <c>sensitivity</c> default (rendergl.cpp FVARP).</summary>
     [Export] public float Sensitivity { get; set; } = 3.0f;
@@ -84,8 +109,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         SensitivityScale = settings.SensitivityScale;
         MouseAccel = settings.MouseAccel;
         InvertMouse = settings.InvertMouse;
-        Fov = settings.Fov;
-        if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
+        View.ApplyLookSettings(settings);
     }
 
     /// <summary>Spawn eye offset above the spawn point's feet (ents.h <c>eyeheight</c>).</summary>
@@ -95,23 +119,37 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// Third-person camera distance behind the eye (engine <c>thirdpersondistance</c>, rendergl.cpp).
     /// <c>0</c> disables the offset.
     /// </summary>
-    [Export] public float ThirdPersonDistance { get; set; } = 0.0f;
+    [Export]
+    public float ThirdPersonDistance
+    {
+        get => View.ThirdPersonDistance;
+        set => View.ThirdPersonDistance = value;
+    }
 
     /// <summary>
     /// Third-person vertical offset (engine <c>thirdpersonup</c>, rendergl.cpp). Negative
     /// looks down at the player; <c>0</c> keeps the eye height while pulling the camera in.
     /// </summary>
-    [Export] public float ThirdPersonUp { get; set; } = 0.0f;
+    [Export]
+    public float ThirdPersonUp
+    {
+        get => View.ThirdPersonUp;
+        set => View.ThirdPersonUp = value;
+    }
 
     /// <summary>True while the camera is detached from the player's eye (engine <c>isthirdperson()</c>).</summary>
-    public bool ThirdPerson { get; private set; }
+    public bool ThirdPerson => View.ThirdPerson;
 
     /// <summary>
     /// When true, the placeholder <c>Body</c> capsule is never shown — the scene
     /// supplies a real <see cref="PlayerModel"/> instead (set by the viewer when it
     /// loads a converted body model).
     /// </summary>
-    public bool HidePlaceholderBody { get; set; }
+    public bool HidePlaceholderBody
+    {
+        get => View.HidePlaceholderBody;
+        set => View.HidePlaceholderBody = value;
+    }
 
     private GameModeInfo? _standaloneMode;
 
@@ -183,10 +221,18 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// of the same Z-up world node), so that it can be placed at the feet and kept
     /// upright independently of the camera's view pitch.
     /// </summary>
-    public PlayerModel? PlayerModel { get; set; }
+    public PlayerModel? PlayerModel
+    {
+        get => View.PlayerModel;
+        set => View.PlayerModel = value;
+    }
 
     /// <summary>The local player's first-person hands/weapon, hidden outside first person.</summary>
-    public HudgunModel? Hudgun { get; set; }
+    public HudgunModel? Hudgun
+    {
+        get => View.Hudgun;
+        set => View.Hudgun = value;
+    }
 
     private Effects.WeaponEffectsRenderer? _weaponEffects;
 
@@ -215,11 +261,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public AudioStreamPlayer? AudioPlayer2D { get; set; }
 
     /// <summary>Toggle the detached third-person camera (engine <c>thirdperson</c> bind).</summary>
-    public void ToggleThirdPerson()
-    {
-        ThirdPerson = !ThirdPerson;
-        SyncCamera();
-    }
+    public void ToggleThirdPerson() => View.ToggleThirdPerson();
 
     /// <summary>The simulated entity (Sauerbraten Z-up). Read by tests/diagnostics.</summary>
     public PhysEnt Entity { get; } = new();
@@ -544,7 +586,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>
-    /// Checks attack cooldowns and updates body/hudgun animations after stepping physics.
+    /// Checks attack cooldowns after stepping physics.
     /// </summary>
     public void PostPhysicsStep()
     {
@@ -553,38 +595,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             if (LastMillis - Combat.LastAction >= Combat.GunWait)
                 TryAttack();
         }
-
-        UpdateBodyAnim();
-        UpdateHudgunAnim();
-    }
-
-    private int _lastActionSeen = -1;
-    private int _lastPainSeen = -1;
-
-    /// <summary>
-    /// Play the body clip matching the current state, mirroring the engine's
-    /// <c>renderclient</c> animation selection (rendermodel.cpp:1060-1110).
-    /// </summary>
-    private void UpdateBodyAnim()
-    {
-        if (PlayerModel is not { } model) return;
-        string name = SelectBodyAnim();
-        bool isNewAction = (Combat.LastAction != _lastActionSeen && name.StartsWith("attack "))
-                        || (Combat.LastPain != _lastPainSeen && name == "pain");
-        if (name != model.CurrentAnim || isNewAction)
-        {
-            model.Play(name, loop: IsLoopingAnim(name), restart: isNewAction);
-            _lastActionSeen = Combat.LastAction;
-            _lastPainSeen = Combat.LastPain;
-        }
-    }
-
-    /// <summary>Update the first-person hudgun animation.</summary>
-    private void UpdateHudgunAnim()
-    {
-        if (Hudgun is not { } hudgun) return;
-        int attackDelay = WeaponCatalog.Get((Gun)Combat.GunSelect).AttackDelay;
-        hudgun.UpdateAnim(LastMillis, Combat.LastAction, Combat.LastAttackGun, Combat.GunSelect, attackDelay);
     }
 
     /// <summary>
@@ -1065,8 +1075,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             EmitSignal(SignalName.HealthChanged, oldHealth, Combat.Health);
         }
-        _lastActionSeen = -1;
-        _lastPainSeen = -1;
+        View.ResetAnimState();
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
         UpdateBodyAnim();
@@ -1151,7 +1160,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             Step(Phys.PhysFrameTime, candidates);
         }
-        SyncTransform();
     }
 
     /// <summary>
@@ -1169,42 +1177,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>True while the player is in the spectator/edit floating state.</summary>
     public bool Floating => Entity.State == PhysEnt.CsEditing || Entity.State == PhysEnt.CsSpectator;
 
-    /// <summary>
-    /// Place the nested <c>Camera3D</c> for the current view mode. In first person it sits
-    /// at the eye (the node origin); in third person it is offset <b>backwards</b> along the
-	/// view direction and <b>up</b> from the eye, matching the engine's detached camera
-	/// (rendergl.cpp <c>recomputecamera</c>: <c>camera1->o += -dir*dist + up*up</c>). This is
-	/// a pure camera offset — the player node stays at the eye and physics is untouched.
-	/// </summary>
-	private void SyncCamera()
-    {
-        if (GetNodeOrNull<Camera3D>("Camera3D") is not { } cam) return;
-
-        // The placeholder capsule is shown only in third person and only when no real
-        // PlayerModel is attached (`HidePlaceholderBody`); otherwise it is hidden
-        // entirely so it never renders for a frame on startup.
-        if (GetNodeOrNull<MeshInstance3D>("Body") is { } body) body.Visible = !HidePlaceholderBody && ThirdPerson;
-
-        // The engine only renders the local player's body when the camera is detached
-        // (`isthirdperson()`, render.cpp:343), so hide the real model in first person —
-        // otherwise the camera sits inside it.
-        if (PlayerModel is { } model) model.Visible = ThirdPerson;
-        if (Hudgun is { } hudgun) hudgun.Visible = !ThirdPerson && !Floating;
-
-        if (!ThirdPerson)
-        {
-            cam.Position = Vector3.Zero;
-            return;
-        }
-
-        // The camera is a child with an identity local rotation, so it shares the
-        // player's view orientation: its local -Z is forward (Godot cameras look down
-        // -Z) and its local +Y is up. Pull back along local +Z and raise along local +Y.
-        // (The player's local frame is Z-up in Sauerbraten terms: local +Y is the
-        // world "up" axis.)
-        cam.Position = new Vector3(0, ThirdPersonUp, ThirdPersonDistance);
-        cam.Basis = Basis.Identity;
-    }
+    /// <summary>Places the nested Camera3D for first-person vs third-person view.</summary>
+    public void SyncCamera() => View.SyncCamera();
 
     /// <summary>Set the view angles directly (tests/diagnostics).</summary>
     public void SetView(float yawDegrees, float pitchDegrees)
@@ -1247,56 +1221,26 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         while (Entity.Yaw >= 360f) Entity.Yaw -= 360f;
     }
 
-    /// <summary>
-    /// (Re)place the body model now, and apply the current view mode (e.g. hide it in
-    /// first person) immediately — called right after a body is attached so it never
-    /// renders for a frame before <see cref="SyncCamera"/> first runs.
-    /// </summary>
-    public void SyncBodyModelNow()
-    {
-        SyncCamera();
-        SyncBodyModel();
-        UpdateBodyAnim();
-    }
+    /// <summary>Immediately positions the body model and synchronizes the camera.</summary>
+    public void SyncBodyModelNow() => View.SyncBodyModelNow();
 
-    /// <summary>Copy the simulated entity into the node transform (Sauerbraten Z-up).</summary>
-    public void SyncTransform()
-    {
-        Position = Entity.O;
-        Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, Pitch, 1, 0);
-        if (forward.LengthSquared() > 1e-6f)
-        {
-            Vector3 up = new Vector3(0, 0, 1);
-            if (Mathf.Abs(forward.Dot(up)) > 0.999f)
-            {
-                float rad = Mathf.DegToRad(Entity.Yaw);
-                up = new Vector3(-Mathf.Sin(rad), Mathf.Cos(rad), 0);
-            }
-            Basis = Basis.LookingAt(forward, up);
-        }
-        SyncCamera();
-        SyncBodyModel();
-    }
+    /// <summary>Updates the player node's 3D position and orientation from physics.</summary>
+    public void SyncTransform() => View.SyncTransform();
 
-    /// <summary>
-    /// Place the visible <see cref="PlayerModel"/> at the player's <b>feet</b> and
-    /// orient it by yaw only, upright — the engine renders the body model at
-    /// <c>d->feetpos()</c> with <c>yaw+90</c> and ignores the view pitch
-    /// (rendermodel.cpp <c>renderclient</c>). This node stays at the eye, so the model
-    /// is offset down by the eye height. The model is a <b>sibling</b> in the same Z-up
-    /// world node, so local coordinates match this node's own <c>Position</c>/<c>Basis</c>.
-    /// </summary>
-    private void SyncBodyModel()
+    /// <summary>Places the visible PlayerModel at the player's feet upright and facing yaw + 180°.</summary>
+    public void SyncBodyModel() => View.SyncBodyModel();
+
+    /// <summary>Updates body model animation based on current player state.</summary>
+    public void UpdateBodyAnim() => View.UpdateBodyAnim();
+
+    /// <summary>Updates first-person hudgun animation.</summary>
+    public void UpdateHudgunAnim() => View.UpdateHudgunAnim();
+
+    public override void _Process(double delta)
     {
-        if (PlayerModel is not { } model) return;
-        if (!model.IsInsideTree()) return;
-        // Same Z-up frame as this node's Position (= Entity.O, the eye).
-        model.Position = Entity.O with { Z = Entity.O.Z - EyeHeight };
-        // The imported glb's forward differs from the engine's authored model, so the
-        // yaw offset is 180 (not the engine's +90); verified in-engine.
-        Vector3 facing = Movement.VecFromYawPitch(Entity.Yaw + 180f, 0f, 1, 0);
-        if (facing.LengthSquared() > 1e-6f)
-            model.Basis = Basis.LookingAt(facing, new Vector3(0, 0, 1));
+        View.SyncTransform();
+        View.UpdateBodyAnim();
+        View.UpdateHudgunAnim();
     }
 
     /// <summary>

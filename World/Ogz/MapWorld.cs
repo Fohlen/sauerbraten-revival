@@ -439,17 +439,13 @@ public partial class MapWorld : Node3D
             // 7. Update item respawns with synchronized simulation clock
             Items?.UpdateRespawns(Phys.PhysFrameTime);
 
-            // 8. Post physics step for players (attack cooldowns, animations)
+            // 8. Post physics step for players (attack cooldowns)
             for (int i = 0; i < _players.Count; i++)
             {
                 _players[i].PostPhysicsStep();
             }
         }
 
-        for (int i = 0; i < _players.Count; i++)
-        {
-            _players[i].SyncTransform();
-        }
         for (int i = 0; i < ActiveBouncers.Count; i++)
         {
             ActiveBouncers[i].SyncTransform();
