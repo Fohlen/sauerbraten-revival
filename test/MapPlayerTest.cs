@@ -1014,4 +1014,79 @@ public class MapPlayerTest : GoTestBase
         target.Free();
         player.Free();
     }
+
+    [Test]
+    public void PhysicsInstanceEventsAreIsolatedPerInstance()
+    {
+        var octa1 = new World.Octa();
+        octa1.EmptyMap(10);
+        var phys1 = new OctaPhysics(octa1);
+
+        var octa2 = new World.Octa();
+        octa2.EmptyMap(10);
+        var phys2 = new OctaPhysics(octa2);
+
+        int bounces1 = 0, dynCollides1 = 0, traces1 = 0;
+
+        phys1.Bounced += (ent, wall) => bounces1++;
+        phys1.DynEntCollide += (ent, other, wall) => dynCollides1++;
+        phys1.MoveTrace = _ => traces1++;
+
+        // Trigger events on phys2
+        var bouncer2 = new PhysEnt
+        {
+            O = new Vector3(256, 256, 512.0f + 20.0f),
+            Vel = new Vector3(0, 0, -60.0f),
+            Type = Phys.EntBounce,
+            PhysState = Phys.PhysFall,
+            Radius = 4.1f,
+            EyeHeight = 14.0f,
+            AboveEye = 1.0f,
+            NewPos = new Vector3(256, 256, 512.0f + 20.0f),
+        };
+        phys2.Bounce(bouncer2, 0.3f, 0.5f, 0.0f, 1.0f);
+
+        var player2 = new PhysEnt
+        {
+            O = new Vector3(256, 256, 512.0f + 14.0f),
+            Type = Phys.EntPlayer,
+            Radius = 4.1f,
+            EyeHeight = 14.0f,
+            AboveEye = 1.0f,
+            State = PhysEnt.CsAlive,
+        };
+        phys2.MovePlayer(player2, Phys.MoveRes, Phys.PhysFrameTime);
+
+        TestAssert.Equal(0, bounces1, "phys1 received no bounces from phys2");
+        TestAssert.Equal(0, dynCollides1, "phys1 received no dyn collisions from phys2");
+        TestAssert.Equal(0, traces1, "phys1 received no move trace logs from phys2");
+
+        // Now trigger on phys1
+        var bouncer1 = new PhysEnt
+        {
+            O = new Vector3(256, 256, 512.0f + 20.0f),
+            Vel = new Vector3(0, 0, -60.0f),
+            Type = Phys.EntBounce,
+            PhysState = Phys.PhysFall,
+            Radius = 4.1f,
+            EyeHeight = 14.0f,
+            AboveEye = 1.0f,
+            NewPos = new Vector3(256, 256, 512.0f + 20.0f),
+        };
+        phys1.Bounce(bouncer1, 0.3f, 0.5f, 0.0f, 1.0f);
+
+        var player1 = new PhysEnt
+        {
+            O = new Vector3(256, 256, 512.0f + 14.0f),
+            Type = Phys.EntPlayer,
+            Radius = 4.1f,
+            EyeHeight = 14.0f,
+            AboveEye = 1.0f,
+            State = PhysEnt.CsAlive,
+        };
+        phys1.MovePlayer(player1, Phys.MoveRes, Phys.PhysFrameTime);
+
+        TestAssert.True(bounces1 > 0, "phys1 received bounce event on phys1 action");
+        TestAssert.True(traces1 > 0, "phys1 received trace events on phys1 action");
+    }
 }

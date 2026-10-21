@@ -66,12 +66,6 @@ public partial class BounceBody : Node3D
 
     public bool Initialized { get; private set; }
 
-    // The engine's game::bounced / game::dynentcollide are single global callbacks
-    // that receive the entity, so they route by identity through a registry here
-    // (the engine handler dispatches on d->type/bouncetype; we dispatch on instance).
-    private static readonly Dictionary<PhysEnt, BounceBody> Bodies = new();
-    private static bool _hooked;
-
     /// <summary>
     /// Initialise against a world. <paramref name="position"/>, <paramref name="velocity"/>
     /// and <paramref name="yawDegrees"/> are Sauerbraten units/degrees.
@@ -87,8 +81,16 @@ public partial class BounceBody : Node3D
         int lifeTime = 1500,
         bool local = true)
     {
-        if (Initialized) _phys?.DynEnts.Remove(Entity);
+        if (Initialized && _phys != null)
+        {
+            _phys.Bounced -= OnOctaBounced;
+            _phys.DynEntCollide -= OnOctaDynEntCollide;
+            _phys.DynEnts.Remove(Entity);
+        }
         _phys = phys;
+        _phys.Bounced += OnOctaBounced;
+        _phys.DynEntCollide += OnOctaDynEntCollide;
+        _phys.DynEnts.Add(Entity);
         ShooterOwner = owner;
         GunInfo = gun ?? (BodyKind == Kind.Grenade ? WeaponCatalog.Get(Gun.GrenadeLauncher) : null);
         QuadDamage = quadDamage;
@@ -111,10 +113,6 @@ public partial class BounceBody : Node3D
         // weapon.cpp:215-216: bnc.offset = from - bnc.o; bnc.offsetmillis = OFFSETMILLIS;
         Offset = position - Entity.O;
         OffsetMillis = 500;
-
-        phys.DynEnts.Add(Entity);
-        Bodies[Entity] = this;
-        Hook();
 
         if (GetNodeOrNull<Node3D>("Visual") == null)
         {
@@ -179,10 +177,25 @@ public partial class BounceBody : Node3D
 
     public override void _ExitTree()
     {
-        _phys?.DynEnts.Remove(Entity);
-        Bodies.Remove(Entity);
-        if (Bodies.Count == 0) Unhook();
+        if (_phys != null)
+        {
+            _phys.Bounced -= OnOctaBounced;
+            _phys.DynEntCollide -= OnOctaDynEntCollide;
+            _phys.DynEnts.Remove(Entity);
+        }
         if (GetParent() is Ogz.MapWorld mw) mw.UnregisterBouncer(this);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && _phys != null)
+        {
+            _phys.Bounced -= OnOctaBounced;
+            _phys.DynEntCollide -= OnOctaDynEntCollide;
+            _phys.DynEnts.Remove(Entity);
+            _phys = null;
+        }
+        base.Dispose(disposing);
     }
 
     /// <summary>newbouncer: set the collision volume for the kind.</summary>
@@ -308,30 +321,20 @@ public partial class BounceBody : Node3D
         Reflected?.Invoke(d, surface);
     }
 
-    private static void Hook()
+    private void OnOctaBounced(PhysEnt d, Vector3 surface)
     {
-        if (_hooked) return;
-        _hooked = true;
-        OctaPhysics.Bounced = DispatchBounced;
-        OctaPhysics.DynEntCollide = DispatchDynEntCollide;
+        if (ReferenceEquals(d, Entity))
+        {
+            OnReflected(d, surface);
+        }
     }
 
-    private static void Unhook()
+    private void OnOctaDynEntCollide(PhysEnt d, PhysEnt other, Vector3 normal)
     {
-        if (!_hooked) return;
-        _hooked = false;
-        OctaPhysics.Bounced = null;
-        OctaPhysics.DynEntCollide = null;
-    }
-
-    private static void DispatchBounced(PhysEnt d, Vector3 surface)
-    {
-        if (Bodies.TryGetValue(d, out var body)) body.OnReflected(d, surface);
-    }
-
-    private static void DispatchDynEntCollide(PhysEnt d, PhysEnt other, Vector3 normal)
-    {
-        if (Bodies.TryGetValue(d, out var body)) body.LastPlayerHit = other;
+        if (ReferenceEquals(d, Entity))
+        {
+            LastPlayerHit = other;
+        }
     }
 
     /// <summary>

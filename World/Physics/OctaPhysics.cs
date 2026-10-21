@@ -269,7 +269,7 @@ public sealed class OctaPhysics
 
     /// <summary>game::dynentcollide seam — called when a collide() hits a dynent.
     /// Null in production; used by the game/weapon layer later.</summary>
-    public static System.Action<PhysEnt, PhysEnt, Vector3>? DynEntCollide;
+    public event System.Action<PhysEnt, PhysEnt, Vector3>? DynEntCollide;
 
     /// <summary>physics.cpp:591 <c>cleardynentcache</c>.</summary>
     public void ClearDynentCache()
@@ -756,8 +756,8 @@ public sealed class OctaPhysics
 
     /// <summary>Optional diagnostic sink for <see cref="Move"/> (null in production).
     /// Set by test probes to diff the move() decision chain against the reference.</summary>
-    public static System.Action<string>? MoveTrace;
-    private static void MT(string s) { MoveTrace?.Invoke(s); }
+    public System.Action<string>? MoveTrace { get; set; }
+    private void MT(string s) { MoveTrace?.Invoke(s); }
 
     /// <summary>physics.cpp:1340 <c>move</c>.</summary>
     public bool Move(PhysEnt d, ref Vector3 dir)
@@ -830,7 +830,7 @@ public sealed class OctaPhysics
     /// <summary>game::bounced seam — called with the reflect surface on each bounce
     /// (fpsgame/weapon.cpp:222 plays a sound for the projectile cases). Null in
     /// production; wired by the game layer later.</summary>
-    public static System.Action<PhysEnt, Vector3>? Bounced;
+    public event System.Action<PhysEnt, Vector3>? Bounced;
 
     /// <summary>physics.cpp:1796 <c>bounce</c> driver: steps <paramref name="physsteps"/> + 1
     /// fixed substeps from the accumulated <see cref="PhysEnt.NewPos"/>, writing the
@@ -1035,8 +1035,8 @@ public sealed class OctaPhysics
 
     /// <summary>game::physicstrigger seam — sounds/events on floor/water transitions.
     /// Null in production; wired by the game layer later.</summary>
-    public static System.Action<PhysEnt, bool, int, int, int>? PhysTrigger;
-    private static void PhysicalTrigger(PhysEnt pl, bool local, int floorLevel, int waterLevel, int material = -1)
+    public event System.Action<PhysEnt, bool, int, int, int>? PhysTrigger;
+    private void PhysicalTrigger(PhysEnt pl, bool local, int floorLevel, int waterLevel, int material = -1)
         => PhysTrigger?.Invoke(pl, local, floorLevel, waterLevel, material);
 
     // ---- vector helpers (engine vec::project / projectxy) ----------------

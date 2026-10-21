@@ -38,7 +38,18 @@ public partial class EmptyMap : Node3D
     /// mesh cost each. Meshes are shared read-only (Godot resources), which is
     /// safe because the seed meshes are never mutated.
     /// </summary>
+    /// <summary>
+    /// Per-instance override to use the seed cache. If null, falls back to <see cref="UseSeedCache"/>.
+    /// </summary>
+    public bool? EnableSeedCache { get; set; }
+
+    /// <summary>
+    /// Process-wide default toggle for caching the canonical hollow room seed.
+    /// Can be overridden per-instance with <see cref="EnableSeedCache"/>.
+    /// </summary>
     public static bool UseSeedCache { get; set; }
+
+    private bool ShouldUseSeedCache => EnableSeedCache ?? UseSeedCache;
 
     private static readonly Dictionary<(int Scale, int Chunk), (Octa Seed, ChunkedWorldMesh Mesh)> SeedCache = new();
 
@@ -46,7 +57,7 @@ public partial class EmptyMap : Node3D
     {
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
 
-        if (UseSeedCache && SeedCache.TryGetValue((WorldScale, ChunkSize), out var seed))
+        if (ShouldUseSeedCache && SeedCache.TryGetValue((WorldScale, ChunkSize), out var seed))
         {
             // Fast path: clone the cached octree and reuse its meshes.
             var cachedOcta = seed.Seed.Clone();
@@ -74,7 +85,7 @@ public partial class EmptyMap : Node3D
         OctaEdit.DeleteCube(octa, sel);
 
         ChunkedWorldMesh? prebuilt = null;
-        if (UseSeedCache)
+        if (ShouldUseSeedCache)
         {
             var mesher = new OctaMesher(octa, null);
             var mesh = mesher.BuildChunked(ChunkSize);

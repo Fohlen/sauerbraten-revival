@@ -47,9 +47,9 @@ public class MoveTraceProbe : GoTestBase
 
         GD.Print($"[movetrace] step {step}: prev ps={pl.PhysState} o={pl.O} v={pl.Vel} flr={pl.Floor} | inputs m={pl.Move} s={pl.Strafe}");
         var log = new List<string>();
-        OctaPhysics.MoveTrace = log.Add;
+        phys.MoveTrace = log.Add;
         phys.MovePlayer(pl, Phys.MoveRes, Phys.PhysFrameTime);
-        OctaPhysics.MoveTrace = null;
+        phys.MoveTrace = null;
 
         foreach (var l in log) GD.Print($"[mt] {l}");
         GD.Print($"[movetrace] predicted v={pl.Vel} ps={pl.PhysState} o={pl.O}");

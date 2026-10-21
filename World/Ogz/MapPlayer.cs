@@ -380,6 +380,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     private OctaPhysics? _phys;
+    /// <summary>The world physics instance used by this player.</summary>
+    public OctaPhysics? Physics => _phys;
     private Vector2 _mouseDelta; // pending frame delta (screen px)
 
     private readonly List<RocketProjectile> _standaloneRockets = new();
