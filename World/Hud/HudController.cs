@@ -38,11 +38,107 @@ public partial class HudController : Control
     private ArmourType? _lastArmourType;
     private Gun? _lastGun;
     private HudIcon? _lastFlagIcon;
+    private bool _statusBarDirty = true;
+    private Vector2 _lastViewportSize;
+    private int _lastSelectedAmmo = -1;
+    private int _lastArmour = -1;
+    private bool _lastQuadActive;
+
+    private MapPlayer? _player;
+    private int _observedHealth = PlayerState.DefaultMaxHealth;
+    private bool _observedDead;
+    private Gun _observedGun = Gun.Pistol;
 
     public CrosshairRenderer Crosshair => _crosshairRenderer;
 
     /// <summary>The player whose status and view drive this HUD.</summary>
-    public MapPlayer? Player { get; set; }
+    public MapPlayer? Player
+    {
+        get => _player;
+        set
+        {
+            if (ReferenceEquals(_player, value)) return;
+            DisconnectPlayerSignals(_player);
+            _player = value;
+            ConnectPlayerSignals(_player);
+            _statusBarDirty = true;
+            if (IsInsideTree() && _statusBarRoot != null)
+            {
+                UpdateStatusBar();
+                UpdateCrosshair();
+            }
+        }
+    }
+
+    private void ConnectPlayerSignals(MapPlayer? player)
+    {
+        if (player == null || !IsInstanceValid(player)) return;
+        _observedHealth = player.Health;
+        _observedDead = player.Entity.Dead;
+        _observedGun = (Gun)player.GunSelect;
+        player.HealthChanged += OnPlayerHealthChanged;
+        player.Died += OnPlayerDied;
+        player.Respawned += OnPlayerRespawned;
+        player.WeaponChanged += OnPlayerWeaponChanged;
+        player.DamageDealt += OnPlayerDamageDealt;
+    }
+
+    private void DisconnectPlayerSignals(MapPlayer? player)
+    {
+        if (player == null || !IsInstanceValid(player)) return;
+        player.HealthChanged -= OnPlayerHealthChanged;
+        player.Died -= OnPlayerDied;
+        player.Respawned -= OnPlayerRespawned;
+        player.WeaponChanged -= OnPlayerWeaponChanged;
+        player.DamageDealt -= OnPlayerDamageDealt;
+    }
+
+    private void OnPlayerHealthChanged(int oldHealth, int newHealth)
+    {
+        _observedHealth = newHealth;
+        _statusBarDirty = true;
+        if (!IsInstanceValid(this) || !IsInsideTree() || _statusBarRoot == null) return;
+        UpdateStatusBar();
+        UpdateCrosshair();
+    }
+
+    private void OnPlayerDied()
+    {
+        _observedDead = true;
+        _observedHealth = 0;
+        _statusBarDirty = true;
+        if (!IsInstanceValid(this) || !IsInsideTree() || _statusBarRoot == null) return;
+        UpdateStatusBar();
+        UpdateCrosshair();
+    }
+
+    private void OnPlayerRespawned()
+    {
+        _observedDead = false;
+        if (_player != null)
+        {
+            _observedHealth = _player.Health;
+            _observedGun = (Gun)_player.GunSelect;
+        }
+        _statusBarDirty = true;
+        if (!IsInstanceValid(this) || !IsInsideTree() || _statusBarRoot == null) return;
+        UpdateStatusBar();
+        UpdateCrosshair();
+    }
+
+    private void OnPlayerWeaponChanged(int gunId)
+    {
+        _observedGun = (Gun)gunId;
+        _statusBarDirty = true;
+        if (!IsInstanceValid(this) || !IsInsideTree() || _statusBarRoot == null) return;
+        UpdateStatusBar();
+    }
+
+    private void OnPlayerDamageDealt(int targetId, int damage)
+    {
+        if (!IsInstanceValid(this) || !IsInsideTree() || _crosshairRect == null) return;
+        UpdateCrosshair();
+    }
 
     /// <summary>Candidate targets in the world (for teammate and hit detection).</summary>
     public System.Collections.Generic.IReadOnlyList<IHitscanTarget>? Targets { get; set; }
@@ -280,6 +376,16 @@ public partial class HudController : Control
         SetupSpectatorNodes();
         SetupEditHudNodes();
         UpdateAtlasTextures();
+        if (_player != null)
+        {
+            UpdateStatusBar();
+            UpdateCrosshair();
+        }
+    }
+
+    public override void _ExitTree()
+    {
+        DisconnectPlayerSignals(_player);
     }
 
     private void SetupGameClockNode()
@@ -603,11 +709,26 @@ public partial class HudController : Control
     public override void _Process(double delta)
     {
         UpdateCrosshair();
-        UpdateStatusBar();
+        if (ShouldRefreshStatusBar())
+        {
+            UpdateStatusBar();
+        }
         UpdateGameClock();
         UpdateHudScore();
         UpdateSpectatorOverlay();
         UpdateEditHud();
+    }
+
+    private bool ShouldRefreshStatusBar()
+    {
+        if (_statusBarDirty) return true;
+        if (_player == null) return false;
+        if (GetViewportRect().Size != _lastViewportSize) return true;
+        if (_player.Combat.SelectedAmmo != _lastSelectedAmmo) return true;
+        if (_player.Combat.Armour != _lastArmour) return true;
+        if ((_player.Combat.QuadMillis > 0) != _lastQuadActive) return true;
+        if (_player.Flags != null && _player.Flags.Flags.Count > 0) return true;
+        return false;
     }
 
     /// <summary>Updates crosshair position, texture, size and modulation.</summary>
@@ -898,6 +1019,12 @@ public partial class HudController : Control
 
         UpdateAmmoHud(scale, isDead);
         UpdateAmmoBar(viewportSize, isDead);
+
+        _statusBarDirty = false;
+        _lastViewportSize = viewportSize;
+        _lastSelectedAmmo = Player.Combat.SelectedAmmo;
+        _lastArmour = Player.Combat.Armour;
+        _lastQuadActive = Player.Combat.QuadMillis > 0;
     }
 
     /// <summary>

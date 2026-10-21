@@ -794,6 +794,49 @@ public class StatusBarRendererTest : GoTestBase
     }
 
     [Test]
+    public void HudControllerUpdatesReactivelyViaSignals()
+    {
+        var player = new MapPlayer();
+        var hud = new HudController { Player = player };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        var texSource = TestTextures();
+        hud.SetupTextures(texSource);
+
+        var healthLabel = hud.GetNodeOrNull<Label>("StatusBar/HealthLabel");
+        var weaponIcon = hud.GetNodeOrNull<TextureRect>("StatusBar/WeaponIcon");
+        var ammoLabel = hud.GetNodeOrNull<Label>("StatusBar/AmmoLabel");
+
+        TestAssert.True(healthLabel != null && weaponIcon != null && ammoLabel != null, "HUD nodes initialized");
+        TestAssert.Equal("100", healthLabel!.Text, "health is initially 100");
+
+        // 1. Taking damage automatically updates HealthLabel without manual UpdateStatusBar()
+        player.TakeDamage(35);
+        TestAssert.Equal("65", healthLabel.Text, "HealthLabel updated reactively to 65 via HealthChanged");
+
+        // 2. Selecting weapon automatically updates weapon icon and ammo label
+        player.Combat.Ammo[(int)Gun.Shotgun] = 24;
+        player.SelectWeapon(Gun.Shotgun);
+        TestAssert.Equal("24", ammoLabel!.Text, "ammo label updated reactively via WeaponChanged");
+        TestAssert.True(weaponIcon!.Visible, "weapon icon visible");
+
+        // 3. Dying hides weapon icon and zeroes health label
+        player.Die();
+        TestAssert.Equal("0", healthLabel.Text, "HealthLabel shows 0 on death");
+        TestAssert.False(weaponIcon.Visible, "weapon icon hidden on death via Died signal");
+
+        // 4. Respawning restores health and weapon icon
+        player.Respawn();
+        TestAssert.Equal("100", healthLabel.Text, "HealthLabel restored to 100 via Respawned signal");
+        TestAssert.True(weaponIcon.Visible, "weapon icon restored on respawn");
+
+        canvas.Free();
+        player.Free();
+    }
+
+    [Test]
     public void GoldenItemsAtlasMapsTo4x4PixelGrid()
     {
         var textures = new ItemsAtlasTextureSource();

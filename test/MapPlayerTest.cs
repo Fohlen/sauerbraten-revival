@@ -922,4 +922,96 @@ public class MapPlayerTest : GoTestBase
 
         world.Free();
     }
+
+    [Test]
+    public void SignalsEmitOnStateTransitions()
+    {
+        var player = new MapPlayer();
+        player.Combat.Health = 100;
+        player.Combat.Armour = 0;
+
+        int healthChangedCount = 0;
+        int lastOldHealth = 0;
+        int lastNewHealth = 0;
+        player.HealthChanged += (oldH, newH) =>
+        {
+            healthChangedCount++;
+            lastOldHealth = oldH;
+            lastNewHealth = newH;
+        };
+
+        bool diedEmitted = false;
+        player.Died += () => diedEmitted = true;
+
+        bool respawnedEmitted = false;
+        player.Respawned += () => respawnedEmitted = true;
+
+        int weaponChangedCount = 0;
+        int lastWeapon = -1;
+        player.WeaponChanged += (gunId) =>
+        {
+            weaponChangedCount++;
+            lastWeapon = gunId;
+        };
+
+        int damageDealtCount = 0;
+        int lastTargetId = -1;
+        int lastDamage = 0;
+        player.DamageDealt += (targetId, dmg) =>
+        {
+            damageDealtCount++;
+            lastTargetId = targetId;
+            lastDamage = dmg;
+        };
+
+        // 1. HealthChanged via property setter
+        player.Health = 80;
+        TestAssert.Equal(1, healthChangedCount, "HealthChanged emitted on property set");
+        TestAssert.Equal(100, lastOldHealth, "oldHealth is 100");
+        TestAssert.Equal(80, lastNewHealth, "newHealth is 80");
+
+        // 2. HealthChanged via TakeDamage
+        player.TakeDamage(20);
+        TestAssert.Equal(2, healthChangedCount, "HealthChanged emitted on TakeDamage");
+        TestAssert.Equal(80, lastOldHealth, "oldHealth is 80");
+        TestAssert.Equal(60, lastNewHealth, "newHealth is 60");
+
+        // 3. WeaponChanged via SelectWeapon
+        player.SelectWeapon(Gun.Shotgun);
+        TestAssert.Equal(1, weaponChangedCount, "WeaponChanged emitted on SelectWeapon");
+        TestAssert.Equal((int)Gun.Shotgun, lastWeapon, "gun is Shotgun");
+
+        // 4. WeaponChanged via GunSelect property setter
+        player.GunSelect = (int)Gun.Rifle;
+        TestAssert.Equal(2, weaponChangedCount, "WeaponChanged emitted on GunSelect setter");
+        TestAssert.Equal((int)Gun.Rifle, lastWeapon, "gun is Rifle");
+
+        // 5. Died and HealthChanged on lethal damage
+        player.TakeDamage(100);
+        TestAssert.True(diedEmitted, "Died signal emitted on lethal damage");
+        TestAssert.Equal(3, healthChangedCount, "HealthChanged emitted on death");
+        TestAssert.Equal(0, lastNewHealth, "newHealth is 0 on death");
+
+        // 6. Respawned signal
+        player.Respawn();
+        TestAssert.True(respawnedEmitted, "Respawned signal emitted on Respawn");
+        TestAssert.Equal(4, healthChangedCount, "HealthChanged emitted on Respawn");
+        TestAssert.Equal(100, lastNewHealth, "health restored to 100 on Respawn");
+
+        // 7. DamageDealt signal on hitscan hit
+        var target = new MapPlayer { PlayerId = 42 };
+        target.Entity.O = new Vector3(0, 50, 14);
+        target.Combat.Health = 100;
+        target.Combat.Armour = 0;
+        player.SelectWeapon(Gun.Rifle);
+        player.Combat.Ammo[(int)Gun.Rifle] = 10;
+        player.TryAttack(nowMillis: 1000, targets: new[] { target });
+
+        TestAssert.Equal(1, damageDealtCount, "DamageDealt emitted when striking target");
+        TestAssert.Equal(42, lastTargetId, "target ID matches target player");
+        TestAssert.Equal(100, lastDamage, "damage dealt matches rifle damage");
+
+        target.Free();
+        player.Free();
+    }
 }

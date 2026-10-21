@@ -28,6 +28,21 @@ namespace SauerbratenRevival.World.Ogz;
 [GlobalClass]
 public partial class MapPlayer : Node3D, IHitscanTarget
 {
+    [Signal]
+    public delegate void HealthChangedEventHandler(int oldHealth, int newHealth);
+
+    [Signal]
+    public delegate void DiedEventHandler();
+
+    [Signal]
+    public delegate void RespawnedEventHandler();
+
+    [Signal]
+    public delegate void WeaponChangedEventHandler(int gunId);
+
+    [Signal]
+    public delegate void DamageDealtEventHandler(int targetId, int damage);
+
     public PhysEnt CollisionEntity => Entity;
     public bool IsAlive => Entity.State == PhysEnt.CsAlive;
     public int Weight => 100;
@@ -212,6 +227,43 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Combat and weapon state (fpsgame/game.h:367 <c>fpsstate</c>).</summary>
     public PlayerState Combat { get; } = new();
 
+    /// <summary>
+    /// Current player health (<c>fpsstate::health</c>). Setting this property emits
+    /// <see cref="SignalName.HealthChanged"/> when the value changes.
+    /// </summary>
+    public int Health
+    {
+        get => Combat.Health;
+        set
+        {
+            int oldHealth = Combat.Health;
+            if (oldHealth == value) return;
+            Combat.Health = value;
+            EmitSignal(SignalName.HealthChanged, oldHealth, value);
+        }
+    }
+
+    /// <summary>
+    /// Currently selected weapon ID (<c>fpsstate::gunselect</c>). Setting this property
+    /// updates weapon models and emits <see cref="SignalName.WeaponChanged"/>.
+    /// </summary>
+    public int GunSelect
+    {
+        get => Combat.GunSelect;
+        set
+        {
+            if (Guns.IsPlayerSelectable(value))
+            {
+                SelectWeapon((Gun)value);
+            }
+            else if (Combat.GunSelect != value)
+            {
+                Combat.GunSelect = value;
+                EmitSignal(SignalName.WeaponChanged, value);
+            }
+        }
+    }
+
     /// <summary>Player team index (0 = FFA, 1 = blue, 2 = red).</summary>
     [Export]
     public int Team
@@ -370,7 +422,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Pitch = 0f;
         Initialized = true;
         _phys.DynEnts.Add(Entity);
+        int oldHealth = Combat.Health;
         Combat.Spawn(Mode ?? GameModeCatalog.Default);
+        if (Combat.Health != oldHealth)
+        {
+            EmitSignal(SignalName.HealthChanged, oldHealth, Combat.Health);
+        }
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
         if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
@@ -612,7 +669,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>
     /// Select a weapon (engine <c>gunselect</c>, weapon.cpp). Updates combat state,
-    /// swaps third-person view weapon, and switches the first-person hudgun.
+    /// swaps third-person view weapon, switches the first-person hudgun, and emits
+    /// <see cref="SignalName.WeaponChanged"/>.
     /// </summary>
     public void SelectWeapon(Gun gun)
     {
@@ -622,6 +680,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         PlayerModel?.SetViewWeapon(WeaponCatalog.Vwep(gun));
         Hudgun?.SetGun(WeaponCatalog.Get(gun).File);
         UpdateBodyAnim();
+        EmitSignal(SignalName.WeaponChanged, g);
     }
 
     /// <summary>Cycle to next/previous selectable weapon with ammo (weapon.cpp <c>nextweapon</c>).</summary>
@@ -705,6 +764,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 var hit = hitscan.Hits[i];
                 hit.Target.ApplyHitPush(hit.PushVel);
                 hit.Target.TakeDamage(hit.Damage);
+                int targetId = (hit.Target as MapPlayer)?.PlayerId ?? -1;
+                EmitSignal(SignalName.DamageDealt, targetId, hit.Damage);
             }
 
             // Play hit confirmation sound and record LastHit timestamp if any target was hit (fpsgame/weapon.cpp:357-358)
@@ -853,6 +914,18 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         ExplosionResult<IExplosionTarget> splashResult)
     {
         if (!IsInstanceValid(this)) return;
+        if (directVictim != null)
+        {
+            int qdam = rocket.Gun.Damage * (rocket.QuadDamage ? 4 : 1);
+            int directId = (directVictim as MapPlayer)?.PlayerId ?? -1;
+            EmitSignal(SignalName.DamageDealt, directId, qdam);
+        }
+        for (int i = 0; i < splashResult.Hits.Count; i++)
+        {
+            var hit = splashResult.Hits[i];
+            int splashId = (hit.Target as MapPlayer)?.PlayerId ?? -1;
+            EmitSignal(SignalName.DamageDealt, splashId, hit.Damage);
+        }
         if (splashResult.Hits.Count > 0 || directVictim != null)
         {
             LastHit = LastMillis;
@@ -874,6 +947,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         ExplosionResult<IExplosionTarget> splashResult)
     {
         if (!IsInstanceValid(this)) return;
+        for (int i = 0; i < splashResult.Hits.Count; i++)
+        {
+            var hit = splashResult.Hits[i];
+            int splashId = (hit.Target as MapPlayer)?.PlayerId ?? -1;
+            EmitSignal(SignalName.DamageDealt, splashId, hit.Damage);
+        }
         if (splashResult.Hits.Count > 0)
         {
             LastHit = LastMillis;
@@ -885,6 +964,20 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         WeaponEffects?.AddScorchMark(impactPos, new Vector3(0f, 0f, 1f), expRad * 0.5f);
     }
 
+    /// <summary>
+    /// Apply an item pickup to the player's combat state, emitting <see cref="SignalName.HealthChanged"/>
+    /// if health was modified (<c>fpsgame/game.h:412 pickup</c>).
+    /// </summary>
+    public void Pickup(int itemType)
+    {
+        int oldHealth = Combat.Health;
+        Combat.Pickup(itemType);
+        if (Combat.Health != oldHealth)
+        {
+            EmitSignal(SignalName.HealthChanged, oldHealth, Combat.Health);
+        }
+    }
+
     /// <summary>Apply damage to the player, updating health and lastpain timestamp.</summary>
     public void TakeDamage(int damage, int? nowMillis = null)
     {
@@ -892,13 +985,19 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         int now = nowMillis ?? LastMillis;
         Combat.LastPain = now;
+        int oldHealth = Combat.Health;
         Combat.DoDamage(damage);
         if (Combat.Health <= 0)
         {
+            Combat.Health = oldHealth;
             Die(now);
         }
         else
         {
+            if (Combat.Health != oldHealth)
+            {
+                EmitSignal(SignalName.HealthChanged, oldHealth, Combat.Health);
+            }
             UpdateBodyAnim();
         }
     }
@@ -907,7 +1006,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public void Die(int? nowMillis = null)
     {
         int now = nowMillis ?? LastMillis;
-        Combat.Health = 0;
+        Health = 0;
         Combat.LastPain = now;
         Combat.Attacking = false;
         Entity.State = PhysEnt.CsDead;
@@ -922,6 +1021,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             Flags.OnPlayerDied(PlayerId, null, false, Entity.FeetPos(), Mode, now, Entity.Yaw);
         }
+
+        EmitSignal(SignalName.Died);
     }
 
     /// <summary>
@@ -958,13 +1059,19 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.State = PhysEnt.CsAlive;
         Entity.Blocked = false;
 
+        int oldHealth = Combat.Health;
         Combat.Spawn(Mode ?? GameModeCatalog.Default);
+        if (Combat.Health != oldHealth)
+        {
+            EmitSignal(SignalName.HealthChanged, oldHealth, Combat.Health);
+        }
         _lastActionSeen = -1;
         _lastPainSeen = -1;
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
         UpdateBodyAnim();
         UpdateHudgunAnim();
+        EmitSignal(SignalName.Respawned);
     }
 
     /// <summary>

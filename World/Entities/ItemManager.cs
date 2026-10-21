@@ -226,7 +226,7 @@ public partial class ItemManager : Node3D
                     item.SpawnTime = SpawnTime(item.ItemType, NumPlayers);
                     item.UpdateVisual(lastMillis);
 
-                    player.Combat.Pickup(item.ItemType);
+                    player.Pickup(item.ItemType);
 
                     // Audio effects matching fpsgame/entities.cpp:184-198
                     ItemStat stat = ItemStats.Get(item.ItemType);
