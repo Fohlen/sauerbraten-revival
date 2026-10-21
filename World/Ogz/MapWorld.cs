@@ -408,7 +408,7 @@ public partial class MapWorld : Node3D
             }
 
             // 7. Update item respawns with synchronized simulation clock
-            Items?.Advance(Phys.PhysFrameTime, LastMillis);
+            Items?.UpdateRespawns(Phys.PhysFrameTime);
 
             // 8. Post physics step for players (attack cooldowns, animations)
             for (int i = 0; i < _players.Count; i++)
@@ -450,6 +450,8 @@ public partial class MapWorld : Node3D
                 }
             }
         }
+
+        Items?.UpdateVisual(lastMillis);
     }
 
     private static string DefaultPath() => MapRoots.Resolve("base/church51");

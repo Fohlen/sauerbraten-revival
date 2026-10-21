@@ -240,6 +240,39 @@ public class ItemPickupTest : GoTestBase
     }
 
     [Test]
+    public void ItemManagerSeparatePhysicsAndVisualUpdates()
+    {
+        var manager = new ItemManager { AutoAdvance = false };
+        var itemQuad = new Item
+        {
+            ItemType = EntityType.QuadDamage,
+            BasePosition = new Vector3(40, 50, 60),
+            Position = new Vector3(40, 50, 60),
+        };
+        manager.AddItem(itemQuad);
+        manager.SpawnItems(GameModeCatalog.Get("ffa"), force: false);
+        TestAssert.False(itemQuad.Spawned, "Quad delayed");
+        TestAssert.Equal(70000, itemQuad.SpawnTime, "Quad spawntime initialized to 70s");
+
+        // Physics tick (UpdateRespawns) steps countdown without changing visual bobbing
+        manager.UpdateRespawns(30000);
+        TestAssert.Equal(40000, itemQuad.SpawnTime, "Quad 40s remaining");
+        TestAssert.Equal(new Vector3(40, 50, 60), itemQuad.Position, "Position unaffected by UpdateRespawns");
+
+        manager.UpdateRespawns(40000);
+        TestAssert.True(itemQuad.Spawned, "Quad spawned");
+        TestAssert.Equal(0, itemQuad.SpawnTime, "Quad spawntime 0");
+
+        // Visual update (UpdateVisual) computes bobbing and yaw
+        manager.UpdateVisual(5000);
+        TestAssert.True(itemQuad.Visible, "Quad is visible");
+        float expectedBob = 1.0f + Mathf.Sin((5000 / 100.0f) + 40 + 50) / 20.0f;
+        TestAssert.True(Mathf.Abs(itemQuad.Position.Z - (60 + expectedBob)) < 0.001f, "Bobbing applied by UpdateVisual");
+
+        manager.Free();
+    }
+
+    [Test]
     public void ItemPickupInteraction()
     {
         var manager = new ItemManager { AutoAdvance = false };

@@ -148,9 +148,9 @@ public partial class ItemManager : Node3D
     }
 
     /// <summary>
-    /// Advances item respawn timers and updates visual bobbing and spinning.
+    /// Updates item respawn countdown timers. Call during the fixed physics step.
     /// </summary>
-    public void Advance(int deltaMillis, int lastMillis)
+    public void UpdateRespawns(int deltaMillis)
     {
         foreach (var item in _items)
         {
@@ -161,11 +161,32 @@ public partial class ItemManager : Node3D
                 {
                     item.SpawnTime = 0;
                     item.Spawned = true;
+                    item.UpdateVisual(0);
                     ItemSpawned?.Invoke(item);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Updates visual bobbing and spinning for all items. Call during the render frame (_Process).
+    /// </summary>
+    public void UpdateVisual(int lastMillis)
+    {
+        foreach (var item in _items)
+        {
             item.UpdateVisual(lastMillis);
         }
+    }
+
+    /// <summary>
+    /// Advances item respawn timers and updates visual bobbing and spinning.
+    /// Retained for standalone testing and backwards compatibility.
+    /// </summary>
+    public void Advance(int deltaMillis, int lastMillis)
+    {
+        UpdateRespawns(deltaMillis);
+        UpdateVisual(lastMillis);
     }
 
     /// <summary>
@@ -214,13 +235,29 @@ public partial class ItemManager : Node3D
         return null;
     }
 
+    public override void _EnterTree()
+    {
+        if (GetParent() is MapWorld)
+        {
+            AutoAdvance = false;
+        }
+    }
+
+    public override void _PhysicsProcess(double delta)
+    {
+        if (Engine.IsEditorHint()) return;
+        if (!AutoAdvance || GetParent() is MapWorld) return;
+
+        int deltaMillis = (int)System.Math.Round(delta * 1000.0);
+        UpdateRespawns(deltaMillis);
+    }
+
     public override void _Process(double delta)
     {
         if (Engine.IsEditorHint()) return;
-        if (!AutoAdvance) return;
+        if (!AutoAdvance || GetParent() is MapWorld) return;
 
-        int deltaMillis = (int)(delta * 1000.0);
         int lastMillis = (int)Time.GetTicksMsec();
-        Advance(deltaMillis, lastMillis);
+        UpdateVisual(lastMillis);
     }
 }
