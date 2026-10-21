@@ -63,7 +63,7 @@ public sealed class CrosshairRenderer
         color = Colors.White;
 
         // In fps.cpp:1123: if(d->state==CS_SPECTATOR || d->state==CS_DEAD) return -1;
-        if (player.Entity.State == PhysEnt.CsDead || player.Entity.Dead)
+        if (player.Entity.Dead)
             return -1;
 
         if (player.Entity.State != PhysEnt.CsAlive)

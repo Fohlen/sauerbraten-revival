@@ -124,7 +124,6 @@ public partial class OgzMapViewer : Node3D
         (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
         World.LocalPlayerTeam = PlayerTeam > 0 ? PlayerTeam : 1;
         World.PlayerProvider = pid => (player.Entity.O, player.Entity.Yaw, player.Entity.AboveEye);
-        player.Mode = modeInfo;
         player.Team = PlayerTeam > 0 ? PlayerTeam : 1;
         player.Setup(World.Physics!, feet, yaw);
         World.RegisterPlayer(player);
@@ -138,7 +137,7 @@ public partial class OgzMapViewer : Node3D
         player.Flags = World.Flags;
         player.JumpPads = World.JumpPads;
         player.Teleports = World.Teleports;
-        World.Items?.SpawnItems(modeInfo, force: true);
+        World.Items?.SpawnItems(force: true);
 
         // Attach CanvasLayer and HUD controller
         var canvas = new CanvasLayer { Name = "HudCanvas" };

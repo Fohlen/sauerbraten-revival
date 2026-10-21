@@ -63,6 +63,11 @@ public class MapPlayerLookTest : GoTestBase
         player.SetView(0f, 0f);
         player.ApplyMouseDelta(new Vector2(0f, 20f)); // cursor down
         TestAssert.True(player.Pitch > 0f, "inverted: cursor down pitches up");
+        TestAssert.Near(player.Pitch, player.Entity.Pitch, 1e-6f, "Entity.Pitch stays in sync after ApplyMouseDelta");
+
+        player.SetView(45f, -35f);
+        TestAssert.Near(-35f, player.Pitch, 1e-6f, "SetView sets Pitch");
+        TestAssert.Near(-35f, player.Entity.Pitch, 1e-6f, "SetView sets Entity.Pitch immediately");
 
         player.Free();
     }

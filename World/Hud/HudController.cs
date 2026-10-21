@@ -664,7 +664,7 @@ public partial class HudController : Control
         // Sauerbraten coordinates scale by viewport height / 1800 (fps.cpp:1060)
         float scale = viewportSize.Y / StatusBarRenderer.ReferenceHeight;
 
-        bool isDead = Player.Entity.State == PhysEnt.CsDead || Player.Entity.Dead;
+        bool isDead = Player.Entity.Dead;
         int health = isDead ? 0 : Player.Combat.Health;
 
         // Health Icon: placed at (HICON_X, HICON_Y) with size HICON_SIZE (game.h:320-324)

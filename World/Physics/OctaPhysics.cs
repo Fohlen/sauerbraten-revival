@@ -62,7 +62,20 @@ public sealed class PhysEnt
     public int Move, Strafe;
     public bool Blocked;
     public int TimeInAir;
-    public bool Dead; // hit MAT_DEATH / fell out of the world (game::suicide)
+    /// <summary>
+    /// True when the entity is in <see cref="CsDead"/>. Setting true transitions
+    /// <see cref="State"/> to <see cref="CsDead"/> (hit <c>MAT_DEATH</c> / fell out of the world);
+    /// setting false while dead restores <see cref="CsAlive"/>.
+    /// </summary>
+    public bool Dead
+    {
+        get => State == CsDead;
+        set
+        {
+            if (value) State = CsDead;
+            else if (State == CsDead) State = CsAlive;
+        }
+    }
     public float Yaw;
     public float Pitch;          // ents.h:71 — used by vecfromyawpitch when floating/water/camera
     public float Roll;           // ents.h:71 — strafe roll (camera only)

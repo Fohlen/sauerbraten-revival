@@ -42,6 +42,18 @@ public sealed class PlayerState
     /// <summary>Timestamp (ms) of last damage taken or death (engine <c>fpsent::lastpain</c>).</summary>
     public int LastPain;
 
+    /// <summary>Timestamp (ms) of the last successful hit on an enemy (engine <c>lasthit</c> in fps.cpp).</summary>
+    public int LastHit;
+
+    /// <summary>Last entity type picked up or triggered (fpsgame/game.h:549 <c>fpsent::lastpickup</c>).</summary>
+    public int LastPickup = -1;
+
+    /// <summary>Timestamp (ms) of the last entity pickup or trigger (fpsgame/game.h:549 <c>fpsent::lastpickupmillis</c>).</summary>
+    public int LastPickupMillis;
+
+    /// <summary>Bitmask of flag pickups currently debounced for this player (ctf.h <c>flagpickup</c>).</summary>
+    public int FlagPickup;
+
     /// <summary>Player team name (engine <c>team</c>, e.g. "good" or "evil").</summary>
     public string Team = "good";
 
@@ -208,6 +220,10 @@ public sealed class PlayerState
         LastAction = 0;
         LastAttackGun = (int)Gun.Pistol;
         LastPain = 0;
+        LastHit = 0;
+        LastPickup = -1;
+        LastPickupMillis = 0;
+        FlagPickup = 0;
         Attacking = false;
         for (int i = 0; i < Ammo.Length; i++) Ammo[i] = 0;
         Ammo[(int)Gun.Fist] = 1;

@@ -112,6 +112,9 @@ public static class GameModeCatalog
     public static GameModeInfo Get(string id)
         => TryGet(id) ?? throw new System.Collections.Generic.KeyNotFoundException($"unknown game mode '{id}'");
 
+    /// <summary>Default fallback game mode (<c>ffa</c>).</summary>
+    public static GameModeInfo Default => Get("ffa");
+
     /// <summary>Replace the cached catalog (test/mod seam).</summary>
     public static void Override(GameModeInfo[] modes) => _all = modes;
 

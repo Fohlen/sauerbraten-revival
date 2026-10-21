@@ -29,7 +29,7 @@ namespace SauerbratenRevival.World.Ogz;
 public partial class MapPlayer : Node3D, IHitscanTarget
 {
     public PhysEnt CollisionEntity => Entity;
-    public bool IsAlive => Entity.State == PhysEnt.CsAlive && Combat.Health > 0;
+    public bool IsAlive => Entity.State == PhysEnt.CsAlive;
     public int Weight => 100;
     public void ApplyHitPush(Vector3 pushVel) => Entity.Vel += pushVel;
     int IExplosionTarget.TakeDamage(int damage)
@@ -98,8 +98,18 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public bool HidePlaceholderBody { get; set; }
 
-    /// <summary>Active game mode info for this player.</summary>
-    public GameModeInfo? Mode { get; set; }
+    private GameModeInfo? _standaloneMode;
+
+    /// <summary>
+    /// Active game mode info for this player. Reads the parent <see cref="MapWorld"/>'s
+    /// <see cref="MapWorld.Mode"/> when attached to a world, falling back to a standalone
+    /// mode when running isolated in tests.
+    /// </summary>
+    public GameModeInfo? Mode
+    {
+        get => (GetParent() as MapWorld)?.Mode ?? _standaloneMode;
+        set => _standaloneMode = value;
+    }
 
     /// <summary>Saved spawn position at player's feet (physics.cpp entinmap).</summary>
     public Vector3 SpawnFeet { get; set; }
@@ -148,9 +158,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>Local player/client ID (default 0).</summary>
     public int PlayerId { get; set; } = 0;
-
-    /// <summary>Bitmask of flag pickups currently debounced for this player (ctf.h flagpickup).</summary>
-    private int _flagPickup;
 
     /// <summary>Active jump pad trigger entities in this map/session.</summary>
     public IReadOnlyList<JumpPad>? JumpPads { get; set; }
@@ -217,7 +224,11 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>Timestamp (ms) of the last successful hit on an enemy (engine <c>lasthit</c> in fps.cpp).</summary>
-    public int LastHit { get; set; }
+    public int LastHit
+    {
+        get => Combat.LastHit;
+        set => Combat.LastHit = value;
+    }
 
     private readonly SimClock _standaloneClock = new();
 
@@ -250,13 +261,25 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>Last entity type picked up or triggered (fpsgame/game.h:549 <c>lastpickup</c>).</summary>
-    public int LastPickup { get; set; } = -1;
+    public int LastPickup
+    {
+        get => Combat.LastPickup;
+        set => Combat.LastPickup = value;
+    }
 
     /// <summary>Timestamp (ms) of the last entity pickup or trigger (fpsgame/game.h:549 <c>lastpickupmillis</c>).</summary>
-    public int LastPickupMillis { get; set; }
+    public int LastPickupMillis
+    {
+        get => Combat.LastPickupMillis;
+        set => Combat.LastPickupMillis = value;
+    }
 
-    /// <summary>View pitch in degrees (the physics model only uses yaw; pitch is camera-only).</summary>
-    public float Pitch { get; private set; }
+    /// <summary>View pitch in degrees, delegating directly to <see cref="PhysEnt.Pitch"/>.</summary>
+    public float Pitch
+    {
+        get => Entity.Pitch;
+        private set => Entity.Pitch = value;
+    }
 
     private OctaPhysics? _phys;
     private Vector2 _mouseDelta; // pending frame delta (screen px)
@@ -343,7 +366,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Pitch = 0f;
         Initialized = true;
         _phys.DynEnts.Add(Entity);
-        Combat.Spawn(Mode ?? GameModeCatalog.Get("ffa"));
+        Combat.Spawn(Mode ?? GameModeCatalog.Default);
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
         if (GetNodeOrNull<Camera3D>("Camera3D") is { } cam) ApplyFov(cam);
@@ -382,7 +405,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             {
                 if (mb.ButtonIndex == MouseButton.Left)
                 {
-                    if (mb.Pressed && Entity.State == PhysEnt.CsDead)
+                    if (mb.Pressed && Entity.Dead)
                     {
                         TryRespawn();
                         return;
@@ -436,7 +459,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         // NOTE: strafe is negated relative to dir() because the same Godot/macOS
         // screen-X handedness that flips mouse yaw (see ApplyMouse) also flips the
         // engine's strafe sign, so A/D would otherwise be swapped.
-        if (Entity.State != PhysEnt.CsDead)
+        if (!Entity.Dead)
         {
             Entity.Move = (Input.IsActionPressed("move_forward") ? 1 : 0) - (Input.IsActionPressed("move_back") ? 1 : 0);
             Entity.Strafe = (Input.IsActionPressed("strafe_right") ? 1 : 0) - (Input.IsActionPressed("strafe_left") ? 1 : 0);
@@ -464,7 +487,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public void PostPhysicsStep()
     {
-        if (Combat.Attacking && Entity.State == PhysEnt.CsAlive)
+        if (Combat.Attacking && IsAlive)
         {
             if (LastMillis - Combat.LastAction >= Combat.GunWait)
                 TryAttack();
@@ -474,7 +497,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         UpdateHudgunAnim();
     }
 
-    private string _bodyAnim = "";
     private int _lastActionSeen = -1;
     private int _lastPainSeen = -1;
 
@@ -488,10 +510,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         string name = SelectBodyAnim();
         bool isNewAction = (Combat.LastAction != _lastActionSeen && name.StartsWith("attack "))
                         || (Combat.LastPain != _lastPainSeen && name == "pain");
-        if (name != _bodyAnim || isNewAction)
+        if (name != model.CurrentAnim || isNewAction)
         {
             model.Play(name, loop: IsLoopingAnim(name), restart: isNewAction);
-            _bodyAnim = name;
             _lastActionSeen = Combat.LastAction;
             _lastPainSeen = Combat.LastPain;
         }
@@ -516,7 +537,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         // CS_DEAD: dying for the first 1000 ms after death/lastpain, then dead (looping).
         // rendermodel.cpp:1068-1078
-        if (Entity.State == PhysEnt.CsDead)
+        if (Entity.Dead)
         {
             int baseTime = Combat.LastPain;
             return (now - baseTime > 1000) ? "dead" : "dying";
@@ -602,7 +623,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Cycle to next/previous selectable weapon with ammo (weapon.cpp <c>nextweapon</c>).</summary>
     public void NextWeapon(int dir = 1)
     {
-        if (Entity.State != PhysEnt.CsAlive) return;
+        if (!IsAlive) return;
         int step = dir < 0 ? -1 : 1;
         int current = Combat.GunSelect;
         int count = Guns.Last - Guns.First + 1;
@@ -624,10 +645,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public bool TryAttack(int? nowMillis = null, IReadOnlyList<IHitscanTarget>? targets = null)
     {
         int now = nowMillis ?? LastMillis;
-        if (Entity.State != PhysEnt.CsAlive)
+        if (!IsAlive)
         {
             // If dead, pressing attack triggers respawn (fps.cpp:376)
-            if (Entity.State == PhysEnt.CsDead)
+            if (Entity.Dead)
                 TryRespawn(now);
             return false;
         }
@@ -844,7 +865,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Apply damage to the player, updating health and lastpain timestamp.</summary>
     public void TakeDamage(int damage, int? nowMillis = null)
     {
-        if (Entity.State == PhysEnt.CsDead) return;
+        if (Entity.Dead) return;
 
         int now = nowMillis ?? LastMillis;
         Combat.LastPain = now;
@@ -867,7 +888,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Combat.LastPain = now;
         Combat.Attacking = false;
         Entity.State = PhysEnt.CsDead;
-        Entity.Dead = true;
         Entity.Move = 0;
         Entity.Strafe = 0;
         Entity.Jumping = false;
@@ -887,7 +907,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public bool TryRespawn(int? nowMillis = null)
     {
-        if (Entity.State != PhysEnt.CsDead) return false;
+        if (!Entity.Dead) return false;
 
         int now = nowMillis ?? LastMillis;
         if (now - Combat.LastPain < SpawnWaitMillis) return false;
@@ -913,15 +933,11 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.PhysState = Phys.PhysFall;
         Entity.TimeInAir = 0;
         Entity.State = PhysEnt.CsAlive;
-        Entity.Dead = false;
         Entity.Blocked = false;
 
-        Combat.Spawn(Mode ?? GameModeCatalog.Get("ffa"));
-        LastHit = 0;
-        LastPickup = -1;
-        LastPickupMillis = 0;
-        _flagPickup = 0;
-        _bodyAnim = "";
+        Combat.Spawn(Mode ?? GameModeCatalog.Default);
+        _lastActionSeen = -1;
+        _lastPainSeen = -1;
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
         SyncTransform();
         UpdateBodyAnim();
@@ -936,13 +952,13 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public void Step(int stepMillis, IReadOnlyList<IExplosionTarget>? candidates = null)
     {
         if (!Initialized || _phys == null) return;
-        Entity.Pitch = Pitch; // pitch feeds movement only while floating (vecfromyawpitch)
+        bool wasDead = Entity.Dead;
         _phys.MovePlayer(Entity, Phys.MoveRes, stepMillis);
         // The world advances the shared clock once per substep; only a standalone
         // player owns and advances its private clock.
         if (Clock == null) _standaloneClock.Advance(stepMillis);
 
-        if (Entity.Dead && Entity.State != PhysEnt.CsDead)
+        if (!wasDead && Entity.Dead)
         {
             Die(LastMillis);
         }
@@ -1101,7 +1117,6 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         while (Entity.Yaw >= 360f) Entity.Yaw -= 360f;
     }
 
-    /// <summary>(Re)place the body model now (e.g. right after attaching one).</summary>
     /// <summary>
     /// (Re)place the body model now, and apply the current view mode (e.g. hide it in
     /// first person) immediately — called right after a body is attached so it never
@@ -1109,9 +1124,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public void SyncBodyModelNow()
     {
-        _bodyAnim = ""; // force a re-select against the (possibly new) model
         SyncCamera();
         SyncBodyModel();
+        UpdateBodyAnim();
     }
 
     /// <summary>Copy the simulated entity into the node transform (Sauerbraten Z-up).</summary>
@@ -1288,7 +1303,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public void CheckFlags(int lastMillis)
     {
-        if (Flags == null || Mode == null || Entity.State != PhysEnt.CsAlive) return;
+        if (Flags == null || Mode == null || !IsAlive) return;
 
         bool isHold = Mode.Has(ModeFlags.Hold);
         Vector3 o = Entity.FeetPos();
@@ -1308,15 +1323,15 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             Vector3 loc = f.DropTime > 0 ? f.DropLoc : f.SpawnLoc;
             if (o.DistanceTo(loc) < Game.FlagManager.FlagRadius)
             {
-                if ((_flagPickup & (1 << f.Id)) != 0) continue;
+                if ((Combat.FlagPickup & (1 << f.Id)) != 0) continue;
 
                 tookFlag = true;
                 Flags.TakeFlag(PlayerId, Team, o, f.Id, f.Version, Mode, lastMillis);
-                _flagPickup |= (1 << f.Id);
+                Combat.FlagPickup |= (1 << f.Id);
             }
             else
             {
-                _flagPickup &= ~(1 << f.Id);
+                Combat.FlagPickup &= ~(1 << f.Id);
             }
         }
 
@@ -1334,14 +1349,14 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             Vector3 loc = f.DropTime > 0 ? f.DropLoc : f.SpawnLoc;
             if (o.DistanceTo(loc) < Game.FlagManager.FlagRadius)
             {
-                if (!tookFlag && (_flagPickup & (1 << f.Id)) != 0) continue;
+                if (!tookFlag && (Combat.FlagPickup & (1 << f.Id)) != 0) continue;
 
                 Flags.TakeFlag(PlayerId, Team, o, f.Id, f.Version, Mode, lastMillis);
-                _flagPickup |= (1 << f.Id);
+                Combat.FlagPickup |= (1 << f.Id);
             }
             else
             {
-                _flagPickup &= ~(1 << f.Id);
+                Combat.FlagPickup &= ~(1 << f.Id);
             }
         }
     }

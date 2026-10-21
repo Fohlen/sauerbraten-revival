@@ -866,4 +866,31 @@ public class MapPlayerTest : GoTestBase
 
         world.Free();
     }
+
+    [Test]
+    public void DeadPredicateAndWorldModeAreSingleSourceOfTruth()
+    {
+        var player = new MapPlayer();
+        TestAssert.True(player.IsAlive, "alive initially");
+        TestAssert.False(player.Entity.Dead, "not dead initially");
+
+        player.Entity.Dead = true;
+        TestAssert.Equal(PhysEnt.CsDead, player.Entity.State, "Dead=true transitions State to CsDead");
+        TestAssert.False(player.IsAlive, "IsAlive false when Dead=true");
+
+        player.Entity.Dead = false;
+        TestAssert.Equal(PhysEnt.CsAlive, player.Entity.State, "Dead=false restores CsAlive");
+        TestAssert.True(player.IsAlive, "IsAlive true when Dead=false");
+
+        var instaMode = World.Game.GameModeCatalog.Get("insta");
+        var world = new MapWorld { Mode = instaMode };
+        var items = new ItemManager();
+        world.AddChild(items);
+        world.AddChild(player);
+
+        TestAssert.Equal(instaMode, player.Mode, "player inherits Mode from parent MapWorld");
+        TestAssert.Equal(instaMode, items.Mode, "ItemManager inherits Mode from parent MapWorld");
+
+        world.Free();
+    }
 }
