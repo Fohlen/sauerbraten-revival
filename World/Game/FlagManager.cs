@@ -31,6 +31,9 @@ public sealed class FlagManager
     private readonly List<Vector3> _holdSpawns = new();
     private readonly int[] _scores = new int[2]; // Index 0 = good (team 1), Index 1 = evil (team 2)
 
+    // Reverse carrier index for the owner model stored in FlagState.Owner: player id -> flag id.
+    private readonly Dictionary<int, int> _carriersByPlayer = new();
+
     public IReadOnlyList<FlagState> Flags => _flags;
     public IReadOnlyList<Vector3> HoldSpawns => _holdSpawns;
 
@@ -56,10 +59,42 @@ public sealed class FlagManager
         return 0;
     }
 
+    /// <summary>
+    /// Player id currently carrying <paramref name="flagId"/>, or <c>null</c> when the
+    /// flag is at base/dropped or the id is invalid. O(1) read of the owner model.
+    /// </summary>
+    public int? GetCarrier(int flagId)
+        => flagId >= 0 && flagId < _flags.Count ? _flags[flagId].Owner : null;
+
+    /// <summary>
+    /// Flag id currently carried by <paramref name="playerId"/>, or <c>null</c> when that
+    /// player carries nothing. O(1) read of the reverse carrier index.
+    /// </summary>
+    public int? GetCarriedFlag(int playerId)
+        => _carriersByPlayer.TryGetValue(playerId, out int flagId) ? flagId : null;
+
+    /// <summary>Flag state currently carried by <paramref name="playerId"/>, or <c>null</c>.</summary>
+    public FlagState? GetCarriedFlagState(int playerId)
+        => GetCarriedFlag(playerId) is int flagId ? _flags[flagId] : null;
+
+    /// <summary>
+    /// Single mutation point for flag ownership: updates <see cref="FlagState.Owner"/> and the
+    /// reverse carrier index together so the two can never disagree.
+    /// </summary>
+    private void SetCarrier(int flagId, int? playerId)
+    {
+        var f = _flags[flagId];
+        if (f.Owner.HasValue && _carriersByPlayer.TryGetValue(f.Owner.Value, out int mapped) && mapped == flagId)
+            _carriersByPlayer.Remove(f.Owner.Value);
+        f.Owner = playerId;
+        if (playerId.HasValue) _carriersByPlayer[playerId.Value] = flagId;
+    }
+
     public void ResetFlags()
     {
         _holdSpawns.Clear();
         _flags.Clear();
+        _carriersByPlayer.Clear();
         _scores[0] = 0;
         _scores[1] = 0;
     }
@@ -72,6 +107,7 @@ public sealed class FlagManager
             _flags.Add(new FlagState { Id = _flags.Count });
         }
         var f = _flags[id];
+        SetCarrier(id, null);
         f.Reset();
         f.Id = id;
         f.Team = team;
@@ -127,7 +163,7 @@ public sealed class FlagManager
     {
         if (flagId < 0 || flagId >= _flags.Count) return;
         var f = _flags[flagId];
-        f.Owner = ownerId;
+        SetCarrier(flagId, ownerId);
         f.OwnTime = nowMillis;
 
         if (f.HoldTime > 0 && f.Team == ownTeam)
@@ -164,7 +200,7 @@ public sealed class FlagManager
         if (dropperId < 0) f.DropCount = 0;
         else if (penalty) f.DropCount = int.MaxValue;
         f.Dropper = dropperId;
-        f.Owner = null;
+        SetCarrier(flagId, null);
         f.InvisTime = 0;
     }
 
@@ -175,7 +211,7 @@ public sealed class FlagManager
         f.DropTime = 0;
         f.HoldTime = 0;
         f.DropCount = 0;
-        f.Owner = null;
+        SetCarrier(flagId, null);
         f.Dropper = -1;
         f.InvisTime = invisTime;
     }
@@ -222,10 +258,7 @@ public sealed class FlagManager
         if (isHold || (isProtect == (f.Team == playerTeam)))
         {
             // Cannot take if already carrying any flag
-            foreach (var flag in _flags)
-            {
-                if (flag.Owner == playerId) return false;
-            }
+            if (GetCarriedFlag(playerId).HasValue) return false;
 
             OwnFlag(flagId, playerId, nowMillis, isHold ? playerTeam : -1);
             f.Version++;
@@ -259,13 +292,10 @@ public sealed class FlagManager
             // CTF: friendly flag is home; check if player is carrying enemy flag to capture
             // and ensure friendly flag is not currently dropped
             if (f.DropTime > 0) return false;
-            for (int j = 0; j < _flags.Count; j++)
+            if (GetCarriedFlag(playerId) is int relayFlagId)
             {
-                if (_flags[j].Owner == playerId)
-                {
-                    ScoreFlag(playerId, playerTeam, flagId, j, mode, nowMillis, onPlayerScore, rng);
-                    return true;
-                }
+                ScoreFlag(playerId, playerTeam, flagId, relayFlagId, mode, nowMillis, onPlayerScore, rng);
+                return true;
             }
             return false;
         }
@@ -321,24 +351,20 @@ public sealed class FlagManager
     /// </summary>
     public void DropPlayerFlag(int playerId, Vector3 playerPos, GameModeInfo mode, int nowMillis, int dropperId = -1, bool tkPenalty = false, float dropAngle = 0f)
     {
+        if (GetCarriedFlag(playerId) is not int carriedFlagId) return;
         bool isProtect = mode.Has(ModeFlags.Protect);
-        foreach (var f in _flags)
+        var f = _flags[carriedFlagId];
+        if (isProtect && InsideBase(f, playerPos))
         {
-            if (f.Owner == playerId)
-            {
-                if (isProtect && InsideBase(f, playerPos))
-                {
-                    ReturnFlag(f.Id);
-                    f.Version++;
-                    DispatchAudio(GameSound.FlagReturn, f.Id, f.Team, playerId, playerPos);
-                }
-                else
-                {
-                    f.Version++;
-                    DropFlag(f.Id, playerPos, nowMillis, dropperId >= 0 ? dropperId : playerId, tkPenalty, dropAngle);
-                    DispatchAudio(GameSound.FlagDrop, f.Id, f.Team, playerId, playerPos);
-                }
-            }
+            ReturnFlag(f.Id);
+            f.Version++;
+            DispatchAudio(GameSound.FlagReturn, f.Id, f.Team, playerId, playerPos);
+        }
+        else
+        {
+            f.Version++;
+            DropFlag(f.Id, playerPos, nowMillis, dropperId >= 0 ? dropperId : playerId, tkPenalty, dropAngle);
+            DispatchAudio(GameSound.FlagDrop, f.Id, f.Team, playerId, playerPos);
         }
     }
 
@@ -354,15 +380,9 @@ public sealed class FlagManager
     public void OnPlayerDied(int victimId, int? actorId, bool isTeammate, Vector3 victimPos, GameModeInfo mode, int nowMillis, float dropAngle = 0f)
     {
         bool isHold = mode.Has(ModeFlags.Hold);
-        if (isHold)
+        if (isHold && GetCarriedFlag(victimId) is int heldFlagId)
         {
-            foreach (var f in _flags)
-            {
-                if (f.Owner == victimId)
-                {
-                    DeadFlag(f.Id, nowMillis);
-                }
-            }
+            DeadFlag(heldFlagId, nowMillis);
         }
 
         bool tkPenalty = actorId.HasValue && actorId.Value != victimId && isTeammate;

@@ -31,8 +31,11 @@ public sealed class FlagState
     /// <summary>Timestamp (ms) baseline for hold mode countdown.</summary>
     public int HoldTime { get; set; }
 
-    /// <summary>Player ID currently carrying this flag, or null if unowned.</summary>
-    public int? Owner { get; set; }
+    /// <summary>
+    /// Player ID currently carrying this flag, or null if unowned. Mutated by
+    /// <see cref="FlagManager"/> through its carrier index so both stay in sync.
+    /// </summary>
+    public int? Owner { get; internal set; }
 
     /// <summary>Previous dropper player ID (for pickup throttling).</summary>
     public int Dropper { get; set; } = -1;

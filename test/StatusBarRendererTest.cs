@@ -292,7 +292,6 @@ public class StatusBarRendererTest : GoTestBase
 
         // Initially no quad and no flag
         player.Combat.QuadMillis = 0;
-        hud.HasFlag = false;
         hud.UpdateStatusBar();
 
         TestAssert.False(quadIcon!.Visible, "quad icon hidden when quadmillis is 0");
@@ -320,8 +319,12 @@ public class StatusBarRendererTest : GoTestBase
 
         // CTF Flag Carrier: blue team holding enemy red flag (flagTeam 2, playerTeam 1)
         player.Team = 1;
-        hud.HeldFlagTeam = 2;
-        hud.HasFlag = true;
+        player.PlayerId = 1;
+        var flags = new FlagManager();
+        flags.AddFlag(0, Vector3.Zero, 1);              // blue flag
+        flags.AddFlag(1, new Vector3(100, 0, 0), 2);    // red flag
+        flags.OwnFlag(1, player.PlayerId, 1000);        // blue player carries the red flag
+        player.Flags = flags;
         hud.IsHoldMode = false;
         hud.UpdateStatusBar();
 
@@ -341,7 +344,8 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.True(Mathf.IsEqualApprox(flagIcon.Position.X, expectedFlagXWithQuad), $"flag X offset by quad size + space when quad is active");
 
         // Player team holding own blue flag (e.g. dropped & returned / protect mode)
-        hud.HeldFlagTeam = 1;
+        flags.ReturnFlag(1);
+        flags.OwnFlag(0, player.PlayerId, 1200, 1);
         hud.UpdateStatusBar();
         flagAtlas = (AtlasTexture)flagIcon.Texture;
         Rect2 blueFlagUv = StatusBarRenderer.GetIconUv(HudIcon.BlueFlag);
@@ -351,9 +355,12 @@ public class StatusBarRendererTest : GoTestBase
             TestAssert.True(Mathf.IsEqualApprox(flagAtlas.Region.Position.Y, blueFlagUv.Position.Y * texSize.Y), "own flag shows blue flag icon Y");
         }
 
-        // Hold Mode: neutral flag with hold counter countdown
+        // Hold Mode: neutral flag with hold counter countdown (14s left of 20s)
+        flags.ReturnFlag(0);
+        flags.AddFlag(2, Vector3.Zero, 0, 0, false);
+        player.LastMillis = 10000;
+        flags.OwnFlag(2, player.PlayerId, 4000);
         hud.IsHoldMode = true;
-        hud.HoldRemainingSeconds = 14;
         hud.UpdateStatusBar();
 
         TestAssert.True(flagLabel.Visible, "flag label visible in hold mode");

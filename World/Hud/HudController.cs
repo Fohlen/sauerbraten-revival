@@ -180,9 +180,6 @@ public partial class HudController : Control
         set => _isInsta = value;
     }
 
-    /// <summary>Whether the current player is carrying a flag (CTF/Hold).</summary>
-    public bool HasFlag { get; set; }
-
     private bool? _isHoldMode;
     /// <summary>Whether current mode is hold mode (m_hold in Sauerbraten). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsHoldMode
@@ -190,12 +187,6 @@ public partial class HudController : Control
         get => _isHoldMode ?? (Player?.Mode.Has(Game.ModeFlags.Hold) ?? false);
         set => _isHoldMode = value;
     }
-
-    /// <summary>The team ID of the flag currently held (1 = good/blue, 2 = evil/red, 0 = neutral).</summary>
-    public int HeldFlagTeam { get; set; }
-
-    /// <summary>Remaining hold seconds countdown for hold mode (max(HOLDSECS - counter/1000, 0)).</summary>
-    public int HoldRemainingSeconds { get; set; }
 
     private bool? _isEfficiency;
     /// <summary>Whether current mode is efficiency mode (no pistol). Derived from <see cref="Player.Mode"/> by default.</summary>
@@ -968,35 +959,17 @@ public partial class HudController : Control
                 if (_quadIcon != null) _quadIcon.Visible = false;
             }
 
-            if (Player.Flags != null)
-            {
-                bool carrying = false;
-                int heldTeam = 0;
-                int holdRemaining = 0;
-                for (int i = 0; i < Player.Flags.Flags.Count; i++)
-                {
-                    var f = Player.Flags.Flags[i];
-                    if (f.Owner == Player.PlayerId)
-                    {
-                        carrying = true;
-                        heldTeam = f.Team;
-                        int now = Player.LastMillis;
-                        holdRemaining = Math.Max(0, Game.FlagManager.HoldSecs - f.HoldCounter(now) / 1000);
-                        break;
-                    }
-                }
-                HasFlag = carrying;
-                HeldFlagTeam = heldTeam;
-                HoldRemainingSeconds = holdRemaining;
-            }
+            // Flag carrier state comes straight from the FlagManager's owner model
+            // instead of scanning the flag list.
+            var carriedFlag = Player.Flags?.GetCarriedFlagState(Player.PlayerId);
 
             // CTF / Mode flag: flag indicator icon with hold counter or carrier status
             // (ctf.h:547-565: drawhud in ctfmode)
             // Position: int x = HICON_X + 3*HICON_STEP + (d->quadmillis ? HICON_SIZE + HICON_SPACE : 0);
             // drawicon(m_hold ? HICON_NEUTRAL_FLAG : (f.team==ctfteamflag(player1->team) ? HICON_BLUE_FLAG : HICON_RED_FLAG), x, HICON_Y);
-            if (HasFlag)
+            if (carriedFlag != null)
             {
-                HudIcon flagIconType = StatusBarRenderer.GetFlagIcon(IsHoldMode, HeldFlagTeam, Player.Team);
+                HudIcon flagIconType = StatusBarRenderer.GetFlagIcon(IsHoldMode, carriedFlag.Team, Player.Team);
                 if (_flagIcon != null)
                 {
                     if (_lastFlagIcon != flagIconType || _flagIcon.Texture == null)
@@ -1016,8 +989,10 @@ public partial class HudController : Control
                     if (IsHoldMode)
                     {
                         // In Sauerbraten hold mode: draw_textf("%d", (x + HICON_SIZE + HICON_SPACE)/2, HICON_TEXTY/2, max(HOLDSECS - f.holdcounter()/1000, 0));
+                        int now = Player.LastMillis;
+                        int holdRemaining = Math.Max(0, Game.FlagManager.HoldSecs - carriedFlag.HoldCounter(now) / 1000);
                         _flagLabel.Visible = true;
-                        _flagLabel.Text = Math.Max(0, HoldRemainingSeconds).ToString();
+                        _flagLabel.Text = holdRemaining.ToString();
                         _flagLabel.Modulate = Colors.White;
 
                         float flagX = StatusBarRenderer.IconX + 3 * StatusBarRenderer.IconStep + (hasQuad ? StatusBarRenderer.IconSize + StatusBarRenderer.IconSpace : 0f);
