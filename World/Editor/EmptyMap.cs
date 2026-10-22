@@ -16,13 +16,24 @@ namespace SauerbratenRevival.World.Editor;
 /// <see cref="Ogz.MapWorld"/>, so it sits in the same space as the editor controller.
 /// </summary>
 [GlobalClass]
-public partial class EmptyMap : Node3D
+public partial class EmptyMap : Node3D, IMapSource
 {
     /// <summary>Octree world scale (worldsize = 1 &lt;&lt; WorldScale). Clamped to 10..16 by the NewMap op.</summary>
     [Export] public int WorldScale { get; set; } = 10; // worldsize 1024; SplitOcta is covered by tests
 
     /// <summary>Chunk size for the mesher.</summary>
     [Export] public int ChunkSize { get; set; } = 128;
+
+    public Node3D WorldNode => this;
+    public Materials.ITextureSource? Textures => null;
+    public Entities.IModelCatalog? Models => null;
+    public Entities.ItemManager? Items => null;
+    public Game.FlagManager? Flags => null;
+    public IReadOnlyList<Entities.JumpPad> JumpPads => System.Array.Empty<Entities.JumpPad>();
+    public IReadOnlyList<Entities.Teleport> Teleports => System.Array.Empty<Entities.Teleport>();
+    public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
+    public SimClock? Clock => null;
+    public bool Built => Octa != null;
 
     public Octa? Octa { get; set; }
     public WorldCommandSink? Sink { get; set; }
@@ -53,8 +64,12 @@ public partial class EmptyMap : Node3D
 
     private static readonly Dictionary<(int Scale, int Chunk), (Octa Seed, ChunkedWorldMesh Mesh)> SeedCache = new();
 
-    public override void _Ready()
+    public override void _Ready() => Build();
+
+    public void Build()
     {
+        if (Built) return;
+
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
 
         if (ShouldUseSeedCache && SeedCache.TryGetValue((WorldScale, ChunkSize), out var seed))
@@ -64,7 +79,7 @@ public partial class EmptyMap : Node3D
             Octa = cachedOcta;
             Sink = new WorldCommandSink(new OctaWorld(cachedOcta));
             CreateRenderer(cachedOcta, seed.Mesh);
-            LinkChildEditors(cachedOcta);
+            LinkChildEditors();
             GD.Print($"[emptymap] seed-cache worldsize={cachedOcta.WorldSize} chunks={Renderer!.ChunkCount} tris={Renderer.TriangleCount}");
             return;
         }
@@ -94,10 +109,11 @@ public partial class EmptyMap : Node3D
         }
 
         CreateRenderer(octa, prebuilt);
-        LinkChildEditors(octa);
+        LinkChildEditors();
 
         GD.Print($"[emptymap] worldsize={size} chunks={Renderer!.ChunkCount} tris={Renderer.TriangleCount}");
     }
+
 
     private void CreateRenderer(Octa octa, ChunkedWorldMesh? prebuilt)
     {
@@ -113,16 +129,11 @@ public partial class EmptyMap : Node3D
     }
 
     // Hand the world to any child editor controller (it draws in this Z-up space).
-    private void LinkChildEditors(Octa octa)
+    private void LinkChildEditors()
     {
         foreach (var child in GetChildren())
             if (child is EditorController ec)
-            {
-                ec.Octa = octa;
-                ec.Sink = Sink;
-                ec.Renderer = Renderer;
-                ec.Radiance = Radiance;
-            }
+                ec.BindMapSource(this);
     }
 
 }

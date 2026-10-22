@@ -118,7 +118,7 @@ public partial class OgzMapViewer : Node3D
 
         player.Reparent(World!); // into the rotated Z-up world
 
-        (Vector3 feet, float yaw) = FindSpawn(World!.Map!);
+        (Vector3 feet, float yaw) = World!.FindSpawn();
         // The player node owns its team (set in the scene); the world only needs a
         // reference to it so flag visuals can colour relative to the local team.
         World.LocalPlayer = player;
@@ -190,12 +190,6 @@ public partial class OgzMapViewer : Node3D
         GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {player.Team}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
     }
 
-    private (Vector3 Feet, float Yaw) FindSpawn(OgzMap map)
-    {
-        foreach (var (_, e) in map.OfType(Entities.EntityType.PlayerStart))
-            return (e.Position, e.Attr1);
-        return (World!.Bounds.GetCenter(), 0f);
-    }
 
     private void ApplySky(OgzMap map, ITextureSource textures)
     {

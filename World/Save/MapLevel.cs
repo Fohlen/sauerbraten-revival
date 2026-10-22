@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Godot;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Materials;
@@ -21,7 +22,7 @@ namespace SauerbratenRevival.World.Save;
 /// −90° about X so it sits in Godot Y-up space.
 /// </summary>
 [GlobalClass]
-public partial class MapLevel : Node3D
+public partial class MapLevel : Node3D, IMapSource
 {
     /// <summary>External reference to the base octree snapshot (<c>world.res</c>).</summary>
     [Export] public WorldResource? World { get; set; }
@@ -31,6 +32,19 @@ public partial class MapLevel : Node3D
 
     /// <summary>Chunk size for the mesher.</summary>
     [Export] public int ChunkSize { get; set; } = 512;
+
+    public Node3D WorldNode => this;
+    public Materials.ITextureSource? Textures => _textures;
+    public Entities.IModelCatalog? Models => null;
+    public Entities.ItemManager? Items => null;
+    public Game.FlagManager? Flags => null;
+    public IReadOnlyList<Entities.JumpPad> JumpPads => System.Array.Empty<Entities.JumpPad>();
+    public IReadOnlyList<Entities.Teleport> Teleports => System.Array.Empty<Entities.Teleport>();
+    public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
+    public SimClock? Clock => null;
+    public bool Built => Octa != null;
+
+    private Materials.ITextureSource? _textures;
 
     public Octa? Octa { get; set; }
     public WorldCommandSink? Sink { get; set; }
@@ -91,6 +105,7 @@ public partial class MapLevel : Node3D
             if (manifest != null)
             {
                 var textures = BuildTextureSource();
+                _textures = textures;
                 materials = ManifestBuilder.ToMaterialSet(manifest, textures);
             }
         }
@@ -99,15 +114,16 @@ public partial class MapLevel : Node3D
         // Hand the world to any child editor controller (same contract as EmptyMap).
         foreach (var child in GetChildren())
             if (child is Editor.EditorController ec)
-            {
-                ec.Octa = octa;
-                ec.Sink = Sink;
-                ec.Renderer = Renderer;
-                ec.Radiance = Radiance;
-            }
+                ec.BindMapSource(this);
 
         GD.Print($"[maplevel] worldsize={octa.WorldSize} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount} entities={Entities.Count}");
     }
+
+    /// <summary>Finds a player spawn point in Sauerbraten coordinates.</summary>
+    public (Vector3 Position, float Yaw) FindSpawn(int index = 0) =>
+        IMapSource.ResolveSpawn(
+            Entities.Where(e => e.Type == (byte)SauerbratenRevival.World.Entities.EntityType.PlayerStart).Select(e => (e.Position, (float)e.Attr1)),
+            ((IMapSource)this).Bounds.GetCenter(), index);
 
     /// <summary>Project Resources first, then the reference dump (when configured).</summary>
     private ITextureSource BuildTextureSource()

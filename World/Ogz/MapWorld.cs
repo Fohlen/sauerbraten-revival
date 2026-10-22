@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Entities;
@@ -25,11 +26,15 @@ namespace SauerbratenRevival.World.Ogz;
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class MapWorld : Node3D
+public partial class MapWorld : Node3D, IMapSource
 {
     /// <summary>Override map to build. Absolute, or package-relative (e.g. <c>base/church51.ogz</c>), resolved through <see cref="ContentRoots.ResolveMap"/>; empty uses the default.</summary>
     [Export] public string OgzPath { get; set; } = "";
     [Export] public int ChunkSize { get; set; } = 512;
+
+    public Node3D WorldNode => this;
+    public Commands.WorldCommandSink? Sink { get; set; }
+    public Meshing.WorldChunkRenderer? Renderer { get; set; }
 
     /// <summary>Show edit-mode blue entity markers and facing arrows.</summary>
     [Export]
@@ -48,7 +53,7 @@ public partial class MapWorld : Node3D
     public OgzMap? Map { get; private set; }
 
     /// <summary>The runtime octree — the collision authority. Null until <see cref="Build"/>.</summary>
-    public Octa? Octa { get; private set; }
+    public Octa? Octa { get; set; }
 
     /// <summary>The shared octree physics simulation authority for this world.</summary>
     public OctaPhysics? Physics { get; private set; }
@@ -233,10 +238,10 @@ public partial class MapWorld : Node3D
     public Aabb Bounds { get; private set; }
 
     /// <summary>Centre of the geometry in Godot world space (Y-up), for framing a camera.</summary>
-    public Vector3 Centre { get; private set; }
+    public Vector3 Centre => IMapSource.ComputeCentre(Bounds);
 
     /// <summary>Bounding radius of the geometry, for framing a camera.</summary>
-    public float Radius { get; private set; } = 1.0f;
+    public float Radius => IMapSource.ComputeRadius(Bounds);
 
     /// <summary>True once <see cref="Build"/> has produced an <see cref="Octa"/>.</summary>
     public bool Built => Octa != null;
@@ -393,14 +398,6 @@ public partial class MapWorld : Node3D
         bool hasBounds = false;
         foreach (var chunk in chunked.Chunks)
         {
-            AddChild(new MeshInstance3D
-            {
-                Name = $"Chunk_{chunk.Origin.X}_{chunk.Origin.Y}_{chunk.Origin.Z}",
-                Mesh = chunk.Mesh,
-                Position = new Vector3(chunk.Origin.X, chunk.Origin.Y, chunk.Origin.Z),
-                MaterialOverride = fallback,
-            });
-
             var aabb = chunk.Mesh.GetAabb();
             aabb.Position += new Vector3(chunk.Origin.X, chunk.Origin.Y, chunk.Origin.Z);
             bounds = hasBounds ? bounds.Merge(aabb) : aabb;
@@ -409,11 +406,35 @@ public partial class MapWorld : Node3D
 
         // Sauerbraten bounds are Z-up; the node rotates them to Godot Y-up.
         Bounds = hasBounds ? bounds : new Aabb(Vector3.Zero, Vector3.One);
-        Vector3 sauerCentre = Bounds.GetCenter();
-        Centre = new Vector3(sauerCentre.X, sauerCentre.Z, -sauerCentre.Y);
-        Radius = Mathf.Max(Bounds.Size.Length() * 0.5f, 1.0f);
+
+        Renderer = new Meshing.WorldChunkRenderer
+        {
+            Name = "WorldMesh",
+            ChunkSize = ChunkSize,
+            BudgetPerFrame = 4,
+            Radiance = Radiance,
+            FallbackMaterial = fallback,
+        };
+        AddChild(Renderer);
+        Renderer.Setup(octa, materials, prebuilt: chunked);
+
+        Sink = new Commands.WorldCommandSink(new Commands.OctaWorld(octa));
+        LinkChildEditors();
 
         GD.Print($"[world] {path}: chunks={chunked.Chunks.Count} triangles={chunked.TriangleCount}");
+    }
+
+    /// <summary>Finds a player start spawn point in Sauerbraten coordinates, falling back to bounds center.</summary>
+    public (Vector3 Position, float Yaw) FindSpawn(int index = 0) =>
+        Map != null
+            ? IMapSource.ResolveSpawn(Map.OfType(Entities.EntityType.PlayerStart).Select(t => (t.Entity.Position, (float)t.Entity.Attr1)), Bounds.GetCenter(), index)
+            : (Bounds.GetCenter(), 0f);
+
+    private void LinkChildEditors()
+    {
+        foreach (var child in GetChildren())
+            if (child is Editor.EditorController ec)
+                ec.BindMapSource(this);
     }
 
     private double _physicsAccum;

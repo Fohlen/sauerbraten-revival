@@ -641,15 +641,26 @@ public partial class EditorController : Node3D
         GD.Print($"[editor] loaded '{MapDir}'");
     }
 
+    /// <summary>Binds editor authority (octree, command sink, renderer, radiance) to a map source.</summary>
+    public void BindMapSource(IMapSource source)
+    {
+        Octa = source.Octa;
+        Sink = source.Sink;
+        Renderer = source.Renderer;
+        Radiance = source.Radiance;
+    }
+
     /// <summary>Re-point the owning map node at the newly loaded octree, if any.</summary>
     private void DetachWorldFromParent()
     {
         foreach (var node in GetParent().GetChildren())
         {
-            switch (node)
+            if (node is IMapSource ms)
             {
-                case EmptyMap em: em.Octa = Octa; em.Sink = Sink; em.Renderer = Renderer; break;
-                case MapLevel ml: ml.Octa = Octa; ml.Sink = Sink; ml.Renderer = Renderer; break;
+                ms.Octa = Octa;
+                ms.Sink = Sink;
+                ms.Renderer = Renderer;
+                break;
             }
         }
     }

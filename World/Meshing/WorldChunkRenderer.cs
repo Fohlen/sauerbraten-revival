@@ -49,6 +49,11 @@ public partial class WorldChunkRenderer : Node3D
     /// </summary>
     public Lighting.RadianceVolume? Radiance { get; set; }
 
+    /// <summary>
+    /// Fallback material applied to chunk meshes when materials is null.
+    /// </summary>
+    public Material? FallbackMaterial { get; set; }
+
     private Octa _octa = null!;
     private MaterialSet? _materials;
     private readonly Dictionary<Vector3I, MeshInstance3D> _nodes = new();
@@ -227,6 +232,7 @@ public partial class WorldChunkRenderer : Node3D
             Name = $"Chunk_{origin.X}_{origin.Y}_{origin.Z}",
             Mesh = mesh,
             Position = new Vector3(origin.X, origin.Y, origin.Z),
+            MaterialOverride = FallbackMaterial,
         };
         _nodes[origin] = node;
         _chunkTriangles[origin] = CountTriangles(mesh);
