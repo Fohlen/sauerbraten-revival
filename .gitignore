@@ -9,6 +9,9 @@ obj/
 .vs/
 *.user
 
+# Rider
+.idea/
+
 # Ignore Python output
 __pycache__
 
