@@ -65,7 +65,7 @@ public partial class PlayerModel : ModelInstance
     private readonly Dictionary<string, float> _animSpeeds = new();
 
     // View-weapon attachment state, retained so a later Reload can re-attach.
-    private ModelCatalog? _models;
+    private IModelCatalog? _models;
     private ITextureSource? _textures;
     private Dictionary<string, Material>? _skinCache;
     private string? _viewWeaponName;
@@ -81,7 +81,7 @@ public partial class PlayerModel : ModelInstance
     /// (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>), or null to attach none.
     /// </param>
     public void Configure(
-        ModelCatalog? models,
+        IModelCatalog? models,
         ITextureSource? textures,
         int modelIndex,
         int team,

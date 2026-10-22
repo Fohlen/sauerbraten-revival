@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
@@ -67,6 +68,35 @@ public class EntityItemTest : GoTestBase
             TestAssert.True(item.Basis.IsEqualApprox(expectedBasis),
                 $"{item.Name} basis ({item.Basis}) stands upright in Z-up world (yaw 0)");
         }
+        root.Free();
+    }
+
+    private sealed class StubModelCatalog : IModelCatalog
+    {
+        public readonly System.Collections.Generic.Dictionary<string, ModelInfo> Stubs = new();
+        public ModelInfo? Get(string name) => Stubs.GetValueOrDefault(name);
+    }
+
+    [Test]
+    public void BuildsItemsWithCustomModelCatalogStub()
+    {
+        var map = TestData.ReadMap();
+        var stub = new StubModelCatalog();
+        stub.Stubs["ammo/shells"] = new ModelInfo { Name = "ammo/shells", Scale = 3.5f };
+
+        var root = ItemBuilder.Build(map, stub);
+        Item? shellsItem = null;
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Item item && item.ItemType == EntityType.Shells)
+            {
+                shellsItem = item;
+                break;
+            }
+        }
+
+        TestAssert.True(shellsItem != null, "found shells item");
+        TestAssert.Equal(3.5f, shellsItem!.ModelScale, "scale resolved from stub model catalog");
         root.Free();
     }
 }

@@ -36,7 +36,7 @@ public static class ModeEntityBuilder
     public const float PlatformSpeed = 8.0f;
 
     public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue = null,
-                               ModelCatalog? models = null, ITextureSource? textures = null,
+                               IModelCatalog? models = null, ITextureSource? textures = null,
                                GameModeInfo? mode = null)
     {
         var root = new Node3D { Name = "ModeEntities" };

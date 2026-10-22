@@ -55,7 +55,7 @@ public partial class HudgunModel : Node3D
         new(vector.Y, vector.Z, -vector.X);
 
     private readonly List<ModelInstance> _parts = new();
-    private ModelCatalog? _models;
+    private IModelCatalog? _models;
     private ModelInfo? _info;
     private ITextureSource? _textures;
     private Dictionary<string, Material>? _skinCache;
@@ -66,7 +66,7 @@ public partial class HudgunModel : Node3D
 
     /// <summary>Configure before adding this node to the camera.</summary>
     public void Configure(
-        ModelCatalog? models,
+        IModelCatalog? models,
         ITextureSource? textures,
         int modelIndex,
         string gun,

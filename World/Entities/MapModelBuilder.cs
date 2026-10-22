@@ -14,7 +14,7 @@ namespace SauerbratenRevival.World.Entities;
 public static class MapModelBuilder
 {
     public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue,
-                               ModelCatalog? models = null, ITextureSource? textures = null)
+                               IModelCatalog? models = null, ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "MapModels" };
         var skinCache = new Dictionary<string, Material>();

@@ -106,7 +106,7 @@ public sealed class PitchInfo
 /// The manifest produced by <c>tools/model-import/import_models.py</c>: converted
 /// glTF paths plus the Cube2 <c>mdlscale</c>/<c>mdltrans</c>/skin parameters.
 /// </summary>
-public sealed class ModelCatalog
+public sealed class ModelCatalog : IModelCatalog
 {
     public readonly Dictionary<string, ModelInfo> Models = new();
 

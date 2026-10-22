@@ -13,7 +13,7 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 public static class ItemBuilder
 {
-    public static ItemManager Build(OgzMap map, ModelCatalog? models = null, ITextureSource? textures = null)
+    public static ItemManager Build(OgzMap map, IModelCatalog? models = null, ITextureSource? textures = null)
     {
         var root = new ItemManager { Name = "Items" };
         var skinCache = new Dictionary<string, Material>();

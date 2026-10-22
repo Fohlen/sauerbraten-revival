@@ -168,7 +168,7 @@ public partial class MapWorld : Node3D
     public ITextureSource? Textures { get; private set; }
 
     /// <summary>The converted-model catalogue (glTF paths + Cube2 parameters), if present.</summary>
-    public ModelCatalog? Models { get; private set; }
+    public IModelCatalog? Models { get; private set; }
 
     /// <summary>The item manager holding map item pickups.</summary>
     public ItemManager? Items { get; private set; }
@@ -507,7 +507,7 @@ public partial class MapWorld : Node3D
 
     /// <summary>Creates the visual node for one flag, oriented by its spawn yaw.</summary>
     private static FlagNode CreateFlagNode(int flagId, int team, Vector3 position, float yaw,
-                                           ModelCatalog? models, ITextureSource textures, Game.GameModeInfo? mode = null)
+                                           IModelCatalog? models, ITextureSource textures, Game.GameModeInfo? mode = null)
     {
         var flagNode = new FlagNode
         {

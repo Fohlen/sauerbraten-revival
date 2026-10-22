@@ -28,7 +28,7 @@ public static class MonsterBuilder
     /// </param>
     public static Node3D Build(
         OgzMap map,
-        ModelCatalog? models = null,
+        IModelCatalog? models = null,
         ITextureSource? textures = null,
         Action<string>? warn = null)
     {

@@ -24,7 +24,7 @@ public partial class FlagNode : ModelInstance
     [Export] public int Team { get; set; }
 
     /// <summary>Model catalog for loading glTF and materials.</summary>
-    public ModelCatalog? Models { get; set; }
+    public IModelCatalog? Models { get; set; }
 
     /// <summary>Texture source for skins.</summary>
     public ITextureSource? Textures { get; set; }

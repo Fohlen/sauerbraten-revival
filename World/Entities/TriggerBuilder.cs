@@ -15,7 +15,7 @@ public static class TriggerBuilder
     public static (Node3D Root, List<JumpPad> JumpPads, List<Teleport> Teleports) BuildTriggers(
         OgzMap map,
         MetadataCatalogue? catalogue = null,
-        ModelCatalog? models = null,
+        IModelCatalog? models = null,
         ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "Triggers" };
@@ -98,7 +98,7 @@ public static class TriggerBuilder
     public static Node3D Build(
         OgzMap map,
         MetadataCatalogue? catalogue = null,
-        ModelCatalog? models = null,
+        IModelCatalog? models = null,
         ITextureSource? textures = null)
         => BuildTriggers(map, catalogue, models, textures).Root;
 
