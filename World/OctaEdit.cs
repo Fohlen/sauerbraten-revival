@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Physics;
 
 namespace SauerbratenRevival.World;
@@ -1056,6 +1057,6 @@ public static class OctaEdit
             var o = new Vector3I(((i & 1) >> 0) * (octa.WorldSize >> 1), ((i & 2) >> 1) * (octa.WorldSize >> 1), ((i & 4) >> 2) * (octa.WorldSize >> 1));
             Remip(octa, octa.WorldRoot[i], o, octa.WorldSize >> 2, mipvis);
         }
-        // calcmerges() rebuilds derived render caches; not octree state.
+        OctaMerges.CalcMerges(octa);
     }
 }

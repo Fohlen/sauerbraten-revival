@@ -73,6 +73,12 @@ public static class OctaFaceWalker
             if (!include(c)) continue;
             for (int orient = 0; orient < 6; orient++)
             {
+                if (!hideSameMaterial && (c.Merged & (1 << orient)) != 0)
+                {
+                    if (c.Ext != null && (c.Ext.Surfaces[orient].NumVerts & Octa.MAXFACEVERTS) != 0)
+                        emit(new CubeFace(c, orient, childCo, size, 3));
+                    continue;
+                }
                 int vis = FaceVisibleTris(octa, c, orient, childCo, size, hideSameMaterial);
                 if (vis != 0)
                     emit(new CubeFace(c, orient, childCo, size, vis));
@@ -101,6 +107,12 @@ public static class OctaFaceWalker
 
             for (int orient = 0; orient < 6; orient++)
             {
+                if (!hideSameMaterial && (c.Merged & (1 << orient)) != 0)
+                {
+                    if (c.Ext != null && (c.Ext.Surfaces[orient].NumVerts & Octa.MAXFACEVERTS) != 0)
+                        emit(new CubeFace(c, orient, childCo, size, 3));
+                    continue;
+                }
                 int vis = FaceVisibleTris(octa, c, orient, childCo, size, hideSameMaterial);
                 if (vis != 0)
                     emit(new CubeFace(c, orient, childCo, size, vis));

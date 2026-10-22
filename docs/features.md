@@ -47,7 +47,7 @@ This list is the one place these are tracked; design lives in the linked docs.
   blend-layer rendering remain deferred.
 - **Renderer extras** ([rendering.md](rendering.md)) — LOD, specular maps,
   alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), exact `visibletris`,
-  face merges, T-joints, grass, RenderingServer mesh streaming.
+  face merges (done), T-joints, grass, RenderingServer mesh streaming.
 - **`movable.cpp`** (box/barrel/platform/elevator) — deliberately not ported; SP-only.
 - **Single-player / bot AI** — out of MVP scope.
 

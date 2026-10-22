@@ -110,6 +110,13 @@ public sealed class OctaMesher
         int vslot = face.Cube.Texture[face.Orient];
         int dim = face.Orient >> 1;
         var local = new Vector3(origin.X, origin.Y, origin.Z);
+        bool alpha = (face.Cube.Material & Octa.MAT_ALPHA) != 0;
+
+        if ((face.Cube.Merged & (1 << face.Orient)) != 0)
+        {
+            EmitMergedFace(face, origin, builder, vslot, dim, local, alpha);
+            return;
+        }
 
         System.Span<Vector3I> v = stackalloc Vector3I[4];
         face.Cube.GenFaceVerts(face.Orient, v);
@@ -122,8 +129,6 @@ public sealed class OctaMesher
         Vector3 a2 = MeshFace.ToWorld(v[(order + 2) & 3], face.Co, face.Size);
         Vector3 a3 = MeshFace.ToWorld(v[(order + 3) & 3], face.Co, face.Size);
         Vector3 l0 = a0 - local, l1 = a1 - local, l2 = a2 - local, l3 = a3 - local;
-
-        bool alpha = (face.Cube.Material & Octa.MAT_ALPHA) != 0;
 
         // octarender.cpp gencubeverts emits the top layer when the surface has no
         // surfaceinfo at all (`!surf.numverts`) or carries LAYER_TOP. A face whose
@@ -178,5 +183,63 @@ public sealed class OctaMesher
             Vector2 uv3 = _materials?.Uv(vslot, dim, a3) ?? Vector2.Zero;
             MeshFace.Triangle(builder, key, orient, l0, l2, l3, uv0, uv2, uv3);
         }
+    }
+
+    private void EmitMergedFace(in CubeFace face, Vector3I origin, ArrayMeshBuilder builder,
+                               int vslot, int dim, Vector3 local, bool alpha)
+    {
+        if (face.Cube.Ext == null) return;
+        var surfInfo = face.Cube.Ext.Surfaces[face.Orient];
+        int numverts = surfInfo.NumVerts & Octa.MAXFACEVERTS;
+        if (numverts < 3) return;
+
+        var vo = new Vector3I((face.Co.X & ~0xFFF), (face.Co.Y & ~0xFFF), (face.Co.Z & ~0xFFF));
+        System.Span<Vector3> worldPos = stackalloc Vector3[numverts];
+        System.Span<Vector3> localPos = stackalloc Vector3[numverts];
+        int vertOffset = surfInfo.Verts;
+        var verts = face.Cube.Ext.Verts;
+
+        for (int k = 0; k < numverts; k++)
+        {
+            var vi = verts[vertOffset + k];
+            worldPos[k] = new Vector3(vo.X + vi.X / 8.0f, vo.Y + vi.Y / 8.0f, vo.Z + vi.Z / 8.0f);
+            localPos[k] = worldPos[k] - local;
+        }
+
+        bool hasSurf = surfInfo.NumVerts != 0;
+        if (!hasSurf || (surfInfo.NumVerts & Octa.LAYER_TOP) != 0)
+            EmitMergedLayer(builder, vslot, dim, face.Orient, alpha, localPos, worldPos);
+
+        int layer = alpha ? 0 : _materials?.LayerFor(vslot) ?? 0;
+        if (layer != 0 && hasSurf && (surfInfo.NumVerts & Octa.LAYER_BOTTOM) != 0)
+        {
+            if ((surfInfo.NumVerts & Octa.LAYER_DUP) != 0 && verts.Length >= vertOffset + numverts * 2)
+            {
+                System.Span<Vector3> worldPosDup = stackalloc Vector3[numverts];
+                System.Span<Vector3> localPosDup = stackalloc Vector3[numverts];
+                for (int k = 0; k < numverts; k++)
+                {
+                    var vi = verts[vertOffset + numverts + k];
+                    worldPosDup[k] = new Vector3(vo.X + vi.X / 8.0f, vo.Y + vi.Y / 8.0f, vo.Z + vi.Z / 8.0f);
+                    localPosDup[k] = worldPosDup[k] - local;
+                }
+                EmitMergedLayer(builder, layer, dim, face.Orient, alpha, localPosDup, worldPosDup);
+            }
+            else
+            {
+                EmitMergedLayer(builder, layer, dim, face.Orient, alpha, localPos, worldPos);
+            }
+        }
+    }
+
+    private void EmitMergedLayer(ArrayMeshBuilder builder, int vslot, int dim, int orient, bool alpha,
+                                System.ReadOnlySpan<Vector3> localPos, System.ReadOnlySpan<Vector3> worldPos)
+    {
+        int key = _materials?.Key(vslot, alpha) ?? vslot;
+        System.Span<Vector2> uvs = stackalloc Vector2[worldPos.Length];
+        for (int k = 0; k < worldPos.Length; k++)
+            uvs[k] = _materials?.Uv(vslot, dim, worldPos[k]) ?? Vector2.Zero;
+
+        MeshFace.Polygon(builder, key, orient, localPos, uvs);
     }
 }

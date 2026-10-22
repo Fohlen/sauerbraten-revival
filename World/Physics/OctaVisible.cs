@@ -9,7 +9,7 @@ namespace SauerbratenRevival.World.Physics;
 public static class OctaVisible
 {
     // octa.cpp:723 faceedgesidx[6][4].
-    private static readonly int[][] FaceEdgesIdx =
+    internal static readonly int[][] FaceEdgesIdx =
     {
         new[] { 4, 5, 8, 10 }, new[] { 6, 7, 9, 11 }, new[] { 8, 9, 0, 2 },
         new[] { 10, 11, 1, 3 }, new[] { 0, 1, 4, 6 }, new[] { 2, 3, 5, 7 },
@@ -288,7 +288,7 @@ public static class OctaVisible
         return 3;
     }
 
-    private static byte EdgeByte(Cube c, int i) => (byte)((c.Faces[i / 4] >> ((i % 4) * 8)) & 0xFF);
+    internal static byte EdgeByte(Cube c, int i) => (byte)((c.Faces[i / 4] >> ((i % 4) * 8)) & 0xFF);
 
     /// <summary>octa.cpp:734 <c>collideface</c>.</summary>
     public static bool CollideFace(Cube c, int orient)

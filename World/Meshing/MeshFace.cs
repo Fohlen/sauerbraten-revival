@@ -53,6 +53,27 @@ public static class MeshFace
             Reverse(p0, p1, p2, normal));
     }
 
+    /// <summary>
+    /// Emit a convex polygon (3..MAXFACEVERTS vertices) fanned from vertex 0:
+    /// (0, i+1, i+2) for i in 0..numverts-3, skipping degenerate triangles,
+    /// wound against the outward <paramref name="orient"/> normal.
+    /// Matches octarender.cpp addtris.
+    /// </summary>
+    public static void Polygon(ArrayMeshBuilder builder, int vslot, int orient,
+                               System.ReadOnlySpan<Vector3> verts,
+                               System.ReadOnlySpan<Vector2> uvs)
+    {
+        Vector3 normal = AxisNormal(orient);
+        for (int i = 0; i < verts.Length - 2; i++)
+        {
+            Vector3 p0 = verts[0], p1 = verts[i + 1], p2 = verts[i + 2];
+            if (p0 == p1 || p1 == p2 || p2 == p0) continue;
+            Vector2 uv0 = uvs[0], uv1 = uvs[i + 1], uv2 = uvs[i + 2];
+            builder.AddTriangle(vslot, p0, p1, p2, uv0, uv1, uv2, normal,
+                Reverse(p0, p1, p2, normal));
+        }
+    }
+
     /// <summary>Whether a triangle must be reversed to face outward under Godot's front-face convention.</summary>
     private static bool Reverse(Vector3 a, Vector3 b, Vector3 c, Vector3 normal)
     {

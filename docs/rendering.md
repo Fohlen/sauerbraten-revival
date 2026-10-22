@@ -282,10 +282,15 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   the engine-default textures and a time-based UV scroll for the flowing animation
   (mirrors `water.cpp`/`material.cpp`; the catalogue doesn't export `matwater`/
   `matlava` yet).
+- **Face merges** — `OctaMesher` honours `Cube.Merged`, skipping merged non-origin
+  faces and emitting origin-stored merged polygons (up to 15 vertices) via
+  `MeshFace.Polygon` fanning. `OctaMerges.CalcMerges` ports `octa.cpp genmerges`
+  to compute merges at `remip` time. Triangle count on church51 drops from 326,943
+  to 87,035.
 - **TODO (deferred)** — **envmap sampling** (`SHADER_ENVMAP`, `closestenvmap`;
   the `ET_ENVMAP` probes themselves are now imported — see
   [ADR 0006](adr/0006-ogz-import.md#entity-type-mapping) — but nothing reads them),
-  **specular maps** (packed/non-PBR), blended layers, face merges, T-joints and
+  **specular maps** (packed/non-PBR), blended layers, T-joints and
   grass. World lighting is the L1 SH probe volume
   ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)); the baked-lightmap path is
   dropped. Tracked divergences live in [known-bugs.md](known-bugs.md).
