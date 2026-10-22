@@ -50,8 +50,10 @@ public class RadianceBakeProbe : GoTestBase
     private const float InfiniteRange = 4096f; // LightBuilder.InfiniteRange
 
     [Test]
+    [Skip("Stage 0 radiance diagnostic probe (evaluates 32/64/128 grid bake costs without assertions). Set RUN_PROBES=1 or run directly via --run-tests=RadianceBakeProbe.")]
     public void MeasureBakeCosts()
     {
+        if (ShouldSkip()) return;
         Measure("church51");
         Measure("earthstation");
     }
