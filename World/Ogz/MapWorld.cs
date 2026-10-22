@@ -49,10 +49,10 @@ public partial class MapWorld : Node3D, IMapSource
     }
     private bool _showEntityMarkers = true;
 
-    /// <summary>The parsed map (slots, entities, metadata). Null until <see cref="Build"/>.</summary>
-    public OgzMap? Map { get; private set; }
+    /// <summary>The parsed map (slots, entities, metadata). Null until <see cref="Build"/>, or pre-assigned to inject a map.</summary>
+    public OgzMap? Map { get; set; }
 
-    /// <summary>The runtime octree — the collision authority. Null until <see cref="Build"/>.</summary>
+    /// <summary>The runtime octree — the collision authority. Null until <see cref="Build"/>, or pre-assigned to inject an octree.</summary>
     public Octa? Octa { get; set; }
 
     /// <summary>The shared octree physics simulation authority for this world.</summary>
@@ -256,6 +256,27 @@ public partial class MapWorld : Node3D, IMapSource
         if (!Built) Build();
     }
 
+    private static readonly Dictionary<string, OgzMap> ParsedMapCache = new();
+
+    /// <summary>Process-wide toggle to cache parsed OGZ maps across MapWorld instances (cloning each time).</summary>
+    public static bool UseMapCache { get; set; }
+
+    /// <summary>Clear the static map cache (e.g. on test cleanup or asset reload).</summary>
+    public static void ClearMapCache() => ParsedMapCache.Clear();
+
+    private static OgzMap LoadMap(string path)
+    {
+        if (UseMapCache)
+        {
+            if (ParsedMapCache.TryGetValue(path, out var cached))
+                return cached.Clone();
+            var read = OgzReader.Read(path);
+            ParsedMapCache[path] = read;
+            return read.Clone();
+        }
+        return OgzReader.Read(path);
+    }
+
     /// <summary>
     /// Build the world as children of this node. Idempotent: subsequent calls are
     /// no-ops once built. Missing maps log an error and leave <see cref="Built"/> false.
@@ -265,7 +286,7 @@ public partial class MapWorld : Node3D, IMapSource
         if (Built) return;
 
         string path = string.IsNullOrEmpty(OgzPath) ? DefaultPath() : ResolvePath(OgzPath);
-        if (!Godot.FileAccess.FileExists(path))
+        if (Map == null && !Godot.FileAccess.FileExists(path))
         {
             GD.PushError($"[world] OGZ not found: '{path}'. Set OgzPath or SAUER_REF.");
             return;
@@ -276,8 +297,8 @@ public partial class MapWorld : Node3D, IMapSource
         // The octree/collision layer is Z-up; rotate so the Godot view is Y-up.
         RotationDegrees = new Vector3(-90, 0, 0);
 
-        var map = OgzReader.Read(path);
-        var octa = map.ToOcta();
+        var map = Map ?? LoadMap(path);
+        var octa = Octa ?? map.ToOcta();
         Map = map;
         Octa = octa;
         Physics = new OctaPhysics(octa);
