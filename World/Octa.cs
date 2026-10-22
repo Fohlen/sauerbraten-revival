@@ -255,11 +255,10 @@ public sealed class Octa
 
     /// <summary>
     /// Deep-copy this world into a fresh <see cref="Octa"/>: the same scale,
-    /// geometry, textures and materials, with an independent node tree. Only
-    /// subtrees that exist are copied, so cloning a sparsely-subdivided world is
-    /// much cheaper than rebuilding it from scratch. Cube render caches
-    /// (<see cref="Cube.Ext"/>, <see cref="Cube.Visible"/>, <see cref="Cube.Merged"/>) are
-    /// cleared, matching <see cref="OctaEdit.CopyCube"/>.
+    /// geometry, textures, materials, <see cref="Cube.Merged"/> and
+    /// <see cref="Cube.Ext"/>, with an independent node tree. Only subtrees that
+    /// exist are copied, so cloning a sparsely-subdivided world is much cheaper
+    /// than rebuilding it from scratch.
     /// </summary>
     public Octa Clone() => new(WorldScale, WorldSize, CloneCubes(WorldRoot), AllocNodes);
 
@@ -278,6 +277,7 @@ public sealed class Octa
                 Faces = s.Faces,
                 Texture = s.Texture,
                 Material = s.Material,
+                Merged = s.Merged,
                 Ext = CloneExt(s.Ext),
                 Children = s.Children != null ? CloneCubes(s.Children) : null,
             };

@@ -26,15 +26,13 @@ public static class MaterialMesher
     {
         var builders = new Dictionary<ushort, ArrayMeshBuilder>();
         OctaFaceWalker.Walk(octa,
-            include: c => (c.Material & Octa.MATF_VOLUME) != Octa.MAT_AIR,
+            include: c => (c.Material & Octa.MATF_VOLUME) != Octa.MAT_AIR && !c.IsEntirelySolid(),
             hideSameMaterial: true,
             emit: face =>
             {
-                if (face.Cube.IsEntirelySolid()) return;
                 ushort volume = (ushort)(face.Cube.Material & Octa.MATF_VOLUME);
                 // Water/lava hide their bottom face in-game (edit-only surface).
                 if (face.Orient == 4 && volume != Octa.MAT_GLASS) return;
-                if (!OctaEdit.VisibleFace(octa, face.Cube, face.Orient, face.Co, face.Size, volume, Octa.MAT_AIR, Octa.MATF_VOLUME)) return;
                 Emit(volume, face, builders);
             });
 

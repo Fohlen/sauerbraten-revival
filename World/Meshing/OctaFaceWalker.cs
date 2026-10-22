@@ -11,13 +11,15 @@ public readonly struct CubeFace
     public readonly int Orient;
     public readonly Vector3I Co;
     public readonly int Size;
+    public readonly int Vis;
 
-    public CubeFace(Cube cube, int orient, Vector3I co, int size)
+    public CubeFace(Cube cube, int orient, Vector3I co, int size, int vis = 3)
     {
         Cube = cube;
         Orient = orient;
         Co = co;
         Size = size;
+        Vis = vis;
     }
 }
 
@@ -26,12 +28,12 @@ public readonly struct CubeFace
 /// descends to the leaf cubes, skips cubes the caller does not care about, tests
 /// each face against its neighbour, and hands the surviving faces to a callback.
 /// Per-face <em>policy</em> (which texture/material, which UVs) stays with the
-/// caller — this only owns the traversal and the conservative cull.
+/// caller — this only owns the traversal and the visibility cull.
 /// </summary>
 public static class OctaFaceWalker
 {
     /// <param name="include">Cubes to mesh (e.g. non-empty, or material volumes).</param>
-    /// <param name="hideSameMaterial">Also hide faces whose neighbour is the same material volume (material surfaces).</param>
+    /// <param name="hideSameMaterial">Use material-volume occlusion (<see cref="OctaEdit.VisibleFace"/>) instead of <see cref="OctaVisible.VisibleTris"/>.</param>
     public static void Walk(Octa octa, Func<Cube, bool> include, bool hideSameMaterial, Action<CubeFace> emit)
         => Walk(octa.WorldRoot, Vector3I.Zero, octa.WorldSize >> 1, octa, include, hideSameMaterial, emit);
 
@@ -70,8 +72,11 @@ public static class OctaFaceWalker
 
             if (!include(c)) continue;
             for (int orient = 0; orient < 6; orient++)
-                if (FaceVisible(octa, c, orient, childCo, size, hideSameMaterial))
-                    emit(new CubeFace(c, orient, childCo, size));
+            {
+                int vis = FaceVisibleTris(octa, c, orient, childCo, size, hideSameMaterial);
+                if (vis != 0)
+                    emit(new CubeFace(c, orient, childCo, size, vis));
+            }
         }
     }
 
@@ -95,55 +100,33 @@ public static class OctaFaceWalker
             if (!include(c)) continue;
 
             for (int orient = 0; orient < 6; orient++)
-                if (FaceVisible(octa, c, orient, childCo, size, hideSameMaterial))
-                    emit(new CubeFace(c, orient, childCo, size));
+            {
+                int vis = FaceVisibleTris(octa, c, orient, childCo, size, hideSameMaterial);
+                if (vis != 0)
+                    emit(new CubeFace(c, orient, childCo, size, vis));
+            }
         }
     }
 
     /// <summary>
-    /// Conservative cull: hide a face when its neighbour occludes it. A neighbour
-    /// entirely solid, or solid across the shared face (engine
-    /// <c>visibletris</c> - "touchingface" with all-solid edges), hides the face,
-    /// as does (with <paramref name="hideSameMaterial"/>) the same material volume.
-    /// The neighbour leaf must be at least as large as this face; anything finer or
-    /// empty is drawn, which can overdraw but never leaves a hole.
+    /// Exact visibility mask for one leaf face: <see cref="OctaVisible.VisibleTris"/>
+    /// (<c>octa.cpp:1094 visibletris</c>) for world geometry, or
+    /// <see cref="OctaEdit.VisibleFace"/> (<c>octa.cpp:1013 visibleface</c>) for
+    /// material volume boundaries (<paramref name="hideSameMaterial"/>).
+    /// Returns 0 when completely occluded/collapsed; bits 0..1 select the visible
+    /// triangles and bit 2 (<c>4</c>) flips the quad diagonal order.
     /// </summary>
-    public static bool FaceVisible(Octa octa, Cube c, int orient, Vector3I co, int size, bool hideSameMaterial)
+    public static int FaceVisibleTris(Octa octa, Cube c, int orient, Vector3I co, int size, bool hideSameMaterial = false)
     {
-        int dim = orient >> 1;
-        int dir = (orient & 1) == 0 ? -1 : 1;
-        int ncoord = co[dim] + dir * size;
-        if (ncoord < 0 || ncoord >= octa.WorldSize) return true; // world boundary
-
-        var centre = co;
-        centre[dim] = ncoord + size / 2;
-        centre[(dim + 1) % 3] = co[(dim + 1) % 3] + size / 2;
-        centre[(dim + 2) % 3] = co[(dim + 2) % 3] + size / 2;
-
-        var nb = octa.LeafCube(centre, out int nsize);
-        if (nb == null) return true;
-        // MAT_ALPHA is see-through (octa.cpp visibletris): a face of an alpha cube
-        // is never hidden by an opaque neighbour, and an opaque face bordering an
-        // alpha cube stays visible so you can see the solid through the alpha.
-        if ((c.Material & Octa.MAT_ALPHA) != 0) return true;
-        if ((nb.Material & Octa.MAT_ALPHA) != 0) return true;
-
-        // octa.cpp visibletris: occluded when entirely solid, OR when the neighbour
-        // is solid across the shared face (touchingface + all-solid edges) even if
-        // not wholly solid. Omitting the second clause draws coplanar faces the
-        // engine culls.
-        int opp = orient ^ 1;
-        if (nsize >= size &&
-            (nb.IsEntirelySolid() || (nb.TouchingFace(opp) && OctaVisible.FaceEdges(nb, opp) == Octa.F_SOLID)))
-            return false;
-        ushort curVolume = (ushort)(c.Material & Octa.MATF_VOLUME);
-        ushort nbVolume = (ushort)(nb.Material & Octa.MATF_VOLUME);
-        if (hideSameMaterial && nsize >= size)
+        if (hideSameMaterial)
         {
-            if ((nbVolume == curVolume) ||
-                (Octa.IsLiquid(curVolume) && nbVolume == Octa.MAT_GLASS))
-                return false;
+            ushort volume = (ushort)(c.Material & Octa.MATF_VOLUME);
+            return OctaEdit.VisibleFace(octa, c, orient, co, size, volume, Octa.MAT_AIR, Octa.MATF_VOLUME) ? 3 : 0;
         }
-        return true;
+        return OctaVisible.VisibleTris(octa, c, orient, co, size);
     }
+
+    /// <summary>Whether any triangle of the face survives occlusion culling.</summary>
+    public static bool FaceVisible(Octa octa, Cube c, int orient, Vector3I co, int size, bool hideSameMaterial)
+        => FaceVisibleTris(octa, c, orient, co, size, hideSameMaterial) != 0;
 }

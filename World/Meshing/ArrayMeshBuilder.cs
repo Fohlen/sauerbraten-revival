@@ -62,6 +62,39 @@ public sealed class ArrayMeshBuilder
         TriangleCount += 2;
     }
 
+    /// <summary>
+    /// Emit a single triangle with a flat normal and per-vertex UVs.
+    /// </summary>
+    public void AddTriangle(int vslot, Vector3 p0, Vector3 p1, Vector3 p2,
+                            Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector3 normal,
+                            bool reverse = false)
+    {
+        if (!_positions.TryGetValue(vslot, out var positions))
+        {
+            positions = new List<Vector3>();
+            _positions[vslot] = positions;
+            _normals[vslot] = new List<Vector3>();
+            _uvs[vslot] = new List<Vector2>();
+            _indices[vslot] = new List<int>();
+        }
+
+        var normals = _normals[vslot];
+        var uvs = _uvs[vslot];
+        var indices = _indices[vslot];
+        int b = positions.Count;
+        positions.Add(p0);
+        positions.Add(p1);
+        positions.Add(p2);
+        uvs.Add(uv0);
+        uvs.Add(uv1);
+        uvs.Add(uv2);
+        for (int i = 0; i < 3; i++) normals.Add(normal);
+        indices.Add(b);
+        indices.Add(reverse ? b + 2 : b + 1);
+        indices.Add(reverse ? b + 1 : b + 2);
+        TriangleCount += 1;
+    }
+
     /// <summary>Build the mesh. When materials are supplied, each surface gets its vslot's material.</summary>
     public ArrayMesh Build(MaterialSet? materials = null)
     {

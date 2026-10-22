@@ -110,7 +110,7 @@ public class MaterialBuilderTest : GoTestBase
         var octa = TestData.ReadMap().ToOcta();
         var chunked = new OctaMesher(octa, set).BuildChunked(512);
 
-        TestAssert.Equal(560314, chunked.TriangleCount, "geometry unchanged by materials");
+        TestAssert.Equal(326943, chunked.TriangleCount, "geometry unchanged by materials");
         int surfaces = 0, withMaterial = 0, withUv = 0;
         foreach (var chunk in chunked.Chunks)
         {

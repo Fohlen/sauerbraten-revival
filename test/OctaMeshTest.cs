@@ -48,11 +48,66 @@ public class OctaMeshTest : GoTestBase
         TestAssert.True(triangles > 0, "at least one triangle");
 
         // Regression baseline for the current geometry-only mesher; update when the
-        // mesher gains fidelity (visibletris, merges, sky, material surfaces, ...).
-        // 118 surfaces: surfaces are grouped by texture vslot (previously 229 with
-        // (texture, lmid) baked-lightmap groupings before R2 removal).
-        TestAssert.Equal(118, surfaces, "surface count baseline");
-        TestAssert.Equal(560314L, triangles, "triangle count baseline");
+        // mesher gains fidelity (merges, T-joints, sky, ...).
+        // 105 surfaces / 326943 triangles with exact visibletris culling (down from
+        // 118 surfaces / 560314 triangles under the conservative face cull).
+        TestAssert.Equal(105, surfaces, "surface count baseline");
+        TestAssert.Equal(326943L, triangles, "triangle count baseline");
+    }
+
+    [Test]
+    public void VisibleTrisMatchesEngineBakedSurfaces()
+    {
+        // For every unmerged face in church51 whose surfaceinfo was baked by the
+        // original engine's calclight (which calls visibletris(c, orient, co, size)
+        // in lightmap.cpp / worldio.cpp), our VisibleTris must produce the exact
+        // same surviving vertex count (3 or 4) and 1/8-unit corner coordinates.
+        var octa = TestData.ReadMap().ToOcta();
+        int checkedFaces = 0, partialFaces = 0, mismatched = 0;
+
+        OctaFaceWalker.Walk(octa,
+            include: c => !c.IsEmpty(),
+            hideSameMaterial: false,
+            emit: face =>
+            {
+                if ((face.Cube.Merged & (1 << face.Orient)) != 0) return;
+                if (face.Cube.Ext == null) return;
+                var surf = face.Cube.Ext.Surfaces[face.Orient];
+                int layerverts = surf.NumVerts & Octa.MAXFACEVERTS;
+                if (layerverts == 0) return;
+
+                checkedFaces++;
+                if (layerverts == 3) partialFaces++;
+
+                System.Span<Vector3I> v = stackalloc Vector3I[4];
+                face.Cube.GenFaceVerts(face.Orient, v);
+                int convex = face.Cube.FlatAxisFace(face.Orient) ? 0 : CubeGeometry.FaceConvexity(v);
+                int order = (face.Vis & 4) != 0 || convex < 0 ? 1 : 0;
+                var vo = new Vector3I((face.Co.X & 0xFFF) << 3, (face.Co.Y & 0xFFF) << 3, (face.Co.Z & 0xFFF) << 3);
+
+                System.Span<Vector3I> actual = stackalloc Vector3I[4];
+                int n = 0;
+                actual[n++] = v[(order + 0) & 3] * face.Size + vo;
+                if ((face.Vis & 1) != 0) actual[n++] = v[(order + 1) & 3] * face.Size + vo;
+                actual[n++] = v[(order + 2) & 3] * face.Size + vo;
+                if ((face.Vis & 2) != 0) actual[n++] = v[(order + 3) & 3] * face.Size + vo;
+
+                if (n != layerverts) { mismatched++; return; }
+                for (int k = 0; k < n; k++)
+                {
+                    var ev = face.Cube.Ext.Verts[surf.Verts + k];
+                    if (actual[k].X != ev.X || actual[k].Y != ev.Y || actual[k].Z != ev.Z)
+                    {
+                        mismatched++;
+                        break;
+                    }
+                }
+            });
+
+        GD.Print($"[visibletris] checked={checkedFaces} partial={partialFaces} mismatched={mismatched}");
+        TestAssert.Equal(18811, checkedFaces, "checked all unmerged baked surfaces in church51");
+        TestAssert.Equal(3484, partialFaces, "exercised single-triangle partial faces");
+        TestAssert.Equal(0, mismatched, "VisibleTris matches engine-baked surface vertices on every face");
     }
 
     [Test]

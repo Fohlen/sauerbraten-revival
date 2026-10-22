@@ -39,6 +39,20 @@ public static class MeshFace
             Reverse(p0, p1, p2, normal), Reverse(p0, p2, p3, normal));
     }
 
+    /// <summary>
+    /// Emit three world-space corners as a single triangle with per-vertex UVs,
+    /// wound against the outward <paramref name="orient"/> normal.
+    /// </summary>
+    public static void Triangle(ArrayMeshBuilder builder, int vslot, int orient,
+                                Vector3 p0, Vector3 p1, Vector3 p2,
+                                Vector2 uv0, Vector2 uv1, Vector2 uv2)
+    {
+        Vector3 normal = AxisNormal(orient);
+
+        builder.AddTriangle(vslot, p0, p1, p2, uv0, uv1, uv2, normal,
+            Reverse(p0, p1, p2, normal));
+    }
+
     /// <summary>Whether a triangle must be reversed to face outward under Godot's front-face convention.</summary>
     private static bool Reverse(Vector3 a, Vector3 b, Vector3 c, Vector3 normal)
     {

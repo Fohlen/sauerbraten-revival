@@ -237,11 +237,14 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   surface verts); `OgzMap.ToOcta()` wraps it as an `Octa`.
 - **Mesher (stage B)** — `World/Meshing/OctaMesher.cs` emits a geometry-only
   `ArrayMesh` (positions, flat normals, indices; one surface per texture via
-  `ArrayMeshBuilder`). The octree traversal and the conservative face cull are
-  shared with the material mesher in `OctaFaceWalker`; `MeshFace` owns the
-  winding/normal convention. Positions are in Sauerbraten coordinates (Z-up); the
-  scene node carries the Z-up → Y-up rotation. World faces are **back-face
-  culled** (Godot's front faces are clockwise; `MeshWindingTest` guards this).
+  `ArrayMeshBuilder`). The octree traversal and exact occlusion culling
+  (`OctaVisible.VisibleTris` for world geometry, `OctaEdit.VisibleFace` for
+  material volumes) are shared in `OctaFaceWalker`; `OctaMesher` emits either a
+  quad or a single triangle per surviving `visibletris` mask (including diagonal
+  flips); `MeshFace` owns the winding/normal convention. Positions are in
+  Sauerbraten coordinates (Z-up); the scene node carries the Z-up → Y-up
+  rotation. World faces are **back-face culled** (Godot's front faces are
+  clockwise; `MeshWindingTest` guards this).
 - **Materials (C1)** — `World/Materials/`: `MetadataCatalogue` loads the
   engine-exported slot/vslot data, `MaterialBuilder` ports `calctexgen` and
   builds one Godot `StandardMaterial3D` per vslot (diffuse texture + tint), and
@@ -282,7 +285,7 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
 - **TODO (deferred)** — **envmap sampling** (`SHADER_ENVMAP`, `closestenvmap`;
   the `ET_ENVMAP` probes themselves are now imported — see
   [ADR 0006](adr/0006-ogz-import.md#entity-type-mapping) — but nothing reads them),
-  **specular maps** (packed/non-PBR), blended layers, exact `visibletris`
-  culling, face merges, T-joints and grass. World lighting is the L1 SH probe
-  volume ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)); the baked-lightmap path is
+  **specular maps** (packed/non-PBR), blended layers, face merges, T-joints and
+  grass. World lighting is the L1 SH probe volume
+  ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)); the baked-lightmap path is
   dropped. Tracked divergences live in [known-bugs.md](known-bugs.md).

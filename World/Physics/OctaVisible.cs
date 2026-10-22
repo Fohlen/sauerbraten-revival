@@ -74,7 +74,7 @@ public static class OctaVisible
         var v2 = new Vector3I(e1 >> 4, e3 >> 4, f3);
         var v3 = new Vector3I(e1 & 0xF, e2 >> 4, f2);
         return CubeGeometry.Cross(v1 - v0, v2 - v0) == Vector3I.Zero &&
-               CubeGeometry.Cross(v2, v3 - v0) == Vector3I.Zero;
+               CubeGeometry.Cross(v2 - v0, v3 - v0) == Vector3I.Zero;
     }
 
     /// <summary>octa.cpp:827 <c>genfacevecs</c> — face polygon in 2D face coords.</summary>
@@ -225,9 +225,9 @@ public static class OctaVisible
         int vis = 3, touching = 0xF;
         var v = new Vector3I[4];
         c.GenFaceVerts(orient, v);
-        Vector3I e1 = v[1], e2 = v[2], e3 = v[0];
-        Vector3I n = CubeGeometry.Cross(e1 - v[0], e2 - v[0]);
-        int convex = (e3 - v[3]).X * n.X + (e3 - v[3]).Y * n.Y + (e3 - v[3]).Z * n.Z;
+        Vector3I e1 = v[1] - v[0], e2 = v[2] - v[0], e3 = v[0] - v[3];
+        Vector3I n = CubeGeometry.Cross(e1, e2);
+        int convex = e3.X * n.X + e3.Y * n.Y + e3.Z * n.Z;
         if (convex == 0)
         {
             if (CubeGeometry.Cross(e3, e2) == Vector3I.Zero || v[1] == v[3])

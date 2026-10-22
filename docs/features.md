@@ -69,6 +69,7 @@ Done:
 - [x] Skybox: cubemap `skybox` mapvar → `SkyBuilder` + `shader_type sky`.
 - [x] Texture pipeline: `ITextureSource` seam + `tools/texture-import/` + runtime dump fallback.
 - [x] Material surfaces (water/lava/glass) — `MaterialMesher` + `MaterialTextures` (exact occlusion culling via `OctaEdit.VisibleFace`).
+- [x] Exact `visibletris` culling (`OctaVisible.VisibleTris` wired into `OctaFaceWalker`/`OctaMesher`, including partial single-triangle faces and diagonal flip; asserted against all 18,811 unmerged baked surfaces in church51 by `test/OctaMeshTest.cs`).
 - [x] `Resource`-based world save/load (compact binary format) — `WorldSnapshot`
       (canonical octree + entity blob, versioned, content-hashed) wrapped in Godot
       `WorldResource`/`HistoryResource`, plus the map-directory layout + compaction +
@@ -84,7 +85,7 @@ Remaining:
 
 - [ ] LOD via `ArrayMesh.add_lod()`.
 - [ ] RenderingServer mesh streaming (bypass the scene tree; [rendering.md](rendering.md#renderingserver-usage-planned-optimisation)).
-- [ ] Exact `visibletris` culling, face merges, T-joints, grass.
+- [ ] Face merges, T-joints, grass.
 - [ ] **Post-MVP fidelity** (see [Post-MVP / deferred fidelity](#post-mvp--deferred-fidelity)):
       lighting ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)), envmap, specular maps,
       blend shader.
