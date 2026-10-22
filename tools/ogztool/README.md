@@ -92,8 +92,8 @@ tools/ogztool/convert-all-maps.sh --dry-run # list without running
 ```
 
 Output lands in `assets/packages/<pkg>/<map>.ogz` (git-ignored; `assets/` carries a
-`.gdignore` so Godot never scans the raw OGZ). The importer (`MapRoots`) reads
-this tree first, then the reference dump.
+`.gdignore` so Godot never scans the raw OGZ). The shared content resolver
+(`ContentRoots`) reads this tree first, then the reference dump.
 
 **Order matters.** Convert first, then [export](#1-export-import-metadata): the
 exporter must read the converted map so its `geometry` block matches what the

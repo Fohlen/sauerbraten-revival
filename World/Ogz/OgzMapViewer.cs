@@ -27,7 +27,7 @@ namespace SauerbratenRevival.World.Ogz;
 [GlobalClass]
 public partial class OgzMapViewer : Node3D
 {
-    /// <summary>Override map to build. Absolute, or package-relative (e.g. <c>base/church51.ogz</c>), resolved against <c>res://assets/packages/</c> then the reference dump; empty uses the default.</summary>
+    /// <summary>Override map to build. Absolute, or package-relative (e.g. <c>base/church51.ogz</c>), resolved through <see cref="Content.ContentRoots.ResolveMap"/>; empty uses the default.</summary>
     [Export] public string OgzPath { get; set; } = "";
     [Export] public int ChunkSize { get; set; } = 512;
 
@@ -127,7 +127,7 @@ public partial class OgzMapViewer : Node3D
         player.ApplyLookSettings(userSettings); // sensitivity / accel / invert / FOV
         AttachPlayerModel(player);
 
-        var effects = new Effects.WeaponEffectsRenderer { Name = "WeaponEffects" };
+        var effects = new Effects.WeaponEffectsRenderer { Name = "WeaponEffects", Textures = World.Textures };
         World.AddChild(effects);
         World.WeaponEffects = effects;
         player.WeaponEffects = effects;

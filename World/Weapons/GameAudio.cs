@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Godot;
-using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Content;
 
 namespace SauerbratenRevival.World.Weapons;
 
@@ -39,10 +38,11 @@ public sealed class SoundConfig
 
 /// <summary>
 /// Locates and loads package-relative sound files (e.g. <c>q009/rifle</c> or
-/// <c>ambience/water.ogg</c>). The shipped project copy (<c>res://assets/sounds/</c>)
-/// is preferred so playback works from a packed PCK; the reference dump
-/// (<c>$SAUER_REF/packages/sounds/</c>) is a dev-only fallback. The extension may be
-/// omitted; <c>.ogg</c> and <c>.wav</c> are probed.
+/// <c>ambience/water.ogg</c>). Path resolution goes through <see cref="ContentRoots"/>:
+/// the shipped project copy (<c>res://assets/sounds/</c>) is preferred so playback
+/// works from a packed PCK; the reference dump (<c>$SAUER_REF/packages/sounds/</c>)
+/// is a dev-only fallback. The extension may be omitted; <c>.ogg</c> and <c>.wav</c>
+/// are probed.
 /// </summary>
 public static class SoundFiles
 {
@@ -57,17 +57,10 @@ public static class SoundFiles
     {
         if (string.IsNullOrEmpty(relative)) return null;
 
-        foreach (var ext in Extensions)
-        {
-            string project = $"res://assets/sounds/{relative}{ext}";
-            if (Godot.FileAccess.FileExists(project)) return project;
-        }
-        foreach (var ext in Extensions)
-        {
-            string dump = Path.Combine(MapRoots.ReferencePackages, "sounds", relative + ext);
-            if (Godot.FileAccess.FileExists(dump)) return dump;
-        }
-        return null;
+        var variants = new string[Extensions.Length];
+        for (int i = 0; i < Extensions.Length; i++)
+            variants[i] = relative + Extensions[i];
+        return ContentRoots.TryResolve(ContentKind.Sound, variants);
     }
 
     /// <summary>Load a path from <see cref="Resolve"/>, applying the requested loop mode.</summary>

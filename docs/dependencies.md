@@ -50,7 +50,7 @@ tools/ogztool/build.sh                    # OGZ metadata + old-map conversion
 
 | Setting / Variable | Type | Used by | Default |
 | --- | --- | --- | --- |
-| `sauerbraten/reference_path` | `ProjectSettings` | Dev resolver (`MapRoots`) fallback when a map is not in the asset pack | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
+| `sauerbraten/reference_path` | `ProjectSettings` | Dev resolver (`ContentRoots`) fallback when an asset is not in the project pack | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
 | `SAUER_REF` | Env var (overrides ProjectSetting) | Tests, viewer, import tools, refharness, ogztool | Unset (falls back to ProjectSetting or default) |
 | `GODOT` | Env var | `run-tests.sh` | `/Applications/Godot_mono.app/Contents/MacOS/Godot` |
 | `SAUER_TRACE` | Env var | A1/A2 instrumented reference client (refharness) | unset (features inert) |

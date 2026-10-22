@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Godot;
+using SauerbratenRevival.World.Content;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.World.Effects;
@@ -45,8 +46,8 @@ public partial class WeaponEffectsRenderer : Node3D
     private const float BulletDecalFadeOut = 1f;   // fadeouttime: 1s (r6889)
 
     // Rocket projectile model (weapon.cpp renderprojectiles; the `projectiles/rocket` MD3).
-    private const string RocketModelPath = "res://assets/models/projectiles_rocket.glb";
-    private const string RocketSkinPath = "res://assets/textures/models/projectiles/rocket/skin.jpg";
+    private static readonly string RocketModelPath = ContentRoots.ProjectPath(ContentKind.Model, "projectiles_rocket.glb");
+    private const string RocketSkinRelative = "models/projectiles/rocket/skin.jpg";
     // The converted MD3 is authored in Cube2 model units; 0.2 matches the grenade's
     // chosen world scale (see BounceBody) so both projectiles read at a similar size.
     private const float RocketVisualScale = 0.2f;
@@ -66,6 +67,12 @@ public partial class WeaponEffectsRenderer : Node3D
         get => (GetParent() as Ogz.MapWorld)?.ActiveRockets ?? _standaloneRockets;
         set => _standaloneRockets = value;
     }
+
+    /// <summary>
+    /// Texture source for decals and the rocket skin. Defaults to the parent
+    /// world's source, then the shared project-first/dump fallback.
+    /// </summary>
+    public ITextureSource? Textures { get; set; }
 
     private readonly List<ActiveBeam> _beams = new();
     private readonly List<ActiveExplosion> _explosions = new();
@@ -107,35 +114,9 @@ public partial class WeaponEffectsRenderer : Node3D
         _decalContainer = new Node3D { Name = "DecalContainer" };
         AddChild(_decalContainer);
 
-        string texPath = "res://assets/textures/particles/bullet.png";
-        string diskPath = ProjectSettings.GlobalizePath(texPath);
-        if (File.Exists(diskPath))
-        {
-            var img = new Image();
-            if (img.Load(diskPath) == Error.Ok)
-            {
-                _bulletTexture = ImageTexture.CreateFromImage(img);
-            }
-        }
-        if (_bulletTexture == null && ResourceLoader.Exists(texPath))
-        {
-            _bulletTexture = GD.Load<Texture2D>(texPath);
-        }
-
-        string scorchPath = "res://assets/textures/particles/scorch.png";
-        string scorchDiskPath = ProjectSettings.GlobalizePath(scorchPath);
-        if (File.Exists(scorchDiskPath))
-        {
-            var img = new Image();
-            if (img.Load(scorchDiskPath) == Error.Ok)
-            {
-                _scorchTexture = ImageTexture.CreateFromImage(img);
-            }
-        }
-        if (_scorchTexture == null && ResourceLoader.Exists(scorchPath))
-        {
-            _scorchTexture = GD.Load<Texture2D>(scorchPath);
-        }
+        var textures = ResolveTextures();
+        _bulletTexture = textures.Get("particles/bullet.png");
+        _scorchTexture = textures.Get("particles/scorch.png");
 
         // Shared 1x1 quad mesh (size is scaled via Node3D scale)
         _quadMesh = new QuadMesh { Size = new Vector2(1f, 1f) };
@@ -171,15 +152,19 @@ public partial class WeaponEffectsRenderer : Node3D
             };
         }
 
-        LoadRocketVisual();
+        LoadRocketVisual(textures);
     }
+
+    /// <summary>Textures for the parent world when attached, else a fresh project-first/dump source.</summary>
+    private ITextureSource ResolveTextures() =>
+        Textures ?? (GetParent() as Ogz.MapWorld)?.Textures ?? TextureSources.CreateDefault();
 
     /// <summary>
     /// Loads the converted <c>projectiles/rocket</c> model and its skin once. Mirrors
     /// the grenade visual in <see cref="World.Entities.BounceBody"/> (the imperfect
     /// direct GLB/skin load used for the first pass).
     /// </summary>
-    private void LoadRocketVisual()
+    private void LoadRocketVisual(ITextureSource textures)
     {
         if (!ResourceLoader.Exists(RocketModelPath)) return;
         _rocketScene = ResourceLoader.Load<PackedScene>(RocketModelPath);
@@ -190,9 +175,9 @@ public partial class WeaponEffectsRenderer : Node3D
             Roughness = 0.3f,
             Metallic = 0.6f
         };
-        if (ResourceLoader.Exists(RocketSkinPath))
+        if (textures.Get(RocketSkinRelative) is { } skin)
         {
-            mat.AlbedoTexture = ResourceLoader.Load<Texture2D>(RocketSkinPath);
+            mat.AlbedoTexture = skin;
             mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps;
         }
         else

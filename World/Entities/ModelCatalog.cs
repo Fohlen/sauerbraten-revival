@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using Godot;
+using SauerbratenRevival.World.Content;
 
 namespace SauerbratenRevival.World.Entities;
 
@@ -110,6 +111,16 @@ public sealed class ModelCatalog
     public readonly Dictionary<string, ModelInfo> Models = new();
 
     public ModelInfo? Get(string name) => Models.GetValueOrDefault(name);
+
+    /// <summary>
+    /// Load the manifest from the project's imported model tree (see
+    /// <see cref="ContentRoots.ProjectDir"/>) — the normal runtime path.
+    /// </summary>
+    public static ModelCatalog? LoadFromProject()
+    {
+        string resDir = ContentRoots.ProjectDir(ContentKind.Model);
+        return Load($"{resDir}/models.json", ProjectSettings.GlobalizePath(resDir), resDir);
+    }
 
     public static ModelCatalog? Load(string jsonPath, string glbOsDir, string glbResDir)
     {

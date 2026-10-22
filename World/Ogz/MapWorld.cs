@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
@@ -26,7 +27,7 @@ namespace SauerbratenRevival.World.Ogz;
 [GlobalClass]
 public partial class MapWorld : Node3D
 {
-    /// <summary>Override map to build. Absolute, or package-relative (e.g. <c>base/church51.ogz</c>), resolved against <c>res://assets/packages/</c> then the reference dump; empty uses the default.</summary>
+    /// <summary>Override map to build. Absolute, or package-relative (e.g. <c>base/church51.ogz</c>), resolved through <see cref="ContentRoots.ResolveMap"/>; empty uses the default.</summary>
     [Export] public string OgzPath { get; set; } = "";
     [Export] public int ChunkSize { get; set; } = 512;
 
@@ -277,7 +278,7 @@ public partial class MapWorld : Node3D
         if (Clock.NowMillis == 0) Clock.Set((int)Time.GetTicksMsec());
 
         string mapName = path.GetFile().GetBaseName();
-        ITextureSource textures = new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource(MapRoots.ReferenceRoot));
+        ITextureSource textures = TextureSources.CreateDefault();
         Textures = textures;
         var catalogue = MetadataCatalogue.TryLoadForMap(mapName);
 
@@ -298,9 +299,7 @@ public partial class MapWorld : Node3D
         var chunked = new OctaMesher(octa, materials).BuildChunked(ChunkSize);
 
         // Converted mapmodels (assimp), imported by Godot as Resources.
-        const string modelsResDir = "res://assets/models";
-        string modelsDir = ProjectSettings.GlobalizePath(modelsResDir);
-        var modelCatalog = ModelCatalog.Load($"{modelsResDir}/models.json", modelsDir, modelsResDir);
+        var modelCatalog = ModelCatalog.LoadFromProject();
         Models = modelCatalog;
 
         AddChild(LightBuilder.Build(map));
@@ -504,7 +503,7 @@ public partial class MapWorld : Node3D
         Items?.UpdateVisual(lastMillis);
     }
 
-    private static string DefaultPath() => MapRoots.Resolve("base/church51");
+    private static string DefaultPath() => ContentRoots.ResolveMap("base/church51");
 
     /// <summary>Creates the visual node for one flag, oriented by its spawn yaw.</summary>
     private static FlagNode CreateFlagNode(int flagId, int team, Vector3 position, float yaw,
@@ -524,5 +523,5 @@ public partial class MapWorld : Node3D
         return flagNode;
     }
 
-    private static string ResolvePath(string ogzPath) => MapRoots.Resolve(ogzPath);
+    private static string ResolvePath(string ogzPath) => ContentRoots.ResolveMap(ogzPath);
 }

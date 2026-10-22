@@ -909,7 +909,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             {
                 var grenade = new BounceBody
                 {
-                    BodyKind = BounceBody.Kind.Grenade
+                    BodyKind = BounceBody.Kind.Grenade,
+                    Textures = (GetParent() as MapWorld)?.Textures,
                 };
                 grenade.Setup(
                     _phys,

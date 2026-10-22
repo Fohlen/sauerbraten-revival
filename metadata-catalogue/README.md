@@ -6,9 +6,9 @@ exported from the **original** Sauerbraten client (patched with
 
 Only the **JSON** is committed. The `.ogz` maps themselves are large binary game
 assets: they ship in the git-ignored asset pack under `assets/packages/`. The OGZ
-reader resolves them through [`MapRoots`](../World/Ogz/MapRoots.cs) (asset pack
-first, then `$SAUER_REF/packages/`), so tests read `base/<map>.ogz` from whichever
-tree is present.
+reader resolves them through the shared
+[`ContentRoots`](../World/Content/ContentRoots.cs) resolver (asset pack first, then
+`$SAUER_REF/packages/`), so tests read `base/<map>.ogz` from whichever tree is present.
 
 Each file holds the resolved `slots`/`vslots`/`mapmodels`/`entities`/`sounds`, plus a
 `geometry` block (cube-tree counts, surface/vertex totals, per-vslot face histogram

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using Godot;
+using SauerbratenRevival.World.Content;
 
 namespace SauerbratenRevival.World.Materials;
 
@@ -16,19 +17,23 @@ public interface ITextureSource
     Image? GetImage(string path);
 }
 
-/// <summary>Loads textures from Godot-imported Resources under <c>res://assets/textures/</c> (see tools/texture-import).</summary>
+/// <summary>
+/// Loads project textures: the Godot-imported Resource when present, else the raw
+/// image on disk (so a fresh checkout without imports still works). The path root
+/// comes from <see cref="ContentRoots.ProjectDir"/> (see tools/texture-import).
+/// </summary>
 public sealed class ResourceTextureSource : ITextureSource
 {
     private readonly string _root;
     private readonly Dictionary<string, Texture2D?> _textures = new();
 
-    public ResourceTextureSource(string root = "res://assets/textures") => _root = root.TrimEnd('/');
+    public ResourceTextureSource(string? root = null)
+        => _root = (root ?? ContentRoots.ProjectDir(ContentKind.Texture)).TrimEnd('/');
 
     public Texture2D? Get(string path)
     {
         if (_textures.TryGetValue(path, out var texture)) return texture;
-        string res = $"{_root}/{path}";
-        texture = ResourceLoader.Exists(res) ? ResourceLoader.Load<Texture2D>(res) : null;
+        texture = Load($"{_root}/{path}");
         _textures[path] = texture;
         return texture;
     }
@@ -36,9 +41,20 @@ public sealed class ResourceTextureSource : ITextureSource
     public Vector2I Size(string path) => Get(path) is { } texture ? (Vector2I)texture.GetSize() : Vector2I.Zero;
 
     public Image? GetImage(string path) => Get(path)?.GetImage();
+
+    private static Texture2D? Load(string resPath)
+    {
+        if (ResourceLoader.Exists(resPath)) return ResourceLoader.Load<Texture2D>(resPath);
+
+        // Imported resource absent (e.g. a fresh checkout): read the source image.
+        string diskPath = ProjectSettings.GlobalizePath(resPath);
+        if (!File.Exists(diskPath)) return null;
+        var image = new Image();
+        return image.Load(diskPath) == Error.Ok ? ImageTexture.CreateFromImage(image) : null;
+    }
 }
 
-/// <summary>Reads from the project's imported textures first, falling back to the dump.</summary>
+/// <summary>Binds the shared <see cref="ContentRoots"/> order (project Resources, then the reference dump) to the <see cref="ITextureSource"/> API.</summary>
 public sealed class FallbackTextureSource : ITextureSource
 {
     private readonly ITextureSource _primary, _fallback;
@@ -60,14 +76,17 @@ public sealed class FallbackTextureSource : ITextureSource
     public Image? GetImage(string path) => _primary.GetImage(path) ?? _fallback.GetImage(path);
 }
 
-/// <summary>Loads textures on demand from the reference dump's <c>packages/</c> directory.</summary>
+/// <summary>Loads textures on demand from the reference dump (see <see cref="ContentRoots.ReferenceTree"/>).</summary>
 public sealed class DumpTextureSource : ITextureSource
 {
     private readonly string _packagesRoot;
     private readonly Dictionary<string, Texture2D?> _textures = new();
     private readonly Dictionary<string, Vector2I> _sizes = new();
 
-    public DumpTextureSource(string referenceRoot) => _packagesRoot = Path.Combine(referenceRoot, "packages");
+    public DumpTextureSource(string? referenceRoot = null)
+        => _packagesRoot = referenceRoot is null
+            ? ContentRoots.ReferenceTree(ContentKind.Texture)
+            : Path.Combine(referenceRoot, "packages");
 
     public Texture2D? Get(string path)
     {
@@ -95,4 +114,15 @@ public sealed class DumpTextureSource : ITextureSource
         var image = new Image();
         return image.Load(full) == Error.Ok ? image : null;
     }
+}
+
+/// <summary>
+/// Builds the production texture source: the one binding of <see cref="ContentRoots"/>'s
+/// project-first, dump-second order to the <see cref="ITextureSource"/> API.
+/// </summary>
+public static class TextureSources
+{
+    /// <summary>Project textures first, then the reference dump.</summary>
+    public static ITextureSource CreateDefault() =>
+        new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource());
 }

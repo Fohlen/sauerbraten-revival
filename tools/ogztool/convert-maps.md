@@ -16,8 +16,8 @@ preparing the original files and their metadata once, before shipping.
 | `assets/models/`, `assets/textures/` | no (asset pack) | `tools/model-import`, `tools/texture-import` |
 | `metadata-catalogue/<map>.json` | **yes** | `tools/ogztool/export-all-maps.sh` |
 
-The runtime resolves a map through [`MapRoots`](../../World/Ogz/MapRoots.cs):
-`assets/packages/` first, then the reference dump. Only the first tree ships.
+The runtime resolves a map through the shared [`ContentRoots`](../../World/Content/ContentRoots.cs)
+resolver: `assets/packages/` first, then the reference dump. Only the first tree ships.
 
 ## 1. Build the reference tooling once
 

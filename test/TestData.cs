@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using Godot;
+using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Ogz;
 
 namespace SauerbratenRevival.Tests;
@@ -11,13 +12,13 @@ namespace SauerbratenRevival.Tests;
 /// </summary>
 public static class TestData
 {
-    public static readonly string ReferenceRoot = MapRoots.ReferenceRoot;
+    public static readonly string ReferenceRoot = ContentRoots.ReferenceRoot;
 
-    public static readonly string OgzPath = MapRoots.Resolve("base/church51");
+    public static readonly string OgzPath = ContentRoots.ResolveMap("base/church51");
 
     public static readonly string CataloguePath = "res://metadata-catalogue/church51.json";
 
-    public static string OgzPathFor(string map) => MapRoots.Resolve(map);
+    public static string OgzPathFor(string map) => ContentRoots.ResolveMap(map);
 
     public static string CataloguePathFor(string map) => $"res://metadata-catalogue/{map}.json";
 

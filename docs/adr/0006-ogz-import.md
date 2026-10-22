@@ -292,9 +292,10 @@ See [add & convert maps](../../tools/ogztool/convert-maps.md) for the end-to-end
 recipe, and [`tools/ogztool/README.md`](../../tools/ogztool/README.md) for the
 tool's own options.
 
-Godot imports `assets/models/` and `assets/textures/` as Resources; the viewer
-loads the imported Resources and falls back to the dump for anything not
-imported.
+Godot imports `assets/models/` and `assets/textures/` as Resources; the runtime
+resolves maps, textures, sounds and models through the single
+[`ContentRoots`](../../World/Content/ContentRoots.cs) resolver (project
+`res://assets/` first, then the reference dump).
 
 ---
 
@@ -383,7 +384,7 @@ loss. See
 - `World/Ogz/OgzMap.cs` — `ToOcta()` + map vars/entities accessors.
 - `World/Ogz/OgzGeometry.cs` — ground-truth geometry checksum.
 - `World/Ogz/OgzMapViewer.cs` / `World/Ogz/MapWorld.cs` — runtime build of a classic map.
-- `World/Ogz/MapRoots.cs` — OGZ resolution (`assets/packages/`, then dump).
+- `World/Content/ContentRoots.cs` — the single asset resolver (`assets/…`, then dump) for maps, textures, sounds and models.
 - `World/Save/` — native map directory, manifest, and editor save/load.
 - `metadata-catalogue/` — committed resolved metadata (ground truth).
 - `tools/ogztool/` — metadata export + old-map normalisation.

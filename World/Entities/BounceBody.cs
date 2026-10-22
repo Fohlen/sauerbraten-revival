@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Content;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 
@@ -58,6 +60,12 @@ public partial class BounceBody : Node3D
     public bool QuadDamage { get; set; }
     public bool Local { get; set; } = true;
     public bool Exploded { get; private set; }
+
+    /// <summary>
+    /// Texture source for the grenade skin. Defaults to the shared project-first/dump
+    /// fallback; assign the world's source to share its cache.
+    /// </summary>
+    public ITextureSource? Textures { get; set; }
 
     /// <summary>Raised when a grenade detonates (timeout or player contact).</summary>
     public event System.Action<Vector3, Weapons.ExplosionResult<IExplosionTarget>>? Detonated;
@@ -119,21 +127,21 @@ public partial class BounceBody : Node3D
             Node3D? visualNode = null;
             if (BodyKind == Kind.Grenade)
             {
-                const string glbPath = "res://assets/models/projectiles_grenade.glb";
+                string glbPath = ContentRoots.ProjectPath(ContentKind.Model, "projectiles_grenade.glb");
                 if (ResourceLoader.Exists(glbPath))
                 {
                     var packed = ResourceLoader.Load<PackedScene>(glbPath);
                     if (packed != null && packed.Instantiate() is Node3D scene)
                     {
+                        var textures = Textures ?? TextureSources.CreateDefault();
                         var mat = new StandardMaterial3D
                         {
                             Roughness = 0.3f,
                             Metallic = 0.6f
                         };
-                        const string texPath = "res://assets/textures/models/projectiles/grenade/skin.jpg";
-                        if (ResourceLoader.Exists(texPath))
+                        if (textures.Get("models/projectiles/grenade/skin.jpg") is { } skin)
                         {
-                            mat.AlbedoTexture = ResourceLoader.Load<Texture2D>(texPath);
+                            mat.AlbedoTexture = skin;
                             mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps;
                         }
                         else
