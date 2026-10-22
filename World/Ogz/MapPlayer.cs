@@ -525,6 +525,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             }
             else
             {
+                if (Floating)
+                {
+                    // In edit / spectator mode, weapon attacks and wheel cycling are bypassed so editor tools take input.
+                    return;
+                }
+
                 if (mb.ButtonIndex == MouseButton.Left)
                 {
                     if (mb.Pressed && Entity.Dead)
@@ -547,6 +553,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         }
         else if (@event is InputEventKey { Pressed: true } key && !key.Echo)
         {
+            if (Floating)
+            {
+                // In edit / spectator mode, numeric weapon slots are bypassed so editor tools take input.
+                return;
+            }
+
             if (key.Keycode >= Key.Key1 && key.Keycode <= Key.Key7)
             {
                 int gun = (int)(key.Keycode - Key.Key1);
@@ -1171,6 +1183,24 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             Step(Phys.PhysFrameTime, candidates);
         }
+    }
+
+    /// <summary>Whether the player is in coop-edit mode (engine CS_EDITING).</summary>
+    [Export]
+    public bool EditMode
+    {
+        get => Entity.State == PhysEnt.CsEditing;
+        set
+        {
+            Entity.State = value ? PhysEnt.CsEditing : PhysEnt.CsAlive;
+            if (value) Entity.Jumping = false;
+        }
+    }
+
+    /// <summary>Toggles between alive and coop-edit mode.</summary>
+    public void ToggleEditMode()
+    {
+        EditMode = !EditMode;
     }
 
     /// <summary>

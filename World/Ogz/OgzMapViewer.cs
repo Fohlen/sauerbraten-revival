@@ -37,6 +37,9 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Attach the direct-child <see cref="MapPlayer"/> to the world's octree and place it at a spawn point.</summary>
     [Export] public bool SpawnPlayer { get; set; } = false;
 
+    /// <summary>When true, spawns player in coop-edit mode with an active EditorController.</summary>
+    [Export] public bool EditMode { get; set; } = false;
+
     /// <summary>Player model table index to load (render.cpp <c>playermodel</c> 0..4); negative keeps the placeholder body.</summary>
     [Export] public int PlayerModelIndex { get; set; } = -1;
 
@@ -65,6 +68,10 @@ public partial class OgzMapViewer : Node3D
     /// <summary>The built world (geometry + octree), once <see cref="_Ready"/> has run.</summary>
     public MapWorld? World { get; private set; }
 
+    /// <summary>The active map source supplying octree, geometry, and entities.</summary>
+    public IMapSource? MapSource => World ?? _customSource;
+    private IMapSource? _customSource;
+
     private bool _built;
 #if TOOLS
     private Camera3D? _frameCamera;
@@ -80,24 +87,45 @@ public partial class OgzMapViewer : Node3D
         // The game mode only applies to an actual play session; the edit viewer
         // leaves Mode unset so the raw mode-entity representation is shown (see
         // ModeEntityBuilder.AppliesToMode).
-        Game.GameModeInfo? modeInfo = SpawnPlayer ? Game.GameModeCatalog.Get(GameMode) : null;
-        World = new MapWorld
-        {
-            Name = "MapWorld",
-            OgzPath = OgzPath,
-            ChunkSize = ChunkSize,
-            ShowEntityMarkers = ShowEntityMarkers,
-            Mode = modeInfo,
-            // Lighting quality is a user setting (`user://settings.cfg`).
-            RadianceSettings = new Lighting.RadianceSettings { Mode = userSettings.LightingMode },
-        };
-        AddChild(World);
-        World.Build();
-        if (!World.Built) return; // missing map, error already pushed
+        Game.GameModeInfo? modeInfo = SpawnPlayer && !EditMode ? Game.GameModeCatalog.Get(GameMode) : null;
 
-        ApplySky(World.Map!, World.Textures!);
-        if (SpawnPlayer) AttachPlayer(userSettings, modeInfo!);
-        if (FrameCamera) FrameSceneCamera(World.Centre, World.Radius);
+        foreach (var child in GetChildren())
+        {
+            if (child is IMapSource ms)
+            {
+                _customSource = ms;
+                break;
+            }
+        }
+
+        if (_customSource != null)
+        {
+            _customSource.Build();
+            World = _customSource as MapWorld;
+        }
+        else
+        {
+            World = new MapWorld
+            {
+                Name = "MapWorld",
+                OgzPath = OgzPath,
+                ChunkSize = ChunkSize,
+                ShowEntityMarkers = ShowEntityMarkers || EditMode,
+                Mode = modeInfo,
+                // Lighting quality is a user setting (`user://settings.cfg`).
+                RadianceSettings = new Lighting.RadianceSettings { Mode = userSettings.LightingMode },
+            };
+            AddChild(World);
+            World.Build();
+        }
+
+        var mapSource = MapSource;
+        if (mapSource == null || !mapSource.Built) return; // missing map, error already pushed
+
+        if (World?.Map != null && World.Textures != null)
+            ApplySky(World.Map, World.Textures);
+        if (SpawnPlayer) AttachPlayer(userSettings, modeInfo, mapSource);
+        if (FrameCamera && !SpawnPlayer) FrameSceneCamera(mapSource.Centre, mapSource.Radius);
     }
 
     /// <summary>
@@ -105,7 +133,7 @@ public partial class OgzMapViewer : Node3D
     /// initialise it against the octree at the map's first <c>ET_PLAYERSTART</c>
     /// (falling back to the map centre). Physics then owns its position/orientation.
     /// </summary>
-    private void AttachPlayer(UserSettings userSettings, Game.GameModeInfo modeInfo)
+    private void AttachPlayer(UserSettings userSettings, Game.GameModeInfo? modeInfo, IMapSource mapSource)
     {
         MapPlayer? player = null;
         foreach (var child in GetChildren())
@@ -116,26 +144,38 @@ public partial class OgzMapViewer : Node3D
             return;
         }
 
-        player.Reparent(World!); // into the rotated Z-up world
+        player.Reparent(mapSource.WorldNode); // into the rotated Z-up world
 
-        (Vector3 feet, float yaw) = World!.FindSpawn();
+        (Vector3 feet, float yaw) = mapSource.FindSpawn();
         // The player node owns its team (set in the scene); the world only needs a
         // reference to it so flag visuals can colour relative to the local team.
-        World.LocalPlayer = player;
-        player.Setup(World.Physics!, feet, yaw);
-        World.RegisterPlayer(player);
+        if (mapSource is MapWorld mw) mw.LocalPlayer = player;
+        var phys = (mapSource as MapWorld)?.Physics ?? (mapSource.Octa != null ? new Physics.OctaPhysics(mapSource.Octa) : new Physics.OctaPhysics(new Octa(10)));
+        player.Setup(phys, feet, yaw);
+        mapSource.RegisterPlayer(player);
         player.ApplyLookSettings(userSettings); // sensitivity / accel / invert / FOV
-        AttachPlayerModel(player);
+        AttachPlayerModel(player, mapSource);
 
-        var effects = new Effects.WeaponEffectsRenderer { Name = "WeaponEffects", Textures = World.Textures };
-        World.AddChild(effects);
-        World.WeaponEffects = effects;
+        var effects = new Effects.WeaponEffectsRenderer { Name = "WeaponEffects", Textures = mapSource.Textures };
+        mapSource.WorldNode.AddChild(effects);
+        mapSource.WeaponEffects = effects;
         player.WeaponEffects = effects;
-        player.Items = World.Items;
-        player.Flags = World.Flags;
-        player.JumpPads = World.JumpPads;
-        player.Teleports = World.Teleports;
-        World.Items?.SpawnItems(force: true);
+        player.Items = mapSource.Items;
+        player.Flags = mapSource.Flags;
+        player.JumpPads = mapSource.JumpPads;
+        player.Teleports = mapSource.Teleports;
+        mapSource.Items?.SpawnItems(force: true);
+
+        bool isEdit = EditMode || player.EditMode;
+        if (isEdit)
+        {
+            player.EditMode = true;
+            var editor = mapSource.WorldNode.GetNodeOrNull<Editor.EditorController>("EditorController")
+                ?? new Editor.EditorController { Name = "EditorController" };
+            editor.BindMapSource(mapSource);
+            if (editor.GetParent() == null)
+                mapSource.WorldNode.AddChild(editor);
+        }
 
         // Attach CanvasLayer and HUD controller
         var canvas = new CanvasLayer { Name = "HudCanvas" };
@@ -143,15 +183,16 @@ public partial class OgzMapViewer : Node3D
         {
             Name = "HUD",
             Player = player,
+            IsEditMode = isEdit,
             // Default 10 minute match timer (10 * 60 * 1000 = 600000 ms) matching Sauerbraten standard maplimit.
             // Seeded from the world's simulation clock, which the game clock is compared against.
-            MapLimit = World.LastMillis + 10 * 60 * 1000
+            MapLimit = (mapSource.Clock?.NowMillis ?? 0) + 10 * 60 * 1000
         };
-        hud.SetupTextures(World.Textures ?? new Materials.ResourceTextureSource());
+        hud.SetupTextures(mapSource.Textures ?? new Materials.ResourceTextureSource());
         canvas.AddChild(hud);
         AddChild(canvas);
 
-        GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw}");
+        GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw} (edit={isEdit})");
     }
 
     /// <summary>
@@ -161,14 +202,14 @@ public partial class OgzMapViewer : Node3D
 	/// the player so <see cref="MapPlayer.SyncBodyModel"/> can keep it upright at the
 	/// feet, independent of the camera view pitch.
 	/// </summary>
-	private void AttachPlayerModel(MapPlayer player)
+	private void AttachPlayerModel(MapPlayer player, IMapSource mapSource)
     {
         if (PlayerModelIndex < 0) return;
 
         var gun = (Gun)player.Combat.GunSelect;
 
         var body = new PlayerModel { Name = "PlayerModel" };
-        World!.AddChild(body);
+        mapSource.WorldNode.AddChild(body);
         player.PlayerModel = body;
         player.HidePlaceholderBody = true;
 
@@ -176,11 +217,11 @@ public partial class OgzMapViewer : Node3D
         // <mdl.hudguns>/<guns[].file> and the third-person view weapon is vweps[]
         // (render.cpp:425, :158). SelectWeapon then keeps them in sync for the rest of
         // the session — it is the single source of truth for the equipped gun.
-        body.Configure(World.Models, World.Textures, PlayerModelIndex, player.Team,
+        body.Configure(mapSource.Models, mapSource.Textures, PlayerModelIndex, player.Team,
             viewWeapon: WeaponCatalog.Vwep(gun));
         player.SyncBodyModelNow();
         var hudgun = new HudgunModel { Name = "Hudgun" };
-        hudgun.Configure(World.Models, World.Textures, PlayerModelIndex, WeaponCatalog.Get(gun).File);
+        hudgun.Configure(mapSource.Models, mapSource.Textures, PlayerModelIndex, WeaponCatalog.Get(gun).File);
         if (player.GetNodeOrNull<Camera3D>("Camera3D") is { } camera)
         {
             camera.AddChild(hudgun);
