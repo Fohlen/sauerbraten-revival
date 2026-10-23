@@ -69,6 +69,26 @@ public class EditorViewSceneTest : GoTestBase
     }
 
     [Test]
+    public void EmptyMapBakesSunlightRadiance()
+    {
+        var map = new EmptyMap { WorldScale = 10, ChunkSize = 128, BakeRadiance = true };
+        map.Build();
+
+        TestAssert.True(map.Radiance != null, "empty map radiance volume baked");
+        TestAssert.True(map.Radiance!.Texture != null, "radiance 3D texture created");
+        TestAssert.True(ReferenceEquals(map.Radiance, map.Renderer!.Radiance), "renderer ticks the baked volume for rebakes");
+
+        bool anyDirectional = map.Radiance.Grid.Probes.Any(p => p.Dir.LengthSquared() > 0f);
+        TestAssert.True(anyDirectional, "sun/sky bake produced directional irradiance");
+
+        var chunk = map.Renderer.GetChildren().OfType<MeshInstance3D>().FirstOrDefault();
+        TestAssert.True(chunk != null, "a chunk mesh exists");
+        TestAssert.True(chunk!.Mesh.SurfaceGetMaterial(0) is ShaderMaterial, "chunk uses the radiance shader material");
+
+        map.Free();
+    }
+
+    [Test]
     public void EditorSceneLoadsWithEditPlayerAndController()
     {
         var scene = GD.Load<PackedScene>("res://scenes/editor_scene.tscn");

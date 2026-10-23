@@ -32,6 +32,7 @@ environment = SubResource("Environment_env")
 script = ExtResource("2_emptymap")
 WorldScale = 10
 ChunkSize = 128
+BakeRadiance = true
 
 [node name="Player" type="Node3D" parent="."]
 script = ExtResource("3_player")

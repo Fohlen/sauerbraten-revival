@@ -42,6 +42,29 @@ public partial class EmptyMap : Node3D, IMapSource
     public WorldChunkRenderer? Renderer { get; set; }
     public Lighting.RadianceVolume? Radiance { get; set; }
 
+    /// <summary>Optional quality settings for the baked radiance hints volume; null uses the defaults (32³, RadianceHints).</summary>
+    public Lighting.RadianceSettings? RadianceSettings { get; set; }
+
+    /// <summary>
+    /// Bake the radiance hints volume (sky + sun + ambient) during <see cref="Build"/>
+    /// and shade the room with it. Off by default so tests and the editor viewport
+    /// stay fast; <c>scenes/empty_map.tscn</c> turns it on so the synthetic room has
+    /// a sun to exercise the lighting algorithm against.
+    /// </summary>
+    [Export] public bool BakeRadiance { get; set; }
+
+    /// <summary>Sunlight colour as packed 0xRRGGBB (engine <c>sunlight</c>); 0 disables the sun.</summary>
+    [Export] public int Sunlight { get; set; } = 0xE8E8E8;
+    [Export] public float SunlightScale { get; set; } = 1.0f;
+    [Export] public int SunlightYaw { get; set; } = 315;
+    [Export] public int SunlightPitch { get; set; } = 45;
+
+    /// <summary>Ambient colour as packed 0xRRGGBB (engine <c>ambient</c>).</summary>
+    [Export] public int Ambient { get; set; } = 0x191919;
+
+    /// <summary>Sky tint colour as packed 0xRRGGBB (engine <c>skyboxcolour</c>).</summary>
+    [Export] public int SkyboxColour { get; set; } = 0xFFFFFF;
+
     /// <summary>The shared octree physics authority for this world.</summary>
     public OctaPhysics? Physics { get; private set; }
 
@@ -133,14 +156,14 @@ public partial class EmptyMap : Node3D, IMapSource
 
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
 
-        if (ShouldUseSeedCache && SeedCache.TryGetValue((WorldScale, ChunkSize), out var seed))
+        if (!BakeRadiance && ShouldUseSeedCache && SeedCache.TryGetValue((WorldScale, ChunkSize), out var seed))
         {
             // Fast path: clone the cached octree and reuse its meshes.
             var cachedOcta = seed.Seed.Clone();
             Octa = cachedOcta;
             Sink = new WorldCommandSink(new OctaWorld(cachedOcta));
             Physics = new OctaPhysics(cachedOcta);
-            CreateRenderer(cachedOcta, seed.Mesh);
+            CreateRenderer(cachedOcta, seed.Mesh, materials: null);
             LinkChildEditors();
             GD.Print($"[emptymap] seed-cache worldsize={cachedOcta.WorldSize} chunks={Renderer!.ChunkCount} tris={Renderer.TriangleCount}");
             return;
@@ -162,8 +185,28 @@ public partial class EmptyMap : Node3D, IMapSource
                              new Vector3I(inner / 8, inner / 8, inner / 8), 8, 0);
         OctaEdit.DeleteCube(octa, sel);
 
+        // Lighting: bake the room through the same radiance hints pipeline as a real
+        // map so a scene can exercise the sky/sun bake and incremental rebake.
+        Materials.MaterialSet? materials = null;
+        if (BakeRadiance)
+        {
+            var config = new Materials.MapConfig
+            {
+                Ambient = Ambient,
+                Sunlight = Sunlight,
+                SunlightScale = SunlightScale,
+                SunlightYaw = SunlightYaw,
+                SunlightPitch = SunlightPitch,
+                SkyboxColour = SkyboxColour,
+            };
+            var volume = Lighting.RadianceVolume.CreateForOcta(octa, RadianceSettings);
+            volume.Bake(octa, config);
+            Radiance = volume;
+            materials = BuildRadianceMaterials(volume, config);
+        }
+
         ChunkedWorldMesh? prebuilt = null;
-        if (ShouldUseSeedCache)
+        if (ShouldUseSeedCache && !BakeRadiance)
         {
             var mesher = new OctaMesher(octa, null);
             var mesh = mesher.BuildChunked(ChunkSize);
@@ -171,14 +214,14 @@ public partial class EmptyMap : Node3D, IMapSource
             prebuilt = mesh;
         }
 
-        CreateRenderer(octa, prebuilt);
+        CreateRenderer(octa, prebuilt, materials);
         LinkChildEditors();
 
         GD.Print($"[emptymap] worldsize={size} chunks={Renderer!.ChunkCount} tris={Renderer.TriangleCount}");
     }
 
 
-    private void CreateRenderer(Octa octa, ChunkedWorldMesh? prebuilt)
+    private void CreateRenderer(Octa octa, ChunkedWorldMesh? prebuilt, Materials.MaterialSet? materials)
     {
         Renderer = new WorldChunkRenderer
         {
@@ -188,7 +231,34 @@ public partial class EmptyMap : Node3D, IMapSource
             Radiance = Radiance,
         };
         AddChild(Renderer);
-        Renderer.Setup(octa, materials: null, prebuilt);
+        Renderer.Setup(octa, materials, prebuilt);
+    }
+
+    /// <summary>
+    /// Build the single default-geometry material used by the room, shading it with
+    /// the baked radiance volume. The room has no textures, so the albedo texture is
+    /// left unset and the shader falls back to the tint/vertex colour.
+    /// </summary>
+    private static Materials.MaterialSet BuildRadianceMaterials(
+        Lighting.RadianceVolume volume, Materials.MapConfig config)
+    {
+        var set = new Materials.MaterialSet();
+        var vs = new Materials.CatalogueVSlot { Index = Octa.DEFAULT_GEOM, Slot = Octa.DEFAULT_GEOM };
+        var material = Materials.MaterialBuilder.BuildRadianceMaterial(
+            albedo: null,
+            tint: Colors.White,
+            radianceTex: volume.Texture,
+            gridOrigin: volume.Grid.Origin,
+            gridExtent: volume.Grid.Extent,
+            skyTint: Lighting.RadianceVolume.DecodeColor(config.SkyboxColour),
+            ambientColor: Lighting.RadianceVolume.DecodeColor(config.Ambient),
+            useRadiance: volume.Settings.Mode == Lighting.RadianceQualityMode.RadianceHints);
+
+        var uv = new Materials.TexGen[3];
+        var texSize = new Vector2I(64, 64);
+        for (int dim = 0; dim < 3; dim++) uv[dim] = Materials.MaterialBuilder.CalcTexGen(vs, dim, texSize);
+        set.Add(Octa.DEFAULT_GEOM, material, uv);
+        return set;
     }
 
     // Hand the world to any child editor controller (it draws in this Z-up space).
