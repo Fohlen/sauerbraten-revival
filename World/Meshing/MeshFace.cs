@@ -75,7 +75,7 @@ public static class MeshFace
     }
 
     /// <summary>Whether a triangle must be reversed to face outward under Godot's front-face convention.</summary>
-    private static bool Reverse(Vector3 a, Vector3 b, Vector3 c, Vector3 normal)
+    public static bool Reverse(Vector3 a, Vector3 b, Vector3 c, Vector3 normal)
     {
         Vector3 cross = (b - a).Cross(c - a);
         return FrontFacesAreClockwise == (cross.Dot(normal) > 0);

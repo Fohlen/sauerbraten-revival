@@ -1058,5 +1058,6 @@ public static class OctaEdit
             Remip(octa, octa.WorldRoot[i], o, octa.WorldSize >> 2, mipvis);
         }
         OctaMerges.CalcMerges(octa);
+        OctaTJoints.FindTJoints(octa);
     }
 }

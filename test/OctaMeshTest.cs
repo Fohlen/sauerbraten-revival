@@ -49,10 +49,14 @@ public class OctaMeshTest : GoTestBase
 
         // Regression baseline for the current geometry-only mesher; update when the
         // mesher gains fidelity (merges, T-joints, sky, ...).
-        // 105 surfaces / 87035 triangles with exact visibletris culling + stored face merges
-        // (down from 105 / 326943 with visibletris only, and 118 / 560314 unculled).
+        // 105 surfaces / 107356 triangles with visibletris + merges + T-joints
+        // (87035 without T-joints, 326943 with visibletris only, 560314 unculled).
         TestAssert.Equal(105, surfaces, "surface count baseline");
-        TestAssert.Equal(87035L, triangles, "triangle count baseline");
+        TestAssert.Equal(107356L, triangles, "triangle count baseline with T-joints");
+
+        var unTJointMesh = new OctaMesher(octa) { FillTJoints = false }.Build();
+        long unTJointTriangles = MeshAssert.Triangles(unTJointMesh);
+        TestAssert.Equal(87035L, unTJointTriangles, "triangle count baseline without T-joints");
     }
 
     [Test]

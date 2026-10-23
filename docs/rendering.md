@@ -287,10 +287,15 @@ algorithms. Rendering differences are cosmetic and can be tuned to match.
   `MeshFace.Polygon` fanning. `OctaMerges.CalcMerges` ports `octa.cpp genmerges`
   to compute merges at `remip` time. Triangle count on church51 drops from 326,943
   to 87,035.
+- **T-joints** — `OctaTJoints.FindTJoints` ports `octarender.cpp findtjoints/gencubeedges`,
+  finding T-junction points on adjacent unaligned edges and linking them to `CubeExt.TJoints`.
+  `OctaMesher` ports `octarender.cpp addtris` to split polygon edges along T-joints,
+  eliminating crack seams/sparklies. On church51, 26,788 T-joints are resolved,
+  yielding 107,356 triangles (87,035 when disabled via `FillTJoints = false`).
 - **TODO (deferred)** — **envmap sampling** (`SHADER_ENVMAP`, `closestenvmap`;
   the `ET_ENVMAP` probes themselves are now imported — see
   [ADR 0006](adr/0006-ogz-import.md#entity-type-mapping) — but nothing reads them),
-  **specular maps** (packed/non-PBR), blended layers, T-joints and
+  **specular maps** (packed/non-PBR), blended layers, and
   grass. World lighting is the L1 SH probe volume
   ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)); the baked-lightmap path is
   dropped. Tracked divergences live in [known-bugs.md](known-bugs.md).

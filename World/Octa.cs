@@ -172,6 +172,14 @@ public struct VertInfo
     public ushort X, Y, Z, U, V, Norm;
 }
 
+/// <summary>octa.h: <c>struct tjoint</c>.</summary>
+public struct TJoint
+{
+    public int Offset;
+    public int Edge;
+    public int Next;
+}
+
 /// <summary>octa.h: <c>struct cubeext</c> (extended, per-cube render info).</summary>
 public sealed class CubeExt
 {
@@ -237,6 +245,7 @@ public sealed class Octa
     public int WorldSize { get; private set; }
     public int WorldScale { get; private set; }
     public int AllocNodes { get; private set; }
+    public System.Collections.Generic.List<TJoint> TJoints { get; set; } = new();
 
     public Octa(int worldscale = 10)
     {
@@ -260,7 +269,12 @@ public sealed class Octa
     /// exist are copied, so cloning a sparsely-subdivided world is much cheaper
     /// than rebuilding it from scratch.
     /// </summary>
-    public Octa Clone() => new(WorldScale, WorldSize, CloneCubes(WorldRoot), AllocNodes);
+    public Octa Clone()
+    {
+        var copy = new Octa(WorldScale, WorldSize, CloneCubes(WorldRoot), AllocNodes);
+        copy.TJoints = new System.Collections.Generic.List<TJoint>(TJoints);
+        return copy;
+    }
 
     /// <summary>
     /// Deep-copy a cube block and, recursively, every subtree that exists. Shared
@@ -302,6 +316,7 @@ public sealed class Octa
         WorldScale = worldscale;
         WorldSize = 1 << worldscale;
         WorldRoot = NewCubes(F_SOLID);
+        TJoints.Clear();
     }
 
     /// <summary>

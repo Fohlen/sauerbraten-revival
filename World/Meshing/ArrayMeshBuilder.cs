@@ -95,6 +95,48 @@ public sealed class ArrayMeshBuilder
         TriangleCount += 1;
     }
 
+    private void EnsureSlot(int vslot, out List<Vector3> positions, out List<Vector3> normals, out List<Vector2> uvs, out List<int> indices)
+    {
+        if (!_positions.TryGetValue(vslot, out positions!))
+        {
+            positions = new List<Vector3>();
+            _positions[vslot] = positions;
+            _normals[vslot] = normals = new List<Vector3>();
+            _uvs[vslot] = uvs = new List<Vector2>();
+            _indices[vslot] = indices = new List<int>();
+        }
+        else
+        {
+            normals = _normals[vslot];
+            uvs = _uvs[vslot];
+            indices = _indices[vslot];
+        }
+    }
+
+    /// <summary>Add a single vertex to the surface for <paramref name="vslot"/> and return its index.</summary>
+    public int AddVertex(int vslot, Vector3 pos, Vector2 uv, Vector3 normal)
+    {
+        EnsureSlot(vslot, out var positions, out var normals, out var uvs, out _);
+        int idx = positions.Count;
+        positions.Add(pos);
+        normals.Add(normal);
+        uvs.Add(uv);
+        return idx;
+    }
+
+    /// <summary>Add a triangle indexing three vertices previously added to <paramref name="vslot"/>.</summary>
+    public void AddIndexTriangle(int vslot, int i0, int i1, int i2, Vector3 normal)
+    {
+        EnsureSlot(vslot, out var positions, out _, out _, out var indices);
+        Vector3 p0 = positions[i0], p1 = positions[i1], p2 = positions[i2];
+        if (p0 == p1 || p1 == p2 || p2 == p0) return;
+        bool reverse = MeshFace.Reverse(p0, p1, p2, normal);
+        indices.Add(i0);
+        indices.Add(reverse ? i2 : i1);
+        indices.Add(reverse ? i1 : i2);
+        TriangleCount += 1;
+    }
+
     /// <summary>Build the mesh. When materials are supplied, each surface gets its vslot's material.</summary>
     public ArrayMesh Build(MaterialSet? materials = null)
     {

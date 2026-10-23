@@ -47,7 +47,7 @@ This list is the one place these are tracked; design lives in the linked docs.
   blend-layer rendering remain deferred.
 - **Renderer extras** ([rendering.md](rendering.md)) — LOD, specular maps,
   alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), exact `visibletris`,
-  face merges (done), T-joints, grass, RenderingServer mesh streaming.
+  face merges (done), T-joints (done), grass, RenderingServer mesh streaming.
 - **`movable.cpp`** (box/barrel/platform/elevator) — deliberately not ported; SP-only.
 - **Single-player / bot AI** — out of MVP scope.
 
@@ -85,7 +85,8 @@ Remaining:
 
 - [ ] LOD via `ArrayMesh.add_lod()`.
 - [ ] RenderingServer mesh streaming (bypass the scene tree; [rendering.md](rendering.md#renderingserver-usage-planned-optimisation)).
-- [ ] Face merges, T-joints, grass.
+- [x] Face merges and T-joints (done; [rendering.md](rendering.md#implementation-status)).
+- [ ] Grass.
 - [ ] **Post-MVP fidelity** (see [Post-MVP / deferred fidelity](#post-mvp--deferred-fidelity)):
       lighting ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)), envmap, specular maps,
       blend shader.

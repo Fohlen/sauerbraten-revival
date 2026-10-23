@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Materials;
@@ -30,6 +31,9 @@ public sealed class OctaMesher
     private readonly Octa _octa;
     private readonly MaterialSet? _materials;
 
+    /// <summary>Whether to compute and apply T-joints during meshing (octarender.cpp filltjoints).</summary>
+    public bool FillTJoints { get; set; } = true;
+
     public OctaMesher(Octa octa, MaterialSet? materials = null)
     {
         _octa = octa;
@@ -48,6 +52,9 @@ public sealed class OctaMesher
     /// <summary>Mesh one chunk region into a single <see cref="ArrayMesh"/>. Used by incremental rebuilds.</summary>
     public ArrayMesh BuildChunk(Vector3I chunkOrigin, int chunkSize)
     {
+        if (FillTJoints && _octa.TJoints.Count == 0)
+            OctaTJoints.FindTJoints(_octa);
+
         var builder = new ArrayMeshBuilder();
         var min = chunkOrigin;
         var max = chunkOrigin + new Vector3I(chunkSize, chunkSize, chunkSize);
@@ -66,6 +73,8 @@ public sealed class OctaMesher
     public ChunkedWorldMesh BuildChunked(int chunkSize = 512)
     {
         if (chunkSize <= 0) chunkSize = 512;
+        if (FillTJoints && _octa.TJoints.Count == 0)
+            OctaTJoints.FindTJoints(_octa);
 
         var builders = new Dictionary<Vector3I, ArrayMeshBuilder>();
         OctaFaceWalker.Walk(_octa,
@@ -112,9 +121,14 @@ public sealed class OctaMesher
         var local = new Vector3(origin.X, origin.Y, origin.Z);
         bool alpha = (face.Cube.Material & Octa.MAT_ALPHA) != 0;
 
+        int tj = FillTJoints && face.Cube.Ext != null ? face.Cube.Ext.TJoints : -1;
+        while (tj >= 0 && _octa.TJoints[tj].Edge < face.Orient * (Octa.MAXFACEVERTS + 1))
+            tj = _octa.TJoints[tj].Next;
+        int hastj = (tj >= 0 && _octa.TJoints[tj].Edge < (face.Orient + 1) * (Octa.MAXFACEVERTS + 1)) ? tj : -1;
+
         if ((face.Cube.Merged & (1 << face.Orient)) != 0)
         {
-            EmitMergedFace(face, origin, builder, vslot, dim, local, alpha);
+            EmitMergedFace(face, origin, builder, vslot, dim, local, alpha, hastj);
             return;
         }
 
@@ -136,7 +150,7 @@ public sealed class OctaMesher
         var surfInfo = face.Cube.Ext?.Surfaces[face.Orient];
         bool hasSurf = surfInfo is { NumVerts: not 0 };
         if (!hasSurf || (surfInfo!.Value.NumVerts & Octa.LAYER_TOP) != 0)
-            EmitLayer(builder, vslot, dim, face.Orient, face.Vis, alpha, l0, l1, l2, l3, a0, a1, a2, a3);
+            EmitLayer(builder, vslot, dim, face.Orient, face.Vis, alpha, l0, l1, l2, l3, a0, a1, a2, a3, hastj);
 
         // Bottom layer: the same face re-textured with the vslot's layer. The
         // engine passes `layer ? *layer : vslot`, but a bottom layer only has a
@@ -145,7 +159,7 @@ public sealed class OctaMesher
         // bottom layer, if any, uses the base vslot.
         int layer = alpha ? 0 : _materials?.LayerFor(vslot) ?? 0;
         if (layer != 0 && hasSurf && (surfInfo!.Value.NumVerts & Octa.LAYER_BOTTOM) != 0)
-            EmitLayer(builder, layer, dim, face.Orient, face.Vis, alpha, l0, l1, l2, l3, a0, a1, a2, a3);
+            EmitLayer(builder, layer, dim, face.Orient, face.Vis, alpha, l0, l1, l2, l3, a0, a1, a2, a3, hastj);
     }
 
     /// <summary>
@@ -157,10 +171,54 @@ public sealed class OctaMesher
     /// </summary>
     private void EmitLayer(ArrayMeshBuilder builder, int vslot, int dim, int orient, int vis, bool alpha,
         Vector3 l0, Vector3 l1, Vector3 l2, Vector3 l3,
-        Vector3 a0, Vector3 a1, Vector3 a2, Vector3 a3)
+        Vector3 a0, Vector3 a1, Vector3 a2, Vector3 a3, int hastj)
     {
         int key = _materials?.Key(vslot, alpha) ?? vslot;
         int tris = vis & 3;
+
+        if (hastj >= 0)
+        {
+            System.Span<Vector3> w = stackalloc Vector3[4];
+            System.Span<Vector3> l = stackalloc Vector3[4];
+            System.Span<Vector2> uv = stackalloc Vector2[4];
+            int numverts = 0;
+
+            if (tris == 3)
+            {
+                numverts = 4;
+                w[0] = a0; w[1] = a1; w[2] = a2; w[3] = a3;
+                l[0] = l0; l[1] = l1; l[2] = l2; l[3] = l3;
+                uv[0] = _materials?.Uv(vslot, dim, a0) ?? Vector2.Zero;
+                uv[1] = _materials?.Uv(vslot, dim, a1) ?? Vector2.Zero;
+                uv[2] = _materials?.Uv(vslot, dim, a2) ?? Vector2.Zero;
+                uv[3] = _materials?.Uv(vslot, dim, a3) ?? Vector2.Zero;
+            }
+            else if (tris == 1)
+            {
+                numverts = 3;
+                w[0] = a0; w[1] = a1; w[2] = a2;
+                l[0] = l0; l[1] = l1; l[2] = l2;
+                uv[0] = _materials?.Uv(vslot, dim, a0) ?? Vector2.Zero;
+                uv[1] = _materials?.Uv(vslot, dim, a1) ?? Vector2.Zero;
+                uv[2] = _materials?.Uv(vslot, dim, a2) ?? Vector2.Zero;
+            }
+            else if (tris == 2)
+            {
+                numverts = 3;
+                w[0] = a0; w[1] = a2; w[2] = a3;
+                l[0] = l0; l[1] = l2; l[2] = l3;
+                uv[0] = _materials?.Uv(vslot, dim, a0) ?? Vector2.Zero;
+                uv[1] = _materials?.Uv(vslot, dim, a2) ?? Vector2.Zero;
+                uv[2] = _materials?.Uv(vslot, dim, a3) ?? Vector2.Zero;
+            }
+
+            if (numverts >= 3)
+            {
+                AddTris(builder, key, orient, l[..numverts], w[..numverts], uv[..numverts], numverts, hastj, _octa.TJoints);
+                return;
+            }
+        }
+
         if (tris == 3)
         {
             Vector2 uv0 = _materials?.Uv(vslot, dim, a0) ?? Vector2.Zero;
@@ -186,7 +244,7 @@ public sealed class OctaMesher
     }
 
     private void EmitMergedFace(in CubeFace face, Vector3I origin, ArrayMeshBuilder builder,
-                               int vslot, int dim, Vector3 local, bool alpha)
+                               int vslot, int dim, Vector3 local, bool alpha, int hastj)
     {
         if (face.Cube.Ext == null) return;
         var surfInfo = face.Cube.Ext.Surfaces[face.Orient];
@@ -208,7 +266,7 @@ public sealed class OctaMesher
 
         bool hasSurf = surfInfo.NumVerts != 0;
         if (!hasSurf || (surfInfo.NumVerts & Octa.LAYER_TOP) != 0)
-            EmitMergedLayer(builder, vslot, dim, face.Orient, alpha, localPos, worldPos);
+            EmitMergedLayer(builder, vslot, dim, face.Orient, alpha, localPos, worldPos, hastj);
 
         int layer = alpha ? 0 : _materials?.LayerFor(vslot) ?? 0;
         if (layer != 0 && hasSurf && (surfInfo.NumVerts & Octa.LAYER_BOTTOM) != 0)
@@ -223,23 +281,174 @@ public sealed class OctaMesher
                     worldPosDup[k] = new Vector3(vo.X + vi.X / 8.0f, vo.Y + vi.Y / 8.0f, vo.Z + vi.Z / 8.0f);
                     localPosDup[k] = worldPosDup[k] - local;
                 }
-                EmitMergedLayer(builder, layer, dim, face.Orient, alpha, localPosDup, worldPosDup);
+                EmitMergedLayer(builder, layer, dim, face.Orient, alpha, localPosDup, worldPosDup, hastj);
             }
             else
             {
-                EmitMergedLayer(builder, layer, dim, face.Orient, alpha, localPos, worldPos);
+                EmitMergedLayer(builder, layer, dim, face.Orient, alpha, localPos, worldPos, hastj);
             }
         }
     }
 
     private void EmitMergedLayer(ArrayMeshBuilder builder, int vslot, int dim, int orient, bool alpha,
-                                System.ReadOnlySpan<Vector3> localPos, System.ReadOnlySpan<Vector3> worldPos)
+                                System.ReadOnlySpan<Vector3> localPos, System.ReadOnlySpan<Vector3> worldPos, int hastj)
     {
         int key = _materials?.Key(vslot, alpha) ?? vslot;
         System.Span<Vector2> uvs = stackalloc Vector2[worldPos.Length];
         for (int k = 0; k < worldPos.Length; k++)
             uvs[k] = _materials?.Uv(vslot, dim, worldPos[k]) ?? Vector2.Zero;
 
+        if (hastj >= 0)
+        {
+            AddTris(builder, key, orient, localPos, worldPos, uvs, localPos.Length, hastj, _octa.TJoints);
+            return;
+        }
+
         MeshFace.Polygon(builder, key, orient, localPos, uvs);
+    }
+
+    /// <summary>
+    /// Port of Sauerbraten's addtris from src/engine/octarender.cpp. Emits triangles
+    /// fanned across the face polygon and splits along edges where T-joints occur.
+    /// </summary>
+    private void AddTris(ArrayMeshBuilder builder, int key, int orient,
+                         System.ReadOnlySpan<Vector3> localVerts,
+                         System.ReadOnlySpan<Vector3> worldVerts,
+                         System.ReadOnlySpan<Vector2> uvs,
+                         int numverts, int tj,
+                         System.Collections.Generic.IReadOnlyList<TJoint> tjoints)
+    {
+        Vector3 normal = MeshFace.AxisNormal(orient);
+        System.Span<int> index = stackalloc int[numverts];
+        System.Span<Vector3> addedVerts = stackalloc Vector3[Octa.MAXFACEVERTS + 16];
+        System.Span<int> addedIndices = stackalloc int[Octa.MAXFACEVERTS + 16];
+        int addedCount = 0;
+
+        static int GetOrAddVert(ArrayMeshBuilder builder, int key, Vector3 normal,
+                                Vector3 localPos, Vector2 uv,
+                                System.Span<Vector3> addedVerts,
+                                System.Span<int> addedIndices,
+                                ref int addedCount)
+        {
+            for (int v = 0; v < addedCount; v++)
+            {
+                if (addedVerts[v].DistanceSquaredTo(localPos) < 1e-6f)
+                    return addedIndices[v];
+            }
+            int idx = builder.AddVertex(key, localPos, uv, normal);
+            if (addedCount < addedVerts.Length)
+            {
+                addedVerts[addedCount] = localPos;
+                addedIndices[addedCount] = idx;
+                addedCount++;
+            }
+            return idx;
+        }
+
+        for (int k = 0; k < numverts; k++)
+            index[k] = GetOrAddVert(builder, key, normal, localVerts[k], uvs[k], addedVerts, addedIndices, ref addedCount);
+
+        int edge = orient * (Octa.MAXFACEVERTS + 1);
+        for (int i = 0; i < numverts - 2; i++)
+        {
+            if (index[0] == index[i + 1] || index[i + 1] == index[i + 2] || index[i + 2] == index[0])
+                continue;
+
+            int left = index[0], mid = index[i + 1], right = index[i + 2], start = left, i0 = left, i1 = -1;
+            for (int k = 0; k < 4; k++)
+            {
+                int i2 = -1, ctj = -1, cedge = -1;
+                switch (k)
+                {
+                    case 1: i1 = i2 = mid; cedge = edge + i + 1; break;
+                    case 2:
+                        if (i1 != mid || i0 == left) { i0 = i1; i1 = right; }
+                        i2 = right;
+                        if (i + 1 == numverts - 2) cedge = edge + i + 2;
+                        break;
+                    case 3:
+                        if (i0 == start) { i0 = i1; i1 = left; }
+                        i2 = left;
+                        if (i == 0) cedge = edge;
+                        break;
+                    default:
+                        if (i == 0) cedge = edge;
+                        break;
+                }
+
+                if (i1 != i2)
+                {
+                    builder.AddIndexTriangle(key, i0, i1, i2, normal);
+                    i1 = i2;
+                }
+
+                if (cedge >= 0)
+                {
+                    for (ctj = tj; ;)
+                    {
+                        if (ctj < 0) break;
+                        if (tjoints[ctj].Edge < cedge) { ctj = tjoints[ctj].Next; continue; }
+                        if (tjoints[ctj].Edge != cedge) ctj = -1;
+                        break;
+                    }
+                }
+
+                if (ctj >= 0)
+                {
+                    int e1 = cedge % (Octa.MAXFACEVERTS + 1), e2 = (e1 + 1) % numverts;
+                    Vector3 w1 = worldVerts[e1], w2 = worldVerts[e2];
+                    Vector3 l1 = localVerts[e1], l2 = localVerts[e2];
+                    Vector2 uv1 = uvs[e1], uv2 = uvs[e2];
+
+                    var d = new Vector3I(
+                        (int)Math.Round((w2.X - w1.X) * 8.0f),
+                        (int)Math.Round((w2.Y - w1.Y) * 8.0f),
+                        (int)Math.Round((w2.Z - w1.Z) * 8.0f));
+
+                    int absX = Math.Abs(d.X), absY = Math.Abs(d.Y), absZ = Math.Abs(d.Z);
+                    int axis = absX > absY ? (absX > absZ ? 0 : 2) : (absY > absZ ? 1 : 2);
+                    if (d[axis] < 0) d = -d;
+                    OctaMerges.ReduceSlope(ref d);
+
+                    int minCoord = Math.Min((int)Math.Round(w1[axis] * 8.0f), (int)Math.Round(w2[axis] * 8.0f));
+                    int origin = minCoord & ~0x7FFF;
+                    int offset1 = ((int)Math.Round(w1[axis] * 8.0f) - origin) / d[axis];
+                    int offset2 = ((int)Math.Round(w2[axis] * 8.0f) - origin) / d[axis];
+                    float doffset = 1.0f / (offset2 - offset1);
+
+                    if (i1 < 0)
+                    {
+                        for (; ; )
+                        {
+                            var t = tjoints[ctj];
+                            if (t.Next < 0 || tjoints[t.Next].Edge != cedge) break;
+                            ctj = t.Next;
+                        }
+                    }
+
+                    while (ctj >= 0)
+                    {
+                        var t = tjoints[ctj];
+                        if (t.Edge != cedge) break;
+
+                        float offset = (t.Offset - offset1) * doffset;
+                        Vector3 vtLocal = l1.Lerp(l2, offset);
+                        Vector2 vtUv = uv1.Lerp(uv2, offset);
+                        i2 = GetOrAddVert(builder, key, normal, vtLocal, vtUv, addedVerts, addedIndices, ref addedCount);
+
+                        if (i1 >= 0)
+                        {
+                            builder.AddIndexTriangle(key, i0, i1, i2, normal);
+                            i1 = i2;
+                        }
+                        else
+                        {
+                            start = i0 = i2;
+                        }
+                        ctj = t.Next;
+                    }
+                }
+            }
+        }
     }
 }
