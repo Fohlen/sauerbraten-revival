@@ -124,7 +124,9 @@ public partial class OgzMapViewer : Node3D
 
         if (World?.Map != null && World.Textures != null)
             ApplySky(World.Map, World.Textures);
-        if (SpawnPlayer) AttachPlayer(userSettings, modeInfo, mapSource);
+        // Runtime only: spawning a player reparents scene-authored nodes, so never
+        // mutate the edited scene from the Godot editor viewport.
+        if (!Engine.IsEditorHint() && SpawnPlayer) AttachPlayer(userSettings, modeInfo, mapSource);
         if (FrameCamera && !SpawnPlayer) FrameSceneCamera(mapSource.Centre, mapSource.Radius);
     }
 
@@ -150,7 +152,7 @@ public partial class OgzMapViewer : Node3D
         // The player node owns its team (set in the scene); the world only needs a
         // reference to it so flag visuals can colour relative to the local team.
         if (mapSource is MapWorld mw) mw.LocalPlayer = player;
-        var phys = (mapSource as MapWorld)?.Physics ?? (mapSource.Octa != null ? new Physics.OctaPhysics(mapSource.Octa) : new Physics.OctaPhysics(new Octa(10)));
+        var phys = mapSource.Physics ?? new Physics.OctaPhysics(mapSource.Octa ?? new Octa(10));
         player.Setup(phys, feet, yaw);
         mapSource.RegisterPlayer(player);
         player.ApplyLookSettings(userSettings); // sensitivity / accel / invert / FOV

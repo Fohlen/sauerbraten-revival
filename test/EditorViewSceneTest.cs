@@ -1,5 +1,6 @@
 using Chickensoft.GoDotTest;
 using Godot;
+using System.Linq;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Ogz;
@@ -36,6 +37,35 @@ public class EditorViewSceneTest : GoTestBase
         TestAssert.False(player.Combat.Attacking, "left click does not attack while in edit mode");
 
         player.Free();
+    }
+
+    [Test]
+    public void EmptyMapStepsRegisteredPlayer()
+    {
+        var map = new EmptyMap { WorldScale = 10, ChunkSize = 128 };
+        map.Build();
+        TestAssert.True(map.Physics != null, "empty map physics initialized");
+
+        int startMillis = map.Clock!.NowMillis;
+        var player = new MapPlayer();
+        map.RegisterPlayer(player);
+        player.Setup(map.Physics!, ((IMapSource)map).FindSpawn().Position, 0f);
+        player.EditMode = true; // floating, as the editor scene runs it
+
+        TestAssert.True(map.Players.Contains(player), "player registered with empty map");
+        TestAssert.Equal(startMillis, player.LastMillis, "player reads the empty map clock");
+
+        Vector3 start = player.Entity.O;
+        Input.ActionPress("move_forward");
+        for (int i = 0; i < 10; i++) map._PhysicsProcess(0.010); // 2 substeps each -> 100 ms
+        Input.ActionRelease("move_forward");
+
+        TestAssert.Equal(startMillis + 100, map.Clock!.NowMillis, "empty map clock advanced by 100 ms");
+        TestAssert.True(player.Entity.O.DistanceTo(start) > 1f, "forward input moves the player through empty map physics");
+
+        map.UnregisterPlayer(player);
+        player.Free();
+        map.Free();
     }
 
     [Test]

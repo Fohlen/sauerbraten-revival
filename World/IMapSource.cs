@@ -29,6 +29,13 @@ public interface IMapSource
     /// <summary>Runtime radiance volume for lighting, if baked/computed.</summary>
     Lighting.RadianceVolume? Radiance { get; }
 
+    /// <summary>
+    /// The shared octree physics authority driving this map's simulation, when it
+    /// has one. A player must be stepped through the same instance it was set up
+    /// with, so scenes should reuse this rather than building another.
+    /// </summary>
+    Physics.OctaPhysics? Physics => null;
+
     /// <summary>Texture resolver for world and entity materials.</summary>
     ITextureSource? Textures { get; }
 
