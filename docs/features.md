@@ -39,15 +39,8 @@ This list is the one place these are tracked; design lives in the linked docs.
 
 - **Lighting** ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)) — **chosen:** a
   world-space L1 SH probe volume ("radiance hints"): soft, diffuse-only, async
-  full bake + incremental region rebake on edit. The pre-baked path (T1 lightmap
-  import / `lightmap.gdshader`, T2 `calclight` rebake) is **dropped** as
-  incompatible with real-time editing. Removal plan:
-  [adr/0002-radiance-hints.md § T1 Removal Inventory](adr/0002-radiance-hints.md#t1-removal-inventory).
-  Radiance hints are post-MVP but planned; envmap world sampling and
-  blend-layer rendering remain deferred.
-- **Renderer extras** ([rendering.md](rendering.md)) — LOD, specular maps,
-  alpha/transparency (`alphafront`/`alphaback`, `LAYER_*`), exact `visibletris`,
-  face merges (done), T-joints (done), grass, RenderingServer mesh streaming.
+  full bake + incremental region rebake on edit. 
+- **Renderer extras** ([rendering.md](rendering.md)) — LOD, specular maps, RenderingServer mesh streaming.
 - **`movable.cpp`** (box/barrel/platform/elevator) — deliberately not ported; SP-only.
 - **Single-player / bot AI** — out of MVP scope.
 
@@ -80,12 +73,12 @@ Done:
       (`WorldChunkRenderer`, `OctaMesher.BuildChunk`, `OctaFaceWalker.WalkRegion`;
       `test/IncrementalMeshTest.cs`). Default chunk 128, budget 4/frame — see
       [rendering.md](rendering.md#chunking-strategy) for the measured tradeoff.
+- [x] Face merges and T-joints (done; [rendering.md](rendering.md#implementation-status)).
 
 Remaining:
 
 - [ ] LOD via `ArrayMesh.add_lod()`.
 - [ ] RenderingServer mesh streaming (bypass the scene tree; [rendering.md](rendering.md#renderingserver-usage-planned-optimisation)).
-- [x] Face merges and T-joints (done; [rendering.md](rendering.md#implementation-status)).
 - [ ] Grass.
 - [ ] **Post-MVP fidelity** (see [Post-MVP / deferred fidelity](#post-mvp--deferred-fidelity)):
       lighting ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)), envmap, specular maps,
@@ -161,20 +154,20 @@ Done (classic maps are read at load time in both the viewer and the play scene):
       [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md). The T1 parsing/link artifacts
       (`OgzLightMap`, `SurfaceKey`/UV2, `WorldSnapshot` `CubeExt` v2) still exist
       and are slated for removal (adr/0002-radiance-hints.md § T1 Removal Inventory).
-
-Remaining:
-
 - [x] ~~Standalone converter: OGZ + metadata → native octree `Resource` + `history.res` + `Level.tscn`.~~
       **Dropped** ([ADR 0006](adr/0006-ogz-import.md)): classic maps ship as `.ogz`
       and are read at load time; the native directory format is the editor's save
       format. There is no GUI wizard or CLI importer.
-- [~] **One-shot full metadata export** — capture all resolved engine state in the
+- [x] **One-shot full metadata export** — capture all resolved engine state in the
       single ~25-min sweep (resolved shaders/slots/vslots/config) as **JSON only**;
       no binary sidecar (blendmap/PVS are already in the OGZ; lighting is baked
       at runtime — [adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)). The
       exporter is **extended and validated** (`shaderType`/`smooth`/`texmask`/grass,
       `shaders[]`, `config`, vslot `linked`/`changed`); re-exporting the whole
       catalogue still pending.
+
+Remaining:
+
 - [ ] Parse the **blendmap** and **PVS** sections (post-MVP).
 - [ ] Expand feature coverage (blends, layers) map by map.
       - [x] **Layers** — bottom-layer geometry emitted (`LAYER_BOTTOM`, `vslot.layer`) and
@@ -292,6 +285,9 @@ order** (design detail for this roadmap item).
       `history.res`, `Level.tscn`) + compaction + archive hash;
       `F2` save / `F3` load binds in `EditorController`. See
       [editor-and-commands.md](editor-and-commands.md#7-map-format-versioned-command-history).
+- [x] Persistent user keybinds (`user://input.cfg`) — persistence implemented
+      (`scripts/InputBindings.cs`); the rebind UI lands with M4e. See
+      [Cross-cutting: configuration](#cross-cutting-configuration).
 
 Remaining:
 
@@ -302,9 +298,6 @@ Remaining:
       entity placement.
 - [ ] **Prefabs, recipes, cross-map paste** (M8) — `ReplaceBlock` content
       resources, rotation, recipe API.
-- [x] Persistent user keybinds (`user://input.cfg`) — persistence implemented
-      (`scripts/InputBindings.cs`); the rebind UI lands with M4e. See
-      [Cross-cutting: configuration](#cross-cutting-configuration).
 
 ## 5. Combat & spawns
 
@@ -360,9 +353,6 @@ Remaining:
             `PlayerModel.ViewWeaponRotationDegrees` is exported to tune the attach.
             Real weapon selection (`MapPlayer.SelectWeapon`) swaps the view weapon and
             the `hold N`/`attack N` anims drive the pose.
-
-Remaining:
-
 - [x] Hitscan weapons (insta rifle; effic loadout).
       - [x] **Weapon definitions** (`Gun`/`Guns`, `WeaponInfo`, `GameSound`,
             `WeaponCatalog` + `resources/weapons/*.tres`), locked to the engine
@@ -389,10 +379,10 @@ Remaining:
       - [x] **Audio settings**: `sound_enabled` / `sound_volume` (0..255) persist in
             `user://settings.cfg` and are applied at startup via `GameAudio.Apply`.
             Asserted by `test/UserSettingsTest.cs`.
-- [ ] Projectiles & explosions (Rocket Launcher & Grenade Launcher).
-      - [ ] **Radial splash damage & self-push** (`radialeffect` / `explode`): distance-attenuated damage `(damage * (1 - dist / (1.5 * exprad)))`, self-damage halving (`EXP_SELFDAMDIV = 2`), self-push amplification (`EXP_SELFPUSH = 2.5`), rocket jump impulse mechanics.
-      - [ ] **Rocket projectiles** (`projectile`, `projsplash`): linear flight at speed 320, dynamic collision against world octree & candidate bounding cylinders, visual fireball/spark trail and impact detonation.
-      - [ ] **Grenade bouncers** (`bouncer`, `BounceBody`): wire existing `BounceBody.Kind.Grenade` physics to weapon firing, fuse timer (`ttl = 1500`), detonation on timeout or target contact, and bounce reflections.
+- [x] Projectiles & explosions (Rocket Launcher & Grenade Launcher).
+      - [x] **Radial splash damage & self-push** (`radialeffect` / `explode`): distance-attenuated damage `(damage * (1 - dist / (1.5 * exprad)))`, self-damage halving (`EXP_SELFDAMDIV = 2`), self-push amplification (`EXP_SELFPUSH = 2.5`), rocket jump impulse mechanics.
+      - [x] **Rocket projectiles** (`projectile`, `projsplash`): linear flight at speed 320, dynamic collision against world octree & candidate bounding cylinders, visual fireball/spark trail and impact detonation.
+      - [x] **Grenade bouncers** (`bouncer`, `BounceBody`): wire existing `BounceBody.Kind.Grenade` physics to weapon firing, fuse timer (`ttl = 1500`), detonation on timeout or target contact, and bounce reflections.
 - [x] Item pickups & respawns.
       - [x] **Item state and rules** (`PlayerState.CanPickup`, `Pickup`, `HasMaxAmmo`, `CheckQuad`): faithful port of `fpsgame/game.h` item mechanics (health, boost, armour absorption hierarchy, quad damage countdown, ammo caps).
       - [x] **Item manager and respawn system** (`ItemManager`, `Item`): ports `spawntime`, `delayspawn`, `canspawnitem`, `spawnitems`, and `checkitems` (12 unit pickup radius, scaling respawn delays, delayed armour/boost/quad spawns, `NoItems`/`NoAmmo` mode filtering).
@@ -406,7 +396,7 @@ Remaining:
 - [x] FFA.
 - [x] Insta CTF.
 - [x] Effic CTF.
-- [x] Coop edit (multiplayer editing over the command stream).
+- [ ] Coop edit (multiplayer editing over the command stream).
 
 ## 7. Demos & replays
 
