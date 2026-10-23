@@ -177,4 +177,99 @@ public class UserSettingsTest : GoTestBase
             previous.Save();
         }
     }
+
+    [Test]
+    public void ScreenSettingsRoundTrip()
+    {
+        UserSettings previous = UserSettings.Load();
+        try
+        {
+            (previous with
+            {
+                ScreenMode = ScreenMode.BorderlessFullscreen,
+                WindowWidth = 1600,
+                WindowHeight = 900,
+                Vsync = true,
+                MaxFps = 144,
+            }).Save();
+
+            UserSettings loaded = UserSettings.Load();
+            TestAssert.Equal(ScreenMode.BorderlessFullscreen, loaded.ScreenMode, "screen_mode persists");
+            TestAssert.Equal(1600, loaded.WindowWidth, "window_width persists");
+            TestAssert.Equal(900, loaded.WindowHeight, "window_height persists");
+            TestAssert.True(loaded.Vsync, "vsync persists");
+            TestAssert.Equal(144, loaded.MaxFps, "max_fps persists");
+        }
+        finally
+        {
+            previous.Save();
+        }
+    }
+
+    [Test]
+    public void ScreenDefaultsMatchEngine()
+    {
+        var defaults = new UserSettings();
+        TestAssert.Equal(ScreenMode.Windowed, defaults.ScreenMode, "windowed by default");
+        TestAssert.Equal(ScreenSettings.DefaultWidth, defaults.WindowWidth, "default width 1024");
+        TestAssert.Equal(ScreenSettings.DefaultHeight, defaults.WindowHeight, "default height 768");
+        TestAssert.False(defaults.Vsync, "vsync default off");
+        TestAssert.Equal(ScreenSettings.DefaultMaxFps, defaults.MaxFps, "maxfps default 200");
+    }
+
+    [Test]
+    public void OutOfRangeScreenValuesClampOnLoad()
+    {
+        UserSettings previous = UserSettings.Load();
+        var cfg = new ConfigFile();
+        cfg.Load(UserSettings.SettingsPath);
+        cfg.SetValue(UserSettings.Section, "window_width", 1);
+        cfg.SetValue(UserSettings.Section, "window_height", 999999);
+        cfg.SetValue(UserSettings.Section, "max_fps", -5);
+        cfg.Save(UserSettings.SettingsPath);
+        try
+        {
+            UserSettings loaded = UserSettings.Load();
+            TestAssert.Equal(ScreenSettings.MinWidth, loaded.WindowWidth, "width clamps to min");
+            TestAssert.Equal(ScreenSettings.MaxDimension, loaded.WindowHeight, "height clamps to max");
+            TestAssert.Equal(0, loaded.MaxFps, "negative maxfps clamps to unlimited");
+        }
+        finally
+        {
+            previous.Save();
+        }
+    }
+
+    [Test]
+    public void ScreenModeTokensAreStableAndCaseInsensitive()
+    {
+        TestAssert.Equal("windowed", UserSettings.ScreenModeToken(ScreenMode.Windowed), "windowed token stable");
+        TestAssert.Equal("fullscreen", UserSettings.ScreenModeToken(ScreenMode.ExclusiveFullscreen), "fullscreen token stable");
+        TestAssert.Equal("borderless", UserSettings.ScreenModeToken(ScreenMode.BorderlessFullscreen), "borderless token stable");
+        TestAssert.Equal(ScreenMode.ExclusiveFullscreen, UserSettings.ParseScreenMode("  FullScreen "), "token is normalized");
+        TestAssert.Equal(ScreenMode.Windowed, UserSettings.ParseScreenMode("nonsense"), "unknown falls back to windowed");
+        TestAssert.Equal(ScreenMode.Windowed, UserSettings.ParseScreenMode(""), "empty falls back to windowed");
+    }
+
+    [Test]
+    public void ResolveWindowSizeClampsToEngineRange()
+    {
+        var desktop = new Vector2I(1920, 1080);
+        TestAssert.Equal(new Vector2I(ScreenSettings.MinWidth, ScreenSettings.MinHeight),
+            ScreenSettings.ResolveWindowSize(ScreenMode.Windowed, 1, 1, desktop), "below-min clamps up");
+        TestAssert.Equal(new Vector2I(ScreenSettings.MaxDimension, ScreenSettings.MaxDimension),
+            ScreenSettings.ResolveWindowSize(ScreenMode.Windowed, 999999, 999999, desktop), "above-max clamps down");
+        TestAssert.Equal(new Vector2I(1280, 720),
+            ScreenSettings.ResolveWindowSize(ScreenMode.Windowed, 1280, 720, desktop), "in-range is untouched");
+    }
+
+    [Test]
+    public void ResolveWindowSizeCapsBorderlessToDesktop()
+    {
+        var desktop = new Vector2I(1280, 720);
+        TestAssert.Equal(new Vector2I(1280, 720),
+            ScreenSettings.ResolveWindowSize(ScreenMode.BorderlessFullscreen, 2560, 1440, desktop), "borderless caps to desktop");
+        TestAssert.Equal(new Vector2I(800, 600),
+            ScreenSettings.ResolveWindowSize(ScreenMode.BorderlessFullscreen, 800, 600, desktop), "smaller borderless size is kept");
+    }
 }

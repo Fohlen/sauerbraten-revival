@@ -38,6 +38,7 @@ public partial class Main : Node
         // User settings are applied once at startup; the world layer reads its own
         // (lighting) settings when it builds.
         UserSettings settings = UserSettings.Load();
+        ScreenSettings.Apply(settings);
         GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
         InputBindings.Load().Apply();
         GetTree().ChangeSceneToFile("res://scenes/player_scene.tscn");

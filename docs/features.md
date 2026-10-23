@@ -462,6 +462,11 @@ No CubeScript.
 - [x] Look sensitivity/accel/invert/FOV persist as user settings (`sensitivity`,
       `sensitivity_scale`, `mouse_accel`, `invert_mouse`, `fov` in
       `user://settings.cfg`; applied to `MapPlayer` at spawn).
+- [x] Screen settings persist as user settings (`screen_mode`, `window_width`,
+      `window_height`, `vsync`, `max_fps` in `user://settings.cfg`; applied at
+      startup via `ScreenSettings.Apply` — windowed / exclusive fullscreen /
+      borderless fullscreen, original `scr_w`/`scr_h` range and `maxfps` cap).
+      Asserted by `test/UserSettingsTest.cs`.
 - [x] Persistent user remaps via `user://input.cfg` (load on startup, write on
       rebind; `scripts/InputBindings.cs`). The rebinding UI lands with M4e. Design:
       [vision.md §11.1](vision.md#keybinds-defaults-remapping-and-what-is-not-yet-bound).
