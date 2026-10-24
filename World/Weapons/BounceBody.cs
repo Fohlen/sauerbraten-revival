@@ -180,7 +180,7 @@ public partial class BounceBody : Node3D
 
     public override void _EnterTree()
     {
-        if (GetParent() is Ogz.MapWorld mw) mw.RegisterBouncer(this);
+        if (GetParent() is IGameWorld mw) mw.RegisterBouncer(this);
     }
 
     public override void _ExitTree()
@@ -191,7 +191,7 @@ public partial class BounceBody : Node3D
             _phys.DynEntCollide -= OnOctaDynEntCollide;
             _phys.DynEnts.Remove(Entity);
         }
-        if (GetParent() is Ogz.MapWorld mw) mw.UnregisterBouncer(this);
+        if (GetParent() is IGameWorld mw) mw.UnregisterBouncer(this);
     }
 
     protected override void Dispose(bool disposing)

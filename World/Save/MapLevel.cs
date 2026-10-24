@@ -5,8 +5,11 @@ using Godot;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Game.Items;
+using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
+using SauerbratenRevival.World.Physics;
+using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.World.Save;
 
@@ -24,7 +27,7 @@ namespace SauerbratenRevival.World.Save;
 /// −90° about X so it sits in Godot Y-up space.
 /// </summary>
 [GlobalClass]
-public partial class MapLevel : Node3D, IMapSource
+public partial class MapLevel : Node3D, IGameWorld
 {
     /// <summary>External reference to the base octree snapshot (<c>world.res</c>).</summary>
     [Export] public WorldResource? World { get; set; }
@@ -43,8 +46,55 @@ public partial class MapLevel : Node3D, IMapSource
     public IReadOnlyList<Entities.JumpPad> JumpPads => System.Array.Empty<Entities.JumpPad>();
     public IReadOnlyList<Entities.Teleport> Teleports => System.Array.Empty<Entities.Teleport>();
     public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
-    public SimClock? Clock => null;
+    public SimClock? Clock => _clock;
     public bool Built => Octa != null;
+
+    /// <summary>Active flying projectiles (rockets) stepped centrally by this world's physics loop.</summary>
+    public List<RocketProjectile> ActiveRockets { get; } = new();
+
+    /// <summary>Active bouncers (grenades, debris, gibs) stepped centrally by this world's physics loop.</summary>
+    public List<BounceBody> ActiveBouncers { get; } = new();
+
+    /// <summary>Backing read-only list for active bouncers.</summary>
+    public IReadOnlyList<BounceBody> Bouncers => ActiveBouncers;
+
+    private readonly List<MapPlayer> _players = new();
+    public IReadOnlyList<MapPlayer> Players => _players;
+
+    public MapPlayer? LocalPlayer { get; set; }
+    public Game.GameModeInfo? Mode { get; set; }
+
+    /// <summary>The shared octree physics simulation authority for this world.</summary>
+    public OctaPhysics? Physics { get; private set; }
+
+    private SimClock _clock = new();
+
+    public void RegisterPlayer(MapPlayer player)
+    {
+        if (!_players.Contains(player))
+        {
+            if (Mode != null) player.Mode = Mode;
+            _players.Add(player);
+            player.AttachClock(_clock);
+        }
+    }
+
+    public void UnregisterPlayer(MapPlayer player)
+    {
+        if (_players.Remove(player)) player.DetachClock();
+        if (ReferenceEquals(LocalPlayer, player)) LocalPlayer = null;
+    }
+
+    public void RegisterBouncer(BounceBody bouncer)
+    {
+        if (!ActiveBouncers.Contains(bouncer))
+            ActiveBouncers.Add(bouncer);
+    }
+
+    public void UnregisterBouncer(BounceBody bouncer)
+    {
+        ActiveBouncers.Remove(bouncer);
+    }
 
     private Materials.ITextureSource? _textures;
 
@@ -81,6 +131,8 @@ public partial class MapLevel : Node3D, IMapSource
         Snapshot = World.ToSnapshot();
         var octa = Snapshot.ToOcta();
         Octa = octa;
+        Physics = new OctaPhysics(octa);
+        if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
         Sink = new WorldCommandSink(new OctaWorld(octa));
 
         // Replay the saved history tail on top of the base snapshot (§4 strategy 2).
@@ -119,6 +171,13 @@ public partial class MapLevel : Node3D, IMapSource
                 ec.BindMapSource(this);
 
         GD.Print($"[maplevel] worldsize={octa.WorldSize} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount} entities={Entities.Count}");
+    }
+
+    private readonly WorldSimulation _simulation = new();
+
+    public override void _PhysicsProcess(double delta)
+    {
+        _simulation.Step(this, delta);
     }
 
     /// <summary>Finds a player spawn point in Sauerbraten coordinates.</summary>

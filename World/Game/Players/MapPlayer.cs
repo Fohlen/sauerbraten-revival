@@ -4,7 +4,6 @@ using Godot;
 using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game.Ctf;
-using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
@@ -250,12 +249,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>
     /// Weapon tracer and particle effect renderer. Reads the parent
-    /// <see cref="MapWorld.WeaponEffects"/> when attached to a world, or a standalone
+    /// <see cref="IGameWorld.WeaponEffects"/> when attached to a world, or a standalone
     /// instance assigned directly.
     /// </summary>
     public Effects.WeaponEffectsRenderer? WeaponEffects
     {
-        get => (GetParent() as MapWorld)?.WeaponEffects ?? _weaponEffects;
+        get => (GetParent() as IGameWorld)?.WeaponEffects ?? _weaponEffects;
         set
         {
             _weaponEffects = value;
@@ -393,10 +392,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     private readonly List<BounceBody> _standaloneGrenades = new();
 
     /// <summary>Active flying rocket projectiles fired by or tracked by this player/scene.</summary>
-    public List<RocketProjectile> ActiveRockets => (GetParent() as MapWorld)?.ActiveRockets ?? _standaloneRockets;
+    public List<RocketProjectile> ActiveRockets => (GetParent() as IGameWorld)?.ActiveRockets ?? _standaloneRockets;
 
     /// <summary>Active bounce grenades fired by or tracked by this player/scene.</summary>
-    public List<BounceBody> ActiveGrenades => (GetParent() as MapWorld)?.ActiveBouncers ?? _standaloneGrenades;
+    public List<BounceBody> ActiveGrenades => (GetParent() as IGameWorld)?.ActiveBouncers ?? _standaloneGrenades;
 
     /// <summary>True once <see cref="Setup"/> has run.</summary>
     public bool Initialized { get; private set; }
@@ -493,7 +492,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     {
         if (what == NotificationParented)
         {
-            if (GetParent() is MapWorld mw && mw.Mode != null)
+            if (GetParent() is IGameWorld mw && mw.Mode != null)
             {
                 Mode = mw.Mode;
             }
@@ -502,7 +501,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     public override void _EnterTree()
     {
-        if (GetParent() is MapWorld mw)
+        if (GetParent() is IGameWorld mw)
         {
             mw.RegisterPlayer(this);
         }
@@ -511,7 +510,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public override void _ExitTree()
     {
         _phys?.DynEnts.Remove(Entity);
-        if (GetParent() is MapWorld mw)
+        if (GetParent() is IGameWorld mw)
         {
             mw.UnregisterPlayer(this);
         }
@@ -928,7 +927,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 var grenade = new BounceBody
                 {
                     BodyKind = BounceBody.Kind.Grenade,
-                    Textures = (GetParent() as MapWorld)?.Textures,
+                    Textures = (GetParent() as IGameWorld)?.Textures,
                 };
                 grenade.Setup(
                     _phys,
@@ -1143,9 +1142,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         var explosionCandidates = candidates ?? new IExplosionTarget[] { this };
 
-        // When running standalone (not under MapWorld), advance own active projectiles & bouncers.
-        // Under MapWorld, UpdateProjectiles and UpdateBouncers are called centrally once per substep.
-        if (GetParent() is not MapWorld)
+        // When running standalone (not under IGameWorld), advance own active projectiles & bouncers.
+        // Under IGameWorld, UpdateProjectiles and UpdateBouncers are called centrally once per substep.
+        if (GetParent() is not IGameWorld)
         {
             for (int i = _standaloneRockets.Count - 1; i >= 0; i--)
             {

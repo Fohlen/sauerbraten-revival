@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
-using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Weapons;
 using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 
@@ -249,7 +248,7 @@ public partial class ItemManager : Node3D
     {
         if (what == NotificationParented)
         {
-            if (GetParent() is MapWorld mw)
+            if (GetParent() is IGameWorld mw)
             {
                 AutoAdvance = false;
                 if (mw.Mode != null) Mode = mw.Mode;
@@ -259,7 +258,7 @@ public partial class ItemManager : Node3D
 
     public override void _EnterTree()
     {
-        if (GetParent() is MapWorld mw)
+        if (GetParent() is IGameWorld mw)
         {
             AutoAdvance = false;
             if (mw.Mode != null) Mode = mw.Mode;
@@ -269,7 +268,7 @@ public partial class ItemManager : Node3D
     public override void _PhysicsProcess(double delta)
     {
         if (Engine.IsEditorHint()) return;
-        if (!AutoAdvance || GetParent() is MapWorld) return;
+        if (!AutoAdvance || GetParent() is IGameWorld) return;
 
         int deltaMillis = (int)System.Math.Round(delta * 1000.0);
         _standaloneClock.Advance(deltaMillis);
@@ -279,7 +278,7 @@ public partial class ItemManager : Node3D
     public override void _Process(double delta)
     {
         if (Engine.IsEditorHint()) return;
-        if (!AutoAdvance || GetParent() is MapWorld) return;
+        if (!AutoAdvance || GetParent() is IGameWorld) return;
 
         UpdateVisual(_standaloneClock.NowMillis);
     }

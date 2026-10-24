@@ -39,7 +39,7 @@ namespace SauerbratenRevival.World.Ogz;
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class MapWorld : Node3D, IMapSource
+public partial class MapWorld : Node3D, IGameWorld
 {
     /// <summary>Override map to build. Absolute, or package-relative (e.g. <c>base/church51.ogz</c>), resolved through <see cref="ContentRoots.ResolveMap"/>; empty uses the default.</summary>
     [Export] public string OgzPath { get; set; } = "";
@@ -146,41 +146,15 @@ public partial class MapWorld : Node3D, IMapSource
     /// Updates all active flying projectiles (rockets) in the world.
     /// Port of <c>fpsgame/weapon.cpp:523 updateprojectiles</c>.
     /// </summary>
-    public void UpdateProjectiles(int timeMillis, IReadOnlyList<Weapons.IExplosionTarget>? candidates = null)
-    {
-        var targets = candidates ?? (IReadOnlyList<Weapons.IExplosionTarget>)_players;
-        for (int i = ActiveRockets.Count - 1; i >= 0; i--)
-        {
-            var rocket = ActiveRockets[i];
-            if (rocket.Advance(timeMillis, Octa, targets))
-            {
-                ActiveRockets.RemoveAt(i);
-            }
-        }
-    }
+    public void UpdateProjectiles(int timeMillis, IReadOnlyList<Weapons.IExplosionTarget>? candidates = null) =>
+        WorldSimulation.UpdateProjectiles(this, timeMillis, candidates);
 
     /// <summary>
     /// Updates all active bouncers (grenades, debris, gibs) in the world.
     /// Port of <c>fpsgame/weapon.cpp:231 updatebouncers</c>.
     /// </summary>
-    public void UpdateBouncers(int timeMillis, IReadOnlyList<Weapons.IExplosionTarget>? candidates = null)
-    {
-        var targets = candidates ?? (IReadOnlyList<Weapons.IExplosionTarget>)_players;
-        for (int i = ActiveBouncers.Count - 1; i >= 0; i--)
-        {
-            var bouncer = ActiveBouncers[i];
-            if (bouncer.Exploded || !GodotObject.IsInstanceValid(bouncer) || bouncer.IsQueuedForDeletion())
-            {
-                ActiveBouncers.RemoveAt(i);
-                continue;
-            }
-            bouncer.Step(timeMillis, targets);
-            if (bouncer.Exploded)
-            {
-                ActiveBouncers.RemoveAt(i);
-            }
-        }
-    }
+    public void UpdateBouncers(int timeMillis, IReadOnlyList<Weapons.IExplosionTarget>? candidates = null) =>
+        WorldSimulation.UpdateBouncers(this, timeMillis, candidates);
 
     /// <summary>The texture source used while building (for later sky/material use).</summary>
     public ITextureSource? Textures { get; private set; }
@@ -474,65 +448,11 @@ public partial class MapWorld : Node3D, IMapSource
                 ec.BindMapSource(this);
     }
 
-    private double _physicsAccum;
-    private const double StepSeconds = Phys.PhysFrameTime / 1000.0;
+    private readonly WorldSimulation _simulation = new();
 
     public override void _PhysicsProcess(double delta)
     {
-        if (Engine.IsEditorHint() || Octa == null || Physics == null) return;
-
-        _physicsAccum += delta;
-        int guard = 0;
-        while (_physicsAccum >= StepSeconds && guard++ < 100)
-        {
-            _physicsAccum -= StepSeconds;
-            Clock.Advance(Phys.PhysFrameTime);
-
-            // 1. Gather player inputs before stepping physics
-            for (int i = 0; i < _players.Count; i++)
-            {
-                _players[i].PrePhysicsStep();
-            }
-
-            // 2. Clear and update dynent cache once per 5 ms substep
-            Physics.ClearDynentCache();
-            foreach (var dynent in Physics.DynEnts)
-            {
-                Physics.UpdateDynentCache(dynent);
-            }
-
-            // 3. Step registered players
-            for (int i = 0; i < _players.Count; i++)
-            {
-                _players[i].Step(Phys.PhysFrameTime);
-            }
-
-            // 4. Update active projectiles (weapon.cpp:523 updateprojectiles)
-            UpdateProjectiles(Phys.PhysFrameTime);
-
-            // 5. Update active bouncers (weapon.cpp:231 updatebouncers)
-            UpdateBouncers(Phys.PhysFrameTime);
-
-            // 6. Update game mode flag rules with synchronized simulation clock
-            if (Flags != null && Mode != null && Mode.Has(Game.ModeFlags.Ctf))
-            {
-                Flags.Update(LastMillis);
-            }
-
-            // 7. Update item respawns with synchronized simulation clock
-            Items?.UpdateRespawns(Phys.PhysFrameTime);
-
-            // 8. Post physics step for players (attack cooldowns)
-            for (int i = 0; i < _players.Count; i++)
-            {
-                _players[i].PostPhysicsStep();
-            }
-        }
-
-        for (int i = 0; i < ActiveBouncers.Count; i++)
-        {
-            ActiveBouncers[i].SyncTransform();
-        }
+        _simulation.Step(this, delta);
     }
 
     public override void _Process(double delta)

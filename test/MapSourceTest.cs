@@ -3,6 +3,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Editor;
+using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Save;
 
@@ -101,5 +102,28 @@ public class MapSourceTest : GoTestBase
 
         controller.Free();
         mapLevel.Free();
+    }
+
+    [Test]
+    public void GameWorldsSupportSimulationAndProjectiles()
+    {
+        var emptyMap = new EmptyMap { WorldScale = 10, ChunkSize = 128 };
+        emptyMap.Build();
+        IGameWorld world = emptyMap;
+
+        TestAssert.True(world.ActiveRockets != null, "active rockets list present");
+        TestAssert.True(world.ActiveBouncers != null, "active bouncers list present");
+        TestAssert.True(world.Players != null, "players list present");
+
+        var player = new MapPlayer();
+        world.RegisterPlayer(player);
+        TestAssert.Equal(1, world.Players!.Count, "player registered");
+        TestAssert.Equal(player, world.Players[0], "registered player is player");
+
+        world.UnregisterPlayer(player);
+        TestAssert.Equal(0, world.Players.Count, "player unregistered");
+
+        player.Free();
+        emptyMap.Free();
     }
 }

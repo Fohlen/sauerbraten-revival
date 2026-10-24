@@ -154,7 +154,7 @@ public partial class OgzMapViewer : Node3D
         (Vector3 feet, float yaw) = mapSource.FindSpawn();
         // The player node owns its team (set in the scene); the world only needs a
         // reference to it so flag visuals can colour relative to the local team.
-        if (mapSource is MapWorld mw) mw.LocalPlayer = player;
+        if (mapSource is IGameWorld gw) gw.LocalPlayer = player;
         var phys = mapSource.Physics ?? new Physics.OctaPhysics(mapSource.Octa ?? new Octa(10));
         player.Setup(phys, feet, yaw);
         mapSource.RegisterPlayer(player);

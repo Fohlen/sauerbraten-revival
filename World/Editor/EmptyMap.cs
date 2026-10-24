@@ -22,7 +22,7 @@ namespace SauerbratenRevival.World.Editor;
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class EmptyMap : Node3D, IMapSource
+public partial class EmptyMap : Node3D, IGameWorld
 {
     /// <summary>Octree world scale (worldsize = 1 &lt;&lt; WorldScale). Clamped to 10..16 by the NewMap op.</summary>
     [Export] public int WorldScale { get; set; } = 10; // worldsize 1024; SplitOcta is covered by tests
@@ -43,6 +43,29 @@ public partial class EmptyMap : Node3D, IMapSource
     public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
     public SimClock? Clock => _clock;
     public bool Built => Octa != null;
+
+    /// <summary>Active flying projectiles (rockets) stepped centrally by this world's physics loop.</summary>
+    public List<Weapons.RocketProjectile> ActiveRockets { get; } = new();
+
+    /// <summary>Active bouncers (grenades, debris, gibs) stepped centrally by this world's physics loop.</summary>
+    public List<Weapons.BounceBody> ActiveBouncers { get; } = new();
+
+    /// <summary>Backing read-only list for active bouncers.</summary>
+    public IReadOnlyList<Weapons.BounceBody> Bouncers => ActiveBouncers;
+
+    public MapPlayer? LocalPlayer { get; set; }
+    public Game.GameModeInfo? Mode { get; set; }
+
+    public void RegisterBouncer(Weapons.BounceBody bouncer)
+    {
+        if (!ActiveBouncers.Contains(bouncer))
+            ActiveBouncers.Add(bouncer);
+    }
+
+    public void UnregisterBouncer(Weapons.BounceBody bouncer)
+    {
+        ActiveBouncers.Remove(bouncer);
+    }
 
     public Octa? Octa { get; set; }
     public WorldCommandSink? Sink { get; set; }
@@ -123,38 +146,11 @@ public partial class EmptyMap : Node3D, IMapSource
 
     public override void _Ready() => Build();
 
-    private double _physicsAccum;
-    private const double StepSeconds = Phys.PhysFrameTime / 1000.0;
+    private readonly WorldSimulation _simulation = new();
 
-    /// <summary>
-    /// Steps registered players on the same fixed 5 ms cadence as
-    /// <see cref="Ogz.MapWorld"/>. The empty map has no game entities, projectiles
-    /// or game mode, so this is the player simulation only.
-    /// </summary>
     public override void _PhysicsProcess(double delta)
     {
-        if (Engine.IsEditorHint() || Octa == null || Physics == null) return;
-
-        _physicsAccum += delta;
-        int guard = 0;
-        while (_physicsAccum >= StepSeconds && guard++ < 100)
-        {
-            _physicsAccum -= StepSeconds;
-            _clock.Advance(Phys.PhysFrameTime);
-
-            // 1. Gather player inputs (including mouse look) before stepping physics.
-            for (int i = 0; i < _players.Count; i++) _players[i].PrePhysicsStep();
-
-            // 2. Clear and update the dynent cache once per 5 ms substep.
-            Physics.ClearDynentCache();
-            foreach (var dynent in Physics.DynEnts) Physics.UpdateDynentCache(dynent);
-
-            // 3. Step registered players.
-            for (int i = 0; i < _players.Count; i++) _players[i].Step(Phys.PhysFrameTime);
-
-            // 4. Post physics step for players (attack cooldowns).
-            for (int i = 0; i < _players.Count; i++) _players[i].PostPhysicsStep();
-        }
+        _simulation.Step(this, delta);
     }
 
     public void Build()

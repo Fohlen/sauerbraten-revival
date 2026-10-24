@@ -59,12 +59,12 @@ public partial class WeaponEffectsRenderer : Node3D
 
     /// <summary>
     /// Active flying rockets rendered by this effects node. Reads the parent
-    /// <see cref="Ogz.MapWorld.ActiveRockets"/> when attached to a world, or an explicit
+    /// <see cref="IGameWorld.ActiveRockets"/> when attached to a world, or an explicit
     /// list assigned for standalone testing.
     /// </summary>
     public IReadOnlyList<RocketProjectile>? ActiveRockets
     {
-        get => (GetParent() as Ogz.MapWorld)?.ActiveRockets ?? _standaloneRockets;
+        get => (GetParent() as IGameWorld)?.ActiveRockets ?? _standaloneRockets;
         set => _standaloneRockets = value;
     }
 
@@ -157,7 +157,7 @@ public partial class WeaponEffectsRenderer : Node3D
 
     /// <summary>Textures for the parent world when attached, else a fresh project-first/dump source.</summary>
     private ITextureSource ResolveTextures() =>
-        Textures ?? (GetParent() as Ogz.MapWorld)?.Textures ?? TextureSources.CreateDefault();
+        Textures ?? (GetParent() as IGameWorld)?.Textures ?? TextureSources.CreateDefault();
 
     /// <summary>
     /// Loads the converted <c>projectiles/rocket</c> model and its skin once. Mirrors
