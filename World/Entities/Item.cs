@@ -9,7 +9,7 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class Item : ModelInstance
+public partial class Item : Models.ModelInstance
 {
     [Export] public int ItemType { get; set; }
     [Export] public int ItemIndex { get; set; }

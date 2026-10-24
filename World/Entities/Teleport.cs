@@ -10,7 +10,7 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class Teleport : ModelInstance
+public partial class Teleport : Models.ModelInstance
 {
     [Export] public int Tag { get; set; }
     [Export] public int ModelIndex { get; set; }

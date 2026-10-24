@@ -5,6 +5,7 @@ using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
+using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
 
 namespace SauerbratenRevival.World;

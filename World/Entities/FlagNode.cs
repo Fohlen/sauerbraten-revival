@@ -2,6 +2,7 @@ using System;
 using Godot;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Models;
 
 namespace SauerbratenRevival.World.Entities;
 
@@ -13,7 +14,7 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class FlagNode : ModelInstance
+public partial class FlagNode : Models.ModelInstance
 {
     private string _currentModelName = "";
 

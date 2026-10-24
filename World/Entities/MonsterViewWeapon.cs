@@ -10,7 +10,7 @@ namespace SauerbratenRevival.World.Entities;
 /// (<c>ANIM_VWEP_IDLE</c>/<c>ANIM_VWEP_SHOOT</c>) is game logic.
 /// </summary>
 [GlobalClass]
-public partial class MonsterViewWeapon : ModelInstance
+public partial class MonsterViewWeapon : Models.ModelInstance
 {
     /// <summary>The engine model name (e.g. "monster/rat/vwep").</summary>
     [Export] public string? ModelPath { get; set; }

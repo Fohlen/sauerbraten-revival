@@ -14,7 +14,7 @@ namespace SauerbratenRevival.World.Entities;
 /// <c>entities::fixentity</c>, which moves <c>attr4→attr5</c>/<c>attr3→attr4</c>).
 /// </summary>
 [GlobalClass]
-public partial class ModeEntity : ModelInstance
+public partial class ModeEntity : Models.ModelInstance
 {
     /// <summary>shared/ents.h + fpsgame/game.h type id (see <see cref="EntityType"/>).</summary>
     [Export] public int ModeType { get; set; }

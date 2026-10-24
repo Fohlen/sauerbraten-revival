@@ -1,7 +1,8 @@
 using System.IO;
 using Godot;
+using SauerbratenRevival.World.Entities;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>
 /// Loads an assimp-converted glTF: prefers Godot's imported Resource (renders in

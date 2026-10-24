@@ -1,8 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
+using SauerbratenRevival.World.Entities;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>
 /// Parser + pose evaluator for Cube 2 / Doom 3 <c>.md5anim</c> skeletal-animation

@@ -3,6 +3,8 @@ using System.Linq;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Models;
+using PlayerModel = SauerbratenRevival.World.Models.PlayerModel;
 
 namespace SauerbratenRevival.Tests;
 

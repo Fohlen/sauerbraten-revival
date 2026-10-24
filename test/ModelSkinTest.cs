@@ -4,6 +4,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Models;
 
 namespace SauerbratenRevival.Tests;
 

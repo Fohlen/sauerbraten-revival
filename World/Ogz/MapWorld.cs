@@ -6,7 +6,9 @@ using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
+using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
+using MapModel = SauerbratenRevival.World.Models.MapModel;
 
 namespace SauerbratenRevival.World.Ogz;
 

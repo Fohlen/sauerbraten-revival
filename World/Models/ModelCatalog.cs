@@ -4,7 +4,7 @@ using System.Text.Json;
 using Godot;
 using SauerbratenRevival.World.Content;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>One model's converted output + Cube2 model parameters.</summary>
 public sealed class ModelInfo

@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>
 /// Builds <see cref="MapModel"/> nodes from a map's <c>ET_MAPMODEL</c> entities.

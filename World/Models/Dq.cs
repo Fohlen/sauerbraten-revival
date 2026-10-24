@@ -1,6 +1,7 @@
 using Godot;
+using SauerbratenRevival.World.Entities;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>
 /// Dual quaternion, ported from <c>shared/geom.h</c> <c>struct dualquat</c> (r6889).

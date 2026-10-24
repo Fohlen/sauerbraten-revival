@@ -1,4 +1,4 @@
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>
 /// Provides model metadata and converted glTF paths by engine model name.

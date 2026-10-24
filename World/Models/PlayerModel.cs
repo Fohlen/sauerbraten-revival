@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Materials;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>
 /// The local player's visible body model — one of the five skeletal MD5 models in

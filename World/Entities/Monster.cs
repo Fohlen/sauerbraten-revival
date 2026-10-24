@@ -13,7 +13,7 @@ namespace SauerbratenRevival.World.Entities;
 /// stats are exposed so a future runtime can build the real <c>monster</c> struct.
 /// </summary>
 [GlobalClass]
-public partial class Monster : ModelInstance
+public partial class Monster : Models.ModelInstance
 {
     /// <summary>attr2: monster type index (see <see cref="MonsterTypes"/>).</summary>
     [Export] public int MonsterType { get; set; }

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Ogz;
 
 namespace SauerbratenRevival.World.Entities;

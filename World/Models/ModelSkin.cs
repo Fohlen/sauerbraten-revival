@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Materials;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>Builds a Godot skin material (diffuse + optional normal) for a converted model.</summary>
 public static class ModelSkin

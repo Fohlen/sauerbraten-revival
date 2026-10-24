@@ -1,8 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
 using Godot;
+using SauerbratenRevival.World.Entities;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>
 /// The mesh skeleton's bind pose (<c>md5mesh</c> <c>joints {}</c> block), ported

@@ -2,6 +2,8 @@ using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Weapons;
+using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
+using PlayerModel = SauerbratenRevival.World.Models.PlayerModel;
 
 namespace SauerbratenRevival.World.Ogz;
 

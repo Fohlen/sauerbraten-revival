@@ -2,6 +2,8 @@ using System.IO;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Models;
+using ModelInstance = SauerbratenRevival.World.Models.ModelInstance;
 
 namespace SauerbratenRevival.Tests;
 

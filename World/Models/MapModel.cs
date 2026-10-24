@@ -1,6 +1,6 @@
 using Godot;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>
 /// A map model (<c>ET_MAPMODEL</c>). Position and yaw come from the entity;

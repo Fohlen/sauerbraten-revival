@@ -1,4 +1,4 @@
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>
 /// One playable model's variants (render.cpp <c>playermodelinfo</c>). The engine

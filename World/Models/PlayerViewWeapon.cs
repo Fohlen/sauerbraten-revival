@@ -1,6 +1,6 @@
 using Godot;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Models;
 
 /// <summary>
 /// A player's third-person view weapon (render.cpp <c>vweps[]</c>, e.g. <c>vwep/rifle</c>).

@@ -3,6 +3,7 @@ using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Meshing;
+using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
 
 namespace SauerbratenRevival.World.Editor;
@@ -86,7 +87,7 @@ public partial class EmptyMap : MapSourceNode
         // still come from the project's imported content (same sources MapWorld
         // uses), so the editor scene shows them instead of warning about a missing
         // catalogue.
-        Models = Entities.ModelCatalog.LoadFromProject();
+        Models = ModelCatalog.LoadFromProject();
         Textures ??= Materials.TextureSources.CreateDefault();
 
         if (!BakeRadiance && ShouldUseSeedCache && SeedCache.TryGetValue((WorldScale, ChunkSize), out var seed))
