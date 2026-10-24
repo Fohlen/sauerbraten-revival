@@ -1,6 +1,8 @@
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Lighting;
+using EnvMapProbe = SauerbratenRevival.World.Lighting.EnvMapProbe;
 
 namespace SauerbratenRevival.Tests;
 

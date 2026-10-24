@@ -1,6 +1,6 @@
 using Godot;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Lighting;
 
 /// <summary>
 /// An <c>ET_ENVMAP</c> reflection/cubemap probe. In Cube 2 the entity defines a

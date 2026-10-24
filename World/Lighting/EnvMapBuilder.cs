@@ -1,7 +1,8 @@
 using Godot;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Ogz;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Lighting;
 
 /// <summary>
 /// Builds <see cref="EnvMapProbe"/> nodes from a map's <c>ET_ENVMAP</c> entities.

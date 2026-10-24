@@ -1,8 +1,9 @@
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Ogz;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Lighting;
 
 /// <summary>
 /// Builds Godot lights from a map's entity list: <c>ET_LIGHT</c> becomes an

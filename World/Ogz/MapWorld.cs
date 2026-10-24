@@ -4,6 +4,7 @@ using System.Linq;
 using Godot;
 using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
