@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using Godot;
-using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Ogz;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Game;
 
 /// <summary>
 /// Builds <see cref="ModeEntity"/> nodes from the game-mode entity types:

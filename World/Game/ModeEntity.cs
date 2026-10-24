@@ -1,6 +1,7 @@
 using Godot;
+using SauerbratenRevival.World.Entities;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Game;
 
 /// <summary>
 /// A Cube 2 game-mode entity: <c>FLAG</c>, <c>BASE</c>, <c>BOX</c>,

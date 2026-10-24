@@ -6,6 +6,7 @@ using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Effects;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Game.Monsters;
