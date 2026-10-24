@@ -7,6 +7,7 @@ using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using Item = SauerbratenRevival.World.Game.Items.Item;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
+using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 
 namespace SauerbratenRevival.Tests;
 

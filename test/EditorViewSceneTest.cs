@@ -5,6 +5,7 @@ using SauerbratenRevival.World;
 using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;
+using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 
 namespace SauerbratenRevival.Tests;
 

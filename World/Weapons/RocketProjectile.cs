@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Physics;
 
 namespace SauerbratenRevival.World.Weapons;
@@ -228,7 +229,7 @@ public sealed class RocketProjectile
             directHitVictim.TakeDamage(qdam);
         }
 
-        if (Owner is Ogz.MapPlayer ownerPlayer)
+        if (Owner is MapPlayer ownerPlayer)
         {
             ownerPlayer.OnRocketDetonated(this, impactPos, directHitVictim, explosionResult);
         }

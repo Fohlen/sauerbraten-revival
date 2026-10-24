@@ -1,13 +1,10 @@
-using System;
 using Godot;
-using SauerbratenRevival.World.Entities;
-using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
 using PlayerModel = SauerbratenRevival.World.Models.PlayerModel;
 
-namespace SauerbratenRevival.World.Ogz;
+namespace SauerbratenRevival.World.Game.Players;
 
 /// <summary>
 /// Presentation controller for <see cref="MapPlayer"/>. Manages node transforms,

@@ -4,6 +4,7 @@ using Godot;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game.Ctf;
+using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
@@ -90,10 +91,10 @@ public interface IMapSource
     SimClock? Clock { get; }
 
     /// <summary>Registers an active player for simulation stepping.</summary>
-    void RegisterPlayer(Ogz.MapPlayer player) { }
+    void RegisterPlayer(MapPlayer player) { }
 
     /// <summary>Unregisters an active player from simulation stepping.</summary>
-    void UnregisterPlayer(Ogz.MapPlayer player) { }
+    void UnregisterPlayer(MapPlayer player) { }
 
     /// <summary>Converts a position from Sauerbraten Z-up coordinates to Godot Y-up coordinates under standard world rotation.</summary>
     public static Vector3 SauerbratenToGodot(Vector3 sauer) => new(sauer.X, sauer.Z, -sauer.Y);

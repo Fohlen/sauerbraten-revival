@@ -5,6 +5,7 @@ using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Weapons;
+using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 
 namespace SauerbratenRevival.World.Game.Items;
 

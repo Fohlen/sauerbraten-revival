@@ -4,6 +4,7 @@ using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Game.Items;
+using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
@@ -75,13 +76,13 @@ public partial class EmptyMap : Node3D, IMapSource
     public OctaPhysics? Physics { get; private set; }
 
     private readonly SimClock _clock = new();
-    private readonly List<Ogz.MapPlayer> _players = new();
+    private readonly List<MapPlayer> _players = new();
 
     /// <summary>Active players stepped by this world's physics loop.</summary>
-    public IReadOnlyList<Ogz.MapPlayer> Players => _players;
+    public IReadOnlyList<MapPlayer> Players => _players;
 
     /// <summary>Registers a player to be stepped by the world's physics loop.</summary>
-    public void RegisterPlayer(Ogz.MapPlayer player)
+    public void RegisterPlayer(MapPlayer player)
     {
         if (!_players.Contains(player))
         {
@@ -91,7 +92,7 @@ public partial class EmptyMap : Node3D, IMapSource
     }
 
     /// <summary>Unregisters a player from the world's physics loop.</summary>
-    public void UnregisterPlayer(Ogz.MapPlayer player)
+    public void UnregisterPlayer(MapPlayer player)
     {
         if (_players.Remove(player)) player.DetachClock();
     }

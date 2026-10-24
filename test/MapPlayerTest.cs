@@ -9,6 +9,7 @@ using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
+using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 
 namespace SauerbratenRevival.Tests;
 

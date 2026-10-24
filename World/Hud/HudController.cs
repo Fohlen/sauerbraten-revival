@@ -6,6 +6,7 @@ using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
+using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 
 namespace SauerbratenRevival.World.Hud;
 

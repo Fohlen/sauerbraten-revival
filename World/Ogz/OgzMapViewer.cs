@@ -1,5 +1,6 @@
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Weapons;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
@@ -36,7 +37,7 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Place the direct-child <c>Camera3D</c> at a full-map overview once built.</summary>
     [Export] public bool FrameCamera { get; set; } = true;
 
-    /// <summary>Attach the direct-child <see cref="MapPlayer"/> to the world's octree and place it at a spawn point.</summary>
+    /// <summary>Attach the direct-child <see cref="Game.Players.MapPlayer"/> to the world's octree and place it at a spawn point.</summary>
     [Export] public bool SpawnPlayer { get; set; } = false;
 
     /// <summary>When true, spawns player in coop-edit mode with an active EditorController.</summary>
@@ -133,18 +134,18 @@ public partial class OgzMapViewer : Node3D
     }
 
     /// <summary>
-    /// Move a scene-authored <see cref="MapPlayer"/> under the Z-up world node and
+    /// Move a scene-authored <see cref="Game.Players.MapPlayer"/> under the Z-up world node and
     /// initialise it against the octree at the map's first <c>ET_PLAYERSTART</c>
     /// (falling back to the map centre). Physics then owns its position/orientation.
     /// </summary>
     private void AttachPlayer(UserSettings userSettings, Game.GameModeInfo? modeInfo, IMapSource mapSource)
     {
-        MapPlayer? player = null;
+        Game.Players.MapPlayer? player = null;
         foreach (var child in GetChildren())
-            if (child is MapPlayer p) { player = p; break; }
+            if (child is Game.Players.MapPlayer p) { player = p; break; }
         if (player == null)
         {
-            GD.PushWarning($"[viewer] SpawnPlayer is set but no direct-child {nameof(MapPlayer)} node exists.");
+            GD.PushWarning($"[viewer] SpawnPlayer is set but no direct-child {nameof(Game.Players.MapPlayer)} node exists.");
             return;
         }
 
@@ -203,10 +204,10 @@ public partial class OgzMapViewer : Node3D
     /// Attach a converted body model to the player (engine <c>playermodels</c>, see
 	/// render.cpp). Leaving <see cref="PlayerModelIndex"/> negative keeps the scene's
 	/// placeholder body. The model is parented under the world as a <b>sibling</b> of
-	/// the player so <see cref="MapPlayer.SyncBodyModel"/> can keep it upright at the
+	/// the player so <see cref="Game.Players.MapPlayer.SyncBodyModel"/> can keep it upright at the
 	/// feet, independent of the camera view pitch.
 	/// </summary>
-	private void AttachPlayerModel(MapPlayer player, IMapSource mapSource)
+	private void AttachPlayerModel(Game.Players.MapPlayer player, IMapSource mapSource)
     {
         if (PlayerModelIndex < 0) return;
 

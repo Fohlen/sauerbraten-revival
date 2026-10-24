@@ -10,6 +10,7 @@ using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Game.Monsters;
+using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
@@ -88,16 +89,16 @@ public partial class MapWorld : Node3D, IMapSource
     /// <summary>Current simulation time in milliseconds.</summary>
     public int LastMillis => Clock.NowMillis;
 
-    private readonly List<MapPlayer> _players = new();
+    private readonly List<Game.Players.MapPlayer> _players = new();
     /// <summary>Active players stepped by this world's physics loop.</summary>
-    public IReadOnlyList<MapPlayer> Players => _players;
+    public IReadOnlyList<Game.Players.MapPlayer> Players => _players;
 
     /// <summary>
-    /// The local player, whose <see cref="MapPlayer.Team"/> drives local-only
+    /// The local player, whose <see cref="Game.Players.MapPlayer.Team"/> drives local-only
     /// presentation (flag colours). Set by the scene that spawns it; null in
     /// world-only contexts such as the edit viewer or tests.
     /// </summary>
-    public MapPlayer? LocalPlayer { get; set; }
+    public Game.Players.MapPlayer? LocalPlayer { get; set; }
 
     /// <summary>Active flying projectiles (rockets) stepped centrally by this world's physics loop.</summary>
     public List<Weapons.RocketProjectile> ActiveRockets { get; } = new();
@@ -109,7 +110,7 @@ public partial class MapWorld : Node3D, IMapSource
     public IReadOnlyList<BounceBody> Bouncers => ActiveBouncers;
 
     /// <summary>Registers a player to be stepped by the world's physics loop.</summary>
-    public void RegisterPlayer(MapPlayer player)
+    public void RegisterPlayer(Game.Players.MapPlayer player)
     {
         if (!_players.Contains(player))
         {
@@ -120,7 +121,7 @@ public partial class MapWorld : Node3D, IMapSource
     }
 
     /// <summary>Unregisters a player from the world's physics loop.</summary>
-    public void UnregisterPlayer(MapPlayer player)
+    public void UnregisterPlayer(Game.Players.MapPlayer player)
     {
         if (_players.Remove(player)) player.DetachClock();
         if (ReferenceEquals(LocalPlayer, player)) LocalPlayer = null;
@@ -212,7 +213,7 @@ public partial class MapWorld : Node3D, IMapSource
                 for (int i = 0; i < _players.Count; i++) _players[i].Mode = value;
                 foreach (var child in GetChildren())
                 {
-                    if (child is MapPlayer p) p.Mode = value;
+                    if (child is Game.Players.MapPlayer p) p.Mode = value;
                     else if (child is ItemManager im) im.Mode = value;
                 }
             }

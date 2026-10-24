@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Content;
+using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Physics;
 
@@ -14,7 +15,7 @@ namespace SauerbratenRevival.World.Weapons;
 /// (players/movables), syncing the node transform.
 ///
 /// It simulates in Sauerbraten coordinates, so it lives under the Z-up world node
-/// (like <see cref="Ogz.MapPlayer"/>). The bouncer dimensions follow
+/// (like <see cref="MapPlayer"/>). The bouncer dimensions follow
 /// <c>newbouncer</c>: radius 1.5 (0.5 for debris) with <c>eyeheight = aboveeye =
 /// radius</c>; a grenade uses <c>COLLIDE_ELLIPSE_PRECISE</c>.
 /// </summary>
@@ -308,7 +309,7 @@ public partial class BounceBody : Node3D
             hit.Target.TakeDamage(hit.Damage);
         }
 
-        if (ShooterOwner is Ogz.MapPlayer ownerPlayer)
+        if (ShooterOwner is MapPlayer ownerPlayer)
         {
             ownerPlayer.OnGrenadeDetonated(this, Entity.O, result);
         }

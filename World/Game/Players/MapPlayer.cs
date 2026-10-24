@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
-using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
+using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
@@ -12,7 +12,7 @@ using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 using PlayerModel = SauerbratenRevival.World.Models.PlayerModel;
 
-namespace SauerbratenRevival.World.Ogz;
+namespace SauerbratenRevival.World.Game.Players;
 
 /// <summary>
 /// The local player, driven by the faithfully-ported octree physics
@@ -283,7 +283,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>
     /// Current player health (<c>fpsstate::health</c>). Setting this property emits
-    /// <see cref="SignalName.HealthChanged"/> when the value changes.
+    /// <see cref="Game.Players.MapPlayer.SignalName.HealthChanged"/> when the value changes.
     /// </summary>
     public int Health
     {
@@ -293,7 +293,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>
     /// Currently selected weapon ID (<c>fpsstate::gunselect</c>). Setting this property
-    /// updates weapon models and emits <see cref="SignalName.WeaponChanged"/>.
+    /// updates weapon models and emits <see cref="Game.Players.MapPlayer.SignalName.WeaponChanged"/>.
     /// </summary>
     public int GunSelect
     {
@@ -410,12 +410,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     private void OnCombatHealthChanged(int oldHealth, int newHealth)
     {
-        EmitSignal(SignalName.HealthChanged, oldHealth, newHealth);
+        EmitSignal(Game.Players.MapPlayer.SignalName.HealthChanged, oldHealth, newHealth);
     }
 
     private void OnCombatWeaponChanged(int gunId)
     {
-        EmitSignal(SignalName.WeaponChanged, gunId);
+        EmitSignal(Game.Players.MapPlayer.SignalName.WeaponChanged, gunId);
     }
 
     public override void _Ready()
@@ -717,7 +717,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>
     /// Select a weapon (engine <c>gunselect</c>, weapon.cpp). Updates combat state,
     /// swaps third-person view weapon, switches the first-person hudgun, and emits
-    /// <see cref="SignalName.WeaponChanged"/>.
+    /// <see cref="Game.Players.MapPlayer.SignalName.WeaponChanged"/>.
     /// </summary>
     public void SelectWeapon(Gun gun)
     {
@@ -811,7 +811,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 hit.Target.ApplyHitPush(hit.PushVel);
                 hit.Target.TakeDamage(hit.Damage);
                 int targetId = (hit.Target as MapPlayer)?.PlayerId ?? -1;
-                EmitSignal(SignalName.DamageDealt, targetId, hit.Damage);
+                EmitSignal(Game.Players.MapPlayer.SignalName.DamageDealt, targetId, hit.Damage);
             }
 
             // Play hit confirmation sound and record LastHit timestamp if any target was hit (fpsgame/weapon.cpp:357-358)
@@ -1012,7 +1012,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>
-    /// Apply an item pickup to the player's combat state, emitting <see cref="SignalName.HealthChanged"/>
+    /// Apply an item pickup to the player's combat state, emitting <see cref="Game.Players.MapPlayer.SignalName.HealthChanged"/>
     /// if health was modified (<c>fpsgame/game.h:412 pickup</c>).
     /// </summary>
     public void Pickup(int itemType)

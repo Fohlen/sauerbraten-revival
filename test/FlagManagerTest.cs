@@ -11,6 +11,7 @@ using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using FlagNode = SauerbratenRevival.World.Game.Ctf.FlagNode;
+using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 
 namespace SauerbratenRevival.Test;
 
