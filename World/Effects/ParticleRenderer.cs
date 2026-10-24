@@ -1,7 +1,7 @@
 using Godot;
 using SauerbratenRevival.World.Materials;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Effects;
 
 /// <summary>
 /// Renders the <c>ET_PARTICLES</c> effects that map to Godot billboard particles

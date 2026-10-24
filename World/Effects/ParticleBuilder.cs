@@ -1,8 +1,9 @@
 using Godot;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Effects;
 
 /// <summary>
 /// Builds <see cref="ParticleEmitter"/> nodes from a map's <c>ET_PARTICLES</c>

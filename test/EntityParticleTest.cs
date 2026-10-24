@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
+using SauerbratenRevival.World.Effects;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
+using ParticleEmitter = SauerbratenRevival.World.Effects.ParticleEmitter;
 
 namespace SauerbratenRevival.Tests;
 

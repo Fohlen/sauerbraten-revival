@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using SauerbratenRevival.World.Content;
+using SauerbratenRevival.World.Effects;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;

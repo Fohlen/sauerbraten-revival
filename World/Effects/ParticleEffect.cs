@@ -1,4 +1,4 @@
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Effects;
 
 /// <summary>
 /// <c>ET_PARTICLES</c> effect ids (<c>renderparticles.cpp makeparticles</c>,

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Effects;
 
 /// <summary>
 /// An <c>ET_PARTICLES</c> entity. The effect id is <see cref="Effect"/> (attr1);
