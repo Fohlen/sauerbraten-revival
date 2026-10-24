@@ -27,5 +27,13 @@ public static class TestAssert
     }
 
     public static void False(bool condition, string message) => True(!condition, message);
+
+    /// <summary>Asserts that <paramref name="action"/> throws an exception of type <typeparamref name="T"/>.</summary>
+    public static void Throws<T>(Action action, string message = "") where T : Exception
+    {
+        try { action(); }
+        catch (T) { return; }
+        throw new Exception($"Assertion failed: expected {typeof(T).Name} {message}");
+    }
 }
 
