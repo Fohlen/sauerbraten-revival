@@ -126,4 +126,88 @@ public class MaterialBuilderTest : GoTestBase
         TestAssert.Equal(surfaces, withMaterial, "every surface has a material");
         TestAssert.True(withUv > 0, "surfaces carry non-zero UVs");
     }
+
+    [Test]
+    public void CatalogueLoadsFromChurch51()
+    {
+        var cat = MetadataCatalogue.Load(TestData.CataloguePath);
+        TestAssert.True(cat.Slots.Count > 0, "has slots");
+        TestAssert.True(cat.VSlots.Count > 0, "has vslots");
+        TestAssert.True(cat.Config.Ambient != 0, "has ambient config");
+        TestAssert.True(cat.Config.Skybox.Length > 0, "has skybox");
+
+        // First slot in church51 is default diffuse
+        TestAssert.True(cat.Slots.ContainsKey(1), "slot 1 exists");
+        TestAssert.Equal("textures/default.png", cat.Slots[1].DiffusePath, "slot 1 diffuse");
+
+        // VSlot 1
+        TestAssert.True(cat.VSlots.ContainsKey(1), "vslot 1 exists");
+        TestAssert.Equal(1, cat.VSlots[1].Slot, "vslot 1 slot index");
+    }
+
+    [Test]
+    public void CatalogueRoundTripsViaJsonString()
+    {
+        var original = MetadataCatalogue.Load(TestData.CataloguePath);
+        string json = original.SerializeToJson(writeIndented: true);
+
+        var restored = MetadataCatalogue.Deserialize(json);
+
+        TestAssert.Equal(original.Slots.Count, restored.Slots.Count, "slot count match");
+        TestAssert.Equal(original.VSlots.Count, restored.VSlots.Count, "vslot count match");
+        TestAssert.Equal(original.MapModels.Count, restored.MapModels.Count, "mapmodel count match");
+        TestAssert.Equal(original.Sounds.Count, restored.Sounds.Count, "sounds count match");
+
+        TestAssert.Equal(original.Config.Ambient, restored.Config.Ambient, "ambient match");
+        TestAssert.Equal(original.Config.SunlightScale, restored.Config.SunlightScale, "sunlight scale match");
+        TestAssert.Equal(original.Config.Skybox, restored.Config.Skybox, "skybox match");
+
+        foreach (var (idx, origSlot) in original.Slots)
+        {
+            TestAssert.True(restored.Slots.ContainsKey(idx), $"restored has slot {idx}");
+            var restSlot = restored.Slots[idx];
+            TestAssert.Equal(origSlot.Shader, restSlot.Shader, $"slot {idx} shader");
+            TestAssert.Equal(origSlot.DiffusePath, restSlot.DiffusePath, $"slot {idx} diffuse");
+            TestAssert.Equal(origSlot.NormalPath, restSlot.NormalPath, $"slot {idx} normal");
+            TestAssert.Equal(origSlot.GlowPath, restSlot.GlowPath, $"slot {idx} glow");
+        }
+
+        foreach (var (idx, origVSlot) in original.VSlots)
+        {
+            TestAssert.True(restored.VSlots.ContainsKey(idx), $"restored has vslot {idx}");
+            var restVSlot = restored.VSlots[idx];
+            TestAssert.Equal(origVSlot.Slot, restVSlot.Slot, $"vslot {idx} slot");
+            TestAssert.Equal(origVSlot.Scale, restVSlot.Scale, $"vslot {idx} scale");
+            TestAssert.Equal(origVSlot.Rotation, restVSlot.Rotation, $"vslot {idx} rotation");
+            TestAssert.Equal(origVSlot.OffsetX, restVSlot.OffsetX, $"vslot {idx} offsetX");
+            TestAssert.Equal(origVSlot.OffsetY, restVSlot.OffsetY, $"vslot {idx} offsetY");
+            TestAssert.Equal(origVSlot.Layer, restVSlot.Layer, $"vslot {idx} layer");
+            TestAssert.Equal(origVSlot.Color, restVSlot.Color, $"vslot {idx} color");
+            TestAssert.Equal(origVSlot.Glow, restVSlot.Glow, $"vslot {idx} glow");
+            TestAssert.Equal(origVSlot.AlphaFront, restVSlot.AlphaFront, $"vslot {idx} alphaFront");
+            TestAssert.Equal(origVSlot.AlphaBack, restVSlot.AlphaBack, $"vslot {idx} alphaBack");
+        }
+    }
+
+    [Test]
+    public void CatalogueRoundTripsViaUtf8Bytes()
+    {
+        var original = MetadataCatalogue.Load(TestData.CataloguePath);
+        byte[] bytes = original.SerializeToUtf8Bytes();
+
+        var restored = MetadataCatalogue.Deserialize(bytes);
+
+        TestAssert.Equal(original.Slots.Count, restored.Slots.Count, "slot count match");
+        TestAssert.Equal(original.VSlots.Count, restored.VSlots.Count, "vslot count match");
+        TestAssert.Equal(original.Config.Ambient, restored.Config.Ambient, "ambient match");
+    }
+
+    [Test]
+    public void CatalogueThrowsOnMissingFile()
+    {
+        TestAssert.Throws<System.IO.FileNotFoundException>(() =>
+        {
+            MetadataCatalogue.Load("res://does_not_exist_metadata.json");
+        });
+    }
 }
