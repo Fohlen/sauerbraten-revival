@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Effects;
 using SauerbratenRevival.World.Entities;

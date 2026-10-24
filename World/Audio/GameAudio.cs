@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Content;
 
-namespace SauerbratenRevival.World.Weapons;
+namespace SauerbratenRevival.World.Audio;
 
 /// <summary>
 /// Represents an audio slot (file path relative to <c>packages/sounds/</c> without extension,

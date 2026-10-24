@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Audio;
 
 namespace SauerbratenRevival.World.Weapons;
 

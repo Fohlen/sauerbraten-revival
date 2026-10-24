@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.Tests;
+using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Ogz;

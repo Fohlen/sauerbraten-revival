@@ -1,6 +1,6 @@
 using Godot;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Audio;
 
 /// <summary>
 /// An <c>ET_SOUND</c> ambient sound. <c>attr1</c> indexes the map's

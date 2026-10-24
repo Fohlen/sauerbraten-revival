@@ -1,5 +1,6 @@
 using Chickensoft.GoDotTest;
 using Godot;
+using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.Tests;

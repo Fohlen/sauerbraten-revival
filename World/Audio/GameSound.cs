@@ -1,4 +1,4 @@
-namespace SauerbratenRevival.World.Weapons;
+namespace SauerbratenRevival.World.Audio;
 
 /// <summary>
 /// The engine's hardcoded sounds (fpsgame/game.h enum, registered in order by

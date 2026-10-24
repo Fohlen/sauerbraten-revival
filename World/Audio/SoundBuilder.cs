@@ -1,9 +1,9 @@
 using Godot;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
-using SauerbratenRevival.World.Weapons;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Audio;
 
 /// <summary>
 /// Builds <see cref="SoundEmitter"/> nodes from a map's <c>ET_SOUND</c> entities,

@@ -1,7 +1,9 @@
 using Chickensoft.GoDotTest;
 using Godot;
+using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
+using SoundEmitter = SauerbratenRevival.World.Audio.SoundEmitter;
 
 namespace SauerbratenRevival.Tests;
 
