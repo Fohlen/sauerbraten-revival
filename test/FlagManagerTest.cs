@@ -274,7 +274,7 @@ public partial class FlagManagerTest : TestClass
 
         TestAssert.Equal(1, fm.GetScore(1), "blue team scored capture");
         TestAssert.False(fm.Flags[1].HasOwner, "red flag returned home after capture");
-        player.Dispose();
+        player.Free();
     }
 
     [Test]
@@ -309,7 +309,7 @@ public partial class FlagManagerTest : TestClass
         fm.TakeFlag(2, 2, Vector3.Zero, 0, fm.Flags[0].Version, GetMode("ctf"), 3000);
         TestAssert.Equal(played + 1, player.Played.Count, "no duplicate audio after reassigning the manager");
 
-        player.Dispose();
+        player.Free();
     }
 
     /// <summary>Captures played sounds instead of driving the audio backend.</summary>
@@ -343,6 +343,6 @@ public partial class FlagManagerTest : TestClass
 
         TestAssert.True(node.Visible, "node is visible");
         TestAssert.Equal(flag.SpawnLoc, node.Position, "node position matches flag position");
-        node.Dispose();
+        node.Free();
     }
 }
