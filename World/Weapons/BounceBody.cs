@@ -3,9 +3,8 @@ using Godot;
 using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Physics;
-using SauerbratenRevival.World.Weapons;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Weapons;
 
 /// <summary>
 /// A runtime <c>ENT_BOUNCE</c> body (grenades, debris, gibs — fpsgame/weapon.cpp

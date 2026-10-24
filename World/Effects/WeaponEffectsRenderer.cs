@@ -161,7 +161,7 @@ public partial class WeaponEffectsRenderer : Node3D
 
     /// <summary>
     /// Loads the converted <c>projectiles/rocket</c> model and its skin once. Mirrors
-    /// the grenade visual in <see cref="World.Entities.BounceBody"/> (the imperfect
+    /// the grenade visual in <see cref="BounceBody"/> (the imperfect
     /// direct GLB/skin load used for the first pass).
     /// </summary>
     private void LoadRocketVisual(ITextureSource textures)

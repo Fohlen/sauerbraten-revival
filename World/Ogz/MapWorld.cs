@@ -14,6 +14,7 @@ using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
+using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
 using FlagNode = SauerbratenRevival.World.Game.Ctf.FlagNode;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 using MapModel = SauerbratenRevival.World.Models.MapModel;

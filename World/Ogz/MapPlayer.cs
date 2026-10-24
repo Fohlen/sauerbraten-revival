@@ -7,6 +7,7 @@ using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
+using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 using PlayerModel = SauerbratenRevival.World.Models.PlayerModel;
