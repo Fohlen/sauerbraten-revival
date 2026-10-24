@@ -1,6 +1,6 @@
 using Godot;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Game.Monsters;
 
 /// <summary>
 /// A monster's first-person view weapon (<c>monstertypes[].vwepname</c>). The

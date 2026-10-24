@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Ogz;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Game.Monsters;
 
 /// <summary>
 /// Builds <see cref="Monster"/> nodes from a map's <c>MONSTER</c> entities.

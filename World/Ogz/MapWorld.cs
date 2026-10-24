@@ -7,6 +7,7 @@ using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Effects;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game.Items;
+using SauerbratenRevival.World.Game.Monsters;
 using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;

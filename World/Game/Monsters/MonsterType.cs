@@ -1,4 +1,4 @@
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Game.Monsters;
 
 /// <summary>
 /// One row of the engine's <c>monstertypes</c> table (monster.cpp). Static

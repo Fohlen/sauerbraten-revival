@@ -1,6 +1,9 @@
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game.Monsters;
+using Monster = SauerbratenRevival.World.Game.Monsters.Monster;
+using MonsterViewWeapon = SauerbratenRevival.World.Game.Monsters.MonsterViewWeapon;
 
 namespace SauerbratenRevival.Tests;
 

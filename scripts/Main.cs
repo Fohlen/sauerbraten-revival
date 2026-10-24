@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Weapons;
 
 #if DEBUG

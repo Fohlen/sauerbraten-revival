@@ -1,6 +1,6 @@
 using Godot;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Game.Monsters;
 
 /// <summary>
 /// A spawn point for a single-player monster (<c>MONSTER</c>, type 21). The
