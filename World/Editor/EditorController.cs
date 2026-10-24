@@ -1,6 +1,7 @@
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Save;
 

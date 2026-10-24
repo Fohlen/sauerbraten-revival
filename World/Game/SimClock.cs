@@ -1,6 +1,6 @@
 using Godot;
 
-namespace SauerbratenRevival.World;
+namespace SauerbratenRevival.World.Game;
 
 /// <summary>
 /// The single simulation clock for a world (engine <c>lastmillis</c>). Advanced only

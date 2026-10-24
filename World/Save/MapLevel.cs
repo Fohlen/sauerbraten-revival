@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using Godot;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Game.Players;
@@ -46,7 +47,7 @@ public partial class MapLevel : Node3D, IGameWorld
     public IReadOnlyList<Entities.JumpPad> JumpPads => System.Array.Empty<Entities.JumpPad>();
     public IReadOnlyList<Entities.Teleport> Teleports => System.Array.Empty<Entities.Teleport>();
     public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
-    public SimClock? Clock => _clock;
+    public Game.SimClock? Clock => _clock;
     public bool Built => Octa != null;
 
     /// <summary>Active flying projectiles (rockets) stepped centrally by this world's physics loop.</summary>
@@ -67,7 +68,7 @@ public partial class MapLevel : Node3D, IGameWorld
     /// <summary>The shared octree physics simulation authority for this world.</summary>
     public OctaPhysics? Physics { get; private set; }
 
-    private SimClock _clock = new();
+    private Game.SimClock _clock = new();
 
     public void RegisterPlayer(MapPlayer player)
     {

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Content;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Physics;

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using Godot;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Entities;
@@ -10,7 +9,7 @@ using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 
-namespace SauerbratenRevival.World;
+namespace SauerbratenRevival.World.Game;
 
 /// <summary>
 /// Universal interface for a map world provider (legacy OGZ, native saved map, or empty seed world).

@@ -1,5 +1,6 @@
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Weapons;

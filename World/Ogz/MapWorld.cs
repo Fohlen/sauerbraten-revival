@@ -71,7 +71,7 @@ public partial class MapWorld : Node3D, IGameWorld
     /// <summary>The shared octree physics simulation authority for this world.</summary>
     public OctaPhysics? Physics { get; private set; }
 
-    private SimClock _clock = new();
+    private Game.SimClock _clock = new();
 
     /// <summary>
     /// The simulation clock for this world (engine <c>lastmillis</c>). Exported so a
@@ -80,10 +80,10 @@ public partial class MapWorld : Node3D, IGameWorld
     /// so hosting two sessions in one process keeps independent time bases.
     /// </summary>
     [Export]
-    public SimClock Clock
+    public Game.SimClock Clock
     {
         get => _clock;
-        set => _clock = value ?? new SimClock();
+        set => _clock = value ?? new Game.SimClock();
     }
 
     /// <summary>Current simulation time in milliseconds.</summary>
