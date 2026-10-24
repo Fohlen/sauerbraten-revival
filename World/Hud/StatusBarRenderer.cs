@@ -1,6 +1,7 @@
 using System;
 using Godot;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;

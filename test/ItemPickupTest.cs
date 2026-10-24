@@ -5,6 +5,8 @@ using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
+using Item = SauerbratenRevival.World.Game.Items.Item;
+using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 
 namespace SauerbratenRevival.Tests;
 

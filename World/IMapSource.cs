@@ -6,6 +6,7 @@ using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
+using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 
 namespace SauerbratenRevival.World;
 

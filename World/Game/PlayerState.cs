@@ -1,6 +1,7 @@
 using System;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.World.Game;

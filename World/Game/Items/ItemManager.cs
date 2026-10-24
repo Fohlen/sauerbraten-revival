@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Ogz;
-using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Game.Items;
 
 /// <summary>
 /// Manages map items (<c>ET_SHELLS</c>..<c>ET_QUAD</c>). Ports the engine's item

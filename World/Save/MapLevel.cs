@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using Godot;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 
@@ -36,7 +37,7 @@ public partial class MapLevel : Node3D, IMapSource
     public Node3D WorldNode => this;
     public Materials.ITextureSource? Textures => _textures;
     public Models.IModelCatalog? Models => null;
-    public Entities.ItemManager? Items => null;
+    public ItemManager? Items => null;
     public Game.FlagManager? Flags => null;
     public IReadOnlyList<Entities.JumpPad> JumpPads => System.Array.Empty<Entities.JumpPad>();
     public IReadOnlyList<Entities.Teleport> Teleports => System.Array.Empty<Entities.Teleport>();

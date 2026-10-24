@@ -1,6 +1,7 @@
 using Godot;
+using SauerbratenRevival.World.Entities;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Game.Items;
 
 /// <summary>
 /// An item pickup (<c>ET_*</c> from `entmdlname`). The engine spins and bobs these

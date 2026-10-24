@@ -1,6 +1,7 @@
 using System.IO;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game.Items;
 
 namespace SauerbratenRevival.World.Models;
 

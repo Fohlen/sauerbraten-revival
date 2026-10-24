@@ -1,6 +1,6 @@
-using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Weapons;
 
-namespace SauerbratenRevival.World.Weapons;
+namespace SauerbratenRevival.World.Game.Items;
 
 /// <summary>
 /// One row of the engine's <c>itemstats[]</c> table (fpsgame/game.h:328). Static

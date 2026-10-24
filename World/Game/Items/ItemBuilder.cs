@@ -1,10 +1,11 @@
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Ogz;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Game.Items;
 
 /// <summary>
 /// Builds <see cref="Item"/> nodes from the item entities

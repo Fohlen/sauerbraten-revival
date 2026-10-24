@@ -2,6 +2,7 @@ using System;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.Tests;

@@ -6,6 +6,7 @@ using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
+using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 using PlayerModel = SauerbratenRevival.World.Models.PlayerModel;
 
 namespace SauerbratenRevival.World.Ogz;

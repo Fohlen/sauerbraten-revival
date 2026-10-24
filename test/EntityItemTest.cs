@@ -2,7 +2,9 @@ using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Models;
+using Item = SauerbratenRevival.World.Game.Items.Item;
 
 namespace SauerbratenRevival.Tests;
 

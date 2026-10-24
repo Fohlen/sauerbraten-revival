@@ -5,11 +5,13 @@ using Godot;
 using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Effects;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
+using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 using MapModel = SauerbratenRevival.World.Models.MapModel;
 
 namespace SauerbratenRevival.World.Ogz;
