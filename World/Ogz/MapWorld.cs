@@ -29,10 +29,15 @@ namespace SauerbratenRevival.World.Ogz;
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class MapWorld : MapSourceNode
+public partial class MapWorld : Node3D, IMapSource
 {
     /// <summary>Override map to build. Absolute, or package-relative (e.g. <c>base/church51.ogz</c>), resolved through <see cref="ContentRoots.ResolveMap"/>; empty uses the default.</summary>
     [Export] public string OgzPath { get; set; } = "";
+    [Export] public int ChunkSize { get; set; } = 512;
+
+    public Node3D WorldNode => this;
+    public Commands.WorldCommandSink? Sink { get; set; }
+    public Meshing.WorldChunkRenderer? Renderer { get; set; }
 
     /// <summary>Show edit-mode blue entity markers and facing arrows.</summary>
     [Export]
@@ -50,6 +55,33 @@ public partial class MapWorld : MapSourceNode
     /// <summary>The parsed map (slots, entities, metadata). Null until <see cref="Build"/>, or pre-assigned to inject a map.</summary>
     public OgzMap? Map { get; set; }
 
+    /// <summary>The runtime octree — the collision authority. Null until <see cref="Build"/>, or pre-assigned to inject an octree.</summary>
+    public Octa? Octa { get; set; }
+
+    /// <summary>The shared octree physics simulation authority for this world.</summary>
+    public OctaPhysics? Physics { get; private set; }
+
+    private SimClock _clock = new();
+
+    /// <summary>
+    /// The simulation clock for this world (engine <c>lastmillis</c>). Exported so a
+    /// scene or session can assign and persist one; assigning null falls back to a
+    /// fresh clock. Per-world/per-session by design — never a process-wide autoload —
+    /// so hosting two sessions in one process keeps independent time bases.
+    /// </summary>
+    [Export]
+    public SimClock Clock
+    {
+        get => _clock;
+        set => _clock = value ?? new SimClock();
+    }
+
+    /// <summary>Current simulation time in milliseconds.</summary>
+    public int LastMillis => Clock.NowMillis;
+
+    private readonly List<MapPlayer> _players = new();
+    /// <summary>Active players stepped by this world's physics loop.</summary>
+    public IReadOnlyList<MapPlayer> Players => _players;
 
     /// <summary>
     /// The local player, whose <see cref="MapPlayer.Team"/> drives local-only
@@ -68,16 +100,20 @@ public partial class MapWorld : MapSourceNode
     public IReadOnlyList<BounceBody> Bouncers => ActiveBouncers;
 
     /// <summary>Registers a player to be stepped by the world's physics loop.</summary>
-    public override void RegisterPlayer(MapPlayer player)
+    public void RegisterPlayer(MapPlayer player)
     {
-        base.RegisterPlayer(player);
-        if (Mode != null) player.Mode = Mode;
+        if (!_players.Contains(player))
+        {
+            if (Mode != null) player.Mode = Mode;
+            _players.Add(player);
+            player.AttachClock(Clock);
+        }
     }
 
     /// <summary>Unregisters a player from the world's physics loop.</summary>
-    public override void UnregisterPlayer(MapPlayer player)
+    public void UnregisterPlayer(MapPlayer player)
     {
-        base.UnregisterPlayer(player);
+        if (_players.Remove(player)) player.DetachClock();
         if (ReferenceEquals(LocalPlayer, player)) LocalPlayer = null;
     }
 
@@ -102,7 +138,7 @@ public partial class MapWorld : MapSourceNode
     /// </summary>
     public void UpdateProjectiles(int timeMillis, IReadOnlyList<Weapons.IExplosionTarget>? candidates = null)
     {
-        var targets = candidates ?? (IReadOnlyList<Weapons.IExplosionTarget>)PlayerList;
+        var targets = candidates ?? (IReadOnlyList<Weapons.IExplosionTarget>)_players;
         for (int i = ActiveRockets.Count - 1; i >= 0; i--)
         {
             var rocket = ActiveRockets[i];
@@ -119,7 +155,7 @@ public partial class MapWorld : MapSourceNode
     /// </summary>
     public void UpdateBouncers(int timeMillis, IReadOnlyList<Weapons.IExplosionTarget>? candidates = null)
     {
-        var targets = candidates ?? (IReadOnlyList<Weapons.IExplosionTarget>)PlayerList;
+        var targets = candidates ?? (IReadOnlyList<Weapons.IExplosionTarget>)_players;
         for (int i = ActiveBouncers.Count - 1; i >= 0; i--)
         {
             var bouncer = ActiveBouncers[i];
@@ -136,6 +172,21 @@ public partial class MapWorld : MapSourceNode
         }
     }
 
+    /// <summary>The texture source used while building (for later sky/material use).</summary>
+    public ITextureSource? Textures { get; private set; }
+
+    /// <summary>The converted-model catalogue (glTF paths + Cube2 parameters), if present.</summary>
+    public IModelCatalog? Models { get; private set; }
+
+    /// <summary>The item manager holding map item pickups.</summary>
+    public ItemManager? Items { get; private set; }
+
+    /// <summary>Flag manager tracking CTF / Protect / Hold state.</summary>
+    public Game.FlagManager? Flags { get; private set; }
+
+    /// <summary>Shared weapon tracer and explosion effects renderer for this world.</summary>
+    public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
+
     private Game.GameModeInfo? _mode;
 
     /// <summary>Active game mode info.</summary>
@@ -149,7 +200,7 @@ public partial class MapWorld : MapSourceNode
             {
                 if (Items != null) Items.Mode = value;
                 if (Flags != null) Flags.Mode = value;
-                for (int i = 0; i < PlayerList.Count; i++) PlayerList[i].Mode = value;
+                for (int i = 0; i < _players.Count; i++) _players[i].Mode = value;
                 foreach (var child in GetChildren())
                 {
                     if (child is MapPlayer p) p.Mode = value;
@@ -162,9 +213,9 @@ public partial class MapWorld : MapSourceNode
     /// <summary>Resolves carrier player position and orientation by player ID from registered players.</summary>
     public (Vector3 pos, float yaw, float aboveEye) GetPlayerOwnerInfo(int playerId)
     {
-        for (int i = 0; i < PlayerList.Count; i++)
+        for (int i = 0; i < _players.Count; i++)
         {
-            var p = PlayerList[i];
+            var p = _players[i];
             if (p.PlayerId == playerId)
                 return (p.Entity.O, p.Entity.Yaw, p.Entity.AboveEye);
         }
@@ -174,13 +225,39 @@ public partial class MapWorld : MapSourceNode
     private readonly List<FlagNode> _flagNodes = new();
     public IReadOnlyList<FlagNode> FlagNodes => _flagNodes;
 
+    /// <summary>Active jump pad trigger entities in this map.</summary>
+    public IReadOnlyList<JumpPad> JumpPads { get; private set; } = System.Array.Empty<JumpPad>();
+
+    /// <summary>Active teleporter trigger entities in this map.</summary>
+    public IReadOnlyList<Teleport> Teleports { get; private set; } = System.Array.Empty<Teleport>();
+
     /// <summary>Optional settings overriding default radiance hints volume quality.</summary>
     public Lighting.RadianceSettings? RadianceSettings { get; set; }
 
     /// <summary>Whether to bake the radiance hints volume during <see cref="Build"/>. True by default; disable in headless tests for fast world initialization.</summary>
     [Export] public bool BakeRadiance { get; set; } = true;
 
+    /// <summary>The radiance hints volume, when baked.</summary>
+    public Lighting.RadianceVolume? Radiance { get; private set; }
+
+    /// <summary>AABB of the geometry in Sauerbraten (Z-up, local) space.</summary>
+    public Aabb Bounds { get; private set; }
+
+    /// <summary>Centre of the geometry in Godot world space (Y-up), for framing a camera.</summary>
+    public Vector3 Centre => IMapSource.ComputeCentre(Bounds);
+
+    /// <summary>Bounding radius of the geometry, for framing a camera.</summary>
+    public float Radius => IMapSource.ComputeRadius(Bounds);
+
+    /// <summary>True once <see cref="Build"/> has produced an <see cref="Octa"/>.</summary>
+    public bool Built => Octa != null;
+
     private static readonly Color MeshTint = new(0.8f, 0.8f, 0.85f);
+
+    public override void _Ready()
+    {
+        if (!Built) Build();
+    }
 
     private static readonly Dictionary<string, OgzMap> ParsedMapCache = new();
 
@@ -207,7 +284,7 @@ public partial class MapWorld : MapSourceNode
     /// Build the world as children of this node. Idempotent: subsequent calls are
     /// no-ops once built. Missing maps log an error and leave <see cref="Built"/> false.
     /// </summary>
-    public override void Build()
+    public void Build()
     {
         if (Built) return;
 
@@ -227,10 +304,10 @@ public partial class MapWorld : MapSourceNode
         var octa = Octa ?? map.ToOcta();
         Map = map;
         Octa = octa;
-        InitPhysics(octa);
+        Physics = new OctaPhysics(octa);
         // Bootstrap a fresh clock. A session-assigned clock (nonzero) keeps its value
         // so the same session can carry time across worlds.
-        BootstrapClock();
+        if (Clock.NowMillis == 0) Clock.Set((int)Time.GetTicksMsec());
 
         string mapName = path.GetFile().GetBaseName();
         ITextureSource textures = TextureSources.CreateDefault();
@@ -344,15 +421,35 @@ public partial class MapWorld : MapSourceNode
             ? new StandardMaterial3D { AlbedoColor = MeshTint, CullMode = BaseMaterial3D.CullModeEnum.Back }
             : null;
 
-        CreateRenderer(octa, materials, chunked, fallback);
-        InitSink(octa);
+        Aabb bounds = default;
+        bool hasBounds = false;
+        foreach (var chunk in chunked.Chunks)
+        {
+            var aabb = chunk.Mesh.GetAabb();
+            aabb.Position += new Vector3(chunk.Origin.X, chunk.Origin.Y, chunk.Origin.Z);
+            bounds = hasBounds ? bounds.Merge(aabb) : aabb;
+            hasBounds = true;
+        }
+
+        // Sauerbraten bounds are Z-up; the node rotates them to Godot Y-up.
+        Bounds = hasBounds ? bounds : new Aabb(Vector3.Zero, Vector3.One);
+
+        Renderer = new Meshing.WorldChunkRenderer
+        {
+            Name = "WorldMesh",
+            ChunkSize = ChunkSize,
+            BudgetPerFrame = 4,
+            Radiance = Radiance,
+            FallbackMaterial = fallback,
+        };
+        AddChild(Renderer);
+        Renderer.Setup(octa, materials, prebuilt: chunked);
+
+        Sink = new Commands.WorldCommandSink(new Commands.OctaWorld(octa));
         LinkChildEditors();
 
         GD.Print($"[world] {path}: chunks={chunked.Chunks.Count} triangles={chunked.TriangleCount}");
     }
-
-    /// <summary>Use the meshed geometry AABB for spawn fallback and camera framing.</summary>
-    protected override bool UseGeometryBounds => true;
 
     /// <summary>Finds a player start spawn point in Sauerbraten coordinates, falling back to bounds center.</summary>
     public (Vector3 Position, float Yaw) FindSpawn(int index = 0) =>
@@ -360,22 +457,72 @@ public partial class MapWorld : MapSourceNode
             ? IMapSource.ResolveSpawn(Map.OfType(Entities.EntityType.PlayerStart).Select(t => (t.Entity.Position, (float)t.Entity.Attr1)), Bounds.GetCenter(), index)
             : (Bounds.GetCenter(), 0f);
 
-    protected override void OnStepped(int timeMillis)
+    private void LinkChildEditors()
     {
-        // Gameplay-specific per-substep updates.
-        UpdateProjectiles(timeMillis);
-        UpdateBouncers(timeMillis);
-
-        if (Flags != null && Mode != null && Mode.Has(Game.ModeFlags.Ctf))
-            Flags.Update(LastMillis);
-
-        Items?.UpdateRespawns(timeMillis);
+        foreach (var child in GetChildren())
+            if (child is Editor.EditorController ec)
+                ec.BindMapSource(this);
     }
 
-    protected override void OnAfterSteps()
+    private double _physicsAccum;
+    private const double StepSeconds = Phys.PhysFrameTime / 1000.0;
+
+    public override void _PhysicsProcess(double delta)
     {
+        if (Engine.IsEditorHint() || Octa == null || Physics == null) return;
+
+        _physicsAccum += delta;
+        int guard = 0;
+        while (_physicsAccum >= StepSeconds && guard++ < 100)
+        {
+            _physicsAccum -= StepSeconds;
+            Clock.Advance(Phys.PhysFrameTime);
+
+            // 1. Gather player inputs before stepping physics
+            for (int i = 0; i < _players.Count; i++)
+            {
+                _players[i].PrePhysicsStep();
+            }
+
+            // 2. Clear and update dynent cache once per 5 ms substep
+            Physics.ClearDynentCache();
+            foreach (var dynent in Physics.DynEnts)
+            {
+                Physics.UpdateDynentCache(dynent);
+            }
+
+            // 3. Step registered players
+            for (int i = 0; i < _players.Count; i++)
+            {
+                _players[i].Step(Phys.PhysFrameTime);
+            }
+
+            // 4. Update active projectiles (weapon.cpp:523 updateprojectiles)
+            UpdateProjectiles(Phys.PhysFrameTime);
+
+            // 5. Update active bouncers (weapon.cpp:231 updatebouncers)
+            UpdateBouncers(Phys.PhysFrameTime);
+
+            // 6. Update game mode flag rules with synchronized simulation clock
+            if (Flags != null && Mode != null && Mode.Has(Game.ModeFlags.Ctf))
+            {
+                Flags.Update(LastMillis);
+            }
+
+            // 7. Update item respawns with synchronized simulation clock
+            Items?.UpdateRespawns(Phys.PhysFrameTime);
+
+            // 8. Post physics step for players (attack cooldowns)
+            for (int i = 0; i < _players.Count; i++)
+            {
+                _players[i].PostPhysicsStep();
+            }
+        }
+
         for (int i = 0; i < ActiveBouncers.Count; i++)
+        {
             ActiveBouncers[i].SyncTransform();
+        }
     }
 
     public override void _Process(double delta)

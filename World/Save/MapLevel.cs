@@ -22,13 +22,34 @@ namespace SauerbratenRevival.World.Save;
 /// −90° about X so it sits in Godot Y-up space.
 /// </summary>
 [GlobalClass]
-public partial class MapLevel : MapSourceNode
+public partial class MapLevel : Node3D, IMapSource
 {
     /// <summary>External reference to the base octree snapshot (<c>world.res</c>).</summary>
     [Export] public WorldResource? World { get; set; }
 
     /// <summary>External reference to the command history (<c>history.res</c>); may be null.</summary>
     [Export] public HistoryResource? History { get; set; }
+
+    /// <summary>Chunk size for the mesher.</summary>
+    [Export] public int ChunkSize { get; set; } = 512;
+
+    public Node3D WorldNode => this;
+    public Materials.ITextureSource? Textures => _textures;
+    public Models.IModelCatalog? Models => null;
+    public Entities.ItemManager? Items => null;
+    public Game.FlagManager? Flags => null;
+    public IReadOnlyList<Entities.JumpPad> JumpPads => System.Array.Empty<Entities.JumpPad>();
+    public IReadOnlyList<Entities.Teleport> Teleports => System.Array.Empty<Entities.Teleport>();
+    public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
+    public SimClock? Clock => null;
+    public bool Built => Octa != null;
+
+    private Materials.ITextureSource? _textures;
+
+    public Octa? Octa { get; set; }
+    public WorldCommandSink? Sink { get; set; }
+    public WorldChunkRenderer? Renderer { get; set; }
+    public Lighting.RadianceVolume? Radiance { get; set; }
 
     /// <summary>The loaded snapshot (octree + entities).</summary>
     public WorldSnapshot? Snapshot { get; private set; }
@@ -46,8 +67,10 @@ public partial class MapLevel : MapSourceNode
     /// <summary>Entities loaded from the snapshot (view of the command log; §7.2).</summary>
     public IReadOnlyList<MapEntity> Entities => Snapshot?.Entities ?? (IReadOnlyList<MapEntity>)System.Array.Empty<MapEntity>();
 
+    public override void _Ready() => Build();
+
     /// <summary>Materialize the octree and history, then mesh. Idempotent.</summary>
-    public override void Build()
+    public void Build()
     {
         if (Octa != null || World == null) return;
 
@@ -56,11 +79,20 @@ public partial class MapLevel : MapSourceNode
         Snapshot = World.ToSnapshot();
         var octa = Snapshot.ToOcta();
         Octa = octa;
-        InitSink(octa);
+        Sink = new WorldCommandSink(new OctaWorld(octa));
 
         // Replay the saved history tail on top of the base snapshot (§4 strategy 2).
         if (History != null)
-            foreach (var cmd in History.ToCommands()) Sink!.Receive(cmd);
+            foreach (var cmd in History.ToCommands()) Sink.Receive(cmd);
+
+        Renderer = new WorldChunkRenderer
+        {
+            Name = "WorldMesh",
+            ChunkSize = ChunkSize,
+            BudgetPerFrame = 4,
+            Radiance = Radiance,
+        };
+        AddChild(Renderer);
 
         // Resolve the manifest (if any) into a material set so the map renders
         // textured; editor maps without an imported manifest mesh untextured.
@@ -73,16 +105,18 @@ public partial class MapLevel : MapSourceNode
             if (manifest != null)
             {
                 var textures = BuildTextureSource();
-                Textures = textures;
+                _textures = textures;
                 materials = ManifestBuilder.ToMaterialSet(manifest, textures);
             }
         }
+        Renderer.Setup(octa, materials);
 
-        var chunks = new OctaMesher(octa, materials).BuildChunked(ChunkSize);
-        CreateRenderer(octa, materials, chunks);
-        LinkChildEditors();
+        // Hand the world to any child editor controller (same contract as EmptyMap).
+        foreach (var child in GetChildren())
+            if (child is Editor.EditorController ec)
+                ec.BindMapSource(this);
 
-        GD.Print($"[maplevel] worldsize={octa.WorldSize} chunks={Renderer!.ChunkCount} tris={Renderer.TriangleCount} entities={Entities.Count}");
+        GD.Print($"[maplevel] worldsize={octa.WorldSize} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount} entities={Entities.Count}");
     }
 
     /// <summary>Finds a player spawn point in Sauerbraten coordinates.</summary>
