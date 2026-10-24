@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
@@ -13,10 +14,12 @@ namespace SauerbratenRevival.World.Effects;
 /// </summary>
 public static class ParticleBuilder
 {
-    public static Node3D Build(OgzMap map, ITextureSource? textures = null)
+    public static Node3D Build(OgzMap map, ITextureSource? textures = null) => Build(map.Entities, textures);
+
+    public static Node3D Build<T>(IReadOnlyList<T> entities, ITextureSource? textures = null) where T : IEntityData
     {
         var root = new Node3D { Name = "Particles" };
-        foreach (var (i, e) in map.OfType(EntityType.Particles))
+        foreach (var (i, e) in entities.OfType(EntityType.Particles))
         {
             var emitter = new ParticleEmitter
             {

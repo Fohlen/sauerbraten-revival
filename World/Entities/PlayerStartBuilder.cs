@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
@@ -11,10 +12,12 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 public static class PlayerStartBuilder
 {
-    public static Node3D Build(OgzMap map, ITextureSource? textures = null)
+    public static Node3D Build(OgzMap map, ITextureSource? textures = null) => Build(map.Entities, textures);
+
+    public static Node3D Build<T>(IReadOnlyList<T> entities, ITextureSource? textures = null) where T : IEntityData
     {
         var root = new Node3D { Name = "PlayerStarts" };
-        foreach (var (i, e) in map.OfType(EntityType.PlayerStart))
+        foreach (var (i, e) in entities.OfType(EntityType.PlayerStart))
         {
             var spawn = new SpawnPoint
             {

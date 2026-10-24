@@ -4,6 +4,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Runtime.Formats.Save;
 
@@ -200,4 +201,37 @@ public class MapFormatTest : GoTestBase
         level.Free();
     }
 
+    [Test]
+    public void MapLevelMaterializesSavedEntities()
+    {
+        string dir = TempDir("level_entities");
+        var octa = EditedWorld(out _);
+        var entities = new List<MapEntity>
+        {
+            new() { Type = EntityType.Light, Position = new Vector3(64, 64, 64), Attr1 = 100, Attr2 = 255, Attr3 = 255, Attr4 = 255 },
+            new() { Type = EntityType.PlayerStart, Position = new Vector3(32, 32, 32), Attr1 = 90 },
+            new() { Type = EntityType.Health, Position = new Vector3(48, 48, 48) },
+            new() { Type = EntityType.Teleport, Position = new Vector3(10, 10, 10), Attr1 = 1 },
+            new() { Type = EntityType.TeleDest, Position = new Vector3(20, 20, 20), Attr2 = 1, Attr1 = 180 },
+        };
+        MapStore.SaveCompacted(dir, octa, entities);
+
+        string abs = ProjectSettings.GlobalizePath(dir);
+        var level = new MapLevel
+        {
+            World = ResourceLoader.Load<WorldResource>(Path.Combine(abs, MapStore.WorldResourceName),
+                "", ResourceLoader.CacheMode.Replace),
+            ChunkSize = 64,
+        };
+        level.Build();
+
+        TestAssert.Equal(5, level.Entities.Count, "all entities loaded");
+        TestAssert.True(level.GetNodeOrNull("Lights") != null, "Lights root created");
+        TestAssert.True(level.GetNodeOrNull("PlayerStarts") != null, "PlayerStarts root created");
+        TestAssert.True(level.Items != null, "Items manager created");
+        TestAssert.Equal(1, level.Teleports.Count, "Teleport created");
+        TestAssert.True(level.Teleports[0].Destination != null, "Teleport linked to TeleDest");
+
+        level.Free();
+    }
 }

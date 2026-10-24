@@ -15,12 +15,15 @@ namespace SauerbratenRevival.World.Game.Items;
 /// </summary>
 public static class ItemBuilder
 {
-    public static ItemManager Build(OgzMap map, IModelCatalog? models = null, ITextureSource? textures = null)
+    public static ItemManager Build(OgzMap map, IModelCatalog? models = null, ITextureSource? textures = null) =>
+        Build(map.Entities, models, textures);
+
+    public static ItemManager Build<T>(IReadOnlyList<T> entities, IModelCatalog? models = null, ITextureSource? textures = null) where T : IEntityData
     {
         var root = new ItemManager { Name = "Items" };
         var skinCache = new Dictionary<string, Material>();
 
-        foreach (var (i, e) in map.Where(e => ModelName(e.Type) != null))
+        foreach (var (i, e) in entities.WhereIndexed(e => ModelName(e.Type) != null))
         {
             string modelName = ModelName(e.Type)!;
 

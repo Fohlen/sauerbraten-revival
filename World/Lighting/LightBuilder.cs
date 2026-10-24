@@ -23,12 +23,14 @@ public static class LightBuilder
     /// <summary>Used when the light has no attenuation radius (attr1 == 0).</summary>
     public const float InfiniteRange = 4096.0f;
 
-    public static Node3D Build(OgzMap map)
+    public static Node3D Build(OgzMap map) => Build(map.Entities);
+
+    public static Node3D Build(IReadOnlyList<IEntityData> entities)
     {
         var root = new Node3D { Name = "Lights" };
-        var spotlightForLight = AttachSpotlights(map.Entities);
+        var spotlightForLight = AttachSpotlights(entities);
 
-        foreach (var (i, e) in map.OfType(EntityType.Light))
+        foreach (var (i, e) in entities.OfType(EntityType.Light))
         {
             Vector3 position = e.Position;
             Color color = LightColor(e);
@@ -71,9 +73,9 @@ public static class LightBuilder
     /// world.cpp attachentity for ET_SPOTLIGHT: each spotlight attaches to the
     /// closest not-yet-attached light within <see cref="AttachRadius"/>.
     /// </summary>
-    private static Dictionary<int, OgzEntity> AttachSpotlights(List<OgzEntity> entities)
+    private static Dictionary<int, IEntityData> AttachSpotlights(IReadOnlyList<IEntityData> entities)
     {
-        var result = new Dictionary<int, OgzEntity>();
+        var result = new Dictionary<int, IEntityData>();
         for (int i = 0; i < entities.Count; i++)
         {
             if (entities[i].Type != EntityType.SpotLight) continue;
@@ -92,7 +94,7 @@ public static class LightBuilder
         return result;
     }
 
-    private static Color LightColor(OgzEntity e)
+    private static Color LightColor(IEntityData e)
     {
         var color = new Color(
             Mathf.Clamp(e.Attr2 / 255.0f, 0.0f, 1.0f),

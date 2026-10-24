@@ -2,13 +2,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Godot;
+using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Effects;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Game.Items;
+using SauerbratenRevival.World.Game.Monsters;
 using SauerbratenRevival.World.Game.Players;
+using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
+using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Runtime;
 using SauerbratenRevival.World.Weapons;
@@ -43,11 +49,11 @@ public partial class MapLevel : Node3D, IGameWorld
 
     public Node3D WorldNode => this;
     public Materials.ITextureSource? Textures => _textures;
-    public Models.IModelCatalog? Models => null;
-    public ItemManager? Items => null;
+    public Models.IModelCatalog? Models { get; private set; }
+    public ItemManager? Items { get; private set; }
     public FlagManager? Flags => null;
-    public IReadOnlyList<Entities.JumpPad> JumpPads => System.Array.Empty<Entities.JumpPad>();
-    public IReadOnlyList<Entities.Teleport> Teleports => System.Array.Empty<Entities.Teleport>();
+    public IReadOnlyList<Entities.JumpPad> JumpPads { get; private set; } = System.Array.Empty<Entities.JumpPad>();
+    public IReadOnlyList<Entities.Teleport> Teleports { get; private set; } = System.Array.Empty<Entities.Teleport>();
     public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
     public SimClock? Clock => _clock;
     public bool Built => Octa != null;
@@ -167,6 +173,27 @@ public partial class MapLevel : Node3D, IGameWorld
             }
         }
         Renderer.Setup(octa, materials);
+
+        // Converted mapmodels (assimp), imported by Godot as Resources.
+        var modelCatalog = ModelCatalog.LoadFromProject();
+        Models = modelCatalog;
+
+        AddChild(LightBuilder.Build(Entities));
+        AddChild(EnvMapBuilder.Build(Entities));
+        AddChild(PlayerStartBuilder.Build(Entities, _textures));
+        AddChild(ModeEntityBuilder.Build(Entities, null, modelCatalog, _textures, Mode));
+        AddChild(MonsterBuilder.Build(Entities, modelCatalog, _textures));
+        var (triggers, jumpPads, teleports) = TriggerBuilder.BuildTriggers(Entities, null, modelCatalog, _textures);
+        JumpPads = jumpPads;
+        Teleports = teleports;
+        AddChild(triggers);
+        Items = ItemBuilder.Build(Entities, modelCatalog, _textures);
+        Items.AutoAdvance = false;
+        AddChild(Items);
+        AddChild(ParticleBuilder.Build(Entities, _textures));
+        AddChild(SoundBuilder.Build(Entities, null));
+        var mapModels = MapModelBuilder.Build(Entities, null, modelCatalog, _textures);
+        AddChild(mapModels);
 
         // Hand the world to any child editor controller (same contract as EmptyMap).
         foreach (var child in GetChildren())

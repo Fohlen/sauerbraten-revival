@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
@@ -14,10 +15,12 @@ namespace SauerbratenRevival.World.Audio;
 /// </summary>
 public static class SoundBuilder
 {
-    public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue)
+    public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue) => Build(map.Entities, catalogue);
+
+    public static Node3D Build<T>(IReadOnlyList<T> entities, MetadataCatalogue? catalogue) where T : IEntityData
     {
         var root = new Node3D { Name = "Sounds" };
-        foreach (var (i, e) in map.OfType(EntityType.Sound))
+        foreach (var (i, e) in entities.OfType(EntityType.Sound))
         {
             string? path = catalogue?.SoundPath(e.Attr1);
             string? file = path != null ? SoundFiles.Resolve(path) : null;

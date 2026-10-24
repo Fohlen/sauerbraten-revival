@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Entities;
 
 namespace SauerbratenRevival.World.Runtime.Formats.Ogz;
 
@@ -30,11 +31,15 @@ public sealed class OgzVar
 }
 
 /// <summary>shared/ents.h: <c>struct entity</c>; fpsgame-specific fields stay raw here.</summary>
-public sealed class OgzEntity
+public sealed class OgzEntity : Entities.IEntityData
 {
-    public Vector3 Position;
-    public short Attr1, Attr2, Attr3, Attr4, Attr5;
-    public byte Type;
+    public Vector3 Position { get; set; }
+    public short Attr1 { get; set; }
+    public short Attr2 { get; set; }
+    public short Attr3 { get; set; }
+    public short Attr4 { get; set; }
+    public short Attr5 { get; set; }
+    public byte Type { get; set; }
     public byte Reserved;
 }
 
@@ -107,14 +112,10 @@ public sealed class OgzMap
     }
 
     /// <summary>Iterate the entities of one type, yielding (index, entity) so nodes can be named by map order.</summary>
-    public IEnumerable<(int Index, OgzEntity Entity)> OfType(byte type) => Where(e => e.Type == type);
+    public IEnumerable<(int Index, OgzEntity Entity)> OfType(byte type) => Entities.OfType(type);
 
     /// <summary>Iterate the entities matching a predicate, yielding (index, entity).</summary>
-    public IEnumerable<(int Index, OgzEntity Entity)> Where(System.Func<OgzEntity, bool> predicate)
-    {
-        for (int i = 0; i < Entities.Count; i++)
-            if (predicate(Entities[i])) yield return (i, Entities[i]);
-    }
+    public IEnumerable<(int Index, OgzEntity Entity)> Where(System.Func<OgzEntity, bool> predicate) => Entities.WhereIndexed(predicate);
 
     /// <summary>Wrap the parsed octree in the runtime <see cref="Octa"/>.</summary>
     public Octa ToOcta()

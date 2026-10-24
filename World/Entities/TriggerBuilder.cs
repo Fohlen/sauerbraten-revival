@@ -17,7 +17,14 @@ public static class TriggerBuilder
         OgzMap map,
         MetadataCatalogue? catalogue = null,
         IModelCatalog? models = null,
-        ITextureSource? textures = null)
+        ITextureSource? textures = null) =>
+        BuildTriggers(map.Entities, catalogue, models, textures);
+
+    public static (Node3D Root, List<JumpPad> JumpPads, List<Teleport> Teleports) BuildTriggers<T>(
+        IReadOnlyList<T> entities,
+        MetadataCatalogue? catalogue = null,
+        IModelCatalog? models = null,
+        ITextureSource? textures = null) where T : IEntityData
     {
         var root = new Node3D { Name = "Triggers" };
         var teleports = new List<Teleport>();
@@ -25,9 +32,9 @@ public static class TriggerBuilder
         var jumpPads = new List<JumpPad>();
         var skinCache = new Dictionary<string, Material>();
 
-        for (int i = 0; i < map.Entities.Count; i++)
+        for (int i = 0; i < entities.Count; i++)
         {
-            var e = map.Entities[i];
+            var e = entities[i];
             switch (e.Type)
             {
                 case EntityType.Teleport:
@@ -101,10 +108,17 @@ public static class TriggerBuilder
         MetadataCatalogue? catalogue = null,
         IModelCatalog? models = null,
         ITextureSource? textures = null)
-        => BuildTriggers(map, catalogue, models, textures).Root;
+        => BuildTriggers(map.Entities, catalogue, models, textures).Root;
+
+    public static Node3D Build<T>(
+        IReadOnlyList<T> entities,
+        MetadataCatalogue? catalogue = null,
+        IModelCatalog? models = null,
+        ITextureSource? textures = null) where T : IEntityData
+        => BuildTriggers(entities, catalogue, models, textures).Root;
 
     /// <summary>fpsgame/entities.cpp JUMPPAD: <c>((sbyte)attr3*10, (sbyte)attr2*10, attr1*12.5)</c>.</summary>
-    public static Vector3 Push(OgzEntity e) =>
+    public static Vector3 Push(IEntityData e) =>
         new((sbyte)e.Attr3 * 10.0f, (sbyte)e.Attr2 * 10.0f, e.Attr1 * 12.5f);
 
     public static string? ResolveModel(int modelIndex, MetadataCatalogue? catalogue) => modelIndex switch

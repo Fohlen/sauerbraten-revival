@@ -32,13 +32,20 @@ public static class MonsterBuilder
         OgzMap map,
         IModelCatalog? models = null,
         ITextureSource? textures = null,
-        Action<string>? warn = null)
+        Action<string>? warn = null) =>
+        Build(map.Entities, models, textures, warn);
+
+    public static Node3D Build<T>(
+        IReadOnlyList<T> entities,
+        IModelCatalog? models = null,
+        ITextureSource? textures = null,
+        Action<string>? warn = null) where T : IEntityData
     {
         warn ??= GD.PushWarning;
         var root = new Node3D { Name = "Monsters" };
         var skinCache = new Dictionary<string, Material>();
 
-        foreach (var (i, e) in map.OfType(EntityType.Monster))
+        foreach (var (i, e) in entities.OfType(EntityType.Monster))
         {
             int type = e.Attr2;
             var info = MonsterTypes.Get(type);

@@ -38,12 +38,17 @@ public sealed class DirectLightSource
     /// <summary>
     /// Extract all point lights and attached spotlights from an OGZ map.
     /// </summary>
-    public static List<DirectLightSource> CollectFromMap(OgzMap map)
+    public static List<DirectLightSource> CollectFromMap(OgzMap map) => CollectFromEntities(map.Entities);
+
+    /// <summary>
+    /// Extract all point lights and attached spotlights from an entity list.
+    /// </summary>
+    public static List<DirectLightSource> CollectFromEntities(IReadOnlyList<IEntityData> entities)
     {
         var result = new List<DirectLightSource>();
-        var spotlightForLight = AttachSpotlights(map.Entities);
+        var spotlightForLight = AttachSpotlights(entities);
 
-        foreach (var (i, e) in map.OfType(EntityType.Light))
+        foreach (var (i, e) in entities.OfType(EntityType.Light))
         {
             Vector3 position = e.Position;
             Color color = new Color(
@@ -71,9 +76,9 @@ public sealed class DirectLightSource
         return result;
     }
 
-    private static Dictionary<int, OgzEntity> AttachSpotlights(List<OgzEntity> entities)
+    private static Dictionary<int, IEntityData> AttachSpotlights(IReadOnlyList<IEntityData> entities)
     {
-        var result = new Dictionary<int, OgzEntity>();
+        var result = new Dictionary<int, IEntityData>();
         for (int i = 0; i < entities.Count; i++)
         {
             if (entities[i].Type != EntityType.SpotLight) continue;

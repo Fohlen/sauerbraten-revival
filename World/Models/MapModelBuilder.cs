@@ -15,12 +15,16 @@ namespace SauerbratenRevival.World.Models;
 public static class MapModelBuilder
 {
     public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue,
-                               IModelCatalog? models = null, ITextureSource? textures = null)
+                               IModelCatalog? models = null, ITextureSource? textures = null) =>
+        Build(map.Entities, catalogue, models, textures);
+
+    public static Node3D Build<T>(IReadOnlyList<T> entities, MetadataCatalogue? catalogue,
+                                  IModelCatalog? models = null, ITextureSource? textures = null) where T : IEntityData
     {
         var root = new Node3D { Name = "MapModels" };
         var skinCache = new Dictionary<string, Material>();
 
-        foreach (var (i, e) in map.OfType(EntityType.MapModel))
+        foreach (var (i, e) in entities.OfType(EntityType.MapModel))
         {
             string name = catalogue?.MapModelPath(e.Attr2) ?? $"mapmodel#{e.Attr2}";
             var info = models?.Get(name);

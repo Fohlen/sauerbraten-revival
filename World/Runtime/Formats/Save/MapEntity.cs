@@ -17,20 +17,24 @@ namespace SauerbratenRevival.World.Runtime.Formats.Save;
 /// stores them, and hand-editing is editor/command-path only. Until entity commands
 /// land, this carries imported entities through the native format losslessly.
 /// </summary>
-public sealed class MapEntity
+public sealed class MapEntity : Entities.IEntityData
 {
     /// <summary>shared/ents.h type id (see <see cref="Entities.EntityType"/>).</summary>
-    public byte Type;
+    public byte Type { get; set; }
 
     /// <summary>Position in world units, fixed-point <see cref="FixedPoint.DMF"/> (1/16 unit).</summary>
     public int X, Y, Z;
 
-    public short Attr1, Attr2, Attr3, Attr4, Attr5;
+    public short Attr1 { get; set; }
+    public short Attr2 { get; set; }
+    public short Attr3 { get; set; }
+    public short Attr4 { get; set; }
+    public short Attr5 { get; set; }
 
     public MapEntity() { }
 
-    /// <summary>Build from a float position (OGZ import), quantizing to fixed-point exactly as Cube2 sends it.</summary>
-    public static MapEntity FromOgz(Ogz.OgzEntity e)
+    /// <summary>Build from any stored entity with float position, quantizing to fixed-point.</summary>
+    public static MapEntity FromEntity(Entities.IEntityData e)
     {
         var (x, y, z) = FixedPoint.Encode(e.Position.X, e.Position.Y, e.Position.Z);
         return new MapEntity
@@ -47,9 +51,15 @@ public sealed class MapEntity
         };
     }
 
+    /// <summary>Build from a float position (OGZ import), quantizing to fixed-point exactly as Cube2 sends it.</summary>
+    public static MapEntity FromOgz(OgzEntity e) => FromEntity(e);
+
     /// <summary>The position in world units (float) — for building runtime projections.</summary>
-    public Vector3 Position =>
-        new(X / (float)FixedPoint.DMF, Y / (float)FixedPoint.DMF, Z / (float)FixedPoint.DMF);
+    public Vector3 Position
+    {
+        get => new(X / (float)FixedPoint.DMF, Y / (float)FixedPoint.DMF, Z / (float)FixedPoint.DMF);
+        set => (X, Y, Z) = FixedPoint.Encode(value.X, value.Y, value.Z);
+    }
 
     public void Write(BinaryWriter w)
     {
