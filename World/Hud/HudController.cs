@@ -1,6 +1,7 @@
 using System;
 using Godot;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;
@@ -990,7 +991,7 @@ public partial class HudController : Control
                     {
                         // In Sauerbraten hold mode: draw_textf("%d", (x + HICON_SIZE + HICON_SPACE)/2, HICON_TEXTY/2, max(HOLDSECS - f.holdcounter()/1000, 0));
                         int now = Player.LastMillis;
-                        int holdRemaining = Math.Max(0, Game.FlagManager.HoldSecs - carriedFlag.HoldCounter(now) / 1000);
+                        int holdRemaining = Math.Max(0, FlagManager.HoldSecs - carriedFlag.HoldCounter(now) / 1000);
                         _flagLabel.Visible = true;
                         _flagLabel.Text = holdRemaining.ToString();
                         _flagLabel.Modulate = Colors.White;

@@ -1,10 +1,10 @@
 using System;
 using Godot;
-using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Models;
 
-namespace SauerbratenRevival.World.Entities;
+namespace SauerbratenRevival.World.Game.Ctf;
 
 /// <summary>
 /// Visual 3D representation of a game flag (<c>ET_FLAG</c> / hold base).

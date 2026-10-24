@@ -6,6 +6,7 @@ using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Effects;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Game.Monsters;
 using SauerbratenRevival.World.Lighting;
@@ -13,6 +14,7 @@ using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
+using FlagNode = SauerbratenRevival.World.Game.Ctf.FlagNode;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 using MapModel = SauerbratenRevival.World.Models.MapModel;
 
@@ -187,7 +189,7 @@ public partial class MapWorld : Node3D, IMapSource
     public ItemManager? Items { get; private set; }
 
     /// <summary>Flag manager tracking CTF / Protect / Hold state.</summary>
-    public Game.FlagManager? Flags { get; private set; }
+    public FlagManager? Flags { get; private set; }
 
     /// <summary>Shared weapon tracer and explosion effects renderer for this world.</summary>
     public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
@@ -356,7 +358,7 @@ public partial class MapWorld : Node3D, IMapSource
         // concept: the engine selects ctf/capture mode code from the flags
         // (client.cpp setclientmode), and only m_ctf builds flag state. Other modes
         // get an empty manager so player/HUD code can keep a stable reference.
-        Flags = new Game.FlagManager();
+        Flags = new FlagManager();
         if (Mode != null) Flags.Mode = Mode;
         var flagsRoot = new Node3D { Name = "Flags" };
         _flagNodes.Clear();

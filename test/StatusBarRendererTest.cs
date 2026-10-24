@@ -3,6 +3,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Hud;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Ogz;

@@ -2,9 +2,8 @@ using System;
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Audio;
-using SauerbratenRevival.World.Weapons;
 
-namespace SauerbratenRevival.World.Game;
+namespace SauerbratenRevival.World.Game.Ctf;
 
 /// <summary>
 /// Unified Flag and CTF state machine managing flags, hold spawns, carrier tracking,

@@ -1,7 +1,7 @@
 using System;
 using Godot;
 
-namespace SauerbratenRevival.World.Game;
+namespace SauerbratenRevival.World.Game.Ctf;
 
 /// <summary>
 /// State of a single flag entity in CTF, Protect, or Hold modes.

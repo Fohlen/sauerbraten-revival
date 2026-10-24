@@ -6,9 +6,11 @@ using SauerbratenRevival.Tests;
 using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Ogz;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
+using FlagNode = SauerbratenRevival.World.Game.Ctf.FlagNode;
 
 namespace SauerbratenRevival.Test;
 

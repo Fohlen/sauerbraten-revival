@@ -4,6 +4,7 @@ using Godot;
 using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
@@ -189,10 +190,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Active item pickups manager for this map/session.</summary>
     public ItemManager? Items { get; set; }
 
-    private Game.FlagManager? _flags;
+    private FlagManager? _flags;
 
     /// <summary>Active flag manager for CTF / Protect / Hold modes.</summary>
-    public Game.FlagManager? Flags
+    public FlagManager? Flags
     {
         get => _flags;
         set
@@ -1440,7 +1441,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             }
 
             Vector3 loc = f.DropTime > 0 ? f.DropLoc : f.SpawnLoc;
-            if (o.DistanceTo(loc) < Game.FlagManager.FlagRadius)
+            if (o.DistanceTo(loc) < FlagManager.FlagRadius)
             {
                 if ((Combat.FlagPickup & (1 << f.Id)) != 0) continue;
 
@@ -1466,7 +1467,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             }
 
             Vector3 loc = f.DropTime > 0 ? f.DropLoc : f.SpawnLoc;
-            if (o.DistanceTo(loc) < Game.FlagManager.FlagRadius)
+            if (o.DistanceTo(loc) < FlagManager.FlagRadius)
             {
                 if (!tookFlag && (Combat.FlagPickup & (1 << f.Id)) != 0) continue;
 

@@ -1,9 +1,7 @@
-using System;
 using Godot;
 using SauerbratenRevival.World.Audio;
-using SauerbratenRevival.World.Weapons;
 
-namespace SauerbratenRevival.World.Game;
+namespace SauerbratenRevival.World.Game.Ctf;
 
 /// <summary>
 /// Audio event dispatched during flag state machine transitions.

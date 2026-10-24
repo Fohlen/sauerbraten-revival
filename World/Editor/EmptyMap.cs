@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
@@ -35,7 +36,7 @@ public partial class EmptyMap : Node3D, IMapSource
     /// <summary>The converted-model catalogue, if present (player/hudgun models).</summary>
     public Models.IModelCatalog? Models { get; private set; }
     public ItemManager? Items => null;
-    public Game.FlagManager? Flags => null;
+    public FlagManager? Flags => null;
     public IReadOnlyList<Entities.JumpPad> JumpPads => System.Array.Empty<Entities.JumpPad>();
     public IReadOnlyList<Entities.Teleport> Teleports => System.Array.Empty<Entities.Teleport>();
     public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }

@@ -3,6 +3,7 @@ using System.Linq;
 using Godot;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
@@ -74,7 +75,7 @@ public interface IMapSource
     ItemManager? Items { get; }
 
     /// <summary>Flag manager for CTF / Protect / Hold modes, if supported.</summary>
-    Game.FlagManager? Flags { get; }
+    FlagManager? Flags { get; }
 
     /// <summary>Jump pads present in the map.</summary>
     IReadOnlyList<JumpPad> JumpPads { get; }
