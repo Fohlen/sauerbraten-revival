@@ -82,6 +82,13 @@ public partial class EmptyMap : MapSourceNode
 
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
 
+        // The room itself is untextured, but player/hudgun models and their skins
+        // still come from the project's imported content (same sources MapWorld
+        // uses), so the editor scene shows them instead of warning about a missing
+        // catalogue.
+        Models = Entities.ModelCatalog.LoadFromProject();
+        Textures ??= Materials.TextureSources.CreateDefault();
+
         if (!BakeRadiance && ShouldUseSeedCache && SeedCache.TryGetValue((WorldScale, ChunkSize), out var seed))
         {
             // Fast path: clone the cached octree and reuse its meshes.
