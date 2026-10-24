@@ -3,7 +3,9 @@ using System.IO;
 using Godot;
 using SauerbratenRevival.World.Commands;
 
-namespace SauerbratenRevival.World.Save;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
+
+namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
 /// <summary>
 /// A serializable map entity — the data definition behind a runtime projection

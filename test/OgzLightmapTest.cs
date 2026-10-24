@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using Godot;
 using Chickensoft.GoDotTest;
-using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 namespace SauerbratenRevival.Tests;
 

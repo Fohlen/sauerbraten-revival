@@ -1,6 +1,6 @@
 using SauerbratenRevival.World.Materials;
 
-namespace SauerbratenRevival.World.Save;
+namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
 /// <summary>
 /// Builds a <see cref="ManifestData"/> from an engine-exported

@@ -3,8 +3,8 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
-using SauerbratenRevival.World.Ogz;
-using SauerbratenRevival.World.Save;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Save;
 
 namespace SauerbratenRevival.Tests;
 

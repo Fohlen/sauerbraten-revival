@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace SauerbratenRevival.World.Ogz;
+namespace SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 /// <summary>Geometry ground truth, matching the <c>geometry</c> block the engine patch exports.</summary>
 public sealed class OgzGeometryStats

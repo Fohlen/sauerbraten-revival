@@ -5,9 +5,9 @@ using SauerbratenRevival.World;
 using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Players;
-using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Runtime;
-using SauerbratenRevival.World.Save;
+using SauerbratenRevival.World.Runtime.Formats.Save;
 
 namespace SauerbratenRevival.Tests;
 

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
-using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 namespace SauerbratenRevival.World.Models;
 

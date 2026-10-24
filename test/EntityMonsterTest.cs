@@ -130,7 +130,7 @@ public class EntityMonsterTest : GoTestBase
     public void UnknownTypeFallsBackToOgro()
     {
         var map = TestData.ReadMap("lost");
-        map.Entities.Add(new World.Ogz.OgzEntity { Type = EntityType.Monster, Attr1 = 90, Attr2 = 200, Attr3 = 7 });
+        map.Entities.Add(new World.Runtime.Formats.Ogz.OgzEntity { Type = EntityType.Monster, Attr1 = 90, Attr2 = 200, Attr3 = 7 });
 
         var warnings = new System.Collections.Generic.List<string>();
         var root = MonsterBuilder.Build(map, warn: warnings.Add);

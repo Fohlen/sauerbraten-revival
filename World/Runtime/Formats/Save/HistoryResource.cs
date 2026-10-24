@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Commands;
 
-namespace SauerbratenRevival.World.Save;
+namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
 /// <summary>
 /// Godot <see cref="Resource"/> wrapper for the command history since the base
@@ -22,7 +22,7 @@ public partial class HistoryResource : Resource
     [Export] public Godot.Collections.Array<byte[]> Commands { get; set; } = new();
 
     /// <summary>Script resource path, assigned so <see cref="ResourceSaver"/> writes a proper ext_resource reference.</summary>
-    public const string ScriptPath = "res://World/Save/HistoryResource.cs";
+    public const string ScriptPath = "res://World/Runtime/Formats/Save/HistoryResource.cs";
 
     public static HistoryResource FromCommands(IEnumerable<WorldCommand> commands)
     {

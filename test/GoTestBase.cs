@@ -70,7 +70,7 @@ public abstract class GoTestBase : TestClass
         // re-building + re-meshing the whole world for every fixture. See
         // EmptyMap.UseSeedCache.
         SauerbratenRevival.World.Editor.EmptyMap.UseSeedCache = true;
-        SauerbratenRevival.World.Ogz.MapWorld.UseMapCache = true;
+        SauerbratenRevival.World.Runtime.Formats.Ogz.MapWorld.UseMapCache = true;
     }
 
     [CleanupAll]

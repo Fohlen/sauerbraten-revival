@@ -1,6 +1,6 @@
 using Chickensoft.GoDotTest;
 using Godot;
-using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;

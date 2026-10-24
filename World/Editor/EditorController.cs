@@ -4,7 +4,7 @@ using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Runtime;
-using SauerbratenRevival.World.Save;
+using SauerbratenRevival.World.Runtime.Formats.Save;
 
 namespace SauerbratenRevival.World.Editor;
 

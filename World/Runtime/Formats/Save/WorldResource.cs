@@ -1,8 +1,7 @@
 using System;
 using Godot;
-using SauerbratenRevival.World.Save;
 
-namespace SauerbratenRevival.World.Save;
+namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
 /// <summary>
 /// Godot <see cref="Resource"/> wrapper for the canonical world snapshot
@@ -24,7 +23,7 @@ public partial class WorldResource : Resource
     [Export] public byte[] Data { get; set; } = Array.Empty<byte>();
 
     /// <summary>Script resource path, assigned so <see cref="ResourceSaver"/> writes a proper ext_resource reference.</summary>
-    public const string ScriptPath = "res://World/Save/WorldResource.cs";
+    public const string ScriptPath = "res://World/Runtime/Formats/Save/WorldResource.cs";
 
     public static WorldResource FromSnapshot(WorldSnapshot snapshot)
     {

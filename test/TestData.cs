@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using Godot;
 using SauerbratenRevival.World.Content;
-using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 namespace SauerbratenRevival.Tests;
 

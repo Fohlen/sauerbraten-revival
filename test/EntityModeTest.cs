@@ -3,7 +3,7 @@ using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Materials;
-using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using ModeEntity = SauerbratenRevival.World.Game.ModeEntity;
 
 namespace SauerbratenRevival.Tests;

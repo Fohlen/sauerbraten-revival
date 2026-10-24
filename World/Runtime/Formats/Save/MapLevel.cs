@@ -14,7 +14,7 @@ using SauerbratenRevival.World.Runtime;
 using SauerbratenRevival.World.Weapons;
 using SimClock = SauerbratenRevival.World.Runtime.SimClock;
 
-namespace SauerbratenRevival.World.Save;
+namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
 /// <summary>
 /// Scene-level root for a native-format map (docs/editor-and-commands.md §7.1). It

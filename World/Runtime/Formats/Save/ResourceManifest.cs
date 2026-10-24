@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using Godot;
 
-namespace SauerbratenRevival.World.Save;
+namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
 /// <summary>
 /// The resource manifest stored alongside a native map (<c>materials/manifest.res</c>
@@ -27,7 +27,7 @@ namespace SauerbratenRevival.World.Save;
 public partial class ResourceManifest : Resource
 {
     /// <summary>Script resource path, assigned so <see cref="ResourceSaver"/> writes a proper ext_resource reference.</summary>
-    public const string ScriptPath = "res://World/Save/ResourceManifest.cs";
+    public const string ScriptPath = "res://World/Runtime/Formats/Save/ResourceManifest.cs";
 
     /// <summary>The encoded manifest blob (see <see cref="ManifestData.Encode"/>).</summary>
     [Export] public byte[] Data { get; set; } = Array.Empty<byte>();

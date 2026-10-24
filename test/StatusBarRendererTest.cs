@@ -6,7 +6,7 @@ using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Hud;
 using SauerbratenRevival.World.Materials;
-using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Weapons;
 using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 

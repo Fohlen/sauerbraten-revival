@@ -23,7 +23,7 @@ using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 using MapModel = SauerbratenRevival.World.Models.MapModel;
 using SimClock = SauerbratenRevival.World.Runtime.SimClock;
 
-namespace SauerbratenRevival.World.Ogz;
+namespace SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 /// <summary>
 /// Builds and owns the runtime octree world for one legacy <c>.ogz</c> map: the

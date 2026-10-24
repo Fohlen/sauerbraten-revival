@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace SauerbratenRevival.World.Ogz;
+namespace SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 /// <summary>worldio.cpp: <c>octaheader</c>. The r6889 header is 40 bytes (adds <c>numvslots</c> over the v29 docs).</summary>
 public sealed class OgzHeader

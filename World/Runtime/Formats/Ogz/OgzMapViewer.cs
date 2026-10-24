@@ -8,7 +8,7 @@ using SauerbratenRevival.World.Weapons;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
 using PlayerModel = SauerbratenRevival.World.Models.PlayerModel;
 
-namespace SauerbratenRevival.World.Ogz;
+namespace SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 /// <summary>
 /// Scene root that builds a legacy <c>.ogz</c> via <see cref="MapWorld"/> and

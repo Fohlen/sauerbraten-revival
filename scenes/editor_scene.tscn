@@ -1,7 +1,7 @@
 [gd_scene load_steps=7 format=3]
 
-[ext_resource type="Script" uid="uid://bc0icyqafgcea" path="res://World/Ogz/OgzMapViewer.cs" id="1_viewer"]
-[ext_resource type="Script" uid="uid://cy7a1q10fkfa7" path="res://World/Ogz/MapPlayer.cs" id="2_player"]
+[ext_resource type="Script" uid="uid://bc0icyqafgcea" path="res://World/Runtime/Formats/Ogz/OgzMapViewer.cs" id="1_viewer"]
+[ext_resource type="Script" uid="uid://cy7a1q10fkfa7" path="res://World/Game/Players/MapPlayer.cs" id="2_player"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 

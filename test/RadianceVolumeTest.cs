@@ -6,7 +6,7 @@ using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;
-using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 namespace SauerbratenRevival.Tests;
 

@@ -3,7 +3,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Materials;
-using SauerbratenRevival.World.Save;
+using SauerbratenRevival.World.Runtime.Formats.Save;
 
 namespace SauerbratenRevival.Tests;
 

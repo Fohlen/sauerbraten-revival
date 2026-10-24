@@ -2,7 +2,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
-using SauerbratenRevival.World.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using Item = SauerbratenRevival.World.Game.Items.Item;

@@ -5,7 +5,7 @@ using System.IO.Compression;
 using System.Text;
 using Godot;
 
-namespace SauerbratenRevival.World.Ogz;
+namespace SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 /// <summary>
 /// Reader for the binary OGZ map format (SVN r6889, MAPVERSION 33). Mirrors the

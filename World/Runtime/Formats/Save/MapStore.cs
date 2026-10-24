@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 using Godot;
 using SauerbratenRevival.World.Commands;
 
-namespace SauerbratenRevival.World.Save;
+namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
 /// <summary>
 /// Loads and saves a map in the native format (docs/editor-and-commands.md §7,
@@ -219,7 +219,7 @@ public static class MapStore
     // ---- Level.tscn (references, not data) ----
 
     /// <summary>Scene script resource path; the scene only holds data references (§7.1).</summary>
-    private const string LevelScript = "res://World/Save/MapLevel.cs";
+    private const string LevelScript = "res://World/Runtime/Formats/Save/MapLevel.cs";
 
     /// <summary>
     /// Write (or rewrite) <c>Level.tscn</c>. It holds only scene-level concerns and
