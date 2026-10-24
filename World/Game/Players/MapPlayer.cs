@@ -5,6 +5,7 @@ using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Physics;
+using SauerbratenRevival.World.Runtime;
 using SauerbratenRevival.World.Weapons;
 using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
@@ -332,13 +333,13 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         set => Combat.LastHit = value;
     }
 
-    private readonly SimClock _standaloneClock = new();
+    private readonly Runtime.SimClock _standaloneClock = new();
 
     /// <summary>
     /// Shared simulation clock when this player is registered with a
     /// <see cref="MapWorld"/>; null when running standalone (tests/harness).
     /// </summary>
-    public SimClock? Clock { get; private set; }
+    public Runtime.SimClock? Clock { get; private set; }
 
     /// <summary>
     /// Simulation clock in milliseconds (engine <c>lastmillis</c>). Reads the shared
@@ -353,7 +354,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>Attach this player to the shared world clock (called on registration).</summary>
-    public void AttachClock(SimClock clock) => Clock = clock;
+    public void AttachClock(Runtime.SimClock clock) => Clock = clock;
 
     /// <summary>Detach from the shared world clock, preserving its current value.</summary>
     public void DetachClock()

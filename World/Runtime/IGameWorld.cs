@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Weapons;
 
-namespace SauerbratenRevival.World.Game;
+namespace SauerbratenRevival.World.Runtime;
 
 /// <summary>
 /// Core contract for a playable simulation world. Extends <see cref="IMapSource"/>

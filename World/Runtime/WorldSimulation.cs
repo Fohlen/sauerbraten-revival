@@ -3,7 +3,7 @@ using Godot;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 
-namespace SauerbratenRevival.World.Game;
+namespace SauerbratenRevival.World.Runtime;
 
 /// <summary>
 /// Encapsulates the fixed 5 ms simulation loop shared across all game world providers

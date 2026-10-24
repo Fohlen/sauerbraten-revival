@@ -16,10 +16,12 @@ using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
+using SauerbratenRevival.World.Runtime;
 using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
 using FlagNode = SauerbratenRevival.World.Game.Ctf.FlagNode;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 using MapModel = SauerbratenRevival.World.Models.MapModel;
+using SimClock = SauerbratenRevival.World.Runtime.SimClock;
 
 namespace SauerbratenRevival.World.Ogz;
 
@@ -71,7 +73,7 @@ public partial class MapWorld : Node3D, IGameWorld
     /// <summary>The shared octree physics simulation authority for this world.</summary>
     public OctaPhysics? Physics { get; private set; }
 
-    private Game.SimClock _clock = new();
+    private SimClock _clock = new();
 
     /// <summary>
     /// The simulation clock for this world (engine <c>lastmillis</c>). Exported so a
@@ -80,10 +82,10 @@ public partial class MapWorld : Node3D, IGameWorld
     /// so hosting two sessions in one process keeps independent time bases.
     /// </summary>
     [Export]
-    public Game.SimClock Clock
+    public SimClock Clock
     {
         get => _clock;
-        set => _clock = value ?? new Game.SimClock();
+        set => _clock = value ?? new SimClock();
     }
 
     /// <summary>Current simulation time in milliseconds.</summary>

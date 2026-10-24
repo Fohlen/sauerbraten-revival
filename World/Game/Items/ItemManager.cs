@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Runtime;
 using SauerbratenRevival.World.Weapons;
 using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 
@@ -21,7 +22,7 @@ public partial class ItemManager : Node3D
 
     // Standalone-only clock for when an ItemManager runs outside a MapWorld
     // (the world owns the shared SimClock in normal play).
-    private readonly SimClock _standaloneClock = new();
+    private readonly Runtime.SimClock _standaloneClock = new();
 
     /// <summary>List of all item pickups registered with this manager.</summary>
     public IReadOnlyList<Item> Items => _items;

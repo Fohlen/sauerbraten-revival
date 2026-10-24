@@ -9,7 +9,7 @@ using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Models;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 
-namespace SauerbratenRevival.World.Game;
+namespace SauerbratenRevival.World.Runtime;
 
 /// <summary>
 /// Universal interface for a map world provider (legacy OGZ, native saved map, or empty seed world).
