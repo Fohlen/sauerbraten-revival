@@ -35,11 +35,11 @@ public static class MonsterBuilder
         Action<string>? warn = null) =>
         Build(map.Entities, models, textures, warn);
 
-    public static Node3D Build<T>(
-        IReadOnlyList<T> entities,
+    public static Node3D Build(
+        IReadOnlyList<MapEntity> entities,
         IModelCatalog? models = null,
         ITextureSource? textures = null,
-        Action<string>? warn = null) where T : IEntityData
+        Action<string>? warn = null)
     {
         warn ??= GD.PushWarning;
         var root = new Node3D { Name = "Monsters" };

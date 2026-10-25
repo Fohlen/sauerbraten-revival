@@ -3,6 +3,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Runtime.Formats.Save;
 
@@ -101,14 +102,31 @@ public class WorldSnapshotTest : GoTestBase
     public void EntitiesRoundTrip()
     {
         var snap = new WorldSnapshot { Scale = 10, Root = new Octa(10).WorldRoot };
-        snap.Entities.Add(new MapEntity { Type = 3, X = 16, Y = 32, Z = -48, Attr1 = 1, Attr2 = 2, Attr3 = 3, Attr4 = 4, Attr5 = 5 });
+        snap.Entities.Add(new MapEntity { Type = 3, Position = new Vector3(1, 2, -3), Attr1 = 1, Attr2 = 2, Attr3 = 3, Attr4 = 4, Attr5 = 5 });
 
         var back = WorldSnapshot.Decode(snap.Encode());
         TestAssert.Equal(1, back.Entities.Count, "entity count");
         TestAssert.Equal((byte)3, back.Entities[0].Type, "type");
-        TestAssert.Equal(16, back.Entities[0].X, "x fixed-point");
-        TestAssert.Equal(-48, back.Entities[0].Z, "z fixed-point");
+        TestAssert.Equal(16, back.Entities[0].FixedPosition.X, "x fixed-point");
+        TestAssert.Equal(-48, back.Entities[0].FixedPosition.Z, "z fixed-point");
         TestAssert.Equal((short)5, back.Entities[0].Attr5, "attr5");
+    }
+
+    [Test]
+    public void EntityHashSurvivesQuantization()
+    {
+        // Entities keep float positions in memory (that is what `.ogz` stores), but the
+        // snapshot quantizes to FixedPoint.DMF when it is written. So hashing a live
+        // world and its reloaded snapshot must agree even for a sub-1/16 position —
+        // otherwise multiplayer parity breaks the moment a map is saved and reloaded.
+        var snap = new WorldSnapshot { Scale = 10, Root = new Octa(10).WorldRoot };
+        snap.Entities.Add(new MapEntity { Type = 3, Position = new Vector3(0.3f, 1.7f, -2.111f) });
+
+        var back = WorldSnapshot.Decode(snap.Encode());
+        TestAssert.Equal(5, back.Entities[0].FixedPosition.X, "0.3 rounds to 5/16");
+        TestAssert.Equal(27, back.Entities[0].FixedPosition.Y, "1.7 rounds to 27/16");
+        TestAssert.Equal(-34, back.Entities[0].FixedPosition.Z, "-2.111 rounds to -34/16");
+        TestAssert.Equal(snap.Hash(), back.Hash(), "hash parity across save/load");
     }
 
     [Test]

@@ -43,10 +43,10 @@ public sealed class DirectLightSource
     /// <summary>
     /// Extract all point lights and attached spotlights from an entity list.
     /// </summary>
-    public static List<DirectLightSource> CollectFromEntities(IReadOnlyList<IEntityData> entities)
+    public static List<DirectLightSource> CollectFromEntities(IReadOnlyList<MapEntity> entities)
     {
         var result = new List<DirectLightSource>();
-        var spotlightForLight = AttachSpotlights(entities);
+        var spotlightForLight = SpotlightAttachments.ByLightIndex(entities);
 
         foreach (var (i, e) in entities.OfType(EntityType.Light))
         {
@@ -73,28 +73,6 @@ public sealed class DirectLightSource
             }
         }
 
-        return result;
-    }
-
-    private static Dictionary<int, IEntityData> AttachSpotlights(IReadOnlyList<IEntityData> entities)
-    {
-        var result = new Dictionary<int, IEntityData>();
-        for (int i = 0; i < entities.Count; i++)
-        {
-            if (entities[i].Type != EntityType.SpotLight) continue;
-
-            int closest = -1;
-            float closestDist = float.MaxValue;
-            for (int j = 0; j < entities.Count; j++)
-            {
-                if (entities[j].Type != EntityType.Light || result.ContainsKey(j)) continue;
-                float dist = entities[i].Position.DistanceTo(entities[j].Position);
-                if (dist < closestDist) { closest = j; closestDist = dist; }
-            }
-
-            if (closest >= 0 && closestDist <= LightBuilder.AttachRadius)
-                result[closest] = entities[i];
-        }
         return result;
     }
 }

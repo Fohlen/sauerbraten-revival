@@ -17,7 +17,7 @@ public static class SoundBuilder
 {
     public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue) => Build(map.Entities, catalogue);
 
-    public static Node3D Build<T>(IReadOnlyList<T> entities, MetadataCatalogue? catalogue) where T : IEntityData
+    public static Node3D Build(IReadOnlyList<MapEntity> entities, MetadataCatalogue? catalogue)
     {
         var root = new Node3D { Name = "Sounds" };
         foreach (var (i, e) in entities.OfType(EntityType.Sound))

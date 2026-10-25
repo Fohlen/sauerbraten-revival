@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Text;
 using Godot;
+using SauerbratenRevival.World.Entities;
 
 namespace SauerbratenRevival.World.Runtime.Formats.Ogz;
 
@@ -152,17 +153,18 @@ public sealed class OgzReader
 
         for (int i = 0; i < count; i++)
         {
-            var e = new OgzEntity
+            var position = new Vector3(_r.ReadSingle(), _r.ReadSingle(), _r.ReadSingle());
+            var e = new MapEntity
             {
-                Position = new Vector3(_r.ReadSingle(), _r.ReadSingle(), _r.ReadSingle()),
+                Position = position,
                 Attr1 = _r.ReadInt16(),
                 Attr2 = _r.ReadInt16(),
                 Attr3 = _r.ReadInt16(),
                 Attr4 = _r.ReadInt16(),
                 Attr5 = _r.ReadInt16(),
                 Type = _r.ReadByte(),
-                Reserved = _r.ReadByte(),
             };
+            _r.ReadByte(); // `reserved` — never used (fpsgame::extraentinfosize() == 0)
             // fpsgame::extraentinfosize() == 0, so `sameGame` entities carry no extras.
             if (!sameGame && map.ExtraEntInfoSize > 0) ReadExact(_r, map.ExtraEntInfoSize);
             map.Entities.Add(e);

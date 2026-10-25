@@ -30,19 +30,6 @@ public sealed class OgzVar
     public string StringValue = "";
 }
 
-/// <summary>shared/ents.h: <c>struct entity</c>; fpsgame-specific fields stay raw here.</summary>
-public sealed class OgzEntity : Entities.IEntityData
-{
-    public Vector3 Position { get; set; }
-    public short Attr1 { get; set; }
-    public short Attr2 { get; set; }
-    public short Attr3 { get; set; }
-    public short Attr4 { get; set; }
-    public short Attr5 { get; set; }
-    public byte Type { get; set; }
-    public byte Reserved;
-}
-
 /// <summary>A resolved slot shader param (VSLOT_SHPARAM).</summary>
 public sealed class OgzShaderParam
 {
@@ -96,7 +83,7 @@ public sealed class OgzMap
     public string GameIdent = "";
     public int ExtraEntInfoSize;
     public List<ushort> TexMru = new();
-    public List<OgzEntity> Entities = new();
+    public List<MapEntity> Entities = new();
     public List<OgzVSlot> VSlots = new();
     public Cube[] WorldRoot = Array.Empty<Cube>();
 
@@ -112,10 +99,10 @@ public sealed class OgzMap
     }
 
     /// <summary>Iterate the entities of one type, yielding (index, entity) so nodes can be named by map order.</summary>
-    public IEnumerable<(int Index, OgzEntity Entity)> OfType(byte type) => Entities.OfType(type);
+    public IEnumerable<(int Index, MapEntity Entity)> OfType(byte type) => Entities.OfType(type);
 
     /// <summary>Iterate the entities matching a predicate, yielding (index, entity).</summary>
-    public IEnumerable<(int Index, OgzEntity Entity)> Where(System.Func<OgzEntity, bool> predicate) => Entities.WhereIndexed(predicate);
+    public IEnumerable<(int Index, MapEntity Entity)> Where(System.Func<MapEntity, bool> predicate) => Entities.WhereIndexed(predicate);
 
     /// <summary>Wrap the parsed octree in the runtime <see cref="Octa"/>.</summary>
     public Octa ToOcta()
@@ -153,7 +140,7 @@ public sealed class OgzMap
             GameIdent = GameIdent,
             ExtraEntInfoSize = ExtraEntInfoSize,
             TexMru = new List<ushort>(TexMru),
-            Entities = new List<OgzEntity>(Entities),
+            Entities = new List<MapEntity>(Entities),
             VSlots = new List<OgzVSlot>(VSlots),
             WorldRoot = Octa.CloneCubes(WorldRoot),
             // Atlas pixels are immutable after load; a shallow list copy is enough

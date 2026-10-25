@@ -41,9 +41,9 @@ public static class ModeEntityBuilder
                                GameModeInfo? mode = null) =>
         Build(map.Entities, catalogue, models, textures, mode);
 
-    public static Node3D Build<T>(IReadOnlyList<T> entities, MetadataCatalogue? catalogue = null,
-                                  IModelCatalog? models = null, ITextureSource? textures = null,
-                                  GameModeInfo? mode = null) where T : IEntityData
+    public static Node3D Build(IReadOnlyList<MapEntity> entities, MetadataCatalogue? catalogue = null,
+                               IModelCatalog? models = null, ITextureSource? textures = null,
+                               GameModeInfo? mode = null)
     {
         var root = new Node3D { Name = "ModeEntities" };
         var skinCache = new Dictionary<string, Material>();
@@ -90,7 +90,7 @@ public static class ModeEntityBuilder
     }
 
     /// <summary>The mode entity types handled here.</summary>
-    public static bool IsModeEntity(IEntityData e) => e.Type switch
+    public static bool IsModeEntity(MapEntity e) => e.Type switch
     {
         EntityType.Carrot or EntityType.Base or EntityType.RespawnPoint or
         EntityType.Box or EntityType.Barrel or EntityType.Platform or
@@ -108,7 +108,7 @@ public static class ModeEntityBuilder
     /// neither. A null <paramref name="mode"/> is the edit/inspection view and keeps
     /// the raw representation of every type.
     /// </summary>
-    public static bool AppliesToMode(IEntityData e, GameModeInfo? mode)
+    public static bool AppliesToMode(MapEntity e, GameModeInfo? mode)
     {
         if (mode == null) return true;
         return e.Type switch
@@ -134,7 +134,7 @@ public static class ModeEntityBuilder
     /// <c>attr2</c> through the catalogue (<c>movable.cpp</c> uses
     /// <c>mapmodelname(attr2)</c>); carrot/checkpoint come from <c>entmdlname</c>.
     /// </summary>
-    public static string? ModelName(IEntityData e, MetadataCatalogue? catalogue) => e.Type switch
+    public static string? ModelName(MapEntity e, MetadataCatalogue? catalogue) => e.Type switch
     {
         EntityType.Carrot => "carrot",
         EntityType.RespawnPoint => "checkpoint",
@@ -160,7 +160,7 @@ public static class ModeEntityBuilder
     /// Resolve the shifted semantics of one mode entity (mirrors the relevant
     /// constructors: <c>movable</c>, <c>ctf.h</c>, <c>capture.h</c>).
     /// </summary>
-    private static void PopulateSemantics(ModeEntity node, IEntityData e)
+    private static void PopulateSemantics(ModeEntity node, MapEntity e)
     {
         switch (e.Type)
         {

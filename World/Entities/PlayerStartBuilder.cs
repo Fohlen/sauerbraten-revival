@@ -14,7 +14,7 @@ public static class PlayerStartBuilder
 {
     public static Node3D Build(OgzMap map, ITextureSource? textures = null) => Build(map.Entities, textures);
 
-    public static Node3D Build<T>(IReadOnlyList<T> entities, ITextureSource? textures = null) where T : IEntityData
+    public static Node3D Build(IReadOnlyList<MapEntity> entities, ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "PlayerStarts" };
         foreach (var (i, e) in entities.OfType(EntityType.PlayerStart))

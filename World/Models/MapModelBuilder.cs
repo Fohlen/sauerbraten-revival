@@ -18,8 +18,8 @@ public static class MapModelBuilder
                                IModelCatalog? models = null, ITextureSource? textures = null) =>
         Build(map.Entities, catalogue, models, textures);
 
-    public static Node3D Build<T>(IReadOnlyList<T> entities, MetadataCatalogue? catalogue,
-                                  IModelCatalog? models = null, ITextureSource? textures = null) where T : IEntityData
+    public static Node3D Build(IReadOnlyList<MapEntity> entities, MetadataCatalogue? catalogue,
+                               IModelCatalog? models = null, ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "MapModels" };
         var skinCache = new Dictionary<string, Material>();

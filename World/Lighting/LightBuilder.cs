@@ -17,18 +17,15 @@ namespace SauerbratenRevival.World.Lighting;
 /// </summary>
 public static class LightBuilder
 {
-    /// <summary>world.cpp <c>attachradius</c> default.</summary>
-    public const float AttachRadius = 100.0f;
-
     /// <summary>Used when the light has no attenuation radius (attr1 == 0).</summary>
     public const float InfiniteRange = 4096.0f;
 
     public static Node3D Build(OgzMap map) => Build(map.Entities);
 
-    public static Node3D Build(IReadOnlyList<IEntityData> entities)
+    public static Node3D Build(IReadOnlyList<MapEntity> entities)
     {
         var root = new Node3D { Name = "Lights" };
-        var spotlightForLight = AttachSpotlights(entities);
+        var spotlightForLight = SpotlightAttachments.ByLightIndex(entities);
 
         foreach (var (i, e) in entities.OfType(EntityType.Light))
         {
@@ -69,32 +66,7 @@ public static class LightBuilder
         return root;
     }
 
-    /// <summary>
-    /// world.cpp attachentity for ET_SPOTLIGHT: each spotlight attaches to the
-    /// closest not-yet-attached light within <see cref="AttachRadius"/>.
-    /// </summary>
-    private static Dictionary<int, IEntityData> AttachSpotlights(IReadOnlyList<IEntityData> entities)
-    {
-        var result = new Dictionary<int, IEntityData>();
-        for (int i = 0; i < entities.Count; i++)
-        {
-            if (entities[i].Type != EntityType.SpotLight) continue;
-
-            int closest = -1;
-            float closestDist = float.MaxValue;
-            for (int j = 0; j < entities.Count; j++)
-            {
-                if (entities[j].Type != EntityType.Light || result.ContainsKey(j)) continue;
-                float dist = entities[i].Position.DistanceTo(entities[j].Position);
-                if (dist < closestDist) { closest = j; closestDist = dist; }
-            }
-
-            if (closest >= 0 && closestDist <= AttachRadius) result[closest] = entities[i];
-        }
-        return result;
-    }
-
-    private static Color LightColor(IEntityData e)
+    private static Color LightColor(MapEntity e)
     {
         var color = new Color(
             Mathf.Clamp(e.Attr2 / 255.0f, 0.0f, 1.0f),

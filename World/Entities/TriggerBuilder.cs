@@ -20,11 +20,11 @@ public static class TriggerBuilder
         ITextureSource? textures = null) =>
         BuildTriggers(map.Entities, catalogue, models, textures);
 
-    public static (Node3D Root, List<JumpPad> JumpPads, List<Teleport> Teleports) BuildTriggers<T>(
-        IReadOnlyList<T> entities,
+    public static (Node3D Root, List<JumpPad> JumpPads, List<Teleport> Teleports) BuildTriggers(
+        IReadOnlyList<MapEntity> entities,
         MetadataCatalogue? catalogue = null,
         IModelCatalog? models = null,
-        ITextureSource? textures = null) where T : IEntityData
+        ITextureSource? textures = null)
     {
         var root = new Node3D { Name = "Triggers" };
         var teleports = new List<Teleport>();
@@ -110,15 +110,15 @@ public static class TriggerBuilder
         ITextureSource? textures = null)
         => BuildTriggers(map.Entities, catalogue, models, textures).Root;
 
-    public static Node3D Build<T>(
-        IReadOnlyList<T> entities,
+    public static Node3D Build(
+        IReadOnlyList<MapEntity> entities,
         MetadataCatalogue? catalogue = null,
         IModelCatalog? models = null,
-        ITextureSource? textures = null) where T : IEntityData
+        ITextureSource? textures = null)
         => BuildTriggers(entities, catalogue, models, textures).Root;
 
     /// <summary>fpsgame/entities.cpp JUMPPAD: <c>((sbyte)attr3*10, (sbyte)attr2*10, attr1*12.5)</c>.</summary>
-    public static Vector3 Push(IEntityData e) =>
+    public static Vector3 Push(MapEntity e) =>
         new((sbyte)e.Attr3 * 10.0f, (sbyte)e.Attr2 * 10.0f, e.Attr1 * 12.5f);
 
     public static string? ResolveModel(int modelIndex, MetadataCatalogue? catalogue) => modelIndex switch

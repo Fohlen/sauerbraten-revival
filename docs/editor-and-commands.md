@@ -1017,9 +1017,10 @@ World/Commands/
     ├── EntityOps.cs
     └── ReplaceBlock.cs    # the universal carrier (paste/prefab/undo/fill)
 World/OctaEdit.cs          # structural primitives + ported edit algorithms (M1)
+World/Entities/
+└── MapEntity.cs           # the stored entity: float in memory, fixed-point on disk/wire
 World/Save/
 ├── WorldSnapshot.cs       # canonical snapshot encode/decode + content hash (M5)
-├── MapEntity.cs           # serializable entity (fixed-point; no floats on disk)
 ├── WorldResource.cs       # Godot Resource wrapper for world.res (M5)
 ├── HistoryResource.cs     # Godot Resource wrapper for history.res (M5)
 ├── MapStore.cs            # map directory load/save, compaction, archive hash (M5)

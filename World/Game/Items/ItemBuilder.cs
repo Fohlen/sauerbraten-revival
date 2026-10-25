@@ -18,7 +18,7 @@ public static class ItemBuilder
     public static ItemManager Build(OgzMap map, IModelCatalog? models = null, ITextureSource? textures = null) =>
         Build(map.Entities, models, textures);
 
-    public static ItemManager Build<T>(IReadOnlyList<T> entities, IModelCatalog? models = null, ITextureSource? textures = null) where T : IEntityData
+    public static ItemManager Build(IReadOnlyList<MapEntity> entities, IModelCatalog? models = null, ITextureSource? textures = null)
     {
         var root = new ItemManager { Name = "Items" };
         var skinCache = new Dictionary<string, Material>();

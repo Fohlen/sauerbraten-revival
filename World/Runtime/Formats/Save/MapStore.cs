@@ -4,6 +4,7 @@ using System.IO;
 using System.Security.Cryptography;
 using Godot;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Entities;
 
 namespace SauerbratenRevival.World.Runtime.Formats.Save;
 

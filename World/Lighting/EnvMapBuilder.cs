@@ -32,7 +32,7 @@ public static class EnvMapBuilder
 
     public static Node3D Build(OgzMap map) => Build(map.Entities);
 
-    public static Node3D Build<T>(IReadOnlyList<T> entities) where T : IEntityData
+    public static Node3D Build(IReadOnlyList<MapEntity> entities)
     {
         var root = new Node3D { Name = "EnvMaps" };
         foreach (var (i, e) in entities.OfType(EntityType.EnvMap))
@@ -53,7 +53,7 @@ public static class EnvMapBuilder
     }
 
     /// <summary><c>ent.attr1 ? clamp(attr1, 0, 10000) : envmapradius</c>.</summary>
-    public static int ResolveRadius(IEntityData e) =>
+    public static int ResolveRadius(MapEntity e) =>
         e.Attr1 != 0 ? Mathf.Clamp(e.Attr1, 0, MaxRadius) : DefaultRadius;
 
     /// <summary>
@@ -61,9 +61,9 @@ public static class EnvMapBuilder
     /// the user's <c>envmapsize</c> cap (<c>min(size, envmapsize)</c>); here that cap
     /// is <see cref="DefaultSize"/>, so a custom size above it is pulled back down.
     /// </summary>
-    public static int ResolveCubeMapSize(IEntityData e) =>
+    public static int ResolveCubeMapSize(MapEntity e) =>
         e.Attr2 != 0 ? Mathf.Min(Mathf.Clamp(e.Attr2, 4, 9), DefaultSize) : DefaultSize;
 
     /// <summary><c>ent.attr3 ? clamp(attr3, 1, 2) : 0</c>.</summary>
-    public static int ResolveBlur(IEntityData e) => e.Attr3 != 0 ? Mathf.Clamp(e.Attr3, 1, 2) : 0;
+    public static int ResolveBlur(MapEntity e) => e.Attr3 != 0 ? Mathf.Clamp(e.Attr3, 1, 2) : 0;
 }

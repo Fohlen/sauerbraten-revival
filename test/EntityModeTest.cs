@@ -176,8 +176,8 @@ public class EntityModeTest : GoTestBase
     {
         // A negative attr4 means the platform runs in reverse (movable.cpp).
         var map = TestData.ReadMap("lost");
-        var negative = new OgzEntity { Type = EntityType.Elevator, Attr1 = 0, Attr2 = 1, Attr3 = 3, Attr4 = -12 };
-        var positive = new OgzEntity { Type = EntityType.Elevator, Attr1 = 0, Attr2 = 1, Attr3 = 3, Attr4 = 12 };
+        var negative = new MapEntity { Type = EntityType.Elevator, Attr1 = 0, Attr2 = 1, Attr3 = 3, Attr4 = -12 };
+        var positive = new MapEntity { Type = EntityType.Elevator, Attr1 = 0, Attr2 = 1, Attr3 = 3, Attr4 = 12 };
         map.Entities.Add(negative);
         map.Entities.Add(positive);
 
