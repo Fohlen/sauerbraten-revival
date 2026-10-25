@@ -1,17 +1,15 @@
 # Sauerbraten Revival
 
-Sauerbraten Revival is an unofficial, community-driven project inspired by **Cube2: Sauerbraten**. It is built in **Godot 4 (.NET / C#)**. The project's goal is to make a Garry's Mod style, fully customizable game engine, with the following features:
+Sauerbraten Revival is an unofficial, community-driven project inspired by **Cube2: Sauerbraten**. It is built in **Godot 4 (.NET / C#)**. The project's goal is to take the original engine much further and make a Garry's Mod style sandbox, fully customizable, with the following features:
 
-- Game modes: **insta CTF**, **effic CTF**, **FFA**, **coop edit**.
-- World: a native, **runtime-mutable octree** (live editing + dynamic geometry).
-- Modding: allow shareable, changeable data and code mods of game modes, weapons etc
-- Classic maps ship as original `.ogz` files and are read at load time; there is
-  **no CubeScript** and no offline converter. Maps made in the editor use a new, versioned, native format.
-- Re-use of free and libre assets where possible
-- Deep support for Steam (lobbies, matchmaking and workshop)
+- Game: The nostalgic Sauerbraten arena FPS feel
+- Modes: Suitable for public lobbies and lan-parties with friends - **CTF**, **Rugby**, **Prop Hunt**, **Racing**
+- World: a native, **runtime-mutable octree** and editor
+- Modding: **everything**, including physics, weapons and game modes can be changed - using [Godot Resources](https://docs.godotengine.org/en/stable/tutorials/scripting/resources.html) and [GDScript](https://docs.godotengine.org/en/stable/tutorials/scripting/gdscript/gdscript_basics.html)
+- Re-use of libre assets where possible, classic maps ship as original `.ogz` files and are read at load time
+- Deep support for Steam (workshop and lobbies)
 
-The title _"Sauerbraten Revival"_ is a preliminary working title, suggestions are encouraged.
-Collaboration is welcome and a [I have compiled list of things you can help with on Riseup](https://pad.riseup.net/p/sauerbraten-revival-keep).
+The title _"Sauerbraten Revival"_ is a preliminary working title. [Collaboration is encouraged](https://pad.riseup.net/p/sauerbraten-revival-keep).
 
 ## Playing the game
 
