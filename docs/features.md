@@ -5,7 +5,8 @@ something works; this file says *what* we are building, *in what order*, and
 *what is done*. If another doc and this file disagree about ordering, timing, or
 status, this file wins — fix the other doc.
 
-MVP target: **insta CTF, effic CTF, FFA, and coop edit.**
+MVP target: **CTF, Rugby, Prop Hunt, and Racing**, on top of **coop edit** as
+the shared sandbox layer.
 
 Status legend: `[x]` done · `[~]` partial · `[ ]` not started / deferred.
 
@@ -24,9 +25,9 @@ Order reflects intent, not schedule.
 4. **Editor MVP** — runtime live cube editing, texturing/blending, entities,
    undo/redo, save/load. Built on the command system.
 5. **Combat & spawns** — weapons/hitscan, flags, scoring, respawns.
-6. **Modes** — FFA, insta CTF, effic CTF, coop edit.
+6. **Modes** — CTF (insta/effic loadouts), Rugby, Prop Hunt, Racing, coop edit.
 7. **Demos & replays** — record/playback of the movement + command stream.
-8. **Community / online** — Steamworks networking, Workshop, UGC.
+8. **Community / online** — Steamworks networking, lobbies/matchmaking, Workshop, UGC.
 
 > Rationale: movement's *velocity model* is proven, but collision can only be
 > validated against the real maps the trace was captured on. So map loading
@@ -139,9 +140,11 @@ Done (classic maps are read at load time in both the viewer and the play scene):
       `moveplayer`/`moveplatform` (`movable.cpp`).
 - [x] **`movable.cpp` (box/barrel/platform/elevator) — deliberately not ported.**
       It is hard-gated to single-player (`if(!m_dmsp && !m_classicsp) return;`,
-      `movable.cpp:90`), so **every mode we target (insta/effic CTF, FFA, coop edit)
-      never simulates one** — and none of `ctf.h`/`capture.h`/`collect.h` reference
-      it. Only **16 of 316** base maps use these types, all SP-campaign maps
+      `movable.cpp:90`), so **the classic modes we port (insta/effic CTF, FFA,
+      coop edit) never simulate one** — and none of
+      `ctf.h`/`capture.h`/`collect.h` reference it. Our own modes (Rugby, Prop
+      Hunt, Racing) build moving geometry through the command stream instead.
+      Only **16 of 316** base maps use these types, all SP-campaign maps
       (`mpsp10`, `crnsp1`, `skrsp1`, `level9`, …); our fixtures (`church51`,
       `bt_falls`) have zero. It is also the *wrong* mechanism for the dynamic-world
       plan: our mutation path is `WorldCommand`-based (see
@@ -203,7 +206,7 @@ Done:
       asserted by `test/BouncePhysicsTest.cs` / `test/BounceBodyTest.cs`).
 - [x] ~~Movable physics (box/barrel/platform/elevator) — `ENT_INANIMATE`,
       `moveplayer`/`moveplatform`. **Deliberately not ported**: SP-only
-      (`movable.cpp:90`), unused by every target mode, and superseded by the
+      (`movable.cpp:90`), unused by the classic modes we port, and superseded by the
       command-based dynamic-world plan (see §2 above).~~
 
 Remaining:
@@ -393,10 +396,16 @@ Remaining:
 
 ## 6. Modes
 
-- [x] FFA.
-- [x] Insta CTF.
-- [x] Effic CTF.
-- [ ] Coop edit (multiplayer editing over the command stream).
+MVP modes are **CTF, Rugby, Prop Hunt, and Racing**, with **coop edit** as the
+shared sandbox layer. FFA is already implemented and stays as the arena baseline.
+
+- [x] FFA (arena baseline; not an MVP target).
+- [x] **CTF** — insta and effic loadouts (both ported as `GameModeInfo` Resources).
+- [ ] **Coop edit** (multiplayer editing over the command stream).
+- [ ] **Rugby**.
+- [ ] **Prop Hunt**.
+- [ ] **Racing** — the dynamic-world showcase: crumbling walls, falling floors,
+      and new geometry created through the command stream.
 
 ## 7. Demos & replays
 
@@ -442,10 +451,15 @@ networked world changes. This is a first-class feature, not a side effect.
 
 ## Cross-cutting: modding
 
-See [vision.md §12](vision.md#12-modding--workshop) for the design.
+See [vision.md §12](vision.md#12-modding--workshop) for the design. Everything
+gameplay-facing is moddable through Godot **Resources** and **GDScript**.
 
-- [ ] Data-first mods (Resources, ConfigFiles, our maps) — safe and easy.
-- [ ] Opt-in code mods (C#) for total conversions; require trust.
+- [ ] Data mods (Resources, ConfigFiles, our maps) — safe and easy.
+- [ ] **Script mods (GDScript)** over a versioned API for physics, weapons and
+      game modes; opt in per pack (runs in-process).
+- [ ] Every gameplay-facing seam (mode rules, weapon behaviour, physics overrides,
+      entity logic) reachable from Resources + GDScript — no C# rebuild for a mod.
+- [ ] Fidelity baseline: A1–A4 always measure the **unmodded** game.
 - [ ] Workshop packaging: `.pck`/folder + `mod.json`, API-versioned,
       load-ordered, multiplayer-parity-checked.
 

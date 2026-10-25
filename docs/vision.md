@@ -8,14 +8,22 @@ For movement/physics details, see [movement-physics.md](movement-physics.md) and
 
 ## 1. High-level goal
 
-Recreate **Cube 2: Sauerbraten** as a playable, shippable game (a "port" /
-revival) in **Godot 4 (.NET / C#)**. The single most important thing is to reproduce the
-original **movement and feel** as faithfully as possible. If movement feels
-wrong, the project has failed regardless of how good everything else looks.
+Take **Cube 2: Sauerbraten** much further than a port: build a **Garry's Mod style
+sandbox** — a fully customizable game in **Godot 4 (.NET / C#)** — on top of the
+nostalgic Sauerbraten arena FPS feel.
 
-The **in-game, live editor** is a defining feature, not a nice-to-have — and we
-deliberately go beyond the original by making the world **mutable at runtime**
-(crumbling walls, collapsing floors, geometry created by game modes).
+The base layer is non-negotiable: reproduce the original **movement and feel** as
+faithfully as possible. If unmodified movement feels wrong, the sandbox has no
+foundation to build on, regardless of how good everything else looks.
+
+Above that base, **everything is meant to be changed** — physics, weapons, game
+modes and content — through Godot-native data and GDScript. The **in-game, live
+editor** is a defining feature, not a nice-to-have, and we deliberately go beyond
+the original by making the world **mutable at runtime** (crumbling walls,
+collapsing floors, geometry created by game modes).
+
+The target experience is the original's: public lobbies and LAN parties with
+friends.
 
 ## 2. Scope & MVP modes
 
@@ -25,12 +33,17 @@ deliberately go beyond the original by making the world **mutable at runtime**
   conversion — never as a runtime dependency.
 - Keep an **editable, dynamic octree** world so live editing and runtime geometry
   changes share one mechanism.
-- Ship through **Steam** using **Steamworks** for networking, content delivery,
-  and Workshop mods.
+- Make physics, weapons and game modes **moddable**: Godot **Resources** plus
+  **GDScript**, never CubeScript.
+- Ship through **Steam** using **Steamworks** for networking, lobbies and
+  matchmaking, content delivery, and Workshop mods.
 
 ### MVP modes
 
-Exactly four: **insta CTF**, **effic CTF**, **FFA**, and **coop edit**.
+Four modes, all suited to public lobbies and LAN parties with friends: **CTF**,
+**Rugby**, **Prop Hunt**, and **Racing**. **Coop edit** is the shared sandbox layer
+they sit on. What is done and in what order is tracked in [features.md](features.md),
+which wins over this doc on status.
 
 ## 3. Non-goals
 
@@ -40,6 +53,8 @@ Exactly four: **insta CTF**, **effic CTF**, **FFA**, and **coop edit**.
 - **No CubeScript, and no classic-map converter.** Classic maps ship as original
   `.ogz` and are read at load time; maps we author use our own format and
   Godot-native configuration. See [ADR 0006](adr/0006-ogz-import.md).
+- Not moving the fidelity-critical core into GDScript. GDScript is the modding and
+  gameplay surface; the octree, meshing and movement step stay in C#.
 - Not targeting 1:1 byte-level map-format compatibility.
 
 ## 4. Guiding principles
@@ -48,7 +63,9 @@ Exactly four: **insta CTF**, **effic CTF**, **FFA**, and **coop edit**.
   doubt, prefer the original code over a reimplementation.
 - One mutation mechanism (serializable commands) for editing, dynamic geometry,
   undo, and networking.
-- Data-first modding; code mods are an explicit, opt-in tier.
+- **Moddable by default**: gameplay-facing behaviour (physics, weapons, modes,
+  entities) is data + GDScript, not hardcoded. The engine core stays C# where
+  fidelity and determinism demand it.
 
 ---
 
@@ -66,7 +83,7 @@ Exactly four: **insta CTF**, **effic CTF**, **FFA**, and **coop edit**.
 | World mutations | All are **serializable commands** (editor, game modes, network) |
 | Config | Godot-native: `ProjectSettings`, `ConfigFile`, `Resource`, `InputMap` |
 | Networking | Steamworks; replicate movement + commands; **server-authoritative** (see [authority-and-latency.md](authority-and-latency.md)) |
-| Modding | Data-first Resources + versioned API; Workshop packs via `load_resource_pack` |
+| Modding | **Resources + GDScript** over a versioned API; Workshop packs via `load_resource_pack` |
 
 ---
 
@@ -91,7 +108,8 @@ Cube 2's world is effectively static geometry at play time; only a few entity
 types move. We explicitly want to overcome this. The world must support
 **real-time structural changes**:
 
-- A race mode where walls crumble, floors fall away, and new geometry appears.
+- A **race** mode (an MVP mode) where walls crumble, floors fall away, and new
+  geometry appears.
 - Any game mode can mutate the world through the same command API the editor uses.
 
 Consequences:
@@ -163,11 +181,16 @@ sync. It is also the foundation for multiplayer and Workshop content.
 undo, VBOs and compression; copying it would drag in much of the engine. We
 therefore port its algorithms and rebuild the plumbing Godot-native.
 
-Language: **C# (.NET)** for everything — octree, meshing, collision queries,
-save/load, command application, editor, game logic, HUD. C# `int` is 32-bit and
-`float` is 32-bit, which matches the original C++ better than GDScript. (The A1
-reference harness stays C++ as an offline dev tool; see
-[ADR 0003](adr/0003-movement-verification.md).)
+Language: **C# (.NET)** for the engine core and built-in game — octree, meshing,
+collision queries, save/load, command application, editor, HUD, and the default
+simulation. C# `int` is 32-bit and `float` is 32-bit, which matches the original
+C++ better than GDScript, and the movement port's bit-exactness depends on it.
+
+**GDScript** is the supported **modding surface**: every gameplay-facing seam
+(mode rules, weapon behaviour, physics overrides, entity logic) must be reachable
+from Resources + GDScript, so a mod can replace it without rebuilding the game.
+The A1 reference harness stays C++ as an offline dev tool; see
+[ADR 0003](adr/0003-movement-verification.md).
 
 ---
 
@@ -269,16 +292,21 @@ table consulted in `_UnhandledInput`, not a pure action lookup. Deferred.
 
 ## 12. Modding & Workshop
 
-**Content mods are easy** — Resources, ConfigFiles, our world format, and model
-imports cover maps, materials, entities, weapon stats, and mode parameters.
+**Everything gameplay-facing is moddable** — physics, weapons, game modes,
+entities, materials and maps — through Godot-native **Resources** and
+**GDScript**. There is no bespoke interpreter and no CubeScript.
 
-**Two tiers, explicitly:**
-
-| Tier | Contents | Safety |
+| Surface | Contents | Notes |
 | --- | --- | --- |
-| Data (default) | maps, materials, models, sounds, entity defs, mode *parameters* | Safe |
-| Code (opt-in) | C# compiled against the game assembly — runtime loading TBD | Arbitrary code execution — trusted authors only |
+| Data (`Resource` / `.tres`) | maps, materials, models, sounds, entity defs, weapon stats, mode parameters, physics tuning | Default; safe to share |
+| Script (`GDScript`) | mode rules, weapon/gameplay behaviour, physics overrides, entity logic | Runs in-process — opt in per pack; trusted authors |
 
+- **Fidelity baseline:** the unmodded game is the reference implementation. A mod
+  may change physics, but movement parity and the A1–A4 validation always measure
+  the unmodified baseline.
+- **API stability:** scripts attach to a **versioned API**; the engine core
+  (octree, meshing, movement step) exposes stable hooks and validates inputs so a
+  mod cannot corrupt the world or the command stream.
 - **Package**: a `.pck` (or folder) with a `mod.json` manifest: `id`, `name`,
   `author`, `version`, `api_version`, `dependencies`, `load_priority`, `contents[]`.
 - **Loading**: enumerate subscribed Workshop content at startup, validate the
@@ -305,4 +333,5 @@ Full detail in [movement-physics.md § 5](movement-physics.md#5-verification--va
 
 All stages (A1–A4) are implemented, verified, and deviation is zero. The port runs
 at a fixed 200 Hz step matching the harness and original engine bit-for-bit on
-event-free trajectories. Movement is the product.
+event-free trajectories. Movement fidelity is the foundation; the sandbox is the
+product.

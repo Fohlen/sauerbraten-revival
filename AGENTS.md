@@ -1,11 +1,13 @@
 # AGENTS.md — working notes for this repo
 
-**Sauerbraten Revival** — a port/revival of *Cube 2: Sauerbraten* in **Godot 4
-(.NET / C#)**. Goal: recreate the original's movement/feel first, then the in-game
-editor (a defining feature), then the game. MVP modes: **insta CTF, effic CTF,
-FFA, coop edit**. World is a native runtime-mutable **octree**. Classic maps ship
-as original `.ogz` files and are read at load time; there is **no CubeScript** and
-no offline converter.
+**Sauerbraten Revival** — a Garry's Mod-style sandbox built on the *Cube 2:
+Sauerbraten* arena FPS feel, in **Godot 4 (.NET / C#)**. Goal: recreate the
+original's movement/feel first as the fidelity base, then the in-game editor (a
+defining feature), then the sandbox game. MVP modes: **CTF, Rugby, Prop Hunt,
+Racing**, with **coop edit** as the shared sandbox layer. World is a native
+runtime-mutable **octree**; physics, weapons and modes are moddable via **Godot
+Resources + GDScript**. Classic maps ship as original `.ogz` files and are read at
+load time; there is **no CubeScript** and no offline converter.
 
 ## Source of truth
 

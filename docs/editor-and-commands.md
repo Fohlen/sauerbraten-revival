@@ -1,6 +1,6 @@
 # Editor & Command System
 
-Design plan for the **editor MVP** (features.md #5) and the **command system**
+Design plan for the **editor MVP** (features.md #4) and the **command system**
 that powers it, undo/redo, runtime geometry, networking, demos, and prefabs.
 
 This document is the reasoning; the implementation status lives in
