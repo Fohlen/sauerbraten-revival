@@ -8,7 +8,7 @@ using SauerbratenRevival.World.Materials;
 namespace SauerbratenRevival.World.Lighting;
 
 /// <summary>
-/// Uniform 3D occupancy and diffuse albedo grid (<c>RGBA8</c>, default 128³ = 8 MB)
+/// Uniform 3D occupancy and diffuse albedo grid (<c>RGBA8</c>, default 64³ = 1 MB)
 /// extracted from the runtime <see cref="Octa"/> and <see cref="MetadataCatalogue"/>
 /// to accelerate GPU compute radiance hints raymarching (docs/adr/0002-radiance-hints.md).
 ///
@@ -20,8 +20,8 @@ namespace SauerbratenRevival.World.Lighting;
 /// </summary>
 public sealed class VoxelGrid
 {
-    /// <summary>Default voxel grid resolution per axis (128³ = 2,097,152 voxels = 8 MB).</summary>
-    public const int DefaultResolution = 128;
+    /// <summary>Default voxel grid resolution per axis (64³ = 262,144 voxels = 1 MB).</summary>
+    public const int DefaultResolution = 64;
 
     /// <summary>Alpha byte for empty air (0.0).</summary>
     public const byte AlphaEmpty = 0;

@@ -52,7 +52,7 @@ bool trace_dda_hit(vec3 start_uvw, vec3 dir_uvw, float max_dist_uvw, out vec3 hi
     float max_voxel_dist = max_dist_uvw * vres;
     ivec3 step_axis = ivec3(0);
 
-    for (int step = 0; step < 256; step++) {
+    for (int step = 0; step < 128; step++) {
         if (side_dist.x < side_dist.y) {
             if (side_dist.x < side_dist.z) {
                 travelled = side_dist.x;

@@ -74,7 +74,7 @@ bool trace_dda_unoccluded(vec3 start_uvw, vec3 dir_uvw, float max_dist_uvw) {
     float max_voxel_dist = max_dist_uvw * vres;
 
     // Step a small amount forward to exit the starting voxel
-    for (int step = 0; step < 256; step++) {
+    for (int step = 0; step < 128; step++) {
         if (side_dist.x < side_dist.y) {
             if (side_dist.x < side_dist.z) {
                 travelled = side_dist.x;

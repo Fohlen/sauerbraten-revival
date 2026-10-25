@@ -40,9 +40,9 @@ public sealed class GpuRadianceBaker : IDisposable
     public Rid ProbeFinalRid => _probeFinalTex;
     public bool IsGpuAvailable => _rd != null && _directPipeline.IsValid && _bouncePipeline.IsValid;
 
-    public GpuRadianceBaker()
+    public GpuRadianceBaker(RenderingDevice? rd = null)
     {
-        _rd = RenderingServer.GetRenderingDevice();
+        _rd = rd ?? RenderingServer.GetRenderingDevice();
         if (_rd != null)
         {
             try
@@ -160,7 +160,10 @@ public sealed class GpuRadianceBaker : IDisposable
             _probeFinalTex = _rd.TextureCreate(probeFormat, new RDTextureView());
             _allocatedProbeRes = probeRes;
 
-            OutputTextureRd = new Texture3Drd { TextureRdRid = _probeFinalTex };
+            if (_rd == RenderingServer.GetRenderingDevice())
+            {
+                OutputTextureRd = new Texture3Drd { TextureRdRid = _probeFinalTex };
+            }
         }
 
         if (lightChanged)
@@ -307,6 +310,7 @@ public sealed class GpuRadianceBaker : IDisposable
 
         Color ambColor = RadianceVolume.DecodeColor(config.Ambient);
         Color skyColor = RadianceVolume.DecodeColor(config.Skylight);
+        Color skyTint = RadianceVolume.DecodeColor(config.SkyboxColour);
         Color sunColor = RadianceVolume.DecodeColor(config.Sunlight);
         Vector3 sunDirSauer = RadianceVolume.CalculateSunlightDirSauer(config.SunlightYaw, config.SunlightPitch);
         Vector3 sunDirWorld = RadianceGrid.SauerToWorld(sunDirSauer);
@@ -342,13 +346,12 @@ public sealed class GpuRadianceBaker : IDisposable
         _rd.ComputeListDispatch(computeList, (uint)groupsX, (uint)groupsY, (uint)groupsZ);
         _rd.ComputeListEnd();
 
-        // Dispatched compute passes automatically order through buffer/image barriers in RenderingDevice
         // ---- DISPATCH PASS 2 ----
         var p2 = new Pass2PushConstants
         {
             GridOrigin = radianceGrid.Origin,
             GridExtent = radianceGrid.Extent,
-            SkyTint = new Vector3(skyColor.R, skyColor.G, skyColor.B),
+            SkyTint = new Vector3(skyTint.R, skyTint.G, skyTint.B),
             ProbeRes = (uint)res,
             SkyRays = (uint)Math.Max(1, skyRays),
             MaxRayDist = maxRay,
@@ -364,6 +367,14 @@ public sealed class GpuRadianceBaker : IDisposable
         _rd.ComputeListSetPushConstant(computeList, p2Bytes, (uint)p2Bytes.Length);
         _rd.ComputeListDispatch(computeList, (uint)groupsX, (uint)groupsY, (uint)groupsZ);
         _rd.ComputeListEnd();
+
+        // Submit and sync on local devices (e.g. unit tests / offscreen probes).
+        // Main rendering device dispatches are submitted automatically by the engine.
+        if (_rd != RenderingServer.GetRenderingDevice())
+        {
+            _rd.Submit();
+            _rd.Sync();
+        }
 
         return true;
     }

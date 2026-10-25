@@ -45,6 +45,9 @@ public sealed class RadianceSettings
     /// <summary>Probe grid resolution per axis (default 32).</summary>
     public int Resolution { get; set; } = RadianceGrid.DefaultResolution;
 
+    /// <summary>Voxel occupancy grid resolution per axis for GPU compute raymarching (default 64).</summary>
+    public int VoxelResolution { get; set; } = VoxelGrid.DefaultResolution;
+
     /// <summary>Creates a default quality configuration (32³, 16 sky rays, 256 budget, auto distance).</summary>
     public static RadianceSettings Default => new();
 
@@ -99,5 +102,6 @@ public sealed class RadianceSettings
         BudgetPerFrame = BudgetPerFrame,
         MaxRayDistance = MaxRayDistance,
         Resolution = Resolution,
+        VoxelResolution = VoxelResolution,
     };
 }

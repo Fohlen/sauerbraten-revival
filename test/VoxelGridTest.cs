@@ -131,7 +131,7 @@ public class VoxelGridTest : GoTestBase
         MetadataCatalogue catalogue = MetadataCatalogue.Load(TestData.CataloguePath);
 
         var radGrid = RadianceGrid.FromOcta(octa, resolution: 32, marginCells: 1);
-        var voxelGrid = VoxelGrid.FromRadianceGrid(radGrid, VoxelGrid.DefaultResolution);
+        var voxelGrid = VoxelGrid.FromRadianceGrid(radGrid, 128);
 
         // Warmup JIT
         for (int w = 0; w < 3; w++)

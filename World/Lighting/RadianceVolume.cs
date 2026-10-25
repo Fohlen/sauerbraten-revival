@@ -257,8 +257,8 @@ public class RadianceVolume
 
         if (GpuBaker != null && GpuBaker.IsGpuAvailable)
         {
-            if (VoxelGrid == null || VoxelGrid.Resolution != VoxelGrid.DefaultResolution)
-                VoxelGrid = VoxelGrid.FromRadianceGrid(Grid, VoxelGrid.DefaultResolution);
+            if (VoxelGrid == null || VoxelGrid.Resolution != Settings.VoxelResolution)
+                VoxelGrid = VoxelGrid.FromRadianceGrid(Grid, Settings.VoxelResolution);
 
             VoxelGrid.Extract(octa, catalogue, textureSource);
 
