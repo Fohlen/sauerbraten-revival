@@ -50,8 +50,14 @@ public class RadianceVolume
         set => Settings.MaxRayDistance = value;
     }
 
-    /// <summary>The generated 3D texture resource.</summary>
-    public ImageTexture3D? Texture { get; private set; }
+    /// <summary>The generated 3D texture resource (either high-level <see cref="ImageTexture3D"/> or GPU compute <see cref="Texture3Drd"/>).</summary>
+    public Texture3D? Texture { get; private set; }
+
+    /// <summary>Optional GPU compute baker backend (null if running in headless or static ambient mode).</summary>
+    public GpuRadianceBaker? GpuBaker { get; private set; }
+
+    /// <summary>The cached voxel grid used for GPU compute raymarching.</summary>
+    public VoxelGrid? VoxelGrid { get; private set; }
 
     public RadianceVolume(RadianceGrid grid, RadianceSettings? settings = null)
     {
@@ -227,15 +233,54 @@ public class RadianceVolume
         if (Settings.Mode == RadianceQualityMode.StaticAmbient)
         {
             Grid.Fill(new RadianceProbe(Vector3.Zero, _context.AmbientRadiance));
-            if (Texture == null)
-                Texture = Grid.CreateTexture();
+            if (Texture is ImageTexture3D imgTex)
+                Grid.UpdateTexture(imgTex);
             else
-                Grid.UpdateTexture(Texture);
+                Texture = Grid.CreateTexture();
 
             _textureNeedsUpdate = false;
             return;
         }
 
+        // Try GPU Compute Dispatch first (docs/adr/0002-radiance-hints.md Stage 2)
+        if (GpuBaker == null && RenderingServer.GetRenderingDevice() != null)
+        {
+            try
+            {
+                GpuBaker = new GpuRadianceBaker();
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"[RadianceVolume] Could not instantiate GpuRadianceBaker: {ex.Message}. Falling back to CPU.");
+            }
+        }
+
+        if (GpuBaker != null && GpuBaker.IsGpuAvailable)
+        {
+            if (VoxelGrid == null || VoxelGrid.Resolution != VoxelGrid.DefaultResolution)
+                VoxelGrid = VoxelGrid.FromRadianceGrid(Grid, VoxelGrid.DefaultResolution);
+
+            VoxelGrid.Extract(octa, catalogue, textureSource);
+
+            bool gpuSuccess = GpuBaker.Bake(
+                VoxelGrid,
+                Grid,
+                config,
+                directLights,
+                dirtyMin: null,
+                dirtyMax: null,
+                skyRays: Settings.SkyRays,
+                maxRayDistance: Settings.MaxRayDistance);
+
+            if (gpuSuccess && GpuBaker.OutputTextureRd != null)
+            {
+                Texture = GpuBaker.OutputTextureRd;
+                _textureNeedsUpdate = false;
+                return;
+            }
+        }
+
+        // CPU Fallback bake pass
         int res = Grid.Resolution;
         for (int z = 0; z < res; z++)
         {
@@ -249,11 +294,11 @@ public class RadianceVolume
             }
         }
 
-        // Create or update GPU 3D texture
-        if (Texture == null)
-            Texture = Grid.CreateTexture();
+        // Create or update CPU-backed GPU 3D texture
+        if (Texture is ImageTexture3D existingImgTex)
+            Grid.UpdateTexture(existingImgTex);
         else
-            Grid.UpdateTexture(Texture);
+            Texture = Grid.CreateTexture();
 
         _textureNeedsUpdate = false;
     }
@@ -463,7 +508,8 @@ public class RadianceVolume
 
         if (_textureNeedsUpdate && Texture != null)
         {
-            Grid.UpdateTexture(Texture);
+            if (Texture is ImageTexture3D imgTex)
+                Grid.UpdateTexture(imgTex);
             _textureNeedsUpdate = false;
         }
 
