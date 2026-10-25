@@ -335,6 +335,12 @@ public sealed class GpuRadianceBaker : IDisposable
         };
 
         byte[] p1Bytes = StructureToByteArray(p1);
+        int countX = Math.Max(0, maxCell.X - minCell.X + 1);
+        int countY = Math.Max(0, maxCell.Y - minCell.Y + 1);
+        int countZ = Math.Max(0, maxCell.Z - minCell.Z + 1);
+        if (countX == 0 || countY == 0 || countZ == 0)
+            return true;
+
         int groupsX = (maxCell.X - minCell.X + 4) / 4;
         int groupsY = (maxCell.Y - minCell.Y + 4) / 4;
         int groupsZ = (maxCell.Z - minCell.Z + 4) / 4;

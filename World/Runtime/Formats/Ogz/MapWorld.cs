@@ -164,6 +164,9 @@ public partial class MapWorld : Node3D, IGameWorld
     /// <summary>The converted-model catalogue (glTF paths + Cube2 parameters), if present.</summary>
     public IModelCatalog? Models { get; private set; }
 
+    /// <summary>The reflection probes built from ET_ENVMAP entities.</summary>
+    public Node3D? EnvMaps { get; private set; }
+
     /// <summary>The item manager holding map item pickups.</summary>
     public ItemManager? Items { get; private set; }
 
@@ -321,7 +324,10 @@ public partial class MapWorld : Node3D, IGameWorld
         Models = modelCatalog;
 
         AddChild(LightBuilder.Build(map));
-        AddChild(EnvMapBuilder.Build(map));
+        var envMaps = EnvMapBuilder.Build(map);
+        EnvMaps = envMaps;
+        AddChild(envMaps);
+        radiance?.RegisterEnvMaps(envMaps);
         AddChild(PlayerStartBuilder.Build(map, textures));
         AddChild(ModeEntityBuilder.Build(map, catalogue, modelCatalog, textures, Mode));
         AddChild(MonsterBuilder.Build(map, modelCatalog, textures));

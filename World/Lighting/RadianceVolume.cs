@@ -54,10 +54,117 @@ public class RadianceVolume
     public Texture3D? Texture { get; private set; }
 
     /// <summary>Optional GPU compute baker backend (null if running in headless or static ambient mode).</summary>
-    public GpuRadianceBaker? GpuBaker { get; private set; }
+    public GpuRadianceBaker? GpuBaker { get; set; }
 
     /// <summary>The cached voxel grid used for GPU compute raymarching.</summary>
     public VoxelGrid? VoxelGrid { get; private set; }
+
+    private readonly List<EnvMapProbe> _envMapProbes = new();
+
+    /// <summary>Active reflection probes registered with this volume to receive refresh notifications on dirty region edits.</summary>
+    public IReadOnlyList<EnvMapProbe> EnvMapProbes => _envMapProbes;
+
+    /// <summary>
+    /// Register an <see cref="EnvMapProbe"/> to be refreshed when its influence radius overlaps dirty world regions.
+    /// </summary>
+    public void RegisterEnvMapProbe(EnvMapProbe probe)
+    {
+        if (probe != null && !_envMapProbes.Contains(probe))
+            _envMapProbes.Add(probe);
+    }
+
+    /// <summary>
+    /// Unregister an <see cref="EnvMapProbe"/>.
+    /// </summary>
+    public void UnregisterEnvMapProbe(EnvMapProbe probe)
+    {
+        if (probe != null)
+            _envMapProbes.Remove(probe);
+    }
+
+    /// <summary>
+    /// Register all <see cref="EnvMapProbe"/> children under <paramref name="envMapsRoot"/>.
+    /// </summary>
+    public void RegisterEnvMaps(Node? envMapsRoot)
+    {
+        if (envMapsRoot == null) return;
+        foreach (var child in envMapsRoot.GetChildren())
+        {
+            if (child is EnvMapProbe probe)
+                RegisterEnvMapProbe(probe);
+        }
+    }
+
+    /// <summary>
+    /// Clear all registered <see cref="EnvMapProbe"/> instances.
+    /// </summary>
+    public void ClearEnvMapProbes() => _envMapProbes.Clear();
+
+    /// <summary>
+    /// Refreshes all registered <see cref="EnvMapProbe"/> instances whose influence AABB
+    /// overlaps <paramref name="sauerRegion"/> by setting their <see cref="ReflectionProbe.UpdateMode"/> to <see cref="ReflectionProbe.UpdateModeEnum.Once"/> (docs/adr/0002-radiance-hints.md §8.1).
+    /// Returns the number of probes triggered.
+    /// </summary>
+    public int RefreshOverlappingEnvMaps(Aabb sauerRegion)
+    {
+        int count = 0;
+        for (int i = _envMapProbes.Count - 1; i >= 0; i--)
+        {
+            var probe = _envMapProbes[i];
+            if (!GodotObject.IsInstanceValid(probe))
+            {
+                _envMapProbes.RemoveAt(i);
+                continue;
+            }
+
+            if (probe.SauerBounds.Intersects(sauerRegion))
+            {
+                probe.UpdateMode = ReflectionProbe.UpdateModeEnum.Once;
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// Reads back probe values from VRAM to <see cref="Grid"/> (docs/adr/0002-radiance-hints.md §5).
+    /// No-op if running in CPU mode.
+    /// </summary>
+    public void ReadbackFromGpu()
+    {
+        if (GpuBaker != null && GpuBaker.IsGpuAvailable)
+        {
+            GpuBaker.ReadbackToGrid(Grid);
+        }
+    }
+
+    /// <summary>
+    /// Update direct entity lights and rebake affected probe region.
+    /// </summary>
+    public void UpdateLights(IReadOnlyList<DirectLightSource>? lights, Aabb? dirtyRegion = null)
+    {
+        if (_context != null)
+        {
+            _context.DirectLights = lights;
+        }
+
+        if (dirtyRegion.HasValue)
+        {
+            MarkDirty(dirtyRegion.Value);
+        }
+        else if (GpuBaker != null && GpuBaker.IsGpuAvailable && VoxelGrid != null && _context != null)
+        {
+            GpuBaker.Bake(
+                VoxelGrid,
+                Grid,
+                _context.Config,
+                lights,
+                dirtyMin: null,
+                dirtyMax: null,
+                skyRays: Settings.SkyRays,
+                maxRayDistance: Settings.MaxRayDistance);
+        }
+    }
 
     public RadianceVolume(RadianceGrid grid, RadianceSettings? settings = null)
     {
@@ -145,6 +252,7 @@ public class RadianceVolume
         public ITextureSource? TextureSource { get; }
         public Dictionary<int, float> AlbedoCache { get; }
         public List<DirectLightSource> CandidateLights { get; }
+        public IReadOnlyList<DirectLightSource>? DirectLights { get; set; }
         public Vector3[] SkyDirsSauer { get; }
         public Vector3[] SkyDirsWorld { get; }
         public Vector3 SunDirSauer { get; }
@@ -169,6 +277,7 @@ public class RadianceVolume
             Settings = settings;
             Catalogue = catalogue;
             TextureSource = textureSource;
+            DirectLights = directLights;
             AlbedoCache = new Dictionary<int, float>();
             CandidateLights = new List<DirectLightSource>();
 
@@ -272,9 +381,10 @@ public class RadianceVolume
                 skyRays: Settings.SkyRays,
                 maxRayDistance: Settings.MaxRayDistance);
 
-            if (gpuSuccess && GpuBaker.OutputTextureRd != null)
+            if (gpuSuccess)
             {
-                Texture = GpuBaker.OutputTextureRd;
+                if (GpuBaker.OutputTextureRd != null)
+                    Texture = GpuBaker.OutputTextureRd;
                 _textureNeedsUpdate = false;
                 return;
             }
@@ -435,14 +545,18 @@ public class RadianceVolume
     /// Mark all probes overlapping the given region dirty.
     /// Region is in Sauerbraten coordinates (matching EditorController / WorldChunkRenderer).
     /// An optional margin (in world units) expands the region before mapping to probe cells.
+    /// In GPU mode, updates the overlapping sub-region of <see cref="VoxelGrid"/>,
+    /// dispatches the compute bake bounded by the dirty probe box, and refreshes overlapping <see cref="EnvMapProbe"/> nodes.
     /// </summary>
     public void MarkDirty(Aabb sauerRegion, float margin = 0f)
     {
-        if (margin > 0f)
-            sauerRegion = sauerRegion.Grow(margin);
+        // Refresh any overlapping ET_ENVMAP reflection probes for coop-edit (docs/adr/0002-radiance-hints.md §8.1)
+        RefreshOverlappingEnvMaps(sauerRegion);
+
+        Aabb dirtySauerRegion = margin > 0f ? sauerRegion.Grow(margin) : sauerRegion;
 
         // Convert Sauerbraten AABB to Godot World AABB
-        Aabb worldRegion = RadianceGrid.SauerBoundsToWorld(sauerRegion);
+        Aabb worldRegion = RadianceGrid.SauerBoundsToWorld(dirtySauerRegion);
 
         // Find cell coordinate bounds
         Vector3I minCell = Grid.WorldToCell(worldRegion.Position);
@@ -456,6 +570,34 @@ public class RadianceVolume
         int y1 = Mathf.Clamp(Mathf.Max(minCell.Y, maxCell.Y), 0, res - 1);
         int z1 = Mathf.Clamp(Mathf.Max(minCell.Z, maxCell.Z), 0, res - 1);
 
+        var dirtyMin = new Vector3I(x0, y0, z0);
+        var dirtyMax = new Vector3I(x1, y1, z1);
+
+        // Fast GPU compute dispatch if available (docs/adr/0002-radiance-hints.md §6)
+        if (GpuBaker != null && GpuBaker.IsGpuAvailable && VoxelGrid != null && _context != null)
+        {
+            // 1. Voxel Grid Sub-Update: re-evaluate octree occupancy & albedo for cells in dirty region
+            VoxelGrid.ExtractRegion(_context.Octa, dirtySauerRegion, _context.Catalogue, _context.TextureSource);
+
+            // 2. Dirty Probe Box Dispatch: execute compute shaders bounded by dirtyMin and dirtyMax
+            bool ok = GpuBaker.Bake(
+                VoxelGrid,
+                Grid,
+                _context.Config,
+                _context.DirectLights,
+                dirtyMin,
+                dirtyMax,
+                skyRays: Settings.SkyRays,
+                maxRayDistance: Settings.MaxRayDistance);
+
+            if (ok)
+            {
+                RebakeCount += (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
+                return;
+            }
+        }
+
+        // CPU Fallback: queue individual dirty cells for budgeted per-frame rebaking
         for (int z = z0; z <= z1; z++)
         {
             for (int y = y0; y <= y1; y++)

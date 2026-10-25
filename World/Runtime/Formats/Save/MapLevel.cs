@@ -50,6 +50,7 @@ public partial class MapLevel : Node3D, IGameWorld
     public Node3D WorldNode => this;
     public Materials.ITextureSource? Textures => _textures;
     public Models.IModelCatalog? Models { get; private set; }
+    public Node3D? EnvMaps { get; private set; }
     public ItemManager? Items { get; private set; }
     public FlagManager? Flags => null;
     public IReadOnlyList<Entities.JumpPad> JumpPads { get; private set; } = System.Array.Empty<Entities.JumpPad>();
@@ -179,7 +180,10 @@ public partial class MapLevel : Node3D, IGameWorld
         Models = modelCatalog;
 
         AddChild(LightBuilder.Build(Entities));
-        AddChild(EnvMapBuilder.Build(Entities));
+        var envMaps = EnvMapBuilder.Build(Entities);
+        EnvMaps = envMaps;
+        AddChild(envMaps);
+        Radiance?.RegisterEnvMaps(envMaps);
         AddChild(PlayerStartBuilder.Build(Entities, _textures));
         AddChild(ModeEntityBuilder.Build(Entities, null, modelCatalog, _textures, Mode));
         AddChild(MonsterBuilder.Build(Entities, modelCatalog, _textures));

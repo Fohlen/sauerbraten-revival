@@ -135,4 +135,68 @@ public class GpuRadianceBakerTest : GoTestBase
             TestAssert.True(volume.Texture is ImageTexture3D, "In headless or CPU mode, Texture should be ImageTexture3D");
         }
     }
+
+    [Test]
+    public void GpuRadianceBaker_IncrementalBake_DirtyMinMax_UpdatesSubBox()
+    {
+        var rd = RenderingServer.GetRenderingDevice();
+        if (rd == null)
+        {
+            GD.Print("[GpuRadianceBakerTest] Skipping GPU incremental bake test (no RenderingDevice in current environment)");
+            return;
+        }
+
+        var octa = new Octa(10);
+        octa.EmptyMap(10); // Floor at Z in [0, 512), open air in [512, 1024)
+
+        var config = new MapConfig
+        {
+            Ambient = 0x333333,
+            Skylight = 0x808080,
+            Sunlight = 0xFFFFFF,
+            SunlightScale = 1.0f,
+            SunlightYaw = 0,
+            SunlightPitch = 90,
+        };
+
+        var bounds = new Aabb(Vector3.Zero, new Vector3(1024f, 1024f, 1024f));
+        var radGrid = RadianceGrid.FromSauerBounds(bounds, resolution: 16, marginCells: 0);
+        var volume = new RadianceVolume(radGrid);
+
+        // Initial full bake
+        volume.Bake(octa, config);
+        TestAssert.True(volume.GpuBaker != null && volume.GpuBaker.IsGpuAvailable, "GpuBaker must be available");
+
+        volume.ReadbackFromGpu();
+
+        // Sample air probe at (256, 256, 580)
+        Vector3 probePos1 = RadianceGrid.SauerToWorld(new Vector3(256f, 256f, 580f));
+        RadianceProbe initialAirProbe = radGrid.Sample(probePos1);
+        TestAssert.True(initialAirProbe.Amb > 0f, "Initial air probe has ambient light");
+
+        // Sample untouched air probe far away in another quadrant at (768, 768, 580)
+        Vector3 probePosFar = RadianceGrid.SauerToWorld(new Vector3(768f, 768f, 580f));
+        RadianceProbe initialFarProbe = radGrid.Sample(probePosFar);
+        TestAssert.True(initialFarProbe.Amb > 0f, "Initial far probe has ambient light");
+
+        // Modify octant 4: Sauer [0..512, 0..512, 512..1024] to be entirely solid
+        octa.WorldRoot[4].SolidFaces();
+
+        // Mark only the modified octant dirty
+        var dirtyBox = new Aabb(new Vector3(0f, 0f, 512f), new Vector3(512f, 512f, 512f));
+        volume.MarkDirty(dirtyBox);
+
+        // Readback probes after incremental update
+        volume.ReadbackFromGpu();
+
+        // The probe at (256, 256, 580) is now inside solid geometry -> should be zeroed out
+        RadianceProbe updatedProbe = radGrid.Sample(probePos1);
+        TestAssert.Equal(0f, updatedProbe.Amb, "Solidified probe ambient should now be zero");
+        TestAssert.Equal(Vector3.Zero, updatedProbe.Dir, "Solidified probe directional should be zero");
+
+        // Untouched probe far away must stay non-zero and match its initial lighting
+        RadianceProbe updatedFarProbe = radGrid.Sample(probePosFar);
+        TestAssert.True(Mathf.Abs(updatedFarProbe.Amb - initialFarProbe.Amb) < 1e-3f,
+            $"Untouched far probe ambient should be preserved: before={initialFarProbe.Amb}, after={updatedFarProbe.Amb}");
+    }
 }

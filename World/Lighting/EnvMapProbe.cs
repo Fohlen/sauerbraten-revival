@@ -37,6 +37,14 @@ public partial class EnvMapProbe : ReflectionProbe
     /// <summary>Default SkyBuilder cube face resolution: <c>1 &lt;&lt; envmapsize</c>.</summary>
     public int CubeMapResolution => 1 << CubeMapSize;
 
+    /// <summary>
+    /// Bounding box in Sauerbraten coordinates enclosing this probe's spherical influence volume.
+    /// </summary>
+    public Aabb SauerBounds => new(
+        Position - new Vector3(Radius, Radius, Radius),
+        new Vector3(Radius * 2f, Radius * 2f, Radius * 2f)
+    );
+
     public override void _Ready()
     {
         // A box probe of side = diameter envelops the sphere the entity describes.

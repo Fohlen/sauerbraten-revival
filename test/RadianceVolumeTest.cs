@@ -867,4 +867,130 @@ public class RadianceVolumeTest : GoTestBase
         var ambStatic = (Vector3)matStatic.GetShaderParameter("ambient_color");
         TestAssert.True(ambStatic.IsEqualApprox(new Vector3(expectedAmb.R, expectedAmb.G, expectedAmb.B)), "ambient_color bound in shader");
     }
+
+    // =========================================================================
+    // Stage 3: Incremental Sub-Region Updates & EnvMapProbe Refresh
+    // =========================================================================
+
+    [Test]
+    public void EnvMapProbe_SauerBounds_CalculatesAabbFromRadius()
+    {
+        var probe = new EnvMapProbe
+        {
+            Position = new Vector3(200f, 300f, 400f),
+            Radius = 50,
+        };
+
+        Aabb bounds = probe.SauerBounds;
+        TestAssert.True(bounds.Position.IsEqualApprox(new Vector3(150f, 250f, 350f)),
+            $"SauerBounds min should be (150, 250, 350), got {bounds.Position}");
+        TestAssert.True(bounds.Size.IsEqualApprox(new Vector3(100f, 100f, 100f)),
+            $"SauerBounds size should be (100, 100, 100), got {bounds.Size}");
+        TestAssert.True(bounds.GetCenter().IsEqualApprox(new Vector3(200f, 300f, 400f)),
+            "SauerBounds center should equal Position");
+
+        probe.Free();
+    }
+
+    [Test]
+    public void RadianceVolume_EnvMapProbe_RefreshOnDirtyRegionOverlap()
+    {
+        var grid = new RadianceGrid(Vector3.Zero, 64f, 4);
+        var volume = new RadianceVolume(grid);
+
+        var probe1 = new EnvMapProbe
+        {
+            Name = "Probe1",
+            Position = new Vector3(100f, 100f, 100f),
+            Radius = 50, // Bounds [50..150, 50..150, 50..150]
+        };
+        var probe2 = new EnvMapProbe
+        {
+            Name = "Probe2",
+            Position = new Vector3(500f, 500f, 500f),
+            Radius = 50, // Bounds [450..550, 450..550, 450..550]
+        };
+
+        probe1.UpdateMode = ReflectionProbe.UpdateModeEnum.Always;
+        probe2.UpdateMode = ReflectionProbe.UpdateModeEnum.Always;
+
+        volume.RegisterEnvMapProbe(probe1);
+        volume.RegisterEnvMapProbe(probe2);
+
+        TestAssert.Equal(2, volume.EnvMapProbes.Count, "2 probes registered");
+
+        // Mark dirty region overlapping only Probe1: Sauer AABB [110..120, 110..120, 110..120]
+        var dirty1 = new Aabb(new Vector3(110f, 110f, 110f), new Vector3(10f, 10f, 10f));
+        int refreshed = volume.RefreshOverlappingEnvMaps(dirty1);
+
+        TestAssert.Equal(1, refreshed, "1 probe should be refreshed");
+        TestAssert.Equal(ReflectionProbe.UpdateModeEnum.Once, probe1.UpdateMode, "Overlapping probe1 should be set to Once");
+        TestAssert.Equal(ReflectionProbe.UpdateModeEnum.Always, probe2.UpdateMode, "Non-overlapping probe2 should remain Always");
+
+        // Now mark dirty region overlapping only Probe2
+        probe1.UpdateMode = ReflectionProbe.UpdateModeEnum.Always;
+        var dirty2 = new Aabb(new Vector3(510f, 510f, 510f), new Vector3(10f, 10f, 10f));
+        refreshed = volume.RefreshOverlappingEnvMaps(dirty2);
+
+        TestAssert.Equal(1, refreshed, "Probe2 should be refreshed");
+        TestAssert.Equal(ReflectionProbe.UpdateModeEnum.Always, probe1.UpdateMode, "Probe1 remains Always");
+        TestAssert.Equal(ReflectionProbe.UpdateModeEnum.Once, probe2.UpdateMode, "Probe2 set to Once");
+
+        // Unregister
+        volume.UnregisterEnvMapProbe(probe1);
+        TestAssert.Equal(1, volume.EnvMapProbes.Count, "1 probe remains after unregistering probe1");
+        volume.ClearEnvMapProbes();
+        TestAssert.Equal(0, volume.EnvMapProbes.Count, "0 probes remain after clear");
+
+        probe1.Free();
+        probe2.Free();
+    }
+
+    [Test]
+    public void RadianceVolume_RegisterEnvMaps_RegistersAllEnvMapChildren()
+    {
+        var grid = new RadianceGrid(Vector3.Zero, 64f, 4);
+        var volume = new RadianceVolume(grid);
+
+        var root = new Node3D { Name = "EnvMapsRoot" };
+        var pA = new EnvMapProbe { Name = "ProbeA", Position = new Vector3(10f, 10f, 10f), Radius = 20 };
+        var pB = new EnvMapProbe { Name = "ProbeB", Position = new Vector3(50f, 50f, 50f), Radius = 20 };
+        var other = new Node3D { Name = "OtherChild" };
+        root.AddChild(pA);
+        root.AddChild(pB);
+        root.AddChild(other);
+
+        volume.RegisterEnvMaps(root);
+        TestAssert.Equal(2, volume.EnvMapProbes.Count, "Only the 2 EnvMapProbe children should be registered");
+
+        pA.Free();
+        pB.Free();
+        other.Free();
+        root.Free();
+    }
+
+    [Test]
+    public void RadianceVolume_UpdateLights_UpdatesDirectLightsContext()
+    {
+        var octa = new Octa(10);
+        octa.EmptyMap(10);
+        var config = new MapConfig { Skylight = 0xFFFFFF };
+
+        var bounds = new Aabb(new Vector3(512, 512, 512), new Vector3(64, 64, 64));
+        var grid = RadianceGrid.FromSauerBounds(bounds, resolution: 4, marginCells: 0);
+        var volume = new RadianceVolume(grid);
+
+        volume.Bake(octa, config);
+
+        var newLights = new List<DirectLightSource>
+        {
+            new DirectLightSource(new Vector3(512, 512, 550), 100f, Colors.Red)
+        };
+
+        var dirtyBox = new Aabb(new Vector3(500, 500, 540), new Vector3(20, 20, 20));
+        volume.UpdateLights(newLights, dirtyBox);
+
+        // Dirty probes queued for rebake
+        TestAssert.True(volume.PendingCount > 0, "Dirty probes enqueued after light update");
+    }
 }
