@@ -266,7 +266,7 @@ theme_override_constants/separation = 7
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
-text = "RESUME MATCH  (Esc)"
+text = "RESUME MATCH"
 
 [node name="ObjectiveHeader" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
 layout_mode = 2
