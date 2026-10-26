@@ -230,13 +230,13 @@ text = "R E V I V A L"
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="NetStatusLabel" type="Label" parent="RootMargin/MainLayout/TopBar"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.541176, 0.87451, 0.615686, 1)
-theme_override_font_sizes/font_size = 13
-text = "LOCAL  ·  OFFLINE"
-vertical_alignment = 1
+;[node name="NetStatusLabel" type="Label" parent="RootMargin/MainLayout/TopBar"]
+;unique_name_in_owner = true
+;layout_mode = 2
+;theme_override_colors/font_color = Color(0.541176, 0.87451, 0.615686, 1)
+;theme_override_font_sizes/font_size = 13
+;text = "LOCAL  ·  OFFLINE"
+;vertical_alignment = 1
 
 [node name="SettingsButton" type="Button" parent="RootMargin/MainLayout/TopBar"]
 unique_name_in_owner = true
