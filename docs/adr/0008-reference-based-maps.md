@@ -55,16 +55,22 @@ constraints must be satisfied simultaneously:
 
 ## Decision
 
-### 1. Cryptographic Content Addressing (`ObjectId`)
+### 1. High-Performance 128-Bit Content Addressing (`ObjectId` via `XxHash128`)
 
-All content-addressed objects are identified by an `ObjectId`:
-- **Hash function**: **SHA-256 truncated to 160 bits (20 bytes)** or full
-  **256 bits (32 bytes)**. It provides cryptographic collision resistance and
-  tamper detection for multiplayer parity and Workshop UGC.
-- **Verification on read**: When an object is fetched from a packfile or received
-  over the network, its payload is hashed against its `ObjectId`. Corrupted data
-  throws `CorruptObjectException` immediately.
-- Formatted as a 40-character lowercase hex string for human-readable references.
+Rather than SHA-256 (which is heavy and overkill for non-adversarial octree
+Merkle hashing) or 64-bit FNV-1a (which has birthday collisions around $2^{32}$
+elements), content addressing uses **`System.IO.Hashing.XxHash128`**:
+
+- **128-bit (16 bytes)**: Represented as a compact, stack-allocated
+  `readonly struct ObjectId(ulong High, ulong Low)`. Fits in registers with
+  zero heap allocations and formats as a clean 32-character hex string.
+- **Extreme throughput**: Vectorized with SIMD instructions (~15–30 GB/s),
+  running at memory bus speed. Hashing thousands of octree nodes takes fractions
+  of a millisecond.
+- **Collision resistance**: With a 128-bit state space ($2^{128}$), generating
+  quintillions of octree subtrees carries virtually zero accidental collision risk.
+- **Verification on read**: When an object is fetched or transferred, its payload
+  is hashed against its `ObjectId`. Corrupted data throws `CorruptObjectException`.
 
 ### 2. Canonical Encoding & Excluded Derived Data
 
@@ -220,7 +226,7 @@ ordering shifts.
 ## Key Source Files
 
 - `res://resources/maps/empty_map/` — shipped canonical base map pack.
-- `World/Runtime/Formats/Save/ObjectId.cs` — 160-bit/256-bit cryptographic identifier.
+- `World/Runtime/Formats/Save/ObjectId.cs` — 128-bit `XxHash128` identifier (`readonly struct ObjectId`).
 - `World/Runtime/Formats/Save/MapObjectStore.cs` — transparent `IObjectStore` with base fallback.
 - `World/Runtime/Formats/Save/HistoryResource.cs` — `Commit` objects, delta `Objects` dictionary, and commit chain.
 - `World/Runtime/Formats/Save/MapStore.cs` — load, commit, checkout, GC, verify.

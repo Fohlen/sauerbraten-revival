@@ -640,9 +640,9 @@ breaks across lossy ops like `Remip`), our format works like Git's **Merkle tree
 object pack** ([ADR 0008](adr/0008-reference-based-maps.md)):
 
 - **Content-addressed intermediate objects (`MapObjectStore`)**:
-  - Every `Cube[8]` octree node is a packable **`OctaNode`** object keyed by its
-    SHA-256 `ObjectId`, referencing child `OctaNode`s by `ObjectId` rather than
-    inlining them.
+  - Every `Cube[8]` octree node is an **`OctaNode`** object keyed by its
+    128-bit `XxHash128` `ObjectId`, referencing child `OctaNode`s by `ObjectId`
+    rather than inlining them.
   - The entity list is an **`EntityList`** object keyed by its `ObjectId`.
   - A world state is a **`WorldTree`** object `(Scale, RootOctaNodeId,
     EntityListId)` whose content hash is its `TreeId`.
@@ -1058,7 +1058,7 @@ World/Entities/
 └── MapEntity.cs           # the stored entity: float in memory, fixed-point on disk/wire
 World/Runtime/Formats/Save/
 ├── WorldSnapshot.cs       # canonical snapshot encode/decode + content hash (M5)
-├── ObjectId.cs            # cryptographic 20/32-byte SHA-256 identifier (ADR 0008)
+├── ObjectId.cs            # 128-bit XxHash128 identifier struct (ADR 0008)
 ├── MapObjectStore.cs      # transparent dictionary-backed object store with BaseStore fallback (ADR 0008)
 ├── WorldResource.cs       # Godot Resource wrapper for world.res (M5)
 ├── HistoryResource.cs     # Godot Resource wrapper for history.res + Commit chain + delta Objects (M5, ADR 0008)
