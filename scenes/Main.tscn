@@ -1,6 +1,11 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/Main.cs" id="1_main"]
+[ext_resource type="PackedScene" path="res://scenes/main_menu.tscn" id="2_menu"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
+
+[node name="GameHost" type="Node" parent="."]
+
+[node name="MainMenu" parent="." instance=ExtResource("2_menu")]
