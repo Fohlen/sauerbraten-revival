@@ -27,7 +27,7 @@ public partial class PlayerModel : ModelInstance
     /// <summary>Selected table index (engine <c>playermodel</c>, 0..4).</summary>
     [Export] public int ModelIndex { get; set; }
 
-    /// <summary>Team skin (0 = FFA, 1 = blue, 2 = red). Diagnostics only.</summary>
+    /// <summary>Team skin (0 = neutral, 1 = blue, 2 = red). Diagnostics only.</summary>
     [Export] public int Team { get; set; }
 
     /// <summary>Animation currently playing, if any.</summary>

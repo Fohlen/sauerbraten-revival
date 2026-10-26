@@ -311,7 +311,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         }
     }
 
-    /// <summary>Player team index (0 = FFA, 1 = blue, 2 = red).</summary>
+    /// <summary>Player team index (0 = neutral, 1 = blue, 2 = red).</summary>
     [Export]
     public int Team
     {

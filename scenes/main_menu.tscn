@@ -546,14 +546,14 @@ layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 6
 
-[node name="TeamRedButton" type="Button" parent="RootMargin/MainLayout/ContentArea/CharacterStage/StageControls/TeamRow"]
+[node name="TeamNeutralButton" type="Button" parent="RootMargin/MainLayout/ContentArea/CharacterStage/StageControls/TeamRow"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(80, 0)
-theme_override_colors/font_color = Color(1, 0.541176, 0.501961, 1)
+theme_override_colors/font_color = Color(0.74902, 0.8, 0.858824, 1)
 toggle_mode = true
 button_group = SubResource("ButtonGroup_team")
-text = "RED"
+text = "NEUTRAL"
 
 [node name="TeamBlueButton" type="Button" parent="RootMargin/MainLayout/ContentArea/CharacterStage/StageControls/TeamRow"]
 unique_name_in_owner = true
@@ -563,16 +563,16 @@ theme_override_colors/font_color = Color(0.529412, 0.741176, 1, 1)
 toggle_mode = true
 button_pressed = true
 button_group = SubResource("ButtonGroup_team")
-text = "BLU"
+text = "BLUE"
 
-[node name="TeamFfaButton" type="Button" parent="RootMargin/MainLayout/ContentArea/CharacterStage/StageControls/TeamRow"]
+[node name="TeamRedButton" type="Button" parent="RootMargin/MainLayout/ContentArea/CharacterStage/StageControls/TeamRow"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(80, 0)
-theme_override_colors/font_color = Color(0.74902, 0.8, 0.858824, 1)
+theme_override_colors/font_color = Color(1, 0.541176, 0.501961, 1)
 toggle_mode = true
 button_group = SubResource("ButtonGroup_team")
-text = "FFA"
+text = "RED"
 
 [node name="StageHint" type="Label" parent="RootMargin/MainLayout/ContentArea/CharacterStage/StageControls"]
 layout_mode = 2

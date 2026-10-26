@@ -20,7 +20,7 @@ public sealed class PlayermodelInfo
     public required string RedIcon { get; init; }
     public required bool Ragdoll { get; init; }
 
-    /// <summary>The body model for a team (0 = FFA, 1 = blue, 2 = red).</summary>
+    /// <summary>The body model for a team (0 = neutral, 1 = blue, 2 = red).</summary>
     public string Body(int team) => team switch
     {
         1 => BlueTeam,

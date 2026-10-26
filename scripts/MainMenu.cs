@@ -33,7 +33,7 @@ public partial class MainMenu : CanvasLayer
     /// <summary>Emitted when the player wants to start a match.</summary>
     /// <param name="map">Package-relative map, e.g. <c>base/metl3</c> (no extension resolution by the viewer).</param>
     /// <param name="mode">Game mode id understood by <see cref="GameModeCatalog"/>.</param>
-    /// <param name="team">0 = FFA, 1 = blue, 2 = red.</param>
+    /// <param name="team">0 = neutral (no team), 1 = blue, 2 = red.</param>
     /// <param name="playerModel">Engine playermodel index 0..4.</param>
     /// <param name="playerName">Display name typed into the floating nametag (not yet used in-game).</param>
     [Signal]
@@ -117,7 +117,7 @@ public partial class MainMenu : CanvasLayer
     private Button _modelNextButton = null!;
     private Label _modelValue = null!;
 
-    private Button _teamFfaButton = null!;
+    private Button _teamNeutralButton = null!;
     private Button _teamBlueButton = null!;
     private Button _teamRedButton = null!;
 
@@ -168,7 +168,7 @@ public partial class MainMenu : CanvasLayer
         _modelNextButton = GetNode<Button>("%ModelNextButton");
         _modelValue = GetNode<Label>("%ModelValueLabel");
 
-        _teamFfaButton = GetNode<Button>("%TeamFfaButton");
+        _teamNeutralButton = GetNode<Button>("%TeamNeutralButton");
         _teamBlueButton = GetNode<Button>("%TeamBlueButton");
         _teamRedButton = GetNode<Button>("%TeamRedButton");
     }
@@ -196,7 +196,7 @@ public partial class MainMenu : CanvasLayer
         _modelPrevButton.Pressed += () => StepModel(-1);
         _modelNextButton.Pressed += () => StepModel(1);
 
-        _teamFfaButton.Toggled += pressed => { if (pressed) SetTeam(0); };
+        _teamNeutralButton.Toggled += pressed => { if (pressed) SetTeam(0); };
         _teamBlueButton.Toggled += pressed => { if (pressed) SetTeam(1); };
         _teamRedButton.Toggled += pressed => { if (pressed) SetTeam(2); };
 
@@ -326,10 +326,23 @@ public partial class MainMenu : CanvasLayer
 
     private void SetTeam(int team)
     {
-        if (!IsTeamObjective || _team == team) return;
+        if (_team == team) return;
         _team = team;
         ApplyPreviewModel();
     }
+
+    /// <summary>
+    /// The team index handed to the match. DM and edit have no teams, so they
+    /// always launch neutral (0). A team mode cannot start teamless, so a neutral
+    /// pick there means "put me on a team": the engine resolves that at spawn with
+    /// <c>chooseworstteam</c> (server.cpp), whose tie-break on an empty server lands
+    /// on <c>evil</c> — red.
+    /// </summary>
+    private static int MatchTeam(Objective objective, int team) => objective switch
+    {
+        Objective.Tdm or Objective.Ctf => team is 1 or 2 ? team : 2,
+        _ => 0,
+    };
 
     private static int Wrap(int value, int length) => ((value % length) + length) % length;
 
@@ -341,7 +354,7 @@ public partial class MainMenu : CanvasLayer
 
         string map = "base/" + _maps[_mapIndex];
         string mode = ModeId(_objective, _mutator);
-        int team = IsTeamObjective ? (_team == 0 ? 1 : _team) : 0;
+        int team = MatchTeam(_objective, _team);
 
         string name = _nametag.Text.Trim();
         if (name.Length == 0) name = "PLAYER";
@@ -522,12 +535,12 @@ public partial class MainMenu : CanvasLayer
     {
         bool teamMode = IsTeamObjective;
 
-        // DM is implicitly FFA; edit has no teams at all.
-        _teamFfaButton.Disabled = teamMode || _objective == Objective.Edit;
+        // Neutral (team 0) is a legal engine state in every mode, so it is never
+        // disabled; only the actual teams need a team objective.
         _teamBlueButton.Disabled = !teamMode;
         _teamRedButton.Disabled = !teamMode;
 
-        _teamFfaButton.ButtonPressed = _team == 0;
+        _teamNeutralButton.ButtonPressed = _team == 0;
         _teamBlueButton.ButtonPressed = _team == 1;
         _teamRedButton.ButtonPressed = _team == 2;
     }
