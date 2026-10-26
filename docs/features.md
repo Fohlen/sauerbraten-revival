@@ -64,12 +64,16 @@ Done:
 - [x] Texture pipeline: `ITextureSource` seam + `tools/texture-import/` + runtime dump fallback.
 - [x] Material surfaces (water/lava/glass) — `MaterialMesher` + `MaterialTextures` (exact occlusion culling via `OctaEdit.VisibleFace`).
 - [x] Exact `visibletris` culling (`OctaVisible.VisibleTris` wired into `OctaFaceWalker`/`OctaMesher`, including partial single-triangle faces and diagonal flip; asserted against all 18,811 unmerged baked surfaces in church51 by `test/OctaMeshTest.cs`).
-- [x] `Resource`-based world save/load (compact binary format) — `WorldSnapshot`
+- [x] `Resource`-based world save/load (reference-based Git-style format,
+      [ADR 0008](adr/0008-reference-based-maps.md)) — `WorldSnapshot`
       (canonical octree + entity blob, versioned, content-hashed) wrapped in Godot
-      `WorldResource`/`HistoryResource`, plus the map-directory layout + compaction +
-      archive content hash (`World/Save/`, asserted by `test/WorldSnapshotTest.cs`
-      and `test/MapFormatTest.cs`). Round-trips church51 exactly. See
-      [editor-and-commands.md](editor-and-commands.md#7-map-format-versioned-command-history).
+      `WorldResource`/`HistoryResource` (`BaseRef` + linear `MapCommit` chain where
+      each commit's `TreeHash` is the octree + entity content hash), canonical base
+      map shipped at `res://resources/maps/empty_map/`, zero-copy checkouts,
+      compaction, and archive content hash (`World/Runtime/Formats/Save/`, asserted
+      by `test/WorldSnapshotTest.cs` and `test/MapFormatTest.cs`). Round-trips
+      church51 exactly. See
+      [editor-and-commands.md](editor-and-commands.md#7-map-format-reference-based-command-history-git-style).
 - [x] Per-frame chunk update budget + incremental dirty-chunk rebuilds
       (`WorldChunkRenderer`, `OctaMesher.BuildChunk`, `OctaFaceWalker.WalkRegion`;
       `test/IncrementalMeshTest.cs`). Load paths use 512-unit chunks (empty map
@@ -252,11 +256,12 @@ order** (design detail for this roadmap item).
             `test/EditorInputMapTest.cs`.
 - [x] **Selection model** (M0): `Selection`/`Block3` port of `selinfo`
       (`World/Commands/`, asserted by `test/SelectionTest.cs`).
-- [x] **World-command system** (M3): `WorldOp`/`WorldCommand`/payloads,
-      `WorldCommandCodec` (`var_to_bytes` over positional arrays),
-      `IWorld`/`OctaWorld` apply seam (`World/Commands/`, asserted by
-      `test/CommandSystemTest.cs`). Shared by editor, game modes and scripts;
-      a `CommandSource` tag distinguishes them.
+- [x] **World-command system** (M3): `WorldOp`/`Command`/payloads (including
+      `AddEntity`/`RemoveEntity`/`EditEntity`), `CommandCodec` (`var_to_bytes`
+      over positional arrays), `IWorld`/`OctaWorld` apply seam (`Octa` +
+      `Entities` in `World/Commands/`, asserted by `test/CommandSystemTest.cs`).
+      Shared by editor, game modes and scripts; a `CommandSource` tag
+      distinguishes them.
 - [x] Undo/redo via the command stack (see editor doc §5.5: undo is a
       server-sequenced `ApplyInverse`, own-`Editor`-changes-only; redo re-applies).
 - [x] Port editor algorithms (add/remove/fill/texture/remip/select).
@@ -289,10 +294,15 @@ order** (design detail for this roadmap item).
       `test/OctaOpsTest.cs`, `test/RemipTest.cs`. The edit binds and `delta_do`
       dispatch that drive them interactively are **done** — see the M4d item above
       (`EditorController` + `DeltaModifier`, `test/DeltaDispatchTest.cs`).
-- [x] Save/load in our format (M5): `WorldSnapshot` + map directory (`world.res`,
-      `history.res`, `Level.tscn`) + compaction + archive hash;
-      `F2` save / `F3` load binds in `EditorController`. See
-      [editor-and-commands.md](editor-and-commands.md#7-map-format-versioned-command-history).
+- [x] Save/load in our reference-based format (M5, [ADR 0008](adr/0008-reference-based-maps.md)):
+      `WorldSnapshot` + map directory (`world.res`, `history.res` with `BaseRef` +
+      linear `MapCommit` chain + `TreeHash`, `Level.tscn`) + shipped base
+      `res://resources/maps/empty_map/` + zero-copy checkout + compaction + archive
+      hash; `F2` commit-save / `F3` load binds in `EditorController`;
+      `scenes/editor_scene.tscn` wired to `MapLevel` referencing `empty_map` (while
+      `EmptyMap` / `scenes/empty_map.tscn` remain as the programmatic generation
+      template). See
+      [editor-and-commands.md](editor-and-commands.md#7-map-format-reference-based-command-history-git-style).
 - [x] Launch edit from the front-end: the menu's EDIT objective emits the
       `coop_edit` mode; `Main` maps its `ModeFlags.Edit` onto the viewer's edit
       entry point, so the play scene spawns the floating edit player with a live

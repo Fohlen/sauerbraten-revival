@@ -78,7 +78,7 @@ which wins over this doc on status.
 | Original octree code | Reuse `octa.cpp`/`octa.h` **core**; port editor *algorithms*; do **not** copy `octaedit.cpp` plumbing |
 | Rendering | Per-chunk `ArrayMesh` (one surface per vslot, Godot materials); Forward+; see [ADR 0007](adr/0007-world-rendering.md) |
 | Collision & movement | Ported octree traversal (`move`/`collide`/steps) in fixed 5 ms steps, validated against the original |
-| Level format | Classic maps: shipped `.ogz`, read at load time. Editor maps: `Level.tscn` (refs + config) + external binary `Resource` world blob. **No CubeScript** ([ADR 0006](adr/0006-ogz-import.md)) |
+| Level format | Classic maps: shipped `.ogz`, read at load time ([ADR 0006](adr/0006-ogz-import.md)). Editor maps: reference-based ([ADR 0008](adr/0008-reference-based-maps.md)) — `Level.tscn` + base snapshot reference (`empty_map/world.res` or local `world.res`) + linear commit history (`history.res`). **No CubeScript** |
 | Editor | Runtime, in-game, Godot UI + **command system** |
 | World mutations | All are **serializable commands** (editor, game modes, network) |
 | Config | Godot-native: `ProjectSettings`, `ConfigFile`, `Resource`, `InputMap` |
@@ -124,21 +124,21 @@ Consequences:
 
 ## 7. World-command system (editor + game modes + network)
 
-Every world mutation is expressed as a `WorldCommand` — there is no "edit
+Every world mutation is expressed as a `Command` — there is no "edit
 command" distinct from a "game command", only different **sources**:
 
 ```
-WorldCommand { op, args, source }   // the inverse is derived, not always stored
+Command { op, args, source }   // the inverse is derived, not always stored
 CommandSource = Editor | GameMode | Script
 ```
 
 - **Editor UI** submits commands (`CommandSource.Editor`): add cube, delete cube,
-  texture face, fill, remip, paste.
+  texture face, fill, remip, paste, add/remove/edit entity.
 - **Game modes** submit commands (`CommandSource.GameMode`; e.g. `crumbling_wall`
   schedules repeated cube removals; `spawn_platform` adds geometry). Modes get a
   safe, data-driven API — not raw memory access.
 - **One sink, one log, one total order.** All sources go through the same
-  [`WorldCommandSink`](editor-and-commands.md#2-the-worldcommandsink--one-seam-many-drivers-and-sources),
+  [`CommandSink`](editor-and-commands.md#2-the-commandsink--one-seam-many-drivers-and-sources),
   because they mutate the same octree and races must resolve identically on every
   peer.
 - **Undo/redo** resubmits an inverse command (`ApplyInverse`) through the same
@@ -196,29 +196,44 @@ The A1 reference harness stays C++ as an offline dev tool; see
 
 ## 9. Level format
 
-The map is a **directory of external resources**, addressed by a scene that holds
-only scene-level concerns. See [editor-and-commands.md §7](editor-and-commands.md#7-map-format-versioned-command-history)
-for the full rationale; the storage tiers (`res://` vs `user://`) and archive
-packaging live there too.
+The native map format is **reference-based, like Git** ([ADR 0008](adr/0008-reference-based-maps.md)
+and [editor-and-commands.md §7](editor-and-commands.md#7-map-format-reference-based-command-history-git-style)).
+A canonical empty starting map (`res://resources/maps/empty_map/`) is dumped to
+disk once; every new map starts with a zero-copy reference (`BaseRef`) to that
+base snapshot. Commits decompose the octree and entity list into **packable,
+content-addressed Merkle objects** (`OctaNode` for `Cube[8]` subtrees,
+`EntityList`, and `WorldTree`), storing only the modified octree branches in
+`history.res` while sharing unchanged subtrees by hash across commits and with
+`BaseRef`. Loading `HEAD` or checking out any historical commit (`TreeHash`)
+materializes the tree directly from the object pack without replaying commands.
 
 ```
 map/
 ├── Level.tscn            # refs + config: environment, game-mode settings
-├── world.res             # base octree snapshot (Godot binary Resource)
-├── history.res           # appended edit commands since world.res (optional)
+├── world.res             # optional standalone/compacted snapshot (omitted for BaseRef maps)
+├── history.res           # BaseRef + HeadHash + MapCommits[] + delta Merkle MapObjectPack
 └── materials/            # material manifest
 ```
 
-- `Level.tscn`: references the world `Resource` and material manifest as
-  **external resources** (by path); holds game-mode settings and environment.
-  Editing geometry/entities never rewrites this scene.
-- **World blob**: a Godot binary `Resource` (`worldroot` octree + per-face
-  material indices + surface data + version field).
-- **History**: the command log (see §7), versioned with the world blob.
-- **Entities**: materialized at load as **runtime projections** (`Node.Owner ==
-  null`), not serialized into the scene. Their authority is the command log —
-  they are a view of it, like render chunks are a view of the octree. Hand-editing
-  entities is editor/command-path only.
+- `Level.tscn`: references the base world `Resource` (`BaseRef` or local
+  `world.res`), `history.res`, and material manifest as **external resources**
+  (by path); holds game-mode settings and environment. Editing geometry/entities
+  never inlines scene data.
+- **Base reference / World blob (`world.res` / `BaseRef`)**: a Godot binary
+  `Resource` (`WorldResource`). Fresh and incremental maps reference
+  `res://resources/maps/empty_map/world.res` (zero-copy) and store only their
+  delta `OctaNode` / `EntityList` / `WorldTree` objects in `history.res`.
+- **History & Object Pack (`history.res`)**: a linear chain of commits
+  (`MapCommit`), each recording `ParentHash`, `TreeHash` (the `WorldTree` content
+  hash of the octree + entities at that commit), and the `Command`s applied in
+  that commit, backed by a deduplicated `MapObjectPack` of intermediate subtree
+  objects. Checking out any commit (including across `Remip`) directly
+  materializes its `TreeHash` from the pack. No merging is offered.
+- **Entities**: stored in the base snapshot and mutated via `AddEntity` /
+  `RemoveEntity` / `EditEntity` commands in `history.res` (using deterministic
+  1/16th-unit fixed-point positions), hashed into every commit's `TreeHash`, and
+  materialized at load as **runtime projections** (`Node.Owner == null`), never
+  serialized into `Level.tscn`.
 - **Material manifest**: face/material index → `ShaderMaterial`. No texture-name
   resolution from scripts.
 

@@ -18,6 +18,7 @@ load time; there is **no CubeScript** and no offline converter.
 | Movement/physics fidelity | [docs/movement-physics.md](docs/movement-physics.md), [docs/adr/0003-movement-verification.md](docs/adr/0003-movement-verification.md) |
 | Character animation / MD5 models | [docs/adr/0004-character-animation.md](docs/adr/0004-character-animation.md) | MD5 skeletal models: engine model, why runtime `Skeleton3D` mapping deformed the mesh, and the baked GLB approach. |
 | Editor + command system | [docs/editor-and-commands.md](docs/editor-and-commands.md) |
+| Reference-based map format | [docs/adr/0008-reference-based-maps.md](docs/adr/0008-reference-based-maps.md) | Git-style base snapshot reference (`empty_map`), linear commit chain, octree+entity `TreeHash`, zero-copy checkouts. |
 | Classic content (OGZ) import | [docs/adr/0006-ogz-import.md](docs/adr/0006-ogz-import.md) |
 | Rendering strategy | [ADR 0007](docs/adr/0007-world-rendering.md) |
 | Lighting (runtime) | [docs/adr/0002-radiance-hints.md](docs/adr/0002-radiance-hints.md) |
@@ -122,13 +123,16 @@ clones, and `EmptyMap` can reuse a built-once seed world (enabled via
 
 ## Inspecting a map (dev viewer)
 
-`scenes/editor_scene.tscn` reads a classic `.ogz` (from `assets/packages/` first,
-then the reference dump), builds the runtime octree, chunks it and displays it
-with diffuse textures resolved from the committed catalogue
-(`metadata-catalogue/<map>.json`) plus the cubemap skybox. Defaults to church51
-(`OgzPath` overrides). It is a `[Tool]` scene, so it also builds in the editor
-viewport. The play scene uses the same reader; see
-[ADR 0006](docs/adr/0006-ogz-import.md).
+`scenes/editor_scene.tscn` loads the native reference-based map format via
+`MapLevel` (defaulting to the canonical empty map at
+`res://resources/maps/empty_map/`; see [ADR 0008](docs/adr/0008-reference-based-maps.md)).
+To inspect a classic `.ogz` map (from `assets/packages/` first, then the
+reference dump), set `OgzPath` on `OgzMapViewer` (or use `scenes/player_scene.tscn`),
+which builds the runtime octree, chunks it and displays it with diffuse textures
+resolved from the committed catalogue (`metadata-catalogue/<map>.json`) plus the
+cubemap skybox. Both are `[Tool]` scenes, so they also build in the editor
+viewport; see [ADR 0006](docs/adr/0006-ogz-import.md). (`scenes/empty_map.tscn`
+and `EmptyMap.cs` remain as the programmatic octree generation example.)
 
 Import original content once (both outputs git-ignored, both Godot Resources):
 
@@ -184,7 +188,7 @@ specific.
 - **Original fidelity is the yardstick** for movement/collision/editor
   algorithms. Port from r6889 and cite it; validate against engine ground truth
   (probes, golden fixtures) rather than eyeballing.
-- **All world mutations are commands** (`WorldCommand`), shared by editor, game
+- **All world mutations are commands** (`Command`), shared by editor, game
   modes and scripts — this powers live editing, crumbling geometry and networked
   world changes ([features.md § dynamic world geometry](docs/features.md#cross-cutting-dynamic-world-geometry)).
 - **No CubeScript.** Classic `.ogz` is read at load time by the ported reader

@@ -49,7 +49,7 @@ This document is the reasoning; the implementation status lives in
 
 > **Naming note.** This system is **shared**, not editor-only: the editor, game
 > modes (crumbling walls, scripted platforms) and scripts all submit the *same*
-> kind of `WorldCommand` through the *same* `WorldCommandSink`. The old
+> kind of `Command` through the *same* `CommandSink`. The old
 > `Edit*` names were a misnomer — there is no "edit command" distinct from a
 > "game command", only different **sources**. Only the editor *cursor*
 > (`EditCursor`) is editor-specific.
@@ -63,23 +63,24 @@ namespace SauerbratenRevival.World.Commands;
 public enum WorldOp : ushort
 {
     // --- selection/structural (mirrors Cube2's EDIT_ enum where it maps) ---
-    AddCube, RemoveCube,       // add/del leaf cube in the selection
-    ExtendSelection, SetSelection, ClearSelection,
-    // --- face edits ---
-    SetFaceTexture,            // vslot + per-face UV carry
-    SetFaceMaterial,           // empty-space material (air/water/lava/glass/clip/...)
-    // --- volume ops ---
-    EditFace,                  // mpeditface: mode 0 face push/pull, 1 fill/empty, 2 corner
-    Remip,                     // merge/split runs (EDIT_REMIP), recomputes cube sizes
-    // --- selection transforms (mprotate/mpflip) ---
-    RotateCube, FlipCube,      // rotate/mirror the selection's cubes; axis from sel.orient
-    // --- clipboard (copy is client-local; paste is ReplaceBlock, §6) ---
-    ReplaceBlock,
-    // --- entities (the same stream!) ---
-    AddEntity, RemoveEntity, MoveEntity, SetEntityAttribute,
+    DeleteCube = 0,            // empty the selected cubes (mpdelcube)
+    EditFace = 1,              // mpeditface: mode 0 face push/pull, 1 fill/empty, 2 corner
+    ReplaceBlock = 2,          // the universal carrier: paste/capture a region
+    // --- face / texture / material ---
+    SetFaceTexture = 10,       // edittexcube
+    ReplaceTexture = 11,       // replacetexcube (per-selection or whole world)
+    SetFaceMaterial = 12,      // mpeditmat
+    FlipCube = 13,             // mpflip (selected cubes, axis d)
+    RotateCube = 14,           // mprotate (selected cubes, axis d, direction cw)
+    // --- merge ---
+    Remip = 20,                // merge/split runs (EDIT_REMIP), deterministic (§5.4)
+    // --- entities (the same stream! §3.5, ADR 0008) ---
+    AddEntity = 30,
+    RemoveEntity = 31,
+    EditEntity = 32,
     // --- lifecycle ---
-    Snapshot,                  // no-op marker; carries a full/delta world snapshot index
-    NewMap,                    // world.cpp emptymap: fresh world (floor + air)
+    Snapshot = 100,            // no-op marker; carries a full/delta world snapshot index
+    NewMap = 101,              // world.cpp emptymap: fresh world (floor + air)
 }
 
 /// Who issued a command. Semantic (part of the wire/save format): it decides what
@@ -88,13 +89,13 @@ public enum CommandSource : byte { Editor = 0, GameMode = 1, Script = 2 }
 ```
 
 ```csharp
-public sealed class WorldCommand
+public sealed class Command
 {
     public WorldOp Op;
     public ulong Sequence;        // monotonic; total order in the log
     public int AuthorPeerId;      // who issued it (attribution, not authority)
     public CommandSource Source;  // Editor / GameMode / Script — see §5.5, §9
-    public ICommandPayload Payload; // op-specific, typed; encoded by WorldCommandCodec (§5)
+    public ICommandPayload Payload; // op-specific, typed; encoded by CommandCodec (§5)
 }
 ```
 
@@ -178,13 +179,13 @@ M0) and `SelectionPayload`.
 | Sauerbraten | Ours |
 | --- | --- |
 | `EDIT_*` enum | `WorldOp` |
-| `edittrigger(sel, op, a1, a2, a3, vs)` | `WorldCommandSink.Submit(WorldCommand)` |
-| `addmsg(N_EDITF + op, fmt, ...)` | `WorldCommandCodec.Encode` |
+| `edittrigger(sel, op, a1, a2, a3, vs)` | `CommandSink.Submit(Command)` |
+| `addmsg(N_EDITF + op, fmt, ...)` | `CommandCodec.Encode` |
 | selection prefix on every message | `SelectionPayload` (identical fields) |
 | `EDIT_REMIP` carries **no arguments** (`"r"`) | `RemipPayload` (pass-through, §5.4) |
 | `EDIT_UNDO`/`EDIT_REDO` are ops carrying a `packundo` blob | `ApplyInverse` wrapper; inverse captured **locally**, never sent (§5.5) |
 | per-op `"ri9i6"` format strings + packed `VSlot` | one framing + `var_to_bytes` (§5.1) |
-| server `msgfilter` privacy classes | server-authoritative `WorldCommandSink` |
+| server `msgfilter` privacy classes | server-authoritative `CommandSink` |
 
 Three deliberate divergences:
 
@@ -205,30 +206,30 @@ edit stream for all world mutations (coop edit), the selection prefix, and
 
 ---
 
-## 2. The WorldCommandSink — one seam, many drivers **and sources**
+## 2. The CommandSink — one seam, many drivers **and sources**
 
 ```
                  ┌────────────────────────────────────────────┐
   Editor UI ────▶│                                            │
-  Game modes ───▶│            WorldCommandSink                 │
-  Scripts ──────▶│  (validates, assigns Sequence, applies)     │
+  Game modes ───▶│               CommandSink                  │
+  Scripts ──────▶│  (validates, assigns Sequence, applies)    │
                  └──────────────┬─────────────────────────────┘
                                 │  every accepted command
                                 ▼
                  ┌────────────────────────────────────────────┐
-                 │        WorldCommandLog (append-only)        │
-                 │  used by: undo, network, demo, save, tests  │
+                 │          CommandLog (append-only)          │
+                 │  used by: undo, network, demo, save, tests │
                  └───┬───────────────┬───────────────┬────────┘
                      │               │               │
              UndoStack (own cmds) NetworkSender   DemoRecorder
               submits ApplyInverse   (RPC/ENet)    (same bytes)
                      │
                      ▼  (back through the sink — never a local apply)
-                 WorldCommandSink
+                 CommandSink
 ```
 
 - **Single entry point.** Nothing mutates the octree directly; everything goes
-  `sink.Submit(cmd)`. Even game-mode "crumbling wall" schedules `RemoveCube`
+  `sink.Submit(cmd)`. Even game-mode "crumbling wall" schedules `DeleteCube`
   commands. This makes the world *auditable* and replayable by construction.
 - **Apply is the same code path** on the issuing client, the server, and every
   peer. There is no "local edit" vs "remote edit" divergence.
@@ -239,14 +240,16 @@ edit stream for all world mutations (coop edit), the selection prefix, and
 Interfaces (sketch):
 
 ```csharp
-public interface IWorld {                 // the mutable octree surface
-    void Apply(WorldCommand cmd);          // deterministic; mutates Octa + entities
-    WorldSnapshot CaptureBlock(Selection sel);
+public interface IWorld {                 // the mutable octree + entity surface
+    Octa Octa { get; }
+    List<MapEntity> Entities { get; }
+    void Apply(Command cmd);              // deterministic; mutates Octa + Entities
+    OctaEdit.CapturedBlock Capture(Block3 region, int rgrid);
 }
 
 public interface ICommandSink {
-    void Submit(WorldCommand cmd);         // local origin: validate → log → apply → replicate
-    void Receive(WorldCommand cmd);        // remote origin: log → apply (no echo)
+    void Submit(Command cmd);             // local origin: validate → log → apply → replicate
+    void Receive(Command cmd);            // remote origin: log → apply (no echo)
     // Undo is not a separate path: Submit(ApplyInverse(cmd)) — see §5.5.
 }
 ```
@@ -607,73 +610,110 @@ mechanically identical to a cube edit.
 
 ---
 
-## 7. Map format: versioned command history
+## 7. Map format: reference-based command history (Git-style)
 
-The native format (vision.md §9) becomes:
+See [ADR 0008](adr/0008-reference-based-maps.md) for the full architectural
+decision. The native format (vision.md §9) is **reference-based, like Git**:
 
 ```
-map/
-├── Level.tscn            # scene: mode config, environment; REFS the data below
-├── world.res             # base octree snapshot (canonical, versioned)
-├── history.res           # appended WorldCommands since world.res (optional)
-└── materials/            # material manifest
+res://resources/maps/empty_map/   # canonical base map shipped on disk
+├── Level.tscn
+├── world.res                     # base WorldSnapshot / Merkle pack (Hash H_0)
+└── materials/
+
+map/                              # any authored map
+├── Level.tscn                    # scene: mode config, environment; REFS BaseRef + history.res
+├── world.res                     # optional standalone/compacted snapshot
+├── history.res                   # BaseRef + HeadHash + MapCommits[] + delta Merkle object pack
+└── materials/                    # material manifest
 ```
 
 The map is a **directory, not a single file**. That is deliberate — it matches
 Godot's external-resource idiom, it is diffable, and it packages cleanly into the
 `.zip`/`.tar` archives Workshop expects (§7.4).
 
-### 7.1 Data lives outside the scene (Godot external-resource idiom)
+### 7.1 Zero-copy base reference, Merkle Octree object pack & linear commit chain
+
+Rather than duplicating a full `world.res` snapshot on every commit (which would
+make versioned maps huge) or replaying the entire command history on load (which
+breaks across lossy ops like `Remip`), our format works like Git's **Merkle tree +
+object pack** ([ADR 0008](adr/0008-reference-based-maps.md)):
+
+- **Content-addressed intermediate objects (`MapObjectPack`)**:
+  - Every `Cube[8]` octree node is a packable **`OctaNode`** object keyed by its
+    64-bit content hash, referencing child `OctaNode`s by hash rather than
+    inlining them.
+  - The entity list is a packable **`EntityList`** object keyed by its content
+    hash.
+  - A world state is a **`WorldTree`** object `(Scale, RootOctaNodeHash,
+    EntityListHash)` whose content hash **is the commit's `TreeHash`**.
+- **Structural sharing across commits and `BaseRef`**:
+  - When an edit modifies a region of the map, only the `OctaNode`s along the
+    path from the modified leaf to the root (~6–10 nodes) get new hashes. All
+    untouched octants and subtrees keep their existing hashes and are **never
+    duplicated** — neither across commits nor against `BaseRef`
+    (`"res://resources/maps/empty_map/world.res"`).
+- **`MapCommit`**: each save appends a commit to `history.res` carrying:
+  - `ParentHash` (`ulong` — the previous commit's `TreeHash`, or the base
+    world's `TreeHash` for the first commit),
+  - `TreeHash` (`ulong` — **the commit hash is the `WorldTree` content hash of the
+    octree + entities**),
+  - `Commands` (`List<Command>` — the geometry and entity edit operations in that
+    commit, preserved for audit, diffing, and replay).
+- **$O(1)$ `HEAD` load & instant historical checkout (even across `Remip`)**:
+  - Loading a map (`MapStore.Load`) or checking out any historical commit
+    (`MapStore.Checkout(mapDir, targetTreeHash)`) resolves `TreeHash` directly
+    from the map's delta object pack + `BaseRef` pack and materializes the octree
+    and entities without replaying the command chain.
+- **No merging**: history is strictly linear; we do not offer branch merging.
 
 `Level.tscn` holds **references** to the data, not the data itself:
 
 ```
 Level.tscn
-  ├─ World : MapWorld
-  │    world   = ExtResource("res://maps/church51/world.res")
-  │    history = ExtResource("res://maps/church51/history.res")
-  ├─ Environment : WorldEnvironment
-  └─ GameMode : Node                 # mode config, rules
+  ├─ Level : MapLevel
+  │    World   = ExtResource("res://resources/maps/empty_map/world.res") # or local "world.res"
+  │    History = ExtResource("history.res")
 ```
 
 Godot scenes store external resources by path and only inline them if the path is
-cleared. So editing the octree rewrites `world.res`; **`Level.tscn` never
-changes** as a result of a geometry or entity edit. The scene stays small and
-stable, and the editor save path (M5) writes `world.res` + `Level.tscn`
-independently; the octree stays the only thing a geometry or entity edit rewrites.
+cleared. **`Level.tscn` never inlines geometry or entities**.
 
-### 7.2 Entities are runtime projections, not scene data
+### 7.2 Entities are command-versioned runtime projections, not scene data
 
-Entity nodes are **not** serialized into `Level.tscn`. `IWorld.Apply` materializes
-them at load via the existing builders, with `Node.Owner == null`, so a
-`PackedScene` never saves them. This mirrors the render chunks: `MapWorld` builds
-`MeshInstance3D` chunks as children from the octree, not as hand-authored scene
-data. Entities follow the same relationship to the command log that chunks follow
-to the octree — they are a **view**, rebuilt deterministically.
+Entities (`MapEntity`) are stored in the base snapshot and mutated in the same
+command stream as cubes via `WorldOp.AddEntity`, `WorldOp.RemoveEntity`, and
+`WorldOp.EditEntity` (using deterministic `1/16`th-unit fixed-point positions,
+`FixedPoint.DMF = 16`). `IWorld.Apply` mutates `IWorld.Entities`, and
+`WorldSnapshot.Hash()` hashes both the octree and `Entities` into every commit's
+`TreeHash`.
+
+At load time, `MapLevel` materializes entity nodes via the existing builders with
+`Node.Owner == null`, so a `PackedScene` never saves them. This mirrors the render
+chunks: `MapLevel` builds chunks and entities as **views** of the command-versioned
+world state.
 
 Consequence: **hand-editing entities happens through the editor/command path,
 never the Godot inspector.** `Level.tscn` holds only scene-level concerns
 (environment, mode config, editor camera). This is the price of unified
-replication, and it is worth it — the same command stream that places an entity
-is what replicates, undoes, and saves it.
+replication and versioning, and it is worth it — the same command stream that
+places an entity is what replicates, undoes, versions, and saves it.
 
 ### 7.3 Rules
 
-- **Snapshots are periodic.** On save, we may emit the current world as a fresh
-  `world.res` and truncate the history (compaction), exactly like the snapshot
-  ring in §3.4.
-- **Versioned maps.** `world.res` carries a format `version`; each command
-  carries `WorldOp` (append-only enum). A newer file opened by an older build can
-  either (a) refuse unknown ops, or (b) — if `history.res` is present — open the
-  older snapshot and skip the unknown tail. **Maps are versioned because they are
-  a command history.**
+- **Commits are the default save; compaction is optional.** Normal editor saves
+  (`F2` / `MapStore.Commit`) append a `MapCommit` to `history.res` on top of
+  `BaseRef`. Explicit compaction (`MapStore.SaveCompacted`) snapshots `HEAD` as a
+  local `world.res` and truncates `history.res`.
+- **Versioned maps.** `world.res` carries `WorldSnapshot.FormatVersion`; each
+  command carries `CommandCodec.FormatVersion` and `WorldOp` (append-only enum);
+  `history.res` carries its commit chain and `TreeHash`es. **Maps are versioned
+  both at the binary format level and as a Git-style commit history.**
 - **Diffable/reviewable.** A text encoding of the history (or a `.tres` sidecar)
-  lets a map change be reviewed like a code change. This is a real product feature
-  for a community that iterates on maps. (Binary `.res` for load speed; optional
-  text for VCS — the same split Godot itself uses for `.res` vs `.tres`.)
+  lets a map change be reviewed like a code change.
 - **Demo/replay = same bytes.** A demo is `base snapshot ref + command log +
   movement stream`. Because edit bytes are already canonical, demos and saves
-  share the codec (features.md #9). Visual A/B against the original becomes
+  share the codec (features.md #7). Visual A/B against the original becomes
   "play the recorded stream".
 
 ### 7.4 Where map data is stored (Godot storage tiers)
@@ -788,10 +828,10 @@ rebuild + dirty set + per-frame budget (`OctaMesher.BuildChunk`,
 `test/IncrementalMeshTest.cs`. Bakes in the rendering side early so edits are
 visible while we build the rest.
 
-**M3 — Command log + undo/redo (done).** `WorldOp`/`WorldCommand`/payloads,
-`WorldCommandCodec` (`var_to_bytes` over positional arrays, §5.1), `IWorld`/`OctaWorld`
-apply seam, `WorldCommandLog` (sequence + own-commands-only undo stack),
-`WorldCommandSink` (submit/receive/undo/redo, §5.5 rules). Offline; asserted by
+**M3 — Command log + undo/redo (done).** `WorldOp`/`Command`/payloads,
+`CommandCodec` (`var_to_bytes` over positional arrays, §5.1), `IWorld`/`OctaWorld`
+apply seam (octree + entities), `CommandLog` (sequence + own-commands-only undo stack),
+`CommandSink` (submit/receive/undo/redo, §5.5 rules). Offline; asserted by
 `test/CommandSystemTest.cs`. **Note:** undo/redo tests compare a
 subdivision-invariant *content* snapshot, not the `OgzGeometry` structural
 checksum — `LookupCube` subdivides as a side effect, so equivalent octrees can
@@ -859,14 +899,17 @@ The wheel is bound like Cube2: `InputMap` actions for the modifier keys, plus a
 single wheel/trackpad path that dispatches through `delta_do` on the active
 modifier (see the `delta_do` note below).
 
-**M5 — Save/load in native format (done).** `WorldSnapshot` encoder/decoder
-(canonical child-order octree traversal + entity blob, version field, content
-hash), Godot `WorldResource`/`HistoryResource`, the map directory (`world.res` +
-`history.res` + `Level.tscn`) with compaction and archive content hash.
-Round-trip/replay tests in `test/WorldSnapshotTest.cs`
-and `test/MapFormatTest.cs`; church51 reloads with an identical geometry checksum.
-The map is a directory of external resources; the archive is the hashing/parity
-unit.
+**M5 — Reference-based save/load & commit history (done).** `WorldSnapshot`
+encoder/decoder (canonical child-order octree traversal + entity blob, version
+field, content hash), Godot `WorldResource`/`HistoryResource` (with `BaseRef`,
+`HeadHash`, and `MapCommit` chain where each commit's `TreeHash` is the resulting
+`WorldSnapshot.Hash()`), shipped canonical `res://resources/maps/empty_map/`,
+zero-copy reference initialization (`MapStore.InitFromReference`), commit append
+(`MapStore.Commit`), historical checkout (`MapStore.Checkout`), compaction, and
+archive content hash ([ADR 0008](adr/0008-reference-based-maps.md)).
+Round-trip/replay/commit tests in `test/WorldSnapshotTest.cs` and
+`test/MapFormatTest.cs`; church51 reloads with an identical geometry checksum, and
+`scenes/editor_scene.tscn` loads `MapLevel` referencing `empty_map`.
 
 **M6 — Networking.** `WorldNetwork` RPC nodes, channels, authority, sequence,
 snapshot transfer, late join. Headless multi-client tests. *Unblocks coop edit.*
@@ -1003,28 +1046,25 @@ The invariants this relies on:
 ```
 World/Commands/
 ├── WorldOp.cs              # append-only op enum + CommandSource
-├── WorldCommand.cs         # command + typed payloads
-├── WorldCommandCodec.cs    # canonical wire/save/demo encoding
+├── Command.cs              # command + typed payloads (geometry + entities)
+├── CommandCodec.cs         # canonical wire/save/demo encoding
 ├── Selection.cs            # selinfo / block3 port (done, M0)
-├── WorldCommandSink.cs     # submit/receive/apply, sequence assignment
-├── WorldCommandLog.cs      # append-only log + own-editor-commands undo stack
-├── IWorld.cs               # Apply + Capture seam (OctaWorld)
-└── Ops/                   # one handler per WorldOp (ported algorithms)
-    ├── AddRemoveCube.cs
-    ├── FaceOps.cs         # texture/material/flip/rotate/replace
-    ├── Fill.cs
-    ├── Remip.cs
-    ├── EntityOps.cs
-    └── ReplaceBlock.cs    # the universal carrier (paste/prefab/undo/fill)
+├── CommandSink.cs          # submit/receive/apply, sequence assignment
+├── CommandLog.cs           # append-only log + own-editor-commands undo stack
+├── IWorld.cs               # Apply + Capture seam (OctaWorld: Octa + Entities)
+└── FixedPoint.cs           # 1/16 world-unit integer quantization (DMF=16)
 World/OctaEdit.cs          # structural primitives + ported edit algorithms (M1)
 World/Entities/
 └── MapEntity.cs           # the stored entity: float in memory, fixed-point on disk/wire
-World/Save/
+World/Runtime/Formats/Save/
 ├── WorldSnapshot.cs       # canonical snapshot encode/decode + content hash (M5)
 ├── WorldResource.cs       # Godot Resource wrapper for world.res (M5)
-├── HistoryResource.cs     # Godot Resource wrapper for history.res (M5)
-├── MapStore.cs            # map directory load/save, compaction, archive hash (M5)
-└── MapLevel.cs            # scene node: refs the data resources (M5)
+├── HistoryResource.cs     # Godot Resource wrapper for history.res + MapCommit chain (M5, ADR 0008)
+├── MapStore.cs            # reference-based map load/commit/checkout/compact + archive hash (M5, ADR 0008)
+└── MapLevel.cs            # scene node: refs World / History.BaseRef + runtime projections (M5)
+resources/maps/empty_map/
+├── Level.tscn             # canonical base empty map scene
+└── world.res              # canonical hollow-room base snapshot
 World/Net/
 ├── WorldNetwork.cs        # RPC nodes, channels, authority
 └── WorldSnapshot.cs       # canonical snapshot encode/decode + hash
