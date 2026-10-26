@@ -6,10 +6,14 @@ using SauerbratenRevival.World.Materials;
 namespace SauerbratenRevival.World.Meshing;
 
 /// <summary>
-/// Owns the world's chunk <see cref="MeshInstance3D"/> nodes and performs
-/// **incremental** re-meshing: after an octree mutation, only the chunks that
-/// overlap the change are rebuilt, and at most <see cref="BudgetPerFrame"/> of
+/// Owns the world's chunk <see cref="RenderingServer"/> mesh and instance RIDs and
+/// performs **incremental** re-meshing: after an octree mutation, only the chunks
+/// that overlap the change are rebuilt, and at most <see cref="BudgetPerFrame"/> of
 /// them per frame, spreading large edits across frames to avoid hitches.
+///
+/// Chunks stream directly to <see cref="RenderingServer"/> (<c>MeshCreate</c>,
+/// <c>MeshClear</c>, <c>MeshAddSurfaceFromArrays</c>, <c>InstanceCreate</c>),
+/// bypassing the Godot scene tree (<see cref="MeshInstance3D"/>) for world geometry.
 ///
 /// This is the render-side counterpart of the command system
 /// (docs/editor-and-commands.md §8): a mutation calls <see cref="MarkDirty"/>,
@@ -18,13 +22,24 @@ namespace SauerbratenRevival.World.Meshing;
 ///
 /// Invalidation is conservative: a changed cube can affect the culling of its
 /// neighbours' faces (which live in *their* chunks) and, being larger than a chunk
-/// potentially, can spill faces far from its origin. <see cref="MarkDirty(Aabb)"/>
+/// potentially, can spill faces far from its origin. <see cref="MarkDirty(Aabb, float)"/>
 /// therefore marks every chunk the AABB overlaps, expanded by the region's own
 /// extent on each side — a superset of the chunks that can change. Over-marking is
 /// safe (a rebuild is idempotent); under-marking leaves stale geometry.
 /// </summary>
 public partial class WorldChunkRenderer : Node3D
 {
+    private sealed class ChunkEntry
+    {
+        public Rid InstanceRid;
+        public Rid OwnedMeshRid;
+        public ArrayMesh? SharedMesh;
+        public int Triangles;
+        public Aabb LocalAabb;
+
+        public Rid MeshRid => OwnedMeshRid.IsValid ? OwnedMeshRid : SharedMesh?.GetRid() ?? default;
+    }
+
     /// <summary>
     /// Chunk edge length in world units (must be a power of two).
     ///
@@ -32,7 +47,7 @@ public partial class WorldChunkRenderer : Node3D
     /// is ~660 ms and is independent of chunk size, but *per-chunk* rebuild cost
     /// falls sharply with smaller chunks — ~108 ms at 512, ~46 ms at 256,
     /// **~1.4 ms at 128**. Small chunks are what make incremental rebuilds fit in a
-    /// frame. 128 is the default for that reason; it costs more chunk nodes
+    /// frame. 128 is the default for that reason; it costs more chunk instances
     /// (91 vs 8 on church51).
     /// </summary>
     [Export] public int ChunkSize { get; set; } = 128;
@@ -50,17 +65,33 @@ public partial class WorldChunkRenderer : Node3D
     /// </summary>
     public Lighting.RadianceVolume? Radiance { get; set; }
 
+    private Material? _fallbackMaterial;
+
     /// <summary>
-    /// Fallback material applied to chunk meshes when materials is null.
+    /// Fallback material applied to chunk instances when materials is null.
     /// </summary>
-    public Material? FallbackMaterial { get; set; }
+    public Material? FallbackMaterial
+    {
+        get => _fallbackMaterial;
+        set
+        {
+            _fallbackMaterial = value;
+            Rid overrideRid = _fallbackMaterial?.GetRid() ?? default;
+            foreach (var entry in _chunks.Values)
+                RenderingServer.InstanceGeometrySetMaterialOverride(entry.InstanceRid, overrideRid);
+        }
+    }
 
     private Octa _octa = null!;
     private MaterialSet? _materials;
-    private readonly Dictionary<Vector3I, MeshInstance3D> _nodes = new();
-    private readonly Dictionary<Vector3I, int> _chunkTriangles = new();
+    private readonly Dictionary<Vector3I, ChunkEntry> _chunks = new();
     private readonly List<Vector3I> _dirty = new();
     private readonly HashSet<Vector3I> _dirtySet = new();
+
+    public WorldChunkRenderer()
+    {
+        SetNotifyTransform(true);
+    }
 
     /// <summary>Chunks rebuilt so far (diagnostics/tests).</summary>
     public int RebuildCount { get; private set; }
@@ -68,47 +99,62 @@ public partial class WorldChunkRenderer : Node3D
     /// <summary>Chunks currently pending a rebuild.</summary>
     public int PendingCount => _dirty.Count;
 
-    /// <summary>Number of live chunk nodes.</summary>
-    public int ChunkCount => _nodes.Count;
+    /// <summary>Number of live chunk instances.</summary>
+    public int ChunkCount => _chunks.Count;
 
     /// <summary>Total triangles across all live chunks.</summary>
     public long TriangleCount { get; private set; }
 
+    /// <summary>Union of all live chunk bounding boxes in Sauerbraten (Z-up) coordinates.</summary>
+    public Aabb Bounds { get; private set; } = new(Vector3.Zero, Vector3.One);
+
+    /// <summary>Origins of all currently active non-empty chunks.</summary>
+    public IReadOnlyCollection<Vector3I> ChunkOrigins => _chunks.Keys;
+
+    /// <summary>Returns the <see cref="RenderingServer"/> visual instance RID for the chunk at <paramref name="origin"/>, or default if absent.</summary>
+    public Rid GetChunkInstanceRid(Vector3I origin) =>
+        _chunks.TryGetValue(origin, out var entry) ? entry.InstanceRid : default;
+
+    /// <summary>Returns the <see cref="RenderingServer"/> mesh RID for the chunk at <paramref name="origin"/>, or default if absent.</summary>
+    public Rid GetChunkMeshRid(Vector3I origin) =>
+        _chunks.TryGetValue(origin, out var entry) ? entry.MeshRid : default;
+
     /// <summary>
-    /// Initialise against a world and build every chunk once. Call before adding
-    /// mutations.
+    /// Initialise against a world and stream every chunk directly to <see cref="RenderingServer"/>.
+    /// Call before adding mutations.
     /// </summary>
     public void Setup(Octa octa, MaterialSet? materials) => Setup(octa, materials, prebuilt: null);
 
     /// <summary>
     /// Initialise against a world and populate its chunks. When
-    /// <paramref name="prebuilt"/> is supplied its meshes are reused verbatim
-    /// instead of re-meshing — a warm-start for callers that already hold the
-    /// meshes for an identical world (e.g. a cached test seed). Meshes are Godot
-    /// resources shared read-only across instances, so reuse is safe.
+    /// <paramref name="prebuilt"/> is supplied its meshes are bound directly to
+    /// <see cref="RenderingServer"/> instances instead of re-meshing — a warm-start
+    /// for callers that already hold the meshes for an identical world (e.g. a
+    /// cached test seed). When a prebuilt chunk is later edited, it allocates its
+    /// own mesh RID on demand so shared seed meshes are never mutated.
     /// </summary>
     public void Setup(Octa octa, MaterialSet? materials, ChunkedWorldMesh? prebuilt)
     {
         _octa = octa;
-        _materials = materials; _nodes.Clear();
-        _chunkTriangles.Clear();
+        _materials = materials;
+        FreeAllChunks();
         _dirty.Clear();
         _dirtySet.Clear();
-        foreach (var child in GetChildren())
-            if (child is MeshInstance3D m) m.QueueFree();
 
         if (prebuilt != null)
         {
-            foreach (var chunk in prebuilt.Chunks) CreateNode(chunk.Origin, chunk.Mesh);
+            foreach (var chunk in prebuilt.Chunks)
+                CreatePrebuiltChunk(chunk.Origin, chunk.Mesh);
         }
         else
         {
             var mesher = new OctaMesher(_octa, _materials);
-            var chunked = mesher.BuildChunked(ChunkSize);
-            foreach (var chunk in chunked.Chunks) CreateNode(chunk.Origin, chunk.Mesh);
+            foreach (var (origin, builder) in mesher.BuildChunkedBuilders(ChunkSize))
+                CreateStreamedChunk(origin, builder);
         }
-        RecomputeTriangleCount();
+        RecomputeTotals();
     }
+
     /// <summary>
     /// Mark every chunk overlapping <paramref name="region"/> dirty. Pass
     /// <paramref name="margin"/> = the edited cube size so the chunks owning
@@ -141,31 +187,41 @@ public partial class WorldChunkRenderer : Node3D
         if (_dirtySet.Add(origin)) _dirty.Add(origin);
     }
 
-    /// <summary>Rebuild a specific chunk immediately (used by tests and first build).</summary>
+    /// <summary>Rebuild a specific chunk immediately and stream its surfaces to <see cref="RenderingServer"/>.</summary>
     public void RebuildChunk(Vector3I origin)
     {
         var mesher = new OctaMesher(_octa, _materials);
-        var mesh = mesher.BuildChunk(origin, ChunkSize);
-        int tris = CountTriangles(mesh);
-        int old = _chunkTriangles.TryGetValue(origin, out int prev) ? prev : 0;
+        var builder = mesher.BuildChunkBuilder(origin, ChunkSize);
+        int tris = builder.TriangleCount;
+        int old = _chunks.TryGetValue(origin, out var existing) ? existing.Triangles : 0;
 
-        if (mesh.GetSurfaceCount() == 0)
+        if (tris == 0)
         {
-            if (_nodes.TryGetValue(origin, out var existing))
+            if (existing != null)
             {
-                existing.QueueFree();
-                _nodes.Remove(origin);
+                FreeChunkEntry(existing);
+                _chunks.Remove(origin);
             }
-            _chunkTriangles.Remove(origin);
         }
-        else if (_nodes.TryGetValue(origin, out var node))
+        else if (existing != null)
         {
-            node.Mesh = mesh;
-            _chunkTriangles[origin] = tris;
+            if (!existing.OwnedMeshRid.IsValid)
+            {
+                existing.OwnedMeshRid = RenderingServer.MeshCreate();
+                existing.SharedMesh = null;
+                builder.UploadTo(existing.OwnedMeshRid, _materials);
+                RenderingServer.InstanceSetBase(existing.InstanceRid, existing.OwnedMeshRid);
+            }
+            else
+            {
+                builder.UploadTo(existing.OwnedMeshRid, _materials);
+            }
+            existing.Triangles = tris;
+            existing.LocalAabb = builder.GetAabb();
         }
         else
         {
-            CreateNode(origin, mesh); // sets _chunkTriangles[origin] = tris
+            CreateStreamedChunk(origin, builder);
         }
 
         TriangleCount += tris - old;
@@ -182,10 +238,20 @@ public partial class WorldChunkRenderer : Node3D
         return tris;
     }
 
-    private void RecomputeTriangleCount()
+    private void RecomputeTotals()
     {
         TriangleCount = 0;
-        foreach (var kv in _chunkTriangles) TriangleCount += kv.Value;
+        Aabb bounds = default;
+        bool hasBounds = false;
+        foreach (var (origin, entry) in _chunks)
+        {
+            TriangleCount += entry.Triangles;
+            var aabb = entry.LocalAabb;
+            aabb.Position += new Vector3(origin.X, origin.Y, origin.Z);
+            bounds = hasBounds ? bounds.Merge(aabb) : aabb;
+            hasBounds = true;
+        }
+        Bounds = hasBounds ? bounds : new Aabb(Vector3.Zero, Vector3.One);
     }
 
     public override void _Process(double delta)
@@ -226,17 +292,126 @@ public partial class WorldChunkRenderer : Node3D
         Setup(_octa, _materials);
     }
 
-    private void CreateNode(Vector3I origin, ArrayMesh mesh)
+    public override void _Notification(int what)
     {
-        var node = new MeshInstance3D
+        switch ((long)what)
         {
-            Name = $"Chunk_{origin.X}_{origin.Y}_{origin.Z}",
-            Mesh = mesh,
-            Position = new Vector3(origin.X, origin.Y, origin.Z),
-            MaterialOverride = FallbackMaterial,
+            case NotificationEnterWorld:
+                SyncAllInstancesToWorld();
+                break;
+            case NotificationTransformChanged:
+                UpdateAllTransforms();
+                break;
+            case NotificationVisibilityChanged:
+                UpdateAllVisibility();
+                break;
+            case NotificationExitWorld:
+                DetachAllFromScenario();
+                break;
+            case NotificationPredelete:
+                FreeAllChunks();
+                break;
+        }
+    }
+
+    private void CreateStreamedChunk(Vector3I origin, ArrayMeshBuilder builder)
+    {
+        Rid meshRid = RenderingServer.MeshCreate();
+        builder.UploadTo(meshRid, _materials);
+
+        Rid instanceRid = CreateAndBindInstance(origin, meshRid);
+        _chunks[origin] = new ChunkEntry
+        {
+            InstanceRid = instanceRid,
+            OwnedMeshRid = meshRid,
+            Triangles = builder.TriangleCount,
+            LocalAabb = builder.GetAabb(),
         };
-        _nodes[origin] = node;
-        _chunkTriangles[origin] = CountTriangles(mesh);
-        AddChild(node);
+    }
+
+    private void CreatePrebuiltChunk(Vector3I origin, ArrayMesh mesh)
+    {
+        Rid instanceRid = CreateAndBindInstance(origin, mesh.GetRid());
+        _chunks[origin] = new ChunkEntry
+        {
+            InstanceRid = instanceRid,
+            SharedMesh = mesh,
+            Triangles = CountTriangles(mesh),
+            LocalAabb = mesh.GetAabb(),
+        };
+    }
+
+    private Rid CreateAndBindInstance(Vector3I origin, Rid meshRid)
+    {
+        Rid instanceRid = RenderingServer.InstanceCreate();
+        RenderingServer.InstanceSetBase(instanceRid, meshRid);
+        Rid scenario = CurrentScenario();
+        if (scenario.IsValid)
+            RenderingServer.InstanceSetScenario(instanceRid, scenario);
+        RenderingServer.InstanceSetTransform(instanceRid, ChunkTransform(origin));
+        RenderingServer.InstanceSetVisible(instanceRid, CurrentVisibility());
+        if (_fallbackMaterial != null)
+            RenderingServer.InstanceGeometrySetMaterialOverride(instanceRid, _fallbackMaterial.GetRid());
+        return instanceRid;
+    }
+
+    private Rid CurrentScenario() =>
+        IsInsideTree() && GetWorld3D() is { } world ? world.Scenario : default;
+
+    private bool CurrentVisibility() =>
+        IsInsideTree() ? IsVisibleInTree() : Visible;
+
+    private Transform3D ChunkTransform(Vector3I origin)
+    {
+        var baseTransform = IsInsideTree() ? GlobalTransform : Transform;
+        return baseTransform.TranslatedLocal(new Vector3(origin.X, origin.Y, origin.Z));
+    }
+
+    private void SyncAllInstancesToWorld()
+    {
+        Rid scenario = CurrentScenario();
+        bool visible = CurrentVisibility();
+        foreach (var (origin, entry) in _chunks)
+        {
+            RenderingServer.InstanceSetScenario(entry.InstanceRid, scenario);
+            RenderingServer.InstanceSetTransform(entry.InstanceRid, ChunkTransform(origin));
+            RenderingServer.InstanceSetVisible(entry.InstanceRid, visible);
+        }
+    }
+
+    private void UpdateAllTransforms()
+    {
+        foreach (var (origin, entry) in _chunks)
+            RenderingServer.InstanceSetTransform(entry.InstanceRid, ChunkTransform(origin));
+    }
+
+    private void UpdateAllVisibility()
+    {
+        bool visible = CurrentVisibility();
+        foreach (var entry in _chunks.Values)
+            RenderingServer.InstanceSetVisible(entry.InstanceRid, visible);
+    }
+
+    private void DetachAllFromScenario()
+    {
+        foreach (var entry in _chunks.Values)
+            RenderingServer.InstanceSetScenario(entry.InstanceRid, default);
+    }
+
+    private static void FreeChunkEntry(ChunkEntry entry)
+    {
+        if (entry.InstanceRid.IsValid)
+            RenderingServer.FreeRid(entry.InstanceRid);
+        if (entry.OwnedMeshRid.IsValid)
+            RenderingServer.FreeRid(entry.OwnedMeshRid);
+        entry.SharedMesh = null;
+    }
+
+    private void FreeAllChunks()
+    {
+        foreach (var entry in _chunks.Values)
+            FreeChunkEntry(entry);
+        _chunks.Clear();
+        TriangleCount = 0;
     }
 }

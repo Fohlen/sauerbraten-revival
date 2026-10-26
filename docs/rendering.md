@@ -77,8 +77,9 @@ When an octree mutation occurs:
 
 This spreads large edits across frames, avoiding hitches.
 
-> **Status:** implemented. `OctaMesher.BuildChunked` does the initial full build;
-> `WorldChunkRenderer` owns the chunk `MeshInstance3D` nodes and rebuilds only the
+> **Status:** implemented. `OctaMesher.BuildChunkedBuilders` does the initial full
+> build; `WorldChunkRenderer` owns the chunk `RenderingServer` mesh and instance
+> RIDs directly (bypassing `MeshInstance3D` scene tree nodes) and rebuilds only the
 > chunks overlapping a change, at most `BudgetPerFrame` per frame
 > (`MarkDirty(Aabb, margin)` + `_Process`). `OctaFaceWalker.WalkRegion` bounds each
 > rebuild to the chunk instead of the whole octree.
@@ -206,10 +207,10 @@ The ArrayMesh approach supports all three stages — only the materials/shaders 
 
 ---
 
-## RenderingServer usage *(planned optimisation)*
+## RenderingServer usage
 
-The current mesher keeps the `ArrayMesh` on a `MeshInstance3D`; a later pass can
-stream meshes directly to RenderingServer:
+`WorldChunkRenderer` and `ArrayMeshBuilder.UploadTo` stream chunk surfaces directly
+to `RenderingServer`, bypassing `MeshInstance3D` scene tree nodes:
 
 ```csharp
 // Create mesh RID (once per chunk)
@@ -224,8 +225,8 @@ Rid instanceRid = RenderingServer.InstanceCreate();
 RenderingServer.InstanceSetBase(instanceRid, meshRid);
 RenderingServer.InstanceSetScenario(instanceRid, GetWorld3D().Scenario);
 
-// On chunk update: clear and re-add surface
-RenderingServer.MeshClearSurfaces(meshRid);
+// On chunk update: clear and re-add surface in place
+RenderingServer.MeshClear(meshRid);
 RenderingServer.MeshAddSurfaceFromArrays(meshRid, ...);
 ```
 

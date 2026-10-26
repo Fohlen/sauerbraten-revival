@@ -317,8 +317,6 @@ public partial class MapWorld : Node3D, IGameWorld
         MaterialSet? materials = catalogue != null ? MaterialBuilder.Build(catalogue, textures, radiance) : null;
         if (materials == null) GD.PushWarning($"[world] no metadata catalogue for '{mapName}'; showing untextured geometry.");
 
-        var chunked = new OctaMesher(octa, materials).BuildChunked(ChunkSize);
-
         // Converted mapmodels (assimp), imported by Godot as Resources.
         var modelCatalog = ModelCatalog.LoadFromProject();
         Models = modelCatalog;
@@ -413,19 +411,6 @@ public partial class MapWorld : Node3D, IGameWorld
             ? new StandardMaterial3D { AlbedoColor = MeshTint, CullMode = BaseMaterial3D.CullModeEnum.Back }
             : null;
 
-        Aabb bounds = default;
-        bool hasBounds = false;
-        foreach (var chunk in chunked.Chunks)
-        {
-            var aabb = chunk.Mesh.GetAabb();
-            aabb.Position += new Vector3(chunk.Origin.X, chunk.Origin.Y, chunk.Origin.Z);
-            bounds = hasBounds ? bounds.Merge(aabb) : aabb;
-            hasBounds = true;
-        }
-
-        // Sauerbraten bounds are Z-up; the node rotates them to Godot Y-up.
-        Bounds = hasBounds ? bounds : new Aabb(Vector3.Zero, Vector3.One);
-
         Renderer = new Meshing.WorldChunkRenderer
         {
             Name = "WorldMesh",
@@ -435,12 +420,15 @@ public partial class MapWorld : Node3D, IGameWorld
             FallbackMaterial = fallback,
         };
         AddChild(Renderer);
-        Renderer.Setup(octa, materials, prebuilt: chunked);
+        Renderer.Setup(octa, materials);
+
+        // Sauerbraten bounds are Z-up; the node rotates them to Godot Y-up.
+        Bounds = Renderer.Bounds;
 
         Sink = new Commands.WorldCommandSink(new Commands.OctaWorld(octa));
         LinkChildEditors();
 
-        GD.Print($"[world] {path}: chunks={chunked.Chunks.Count} triangles={chunked.TriangleCount}");
+        GD.Print($"[world] {path}: chunks={Renderer.ChunkCount} triangles={Renderer.TriangleCount}");
     }
 
     /// <summary>Finds a player start spawn point in Sauerbraten coordinates, falling back to bounds center.</summary>

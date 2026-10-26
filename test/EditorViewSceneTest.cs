@@ -84,9 +84,13 @@ public class EditorViewSceneTest : GoTestBase
         bool anyDirectional = map.Radiance.Grid.Probes.Any(p => p.Dir.LengthSquared() > 0f);
         TestAssert.True(anyDirectional, "sun/sky bake produced directional irradiance");
 
-        var chunk = map.Renderer.GetChildren().OfType<MeshInstance3D>().FirstOrDefault();
-        TestAssert.True(chunk != null, "a chunk mesh exists");
-        TestAssert.True(chunk!.Mesh.SurfaceGetMaterial(0) is ShaderMaterial, "chunk uses the radiance shader material");
+        TestAssert.Equal(0, map.Renderer.GetChildCount(), "chunk renderer bypasses scene tree nodes");
+        TestAssert.True(map.Renderer.ChunkCount > 0, "at least one chunk exists");
+        var origin = map.Renderer.ChunkOrigins.First();
+        Rid meshRid = map.Renderer.GetChunkMeshRid(origin);
+        TestAssert.True(meshRid.IsValid, "chunk has a valid RenderingServer mesh RID");
+        Rid materialRid = RenderingServer.MeshSurfaceGetMaterial(meshRid, 0);
+        TestAssert.True(materialRid.IsValid, "chunk surface uses the radiance shader material RID");
 
         map.Free();
     }

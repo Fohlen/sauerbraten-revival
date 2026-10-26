@@ -41,6 +41,18 @@ public class IncrementalMeshTest : GoTestBase
         return tris;
     }
 
+    private static int Triangles(Rid meshRid)
+    {
+        int tris = 0;
+        int surfaces = RenderingServer.MeshGetSurfaceCount(meshRid);
+        for (int s = 0; s < surfaces; s++)
+        {
+            var indices = RenderingServer.MeshSurfaceGetArrays(meshRid, s)[(int)Mesh.ArrayType.Index].AsInt32Array();
+            tris += indices.Length / 3;
+        }
+        return tris;
+    }
+
     [Test]
     public void BuildChunkMatchesBuildChunked()
     {
@@ -88,11 +100,12 @@ public class IncrementalMeshTest : GoTestBase
 
         var fresh = new OctaMesher(octa).BuildChunked(16);
         TestAssert.Equal(fresh.TriangleCount, renderer.TriangleCount, "incremental == fresh total triangles");
+        TestAssert.Equal(0, renderer.GetChildCount(), "renderer bypasses the scene tree");
 
         long liveSum = 0;
-        foreach (var child in renderer.GetChildren())
-            if (child is MeshInstance3D m && m.Mesh is ArrayMesh am) liveSum += Triangles(am);
-        TestAssert.Equal(fresh.TriangleCount, liveSum, "live chunk triangles match fresh build");
+        foreach (var origin in renderer.ChunkOrigins)
+            liveSum += Triangles(renderer.GetChunkMeshRid(origin));
+        TestAssert.Equal(fresh.TriangleCount, liveSum, "live RenderingServer chunk triangles match fresh build");
         renderer.Free();
     }
 
@@ -155,6 +168,59 @@ public class IncrementalMeshTest : GoTestBase
             renderer.RebuildChunk(chunk.Origin);
 
         TestAssert.Equal(before, renderer.TriangleCount, "rebuild without mutation is a no-op");
+        renderer.Free();
+    }
+
+    [Test]
+    public void StreamsToRenderingServerAndReusesRidsInPlace()
+    {
+        var octa = SmallWorld();
+        var renderer = new WorldChunkRenderer { ChunkSize = 16 };
+        TestScene.AddChild(renderer);
+        renderer.Setup(octa, materials: null);
+
+        TestAssert.Equal(0, renderer.GetChildCount(), "no MeshInstance3D child nodes created");
+        var origin = new Vector3I(0, 0, 0);
+        Rid instanceBefore = renderer.GetChunkInstanceRid(origin);
+        Rid meshBefore = renderer.GetChunkMeshRid(origin);
+        TestAssert.True(instanceBefore.IsValid, "chunk has a valid instance RID");
+        TestAssert.True(meshBefore.IsValid, "chunk has a valid mesh RID");
+        int trisBefore = Triangles(meshBefore);
+        TestAssert.True(trisBefore > 0, "chunk has triangles before edit");
+
+        // Carve another cube inside the same (0,0,0) 16^3 chunk so it stays non-empty.
+        var sel = new Block3(new Vector3I(8, 0, 0), new Vector3I(1, 1, 1), 8, 0);
+        OctaEdit.DeleteCube(octa, sel);
+        renderer.RebuildChunk(origin);
+
+        TestAssert.Equal(instanceBefore, renderer.GetChunkInstanceRid(origin), "instance RID reused in place");
+        TestAssert.Equal(meshBefore, renderer.GetChunkMeshRid(origin), "mesh RID reused in place");
+        int trisAfter = Triangles(meshBefore);
+        TestAssert.True(trisAfter != trisBefore, "RenderingServer mesh surfaces updated in place");
+
+        renderer.Free();
+    }
+
+    [Test]
+    public void EmptiedChunkFreesAndRemovesRids()
+    {
+        var octa = SmallWorld();
+        var renderer = new WorldChunkRenderer { ChunkSize = 16 };
+        renderer.Setup(octa, materials: null);
+
+        var origin = new Vector3I(0, 0, 0);
+        TestAssert.True(renderer.GetChunkInstanceRid(origin).IsValid, "chunk initially present");
+
+        // Restore the carved hollow to solid so no faces survive in the chunk.
+        octa.NewMap(6);
+        renderer.MarkDirty(new Aabb(new Vector3(0, 0, 0), new Vector3(16, 16, 16)), margin: 8);
+        renderer.FlushDirty();
+
+        TestAssert.Equal(0, renderer.ChunkCount, "all chunks removed when world has no visible faces");
+        TestAssert.Equal(0, renderer.TriangleCount, "zero triangles");
+        TestAssert.False(renderer.GetChunkInstanceRid(origin).IsValid, "instance RID removed");
+        TestAssert.False(renderer.GetChunkMeshRid(origin).IsValid, "mesh RID removed");
+
         renderer.Free();
     }
 }

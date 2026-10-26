@@ -137,23 +137,73 @@ public sealed class ArrayMeshBuilder
         TriangleCount += 1;
     }
 
+    /// <summary>Compute the local bounding box enclosing all emitted vertices.</summary>
+    public Aabb GetAabb()
+    {
+        bool hasAny = false;
+        Vector3 min = default, max = default;
+        foreach (var list in _positions.Values)
+        {
+            foreach (var p in list)
+            {
+                if (!hasAny)
+                {
+                    min = max = p;
+                    hasAny = true;
+                }
+                else
+                {
+                    min = min.Min(p);
+                    max = max.Max(p);
+                }
+            }
+        }
+        return hasAny ? new Aabb(min, max - min) : default;
+    }
+
     /// <summary>Build the mesh. When materials are supplied, each surface gets its vslot's material.</summary>
     public ArrayMesh Build(MaterialSet? materials = null)
     {
         var mesh = new ArrayMesh();
         foreach (var entry in _positions)
         {
-            var arrays = new Godot.Collections.Array();
-            arrays.Resize((int)Mesh.ArrayType.Max);
-            arrays[(int)Mesh.ArrayType.Vertex] = entry.Value.ToArray();
-            arrays[(int)Mesh.ArrayType.Normal] = _normals[entry.Key].ToArray();
-            arrays[(int)Mesh.ArrayType.TexUV] = _uvs[entry.Key].ToArray();
-            arrays[(int)Mesh.ArrayType.Index] = _indices[entry.Key].ToArray();
+            var arrays = CreateSurfaceArrays(entry.Key, entry.Value);
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
 
             var material = materials?.MaterialFor(entry.Key);
             if (material != null) mesh.SurfaceSetMaterial(mesh.GetSurfaceCount() - 1, material);
         }
         return mesh;
+    }
+
+    /// <summary>
+    /// Stream the accumulated surfaces directly into an existing <see cref="RenderingServer"/>
+    /// mesh RID, clearing any previous surfaces first.
+    /// </summary>
+    public void UploadTo(Rid meshRid, MaterialSet? materials = null)
+    {
+        RenderingServer.MeshClear(meshRid);
+        int surfaceIndex = 0;
+        foreach (var entry in _positions)
+        {
+            var arrays = CreateSurfaceArrays(entry.Key, entry.Value);
+            RenderingServer.MeshAddSurfaceFromArrays(meshRid, RenderingServer.PrimitiveType.Triangles, arrays);
+
+            var material = materials?.MaterialFor(entry.Key);
+            if (material != null)
+                RenderingServer.MeshSurfaceSetMaterial(meshRid, surfaceIndex, material.GetRid());
+            surfaceIndex++;
+        }
+    }
+
+    private Godot.Collections.Array CreateSurfaceArrays(int key, List<Vector3> positions)
+    {
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = positions.ToArray();
+        arrays[(int)Mesh.ArrayType.Normal] = _normals[key].ToArray();
+        arrays[(int)Mesh.ArrayType.TexUV] = _uvs[key].ToArray();
+        arrays[(int)Mesh.ArrayType.Index] = _indices[key].ToArray();
+        return arrays;
     }
 }

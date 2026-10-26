@@ -41,7 +41,7 @@ This list is the one place these are tracked; design lives in the linked docs.
 - **Lighting** ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)) — **chosen:** a
   world-space L1 SH probe volume ("radiance hints"): soft, diffuse-only, async
   full bake + incremental region rebake on edit. 
-- **Renderer extras** ([rendering.md](rendering.md)) — specular maps, RenderingServer mesh streaming.
+- **Renderer extras** ([rendering.md](rendering.md)) — specular maps.
 - **`movable.cpp`** (box/barrel/platform/elevator) — deliberately not ported; SP-only.
 - **Single-player / bot AI** — out of MVP scope.
 
@@ -75,10 +75,12 @@ Done:
       `test/IncrementalMeshTest.cs`). Default chunk 128, budget 4/frame — see
       [rendering.md](rendering.md#chunking-strategy) for the measured tradeoff.
 - [x] Face merges and T-joints (done; [rendering.md](rendering.md#implementation-status)).
+- [x] RenderingServer mesh streaming (`WorldChunkRenderer`, `ArrayMeshBuilder.UploadTo`,
+      `OctaMesher.BuildChunkBuilder`/`BuildChunkedBuilders`; bypasses the scene tree;
+      [rendering.md](rendering.md#renderingserver-usage)).
 
 Remaining:
 
-- [ ] RenderingServer mesh streaming (bypass the scene tree; [rendering.md](rendering.md#renderingserver-usage-planned-optimisation)).
 - [ ] Grass.
 - [ ] **Post-MVP fidelity** (see [Post-MVP / deferred fidelity](#post-mvp--deferred-fidelity)):
       lighting ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)), envmap, specular maps,

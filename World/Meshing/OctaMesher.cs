@@ -49,8 +49,8 @@ public sealed class OctaMesher
     public static Vector3I ChunkKey(Vector3I co, int chunkSize) =>
         new(co.X / chunkSize, co.Y / chunkSize, co.Z / chunkSize);
 
-    /// <summary>Mesh one chunk region into a single <see cref="ArrayMesh"/>. Used by incremental rebuilds.</summary>
-    public ArrayMesh BuildChunk(Vector3I chunkOrigin, int chunkSize)
+    /// <summary>Mesh one chunk region into an <see cref="ArrayMeshBuilder"/> for direct <see cref="RenderingServer"/> upload.</summary>
+    public ArrayMeshBuilder BuildChunkBuilder(Vector3I chunkOrigin, int chunkSize)
     {
         if (FillTJoints && _octa.TJoints.Count == 0)
             OctaTJoints.FindTJoints(_octa);
@@ -66,11 +66,15 @@ public sealed class OctaMesher
                 if (ChunkKey(face.Co, chunkSize) * chunkSize != chunkOrigin) return;
                 EmitFace(face, chunkOrigin, builder);
             });
-        return builder.Build(_materials);
+        return builder;
     }
 
-    /// <summary>Mesh the world into chunks of <paramref name="chunkSize"/> world units (power of two).</summary>
-    public ChunkedWorldMesh BuildChunked(int chunkSize = 512)
+    /// <summary>Mesh one chunk region into a single <see cref="ArrayMesh"/>. Used by tests and ArrayMesh callers.</summary>
+    public ArrayMesh BuildChunk(Vector3I chunkOrigin, int chunkSize) =>
+        BuildChunkBuilder(chunkOrigin, chunkSize).Build(_materials);
+
+    /// <summary>Mesh the world into per-chunk <see cref="ArrayMeshBuilder"/>s ordered deterministically by chunk origin.</summary>
+    public List<(Vector3I Origin, ArrayMeshBuilder Builder)> BuildChunkedBuilders(int chunkSize = 512)
     {
         if (chunkSize <= 0) chunkSize = 512;
         if (FillTJoints && _octa.TJoints.Count == 0)
@@ -91,15 +95,27 @@ public sealed class OctaMesher
                 EmitFace(face, key * chunkSize, builder);
             });
 
-        var result = new ChunkedWorldMesh { ChunkSize = chunkSize };
         var keys = new List<Vector3I>(builders.Keys);
         keys.Sort(CompareKeys); // deterministic order
 
+        var result = new List<(Vector3I Origin, ArrayMeshBuilder Builder)>(keys.Count);
         foreach (var key in keys)
         {
             var builder = builders[key];
             if (builder.TriangleCount == 0) continue;
-            result.Chunks.Add(new MeshChunk { Origin = key * chunkSize, Mesh = builder.Build(_materials) });
+            result.Add((key * chunkSize, builder));
+        }
+        return result;
+    }
+
+    /// <summary>Mesh the world into chunks of <paramref name="chunkSize"/> world units (power of two).</summary>
+    public ChunkedWorldMesh BuildChunked(int chunkSize = 512)
+    {
+        if (chunkSize <= 0) chunkSize = 512;
+        var result = new ChunkedWorldMesh { ChunkSize = chunkSize };
+        foreach (var (origin, builder) in BuildChunkedBuilders(chunkSize))
+        {
+            result.Chunks.Add(new MeshChunk { Origin = origin, Mesh = builder.Build(_materials) });
             result.TriangleCount += builder.TriangleCount;
             result.SurfaceCount += builder.TextureCount;
         }
