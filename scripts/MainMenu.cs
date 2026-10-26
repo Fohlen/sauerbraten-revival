@@ -87,7 +87,7 @@ public partial class MainMenu : CanvasLayer
     private readonly Dictionary<string, Material> _skinCache = new();
 
     // Node references (resolved in _Ready).
-    private Label _netStatus = null!;
+    //private Label _netStatus = null!;
     private Button _settingsButton = null!;
     private Button _quitButton = null!;
     private Button _settingsBackButton = null!;
@@ -132,7 +132,7 @@ public partial class MainMenu : CanvasLayer
 
     private void ResolveNodes()
     {
-        _netStatus = GetNode<Label>("%NetStatusLabel");
+        //_netStatus = GetNode<Label>("%NetStatusLabel");
         _settingsButton = GetNode<Button>("%SettingsButton");
         _quitButton = GetNode<Button>("%QuitButton");
         _settingsPanel = GetNode<PanelContainer>("%SettingsPanel");
@@ -216,7 +216,7 @@ public partial class MainMenu : CanvasLayer
     {
         Visible = true;
         _resumeButton.Visible = inGame;
-        _netStatus.Text = inGame ? "LOCAL  ·  MATCH PAUSED" : "LOCAL  ·  OFFLINE";
+        //_netStatus.Text = inGame ? "LOCAL  ·  MATCH PAUSED" : "LOCAL  ·  OFFLINE";
         if (!_previewBuilt) BuildPreview();
         RefreshAll();
         if (inGame) _resumeButton.GrabFocus();
