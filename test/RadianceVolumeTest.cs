@@ -993,4 +993,63 @@ public class RadianceVolumeTest : GoTestBase
         // Dirty probes queued for rebake
         TestAssert.True(volume.PendingCount > 0, "Dirty probes enqueued after light update");
     }
+
+    // =========================================================================
+    // Stage 4: Full RGB Color Preservation & Ambient Texture Tests (§7, §10)
+    // =========================================================================
+
+    [Test]
+    public void RadianceProbe_FullRgbColor_PreservesChannelChromaticity()
+    {
+        var probe = RadianceProbe.Zero;
+        // Pure red directional light (radiance = 4.0 in R, 0 in G, 0 in B) from +Z
+        probe.AddDirectional(new Vector3(0, 0, 1), new Color(4f, 0f, 0f));
+
+        // AmbColor should be (1.0, 0.0, 0.0)
+        TestAssert.True(probe.AmbColor.IsEqualApprox(new Vector3(1f, 0f, 0f)),
+            $"AmbColor should be (1, 0, 0), got {probe.AmbColor}");
+
+        // EvaluateColor facing light (+Z):
+        // scalar c0 = (1+0+0)/3 = 1/3; c1 = (0, 0, 2/3); dot(c1, +Z) = 2/3
+        // chroma = c0_rgb / c0 = (3, 0, 0)
+        // irr = (1, 0, 0) + (3, 0, 0) * (2/3) = (3, 0, 0) = 0.75 * L_red
+        Color irrFacing = probe.EvaluateColor(new Vector3(0, 0, 1), Colors.White);
+        TestAssert.True(Mathf.Abs(irrFacing.R - 3.0f) < 1e-4f, $"Facing red light R should be 3.0, got {irrFacing.R}");
+        TestAssert.True(Mathf.Abs(irrFacing.G) < 1e-5f, $"Facing red light G should be 0, got {irrFacing.G}");
+        TestAssert.True(Mathf.Abs(irrFacing.B) < 1e-5f, $"Facing red light B should be 0, got {irrFacing.B}");
+    }
+
+    [Test]
+    public void RadianceVolume_ColoredDirectLightAndBounce_PreservesRgbInCpuAndTexture()
+    {
+        var octa = new Octa(10);
+        octa.EmptyMap(10);
+
+        var sauerBounds = new Aabb(new Vector3(200, 200, 512), new Vector3(128, 128, 128));
+        var grid = RadianceGrid.FromSauerBounds(sauerBounds, resolution: 4, marginCells: 0);
+        var volume = new RadianceVolume(grid) { SkyRays = 4 };
+
+        var config = new MapConfig
+        {
+            Ambient = 0,
+            Skylight = 0,
+            Sunlight = 0,
+        };
+
+        // Pure Red point light at (264, 264, 560)
+        var lights = new List<DirectLightSource>
+        {
+            new DirectLightSource(new Vector3(264, 264, 560), 200f, new Color(2f, 0f, 0f))
+        };
+
+        volume.Bake(octa, config, lights);
+        TestAssert.True(volume.AmbientTexture != null, "AmbientTexture created alongside primary Texture");
+
+        // Sample probe near the red light
+        Vector3 probeWorld = RadianceGrid.SauerToWorld(new Vector3(264, 264, 550));
+        RadianceProbe sampled = volume.Grid.Sample(probeWorld);
+        TestAssert.True(sampled.AmbColor.X > 0.01f, $"Red channel should be positive: {sampled.AmbColor}");
+        TestAssert.True(sampled.AmbColor.Y < 1e-4f, $"Green channel should be 0 for pure red light: {sampled.AmbColor}");
+        TestAssert.True(sampled.AmbColor.Z < 1e-4f, $"Blue channel should be 0 for pure red light: {sampled.AmbColor}");
+    }
 }

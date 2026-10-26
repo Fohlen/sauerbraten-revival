@@ -14,7 +14,7 @@ namespace SauerbratenRevival.World.Lighting;
 /// Direct sunlight is cast as a shadow ray; unoccluded probes receive sunlight.
 /// Sky radiance is estimated via cosine-weighted hemisphere rays against the octree.
 /// </summary>
-public class RadianceVolume
+public class RadianceVolume : IDisposable
 {
     /// <summary>The underlying world-space probe grid.</summary>
     public RadianceGrid Grid { get; }
@@ -52,6 +52,9 @@ public class RadianceVolume
 
     /// <summary>The generated 3D texture resource (either high-level <see cref="ImageTexture3D"/> or GPU compute <see cref="Texture3Drd"/>).</summary>
     public Texture3D? Texture { get; private set; }
+
+    /// <summary>The generated 3D colored ambient texture resource (<c>radiance_amb_tex</c>, either <see cref="ImageTexture3D"/> or <see cref="Texture3Drd"/>).</summary>
+    public Texture3D? AmbientTexture { get; private set; }
 
     /// <summary>Optional GPU compute baker backend (null if running in headless or static ambient mode).</summary>
     public GpuRadianceBaker? GpuBaker { get; set; }
@@ -258,8 +261,11 @@ public class RadianceVolume
         public Vector3 SunDirSauer { get; }
         public Vector3 SunDirWorld { get; }
         public float AmbientRadiance { get; }
+        public Color AmbientColor { get; }
         public float SkyRadiance { get; }
+        public Color SkyColor { get; }
         public float SunRadiance { get; }
+        public Color SunColor { get; }
         public float MaxRayDist { get; }
         public int RayCount { get; }
 
@@ -286,6 +292,7 @@ public class RadianceVolume
             Color sunlightColor = DecodeColor(config.Sunlight);
             float sunlightScale = config.SunlightScale;
 
+            AmbientColor = ambientColor;
             AmbientRadiance = (ambientColor.R + ambientColor.G + ambientColor.B) / 3.0f;
 
             Color effectiveSkyColor = new(
@@ -293,10 +300,12 @@ public class RadianceVolume
                 Mathf.Max(skylightColor.G, ambientColor.G),
                 Mathf.Max(skylightColor.B, ambientColor.B)
             );
+            SkyColor = effectiveSkyColor;
             SkyRadiance = (effectiveSkyColor.R + effectiveSkyColor.G + effectiveSkyColor.B) / 3.0f;
 
             SunDirSauer = CalculateSunlightDirSauer(config.SunlightYaw, config.SunlightPitch);
             SunDirWorld = RadianceGrid.SauerToWorld(SunDirSauer);
+            SunColor = new Color(sunlightColor.R * sunlightScale, sunlightColor.G * sunlightScale, sunlightColor.B * sunlightScale);
             SunRadiance = ((sunlightColor.R + sunlightColor.G + sunlightColor.B) / 3.0f) * sunlightScale;
 
             RayCount = Mathf.Max(1, settings.SkyRays);
@@ -341,11 +350,17 @@ public class RadianceVolume
 
         if (Settings.Mode == RadianceQualityMode.StaticAmbient)
         {
-            Grid.Fill(new RadianceProbe(Vector3.Zero, _context.AmbientRadiance));
+            var ambVec = new Vector3(_context.AmbientColor.R, _context.AmbientColor.G, _context.AmbientColor.B);
+            Grid.Fill(new RadianceProbe(Vector3.Zero, _context.AmbientRadiance, ambVec));
             if (Texture is ImageTexture3D imgTex)
                 Grid.UpdateTexture(imgTex);
             else
                 Texture = Grid.CreateTexture();
+
+            if (AmbientTexture is ImageTexture3D ambImgTex)
+                Grid.UpdateAmbientTexture(ambImgTex);
+            else
+                AmbientTexture = Grid.CreateAmbientTexture();
 
             _textureNeedsUpdate = false;
             return;
@@ -385,6 +400,8 @@ public class RadianceVolume
             {
                 if (GpuBaker.OutputTextureRd != null)
                     Texture = GpuBaker.OutputTextureRd;
+                if (GpuBaker.OutputAmbTextureRd != null)
+                    AmbientTexture = GpuBaker.OutputAmbTextureRd;
                 _textureNeedsUpdate = false;
                 return;
             }
@@ -404,11 +421,16 @@ public class RadianceVolume
             }
         }
 
-        // Create or update CPU-backed GPU 3D texture
+        // Create or update CPU-backed GPU 3D textures
         if (Texture is ImageTexture3D existingImgTex)
             Grid.UpdateTexture(existingImgTex);
         else
             Texture = Grid.CreateTexture();
+
+        if (AmbientTexture is ImageTexture3D existingAmbTex)
+            Grid.UpdateAmbientTexture(existingAmbTex);
+        else
+            AmbientTexture = Grid.CreateAmbientTexture();
 
         _textureNeedsUpdate = false;
     }
@@ -422,7 +444,7 @@ public class RadianceVolume
 
         if (ctx.Settings.Mode == RadianceQualityMode.StaticAmbient)
         {
-            probe.AddAmbient(ctx.AmbientRadiance);
+            probe.AddAmbient(ctx.AmbientColor);
             return;
         }
 
@@ -435,7 +457,7 @@ public class RadianceVolume
             return;
 
         // Base ambient
-        probe.AddAmbient(ctx.AmbientRadiance);
+        probe.AddAmbient(ctx.AmbientColor);
 
         // 1. Sky pass: cast hemisphere rays (Stage 1 unoccluded sky + Stage 3 indirect bounce)
         for (int r = 0; r < ctx.RayCount; r++)
@@ -445,7 +467,8 @@ public class RadianceVolume
             if (dist >= ctx.MaxRayDist * 0.999f)
             {
                 // Unoccluded sky: radiance divided by rayCount for Monte Carlo estimate
-                probe.AddDirectional(ctx.SkyDirsWorld[r], ctx.SkyRadiance / ctx.RayCount);
+                float invRays = 1.0f / ctx.RayCount;
+                probe.AddDirectional(ctx.SkyDirsWorld[r], new Color(ctx.SkyColor.R * invRays, ctx.SkyColor.G * invRays, ctx.SkyColor.B * invRays));
             }
             else
             {
@@ -459,10 +482,10 @@ public class RadianceVolume
                 // Incident radiance on hit surface from sky/sun:
                 // Upper hemisphere factor facing +Z in Sauer space:
                 float skyCos = Mathf.Max(0f, hitNormal.Z);
-                float incSkyRadiance = ctx.SkyRadiance * skyCos;
+                Color incSky = new(ctx.SkyColor.R * skyCos, ctx.SkyColor.G * skyCos, ctx.SkyColor.B * skyCos);
 
                 // Direct sun incident on hit surface:
-                float incSunRadiance = 0f;
+                Color incSun = new(0f, 0f, 0f);
                 if (ctx.SunRadiance > 0.001f)
                 {
                     float nDotL = hitNormal.Dot(ctx.SunDirSauer);
@@ -471,18 +494,21 @@ public class RadianceVolume
                         float sunShadow = OctaRaycast.RayCube(ctx.Octa, hitPos + hitNormal * 0.1f, ctx.SunDirSauer, ctx.MaxRayDist, 0, 0, out _);
                         if (sunShadow >= ctx.MaxRayDist * 0.999f)
                         {
-                            incSunRadiance = ctx.SunRadiance * nDotL;
+                            incSun = new Color(ctx.SunColor.R * nDotL, ctx.SunColor.G * nDotL, ctx.SunColor.B * nDotL);
                         }
                     }
                 }
 
                 // Reflected diffuse radiance arriving from hit surface towards probe:
-                // Reflected radiance = (incident * albedo) / rayCount.
-                // Arriving along skyDirsWorld[r] from hit point.
-                float bounceRadiance = (incSkyRadiance + incSunRadiance) * albedo / ctx.RayCount;
-                if (bounceRadiance > 1e-5f)
+                float scale = albedo / ctx.RayCount;
+                Color bounceCol = new(
+                    (incSky.R + incSun.R) * scale,
+                    (incSky.G + incSun.G) * scale,
+                    (incSky.B + incSun.B) * scale);
+                float bounceLum = (bounceCol.R + bounceCol.G + bounceCol.B) / 3.0f;
+                if (bounceLum > 1e-5f)
                 {
-                    probe.AddDirectional(ctx.SkyDirsWorld[r], bounceRadiance);
+                    probe.AddDirectional(ctx.SkyDirsWorld[r], bounceCol);
                 }
             }
         }
@@ -493,7 +519,7 @@ public class RadianceVolume
             float sunDist = OctaRaycast.RayCube(ctx.Octa, centerSauer, ctx.SunDirSauer, ctx.MaxRayDist, 0, 0, out _);
             if (sunDist >= ctx.MaxRayDist * 0.999f)
             {
-                probe.AddDirectional(ctx.SunDirWorld, ctx.SunRadiance);
+                probe.AddDirectional(ctx.SunDirWorld, ctx.SunColor);
             }
         }
 
@@ -534,8 +560,8 @@ public class RadianceVolume
                 {
                     // Unoccluded: accumulate into probe in Godot world space
                     Vector3 rayDirWorld = RadianceGrid.SauerToWorld(rayDir);
-                    float lightLum = (light.Color.R + light.Color.G + light.Color.B) / 3.0f;
-                    probe.AddDirectional(rayDirWorld, lightLum * intensity);
+                    Color lightCol = new(light.Color.R * intensity, light.Color.G * intensity, light.Color.B * intensity);
+                    probe.AddDirectional(rayDirWorld, lightCol);
                 }
             }
         }
@@ -652,6 +678,8 @@ public class RadianceVolume
         {
             if (Texture is ImageTexture3D imgTex)
                 Grid.UpdateTexture(imgTex);
+            if (AmbientTexture is ImageTexture3D ambImgTex)
+                Grid.UpdateAmbientTexture(ambImgTex);
             _textureNeedsUpdate = false;
         }
 
@@ -814,4 +842,11 @@ public class RadianceVolume
     /// Backward-compatible alias for <see cref="Bake"/> without entity lights.
     /// </summary>
     public void BakeSkyAndSun(Octa octa, MapConfig config) => Bake(octa, config, null, null, null);
+
+    public void Dispose()
+    {
+        GpuBaker?.Dispose();
+        GpuBaker = null;
+        GC.SuppressFinalize(this);
+    }
 }

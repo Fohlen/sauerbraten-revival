@@ -47,6 +47,8 @@ public static class MaterialBuilder
             if (radiance != null)
             {
                 bool useRadiance = radiance.Settings.Mode == Lighting.RadianceQualityMode.RadianceHints;
+                bool useEnvmap = slot != null && slot.IsEnvMap;
+                Vector3? envScale = useEnvmap ? slot!.ResolveEnvScale(vs) : null;
                 material = BuildRadianceMaterial(
                     albedo,
                     tint,
@@ -58,7 +60,10 @@ public static class MaterialBuilder
                     radiance.Grid.Extent,
                     skyTint,
                     ambientColor,
-                    useRadiance);
+                    useRadiance,
+                    radianceAmbTex: radiance.AmbientTexture,
+                    useEnvmap: useEnvmap,
+                    envScale: envScale);
             }
             else
             {
@@ -147,7 +152,11 @@ public static class MaterialBuilder
         float gridExtent = 1f,
         Color? skyTint = null,
         Color? ambientColor = null,
-        bool useRadiance = true)
+        bool useRadiance = true,
+        Texture3D? radianceAmbTex = null,
+        bool useEnvmap = false,
+        Vector3? envScale = null,
+        float envRoughness = 0.05f)
     {
         var shader = ResourceLoader.Load<Shader>(RadianceShaderPath)
             ?? throw new System.InvalidOperationException($"missing shader {RadianceShaderPath}");
@@ -180,10 +189,40 @@ public static class MaterialBuilder
             Color st = skyTint ?? Colors.White;
             material.SetShaderParameter("sky_tint", new Vector3(st.R, st.G, st.B));
             material.SetShaderParameter("use_radiance", useRadiance);
+
+            if (radianceAmbTex != null)
+            {
+                material.SetShaderParameter("radiance_amb_tex", radianceAmbTex);
+                material.SetShaderParameter("use_radiance_amb", useRadiance);
+            }
+            else
+            {
+                material.SetShaderParameter("use_radiance_amb", false);
+            }
         }
         else
         {
             material.SetShaderParameter("use_radiance", false);
+            material.SetShaderParameter("use_radiance_amb", false);
+        }
+
+        if (useEnvmap)
+        {
+            Vector3 es = envScale ?? CatalogueSlot.DefaultEnvScale;
+            Vector3 clampedTint = new(
+                Mathf.Clamp(es.X, 0f, 1f),
+                Mathf.Clamp(es.Y, 0f, 1f),
+                Mathf.Clamp(es.Z, 0f, 1f));
+            float intensity = Mathf.Clamp(Mathf.Max(es.X, Mathf.Max(es.Y, es.Z)), 0f, 1f);
+
+            material.SetShaderParameter("use_envmap", true);
+            material.SetShaderParameter("env_tint", clampedTint);
+            material.SetShaderParameter("env_intensity", intensity);
+            material.SetShaderParameter("env_roughness", Mathf.Clamp(envRoughness, 0f, 1f));
+        }
+        else
+        {
+            material.SetShaderParameter("use_envmap", false);
         }
 
         return material;

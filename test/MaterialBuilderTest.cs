@@ -210,4 +210,76 @@ public class MaterialBuilderTest : GoTestBase
             MetadataCatalogue.Load("res://does_not_exist_metadata.json");
         });
     }
+
+    [Test]
+    public void CatalogueParsesEnvMapShadersAndParams()
+    {
+        var cat = MetadataCatalogue.Load(TestData.CataloguePathFor("earthstation"));
+        TestAssert.True(cat.Slots.Count > 0, "earthstation has slots");
+
+        // Slot 805 in earthstation uses shader "envworld" with shaderType "envmap" and default envscale (0.2, 0.2, 0.2)
+        TestAssert.True(cat.Slots.TryGetValue(805, out var slot805), "slot 805 exists in earthstation");
+        TestAssert.Equal("envworld", slot805!.Shader, "slot 805 shader is envworld");
+        TestAssert.Equal("envmap", slot805.ShaderType, "slot 805 shaderType is envmap");
+        TestAssert.True(slot805.IsEnvMap, "slot 805 IsEnvMap is true");
+        TestAssert.True(slot805.ResolveEnvScale().IsEqualApprox(new Vector3(0.2f, 0.2f, 0.2f)), "slot 805 envscale resolves to (0.2, 0.2, 0.2)");
+
+        // Slot 353 in earthstation uses "bumpspecmapparallaxworld" -> not envmap
+        TestAssert.True(cat.Slots.TryGetValue(353, out var slot353), "slot 353 exists");
+        TestAssert.False(slot353!.IsEnvMap, "bumpspecmapparallaxworld slot is not envmap");
+
+        // Verify vslot envscale override takes precedence over slot envscale
+        var customSlot = new CatalogueSlot
+        {
+            Index = 99,
+            Shader = "bumpenvspecmapworld",
+            ShaderType = "normalslms",
+            Params = [new ShaderParam { Name = "envscale", Val = [0.3f, 0.4f, 0.5f, 0f] }],
+        };
+        TestAssert.True(customSlot.IsEnvMap, "bumpenvspecmapworld detected as envmap");
+        TestAssert.True(customSlot.ResolveEnvScale().IsEqualApprox(new Vector3(0.3f, 0.4f, 0.5f)), "slot envscale parsed");
+
+        var customVSlot = new CatalogueVSlot
+        {
+            Index = 99,
+            Slot = 99,
+            Params = [new ShaderParam { Name = "envscale", Val = [0.7f, 0.8f, 0.9f, 0f] }],
+        };
+        TestAssert.True(customSlot.ResolveEnvScale(customVSlot).IsEqualApprox(new Vector3(0.7f, 0.8f, 0.9f)), "vslot envscale overrides slot envscale");
+    }
+
+    [Test]
+    public void MaterialBuilder_ConfiguresEnvMapAndNormalMapUniformsOnRadianceMaterials()
+    {
+        var cat = MetadataCatalogue.Load(TestData.CataloguePathFor("earthstation"));
+        var textures = new DumpTextureSource(TestData.ReferenceRoot);
+
+        var grid = new SauerbratenRevival.World.Lighting.RadianceGrid(Vector3.Zero, 64f, 4);
+        var volume = new SauerbratenRevival.World.Lighting.RadianceVolume(grid);
+        var octa = new Octa(6);
+        octa.EmptyMap(6);
+        volume.Bake(octa, cat.Config);
+
+        var set = MaterialBuilder.Build(cat, textures, volume);
+
+        int envMapMats = 0, normalMapMats = 0, ambTexBound = 0;
+        foreach (var (_, mat) in set.Materials)
+        {
+            if (mat is not ShaderMaterial sm) continue;
+            if ((bool)sm.GetShaderParameter("use_radiance_amb") && sm.GetShaderParameter("radiance_amb_tex").Obj != null)
+                ambTexBound++;
+            if ((bool)sm.GetShaderParameter("use_envmap"))
+            {
+                envMapMats++;
+                float intensity = (float)sm.GetShaderParameter("env_intensity");
+                TestAssert.True(intensity > 0f, "envmap material has positive env_intensity");
+            }
+            if ((bool)sm.GetShaderParameter("use_normal"))
+                normalMapMats++;
+        }
+
+        TestAssert.True(ambTexBound > 0, "radiance_amb_tex bound on ShaderMaterials");
+        TestAssert.True(envMapMats > 0, "earthstation has SHADER_ENVMAP ShaderMaterials");
+        TestAssert.True(normalMapMats > 0, "earthstation has normal-mapped ShaderMaterials");
+    }
 }

@@ -402,4 +402,64 @@ public class RadianceGrid
         var images = BuildImages();
         texture.Update(images);
     }
+
+    /// <summary>
+    /// Build an array of 2D slice <see cref="Image"/>s in <see cref="Image.Format.Rgbah"/> format
+    /// storing colored ambient irradiance (<see cref="RadianceProbe.AmbColor"/>) in <c>RGB</c> and <c>1.0</c> in <c>A</c>.
+    /// </summary>
+    public Godot.Collections.Array<Image> BuildAmbientImages()
+    {
+        var images = new Godot.Collections.Array<Image>();
+        int sliceTexels = Resolution * Resolution;
+        int sliceBytesLen = sliceTexels * 8;
+
+        for (int z = 0; z < Resolution; z++)
+        {
+            byte[] sliceBytes = new byte[sliceBytesLen];
+            Span<Half> halfSpan = MemoryMarshal.Cast<byte, Half>(sliceBytes.AsSpan());
+            int halfIdx = 0;
+
+            for (int y = 0; y < Resolution; y++)
+            {
+                for (int x = 0; x < Resolution; x++)
+                {
+                    ref readonly var probe = ref _probes[Index(x, y, z)];
+                    halfSpan[halfIdx++] = (Half)probe.AmbColor.X;
+                    halfSpan[halfIdx++] = (Half)probe.AmbColor.Y;
+                    halfSpan[halfIdx++] = (Half)probe.AmbColor.Z;
+                    halfSpan[halfIdx++] = (Half)1.0f;
+                }
+            }
+
+            var sliceImage = Image.CreateFromData(Resolution, Resolution, false, Image.Format.Rgbah, sliceBytes);
+            images.Add(sliceImage);
+        }
+
+        return images;
+    }
+
+    /// <summary>
+    /// Create a new Godot <see cref="ImageTexture3D"/> resource initialized with the current grid's colored ambient probes.
+    /// </summary>
+    public ImageTexture3D CreateAmbientTexture()
+    {
+        var images = BuildAmbientImages();
+        var tex = new ImageTexture3D();
+        Error err = tex.Create(Image.Format.Rgbah, Resolution, Resolution, Resolution, false, images);
+        if (err != Error.Ok)
+        {
+            throw new InvalidOperationException($"Failed to create ambient ImageTexture3D ({Resolution}³, Rgbah): {err}");
+        }
+        return tex;
+    }
+
+    /// <summary>
+    /// Update an existing ambient <see cref="ImageTexture3D"/> with current CPU colored ambient probe data.
+    /// </summary>
+    public void UpdateAmbientTexture(ImageTexture3D texture)
+    {
+        ArgumentNullException.ThrowIfNull(texture);
+        var images = BuildAmbientImages();
+        texture.Update(images);
+    }
 }

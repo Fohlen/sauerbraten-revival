@@ -18,6 +18,7 @@ layout(set = 0, binding = 1, std430) restrict readonly buffer LightBuffer {
 } light_buf;
 
 layout(set = 0, binding = 2, rgba16f) uniform restrict writeonly image3D probe_direct_tex;
+layout(set = 0, binding = 3, rgba16f) uniform restrict writeonly image3D probe_direct_amb_tex;
 
 layout(push_constant, std430) uniform PushConstants {
     vec3 grid_origin;
@@ -164,19 +165,23 @@ void main() {
     float center_occ = textureLod(voxel_grid, probe_uvw, 0.0).a;
     if (center_occ >= 0.99) {
         imageStore(probe_direct_tex, cell, vec4(0.0));
+        imageStore(probe_direct_amb_tex, cell, vec4(0.0));
         return;
     }
 
     vec3 c1 = vec3(0.0);
     float c0 = (pc.ambient_color.r + pc.ambient_color.g + pc.ambient_color.b) / 3.0;
+    vec3 c0_rgb = pc.ambient_color;
 
     // 1. Sun shadow ray
-    float sun_lum = (pc.sun_color.r + pc.sun_color.g + pc.sun_color.b) / 3.0 * pc.sun_scale;
+    vec3 sun_rad_rgb = pc.sun_color * pc.sun_scale;
+    float sun_lum = (sun_rad_rgb.r + sun_rad_rgb.g + sun_rad_rgb.b) / 3.0;
     if (sun_lum > 0.001) {
         float max_uvw_dist = pc.max_ray_dist / pc.grid_extent;
         if (trace_dda_unoccluded(probe_uvw, pc.sun_dir, max_uvw_dist)) {
             c0 += 0.25 * sun_lum;
             c1 += 0.5 * pc.sun_dir * sun_lum;
+            c0_rgb += 0.25 * sun_rad_rgb;
         }
     }
 
@@ -184,15 +189,20 @@ void main() {
     float sky_lum = (pc.sky_color.r + pc.sky_color.g + pc.sky_color.b) / 3.0;
     uint ray_count = max(1u, pc.sky_rays);
     float sky_per_ray = sky_lum / float(ray_count);
+    vec3 sky_rgb_per_ray = pc.sky_color / float(ray_count);
     float max_uvw_dist = pc.max_ray_dist / pc.grid_extent;
+    float sky_hits = 0.0;
 
     for (uint r = 0; r < ray_count; r++) {
         vec3 ray_dir = cosine_hemisphere_world(r, ray_count);
         if (trace_dda_unoccluded(probe_uvw, ray_dir, max_uvw_dist)) {
             c0 += 0.25 * sky_per_ray;
             c1 += 0.5 * ray_dir * sky_per_ray;
+            c0_rgb += 0.25 * sky_rgb_per_ray;
+            sky_hits += 1.0;
         }
     }
+    float sky_vis = sky_hits / float(ray_count);
 
     // 3. Direct entity lights from shared workgroup list
     uint active_lights = min(s_light_count, uint(MAX_WG_LIGHTS));
@@ -223,12 +233,14 @@ void main() {
 
         float dist_uvw = dist / pc.grid_extent;
         if (trace_dda_unoccluded(probe_uvw, ray_dir, dist_uvw)) {
-            vec3 col = light.color_spotcos.rgb;
-            float lum = (col.r + col.g + col.b) / 3.0 * intensity;
+            vec3 col = light.color_spotcos.rgb * intensity;
+            float lum = (col.r + col.g + col.b) / 3.0;
             c0 += 0.25 * lum;
             c1 += 0.5 * ray_dir * lum;
+            c0_rgb += 0.25 * col;
         }
     }
 
     imageStore(probe_direct_tex, cell, vec4(c1, c0));
+    imageStore(probe_direct_amb_tex, cell, vec4(c0_rgb, sky_vis));
 }

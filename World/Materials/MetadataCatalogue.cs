@@ -28,14 +28,78 @@ public sealed class IndexedPath
     public string? Path { get; set; }
 }
 
+/// <summary>One shader parameter (<c>SlotShaderParam</c>) from a slot or vslot definition.</summary>
+public sealed class ShaderParam
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("val")]
+    public float?[]? Val { get; set; }
+
+    public Vector3 ToVector3(Vector3 fallback = default)
+    {
+        if (Val is { Length: >= 3 })
+        {
+            return new Vector3(
+                Val[0] ?? fallback.X,
+                Val[1] ?? fallback.Y,
+                Val[2] ?? fallback.Z);
+        }
+        return fallback;
+    }
+}
+
 /// <summary>One <c>slot</c> from the metadata catalogue (a set of texture layers + shader).</summary>
 public sealed class CatalogueSlot
 {
+    /// <summary>Default <c>envscale</c> parameter from Sauerbraten's <c>envworld</c> / <c>bumpenvworld</c> shaders.</summary>
+    public static readonly Vector3 DefaultEnvScale = new(0.2f, 0.2f, 0.2f);
+
     [JsonPropertyName("index")]
     public int Index { get; set; }
 
     [JsonPropertyName("shader")]
     public string Shader { get; set; } = "";
+
+    [JsonPropertyName("shaderType")]
+    public string ShaderType { get; set; } = "";
+
+    [JsonPropertyName("params")]
+    public List<ShaderParam>? Params { get; set; }
+
+    /// <summary>True if this slot uses environment cubemap reflections (<c>SHADER_ENVMAP</c>, e.g. <c>envworld</c> or <c>bumpenv*world</c>).</summary>
+    [JsonIgnore]
+    public bool IsEnvMap =>
+        string.Equals(ShaderType, "envmap", StringComparison.OrdinalIgnoreCase) ||
+        Shader.Contains("env", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Resolve the <c>envscale</c> RGB reflection tint/intensity for this slot and optional <paramref name="vslot"/> override.
+    /// VSlot <c>params</c> take precedence over Slot <c>params</c>, falling back to <see cref="DefaultEnvScale"/>.
+    /// </summary>
+    public Vector3 ResolveEnvScale(CatalogueVSlot? vslot = null)
+    {
+        if (vslot?.Params != null)
+        {
+            for (int i = 0; i < vslot.Params.Count; i++)
+            {
+                if (string.Equals(vslot.Params[i].Name, "envscale", StringComparison.OrdinalIgnoreCase))
+                    return vslot.Params[i].ToVector3(DefaultEnvScale);
+            }
+        }
+
+        if (Params != null)
+        {
+            for (int i = 0; i < Params.Count; i++)
+            {
+                if (string.Equals(Params[i].Name, "envscale", StringComparison.OrdinalIgnoreCase))
+                    return Params[i].ToVector3(DefaultEnvScale);
+            }
+        }
+
+        return DefaultEnvScale;
+    }
 
     [JsonIgnore]
     public string? DiffusePath;
@@ -146,6 +210,9 @@ public sealed class CatalogueVSlot
             if (value is { Length: >= 2 }) AlphaBack = value[1];
         }
     }
+
+    [JsonPropertyName("params")]
+    public List<ShaderParam>? Params { get; set; }
 }
 
 /// <summary>Map configuration values (lighting, skybox, etc.) from the metadata catalogue.</summary>

@@ -5,7 +5,9 @@ layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
 layout(set = 0, binding = 0) uniform sampler3D voxel_grid;
 layout(set = 0, binding = 1) uniform sampler3D probe_direct_sampler;
-layout(set = 0, binding = 2, rgba16f) uniform restrict writeonly image3D probe_final_tex;
+layout(set = 0, binding = 2) uniform sampler3D probe_direct_amb_sampler;
+layout(set = 0, binding = 3, rgba16f) uniform restrict writeonly image3D probe_final_tex;
+layout(set = 0, binding = 4, rgba16f) uniform restrict writeonly image3D probe_final_amb_tex;
 
 layout(push_constant, std430) uniform PushConstants {
     vec3 grid_origin;
@@ -111,13 +113,17 @@ void main() {
 
     // Read direct irradiance from Pass 1
     vec4 direct_sample = textureLod(probe_direct_sampler, probe_uvw, 0.0);
+    vec4 direct_amb_sample = textureLod(probe_direct_amb_sampler, probe_uvw, 0.0);
     vec3 c1 = direct_sample.rgb;
     float c0 = direct_sample.a;
+    vec3 c0_rgb = direct_amb_sample.rgb;
+    float sky_vis = direct_amb_sample.a;
 
     // Solid rejection check
     float center_occ = textureLod(voxel_grid, probe_uvw, 0.0).a;
     if (center_occ >= 0.99) {
         imageStore(probe_final_tex, cell, vec4(0.0));
+        imageStore(probe_final_amb_tex, cell, vec4(0.0));
         return;
     }
 
@@ -127,6 +133,7 @@ void main() {
 
     vec3 bounce_c1 = vec3(0.0);
     float bounce_c0 = 0.0;
+    vec3 bounce_c0_rgb = vec3(0.0);
 
     for (uint r = 0; r < ray_count; r++) {
         vec3 ray_dir = cosine_hemisphere_world(r, ray_count);
@@ -135,19 +142,23 @@ void main() {
             // Sample direct probe volume slightly in front of hit surface
             vec3 sample_pos = hit_uvw + hit_normal * (probe_texel * 0.75);
             vec4 surf_direct = textureLod(probe_direct_sampler, sample_pos, 0.0);
+            vec4 surf_amb = textureLod(probe_direct_amb_sampler, sample_pos, 0.0);
 
-            // Outgoing diffuse irradiance E(n) = max(sky_tint * amb + dot(c1, normal), 0.0)
+            // Outgoing diffuse irradiance E_rgb(n) = max(c0_rgb + chroma * dot(c1, normal), 0.0)
             float n_dot_c1 = dot(surf_direct.rgb, hit_normal);
-            float surf_irr = max(surf_direct.a * ((pc.sky_tint.r + pc.sky_tint.g + pc.sky_tint.b) / 3.0) + n_dot_c1, 0.0);
+            vec3 surf_chroma = (surf_direct.a > 1e-4) ? (surf_amb.rgb / surf_direct.a) : pc.sky_tint;
+            vec3 surf_irr_rgb = max(surf_amb.rgb + surf_chroma * n_dot_c1, vec3(0.0));
 
-            // Reflected bounce luminance
-            float albedo_lum = (hit_albedo.r + hit_albedo.g + hit_albedo.b) / 3.0;
-            float bounce_lum = (surf_irr * albedo_lum) / float(ray_count);
+            // Reflected bounce RGB and luminance
+            vec3 bounce_rgb = (surf_irr_rgb * hit_albedo) / float(ray_count);
+            float bounce_lum = (bounce_rgb.r + bounce_rgb.g + bounce_rgb.b) / 3.0;
 
             bounce_c0 += 0.25 * bounce_lum;
             bounce_c1 += 0.5 * ray_dir * bounce_lum;
+            bounce_c0_rgb += 0.25 * bounce_rgb;
         }
     }
 
     imageStore(probe_final_tex, cell, vec4(c1 + bounce_c1, c0 + bounce_c0));
+    imageStore(probe_final_amb_tex, cell, vec4(c0_rgb + bounce_c0_rgb, sky_vis));
 }

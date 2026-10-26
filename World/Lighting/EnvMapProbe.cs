@@ -57,6 +57,7 @@ public partial class EnvMapProbe : ReflectionProbe
         BlendDistance = Mathf.Max(Radius * 0.1f, 1.0f);
         BoxProjection = true;
         UpdateMode = UpdateModeEnum.Once;
+        AmbientMode = AmbientModeEnum.Disabled;
 
         // Blur softens the reflection — Godot has no direct blur control, so the
         // resolved value is informational for now (see EnvMapBuilder).

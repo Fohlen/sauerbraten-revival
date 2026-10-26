@@ -265,7 +265,8 @@ public partial class EmptyMap : Node3D, IGameWorld
             gridExtent: volume.Grid.Extent,
             skyTint: Lighting.RadianceVolume.DecodeColor(config.SkyboxColour),
             ambientColor: Lighting.RadianceVolume.DecodeColor(config.Ambient),
-            useRadiance: volume.Settings.Mode == Lighting.RadianceQualityMode.RadianceHints);
+            useRadiance: volume.Settings.Mode == Lighting.RadianceQualityMode.RadianceHints,
+            radianceAmbTex: volume.AmbientTexture);
 
         var uv = new Materials.TexGen[3];
         var texSize = new Vector2I(64, 64);

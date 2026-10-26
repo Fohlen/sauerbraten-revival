@@ -24,7 +24,9 @@ public sealed class GpuRadianceBaker : IDisposable
 
     private Rid _voxelGridTex;
     private Rid _probeDirectTex;
+    private Rid _probeDirectAmbTex;
     private Rid _probeFinalTex;
+    private Rid _probeFinalAmbTex;
     private Rid _probeDirectSampler;
     private Rid _voxelSampler;
     private Rid _lightBuffer;
@@ -37,7 +39,9 @@ public sealed class GpuRadianceBaker : IDisposable
     private int _allocatedLightCapacity;
 
     public Texture3Drd? OutputTextureRd { get; private set; }
+    public Texture3Drd? OutputAmbTextureRd { get; private set; }
     public Rid ProbeFinalRid => _probeFinalTex;
+    public Rid ProbeFinalAmbRid => _probeFinalAmbTex;
     public bool IsGpuAvailable => _rd != null && _directPipeline.IsValid && _bouncePipeline.IsValid;
 
     public GpuRadianceBaker(RenderingDevice? rd = null)
@@ -121,6 +125,14 @@ public sealed class GpuRadianceBaker : IDisposable
         bool voxelChanged = _voxelGridTex.Id == 0 || _allocatedVoxelRes != voxelRes;
         bool lightChanged = _lightBuffer.Id == 0 || _allocatedLightCapacity < Math.Max(1, lightCount);
 
+        if (probeChanged || voxelChanged || lightChanged)
+        {
+            if (_pass1UniformSet.IsValid) _rd.FreeRid(_pass1UniformSet);
+            if (_pass2UniformSet.IsValid) _rd.FreeRid(_pass2UniformSet);
+            _pass1UniformSet = default;
+            _pass2UniformSet = default;
+        }
+
         if (voxelChanged)
         {
             if (_voxelGridTex.IsValid) _rd.FreeRid(_voxelGridTex);
@@ -142,7 +154,9 @@ public sealed class GpuRadianceBaker : IDisposable
         if (probeChanged)
         {
             if (_probeDirectTex.IsValid) _rd.FreeRid(_probeDirectTex);
+            if (_probeDirectAmbTex.IsValid) _rd.FreeRid(_probeDirectAmbTex);
             if (_probeFinalTex.IsValid) _rd.FreeRid(_probeFinalTex);
+            if (_probeFinalAmbTex.IsValid) _rd.FreeRid(_probeFinalAmbTex);
 
             var probeFormat = new RDTextureFormat
             {
@@ -157,12 +171,15 @@ public sealed class GpuRadianceBaker : IDisposable
             };
 
             _probeDirectTex = _rd.TextureCreate(probeFormat, new RDTextureView());
+            _probeDirectAmbTex = _rd.TextureCreate(probeFormat, new RDTextureView());
             _probeFinalTex = _rd.TextureCreate(probeFormat, new RDTextureView());
+            _probeFinalAmbTex = _rd.TextureCreate(probeFormat, new RDTextureView());
             _allocatedProbeRes = probeRes;
 
             if (_rd == RenderingServer.GetRenderingDevice())
             {
                 OutputTextureRd = new Texture3Drd { TextureRdRid = _probeFinalTex };
+                OutputAmbTextureRd = new Texture3Drd { TextureRdRid = _probeFinalAmbTex };
             }
         }
 
@@ -185,10 +202,14 @@ public sealed class GpuRadianceBaker : IDisposable
     {
         if (_rd == null) return;
 
+        if (_pass1UniformSet.IsValid) _rd.FreeRid(_pass1UniformSet);
+        if (_pass2UniformSet.IsValid) _rd.FreeRid(_pass2UniformSet);
+
         // Pass 1 Uniform Set:
         // Binding 0: sampler3D voxel_grid
         // Binding 1: LightBuffer SSBO
         // Binding 2: image3D probe_direct_tex
+        // Binding 3: image3D probe_direct_amb_tex
         var uVoxel = new RDUniform
         {
             UniformType = RenderingDevice.UniformType.SamplerWithTexture,
@@ -211,12 +232,21 @@ public sealed class GpuRadianceBaker : IDisposable
         };
         uDirectImg.AddId(_probeDirectTex);
 
-        _pass1UniformSet = _rd.UniformSetCreate(new Godot.Collections.Array<RDUniform> { uVoxel, uLights, uDirectImg }, _directShader, 0);
+        var uDirectAmbImg = new RDUniform
+        {
+            UniformType = RenderingDevice.UniformType.Image,
+            Binding = 3,
+        };
+        uDirectAmbImg.AddId(_probeDirectAmbTex);
+
+        _pass1UniformSet = _rd.UniformSetCreate(new Godot.Collections.Array<RDUniform> { uVoxel, uLights, uDirectImg, uDirectAmbImg }, _directShader, 0);
 
         // Pass 2 Uniform Set:
         // Binding 0: sampler3D voxel_grid
         // Binding 1: sampler3D probe_direct_sampler
-        // Binding 2: image3D probe_final_tex
+        // Binding 2: sampler3D probe_direct_amb_sampler
+        // Binding 3: image3D probe_final_tex
+        // Binding 4: image3D probe_final_amb_tex
         var uDirectSamp = new RDUniform
         {
             UniformType = RenderingDevice.UniformType.SamplerWithTexture,
@@ -225,14 +255,29 @@ public sealed class GpuRadianceBaker : IDisposable
         uDirectSamp.AddId(_probeDirectSampler);
         uDirectSamp.AddId(_probeDirectTex);
 
+        var uDirectAmbSamp = new RDUniform
+        {
+            UniformType = RenderingDevice.UniformType.SamplerWithTexture,
+            Binding = 2,
+        };
+        uDirectAmbSamp.AddId(_probeDirectSampler);
+        uDirectAmbSamp.AddId(_probeDirectAmbTex);
+
         var uFinalImg = new RDUniform
         {
             UniformType = RenderingDevice.UniformType.Image,
-            Binding = 2,
+            Binding = 3,
         };
         uFinalImg.AddId(_probeFinalTex);
 
-        _pass2UniformSet = _rd.UniformSetCreate(new Godot.Collections.Array<RDUniform> { uVoxel, uDirectSamp, uFinalImg }, _bounceShader, 0);
+        var uFinalAmbImg = new RDUniform
+        {
+            UniformType = RenderingDevice.UniformType.Image,
+            Binding = 4,
+        };
+        uFinalAmbImg.AddId(_probeFinalAmbTex);
+
+        _pass2UniformSet = _rd.UniformSetCreate(new Godot.Collections.Array<RDUniform> { uVoxel, uDirectSamp, uDirectAmbSamp, uFinalImg, uFinalAmbImg }, _bounceShader, 0);
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 16)]
@@ -439,8 +484,12 @@ public sealed class GpuRadianceBaker : IDisposable
         byte[] raw = _rd.TextureGetData(_probeFinalTex, 0);
         Span<Half> halves = MemoryMarshal.Cast<byte, Half>(raw.AsSpan());
 
+        byte[]? rawAmb = _probeFinalAmbTex.IsValid ? _rd.TextureGetData(_probeFinalAmbTex, 0) : null;
+        Span<Half> ambHalves = rawAmb != null ? MemoryMarshal.Cast<byte, Half>(rawAmb.AsSpan()) : Span<Half>.Empty;
+
         int res = targetGrid.Resolution;
         int halfIdx = 0;
+        int ambIdx = 0;
 
         for (int z = 0; z < res; z++)
         {
@@ -453,7 +502,21 @@ public sealed class GpuRadianceBaker : IDisposable
                     float b = (float)halves[halfIdx++];
                     float a = (float)halves[halfIdx++];
 
-                    targetGrid[x, y, z] = new RadianceProbe(new Vector3(r, g, b), a);
+                    Vector3 ambCol;
+                    if (!ambHalves.IsEmpty)
+                    {
+                        float ar = (float)ambHalves[ambIdx++];
+                        float ag = (float)ambHalves[ambIdx++];
+                        float ab = (float)ambHalves[ambIdx++];
+                        ambIdx++; // skip alpha (sky_vis)
+                        ambCol = new Vector3(ar, ag, ab);
+                    }
+                    else
+                    {
+                        ambCol = new Vector3(a, a, a);
+                    }
+
+                    targetGrid[x, y, z] = new RadianceProbe(new Vector3(r, g, b), a, ambCol);
                 }
             }
         }
@@ -480,9 +543,14 @@ public sealed class GpuRadianceBaker : IDisposable
     {
         if (_rd == null) return;
 
+        if (_pass1UniformSet.IsValid) _rd.FreeRid(_pass1UniformSet);
+        if (_pass2UniformSet.IsValid) _rd.FreeRid(_pass2UniformSet);
+
         if (_voxelGridTex.IsValid) _rd.FreeRid(_voxelGridTex);
         if (_probeDirectTex.IsValid) _rd.FreeRid(_probeDirectTex);
+        if (_probeDirectAmbTex.IsValid) _rd.FreeRid(_probeDirectAmbTex);
         if (_probeFinalTex.IsValid) _rd.FreeRid(_probeFinalTex);
+        if (_probeFinalAmbTex.IsValid) _rd.FreeRid(_probeFinalAmbTex);
         if (_voxelSampler.IsValid) _rd.FreeRid(_voxelSampler);
         if (_probeDirectSampler.IsValid) _rd.FreeRid(_probeDirectSampler);
         if (_lightBuffer.IsValid) _rd.FreeRid(_lightBuffer);

@@ -91,6 +91,7 @@ public class EntityEnvMapTest : GoTestBase
         TestAssert.True(Mathf.Abs(probe.Size.X - extent) < 0.01f, "probe box extent");
         TestAssert.True(Mathf.Abs(probe.MaxDistance - Mathf.Max(probe.Radius, 1.0f)) < 0.01f, "max distance");
         TestAssert.Equal((int)ReflectionProbe.UpdateModeEnum.Once, (int)probe.UpdateMode, "update mode");
+        TestAssert.Equal((int)ReflectionProbe.AmbientModeEnum.Disabled, (int)probe.AmbientMode, "ambient mode disabled (§8.2)");
         TestAssert.True(probe.BoxProjection, "box projection");
         TestAssert.Equal(6, probe.CubeMapSize, "resolution exponent");
         TestAssert.Equal(64, probe.CubeMapResolution, "1 << 6");

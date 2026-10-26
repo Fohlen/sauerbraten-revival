@@ -102,6 +102,131 @@ public class GpuRadianceBakerTest : GoTestBase
     }
 
     [Test]
+    public void GpuRadianceBaker_ColoredDirectAndBounce_PreservesRgbAndBenchmarksMaps()
+    {
+        RenderingDevice? rd = RenderingServer.GetRenderingDevice();
+        bool ownsLocalRd = false;
+        if (rd == null)
+        {
+            rd = RenderingServer.CreateLocalRenderingDevice();
+            ownsLocalRd = rd != null;
+        }
+        if (rd == null)
+        {
+            GD.Print("[GpuRadianceBakerTest] Skipping GPU color & benchmark test (no RenderingDevice available)");
+            return;
+        }
+
+        try
+        {
+            using var baker = new GpuRadianceBaker(rd);
+            TestAssert.True(baker.IsGpuAvailable, "GpuRadianceBaker initialized on RenderingDevice");
+
+            // 1. Verify full RGB color preservation on GPU (pure red point light + green floor bounce)
+            var octa = new Octa(10);
+            octa.EmptyMap(10); // Floor at Z < 512 (vslot 1), air at Z >= 512
+
+            var config = new MapConfig
+            {
+                Ambient = 0,
+                Skylight = 0,
+                Sunlight = 0,
+            };
+
+            var catalogue = new MetadataCatalogue();
+            catalogue.VSlots[1] = new CatalogueVSlot
+            {
+                Index = 1,
+                Slot = 1,
+                Color = new Vector3(1.0f, 0.2f, 0.0f), // warm orange-red floor
+            };
+
+            var bounds = new Aabb(Vector3.Zero, new Vector3(1024f, 1024f, 1024f));
+            var radGrid = RadianceGrid.FromSauerBounds(bounds, resolution: 16, marginCells: 0);
+            var voxelGrid = VoxelGrid.FromRadianceGrid(radGrid, resolution: 64);
+            voxelGrid.Extract(octa, catalogue);
+
+            // Pure Red point light at (512, 512, 580)
+            var lights = new List<DirectLightSource>
+            {
+                new DirectLightSource(new Vector3(512f, 512f, 580f), 250f, new Color(2.0f, 0.0f, 0.0f))
+            };
+
+            bool ok = baker.Bake(voxelGrid, radGrid, config, lights, skyRays: 8);
+            TestAssert.True(ok, "GPU bake with colored light succeeded");
+            TestAssert.True(baker.ProbeFinalRid.IsValid, "ProbeFinalRid is valid");
+            TestAssert.True(baker.ProbeFinalAmbRid.IsValid, "ProbeFinalAmbRid is valid");
+
+            baker.ReadbackToGrid(radGrid);
+
+            Vector3 probePosWorld = RadianceGrid.SauerToWorld(new Vector3(512f, 512f, 560f));
+            RadianceProbe probe = radGrid.Sample(probePosWorld);
+            TestAssert.True(probe.AmbColor.X > 0.01f, $"GPU Red channel should be positive: {probe.AmbColor}");
+            TestAssert.True(probe.AmbColor.Z < 1e-4f, $"GPU Blue channel should be 0 for red light on orange floor: {probe.AmbColor}");
+
+            // 2. Benchmark 32^3 vs 64^3 on church51 and earthstation
+            BenchmarkMap(rd, baker, "church51");
+            BenchmarkMap(rd, baker, "earthstation");
+        }
+        finally
+        {
+            if (ownsLocalRd)
+                rd.Free();
+        }
+    }
+
+    private static void BenchmarkMap(RenderingDevice rd, GpuRadianceBaker baker, string mapName)
+    {
+        var map = TestData.ReadMap(mapName);
+        var octa = map.ToOcta();
+        var cat = MetadataCatalogue.Load(TestData.CataloguePathFor(mapName));
+        var lights = DirectLightSource.CollectFromMap(map);
+        Aabb geomBounds = RadianceGrid.CalculateGeometryBounds(octa);
+
+        foreach (int probeRes in new[] { 32, 64 })
+        {
+            var radGrid = RadianceGrid.FromSauerBounds(geomBounds, resolution: probeRes, marginCells: 1);
+            var voxelGrid = VoxelGrid.FromRadianceGrid(radGrid, resolution: 128);
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            voxelGrid.Extract(octa, cat);
+            double extractMs = sw.Elapsed.TotalMilliseconds;
+
+            // Warmup allocation + first bake
+            baker.Bake(voxelGrid, radGrid, cat.Config, lights, skyRays: 16);
+            if (rd == RenderingServer.GetRenderingDevice())
+            {
+                // Local RD already synced inside Bake(); main RD doesn't allow Sync()
+            }
+
+            // Timed full GPU bake (Pass 1 + Pass 2 + voxel upload)
+            sw.Restart();
+            baker.Bake(voxelGrid, radGrid, cat.Config, lights, skyRays: 16);
+            double fullBakeMs = sw.Elapsed.TotalMilliseconds;
+
+            // Timed incremental sub-region edit (128 Sauer units box around map center)
+            Vector3 centerSauer = geomBounds.GetCenter();
+            var editBox = new Aabb(centerSauer - new Vector3(64f, 64f, 64f), new Vector3(128f, 128f, 128f));
+            sw.Restart();
+            voxelGrid.ExtractRegion(octa, editBox, cat);
+            double subExtractMs = sw.Elapsed.TotalMilliseconds;
+
+            float bleedMargin = 2f * radGrid.CellSize;
+            Aabb worldEdit = RadianceGrid.SauerBoundsToWorld(editBox.Grow(bleedMargin));
+            Vector3I minCell = radGrid.WorldToCell(worldEdit.Position);
+            Vector3I maxCell = radGrid.WorldToCell(worldEdit.End);
+
+            sw.Restart();
+            baker.Bake(voxelGrid, radGrid, cat.Config, lights, dirtyMin: minCell, dirtyMax: maxCell, skyRays: 16);
+            double incrBakeMs = sw.Elapsed.TotalMilliseconds;
+
+            GD.Print($"[GPU Benchmark] map={mapName} probes={probeRes}^3 ({radGrid.TotalProbes:N0}) lights={lights.Count}: " +
+                     $"VoxelExtract(128^3)={extractMs:F2}ms, FullBake(GPU)={fullBakeMs:F2}ms, " +
+                     $"IncrVoxelExtract={subExtractMs:F2}ms, IncrBake(GPU {minCell}..{maxCell})={incrBakeMs:F2}ms");
+        }
+    }
+
+    [Test]
     public void RadianceVolume_Bake_IntegratesGpuComputeWithFallback()
     {
         var octa = new Octa(10);
@@ -119,7 +244,7 @@ public class GpuRadianceBakerTest : GoTestBase
 
         var bounds = new Aabb(Vector3.Zero, new Vector3(1024f, 1024f, 1024f));
         var grid = RadianceGrid.FromSauerBounds(bounds, resolution: 16, marginCells: 0);
-        var volume = new RadianceVolume(grid);
+        using var volume = new RadianceVolume(grid);
 
         volume.Bake(octa, config);
 
@@ -161,7 +286,7 @@ public class GpuRadianceBakerTest : GoTestBase
 
         var bounds = new Aabb(Vector3.Zero, new Vector3(1024f, 1024f, 1024f));
         var radGrid = RadianceGrid.FromSauerBounds(bounds, resolution: 16, marginCells: 0);
-        var volume = new RadianceVolume(radGrid);
+        using var volume = new RadianceVolume(radGrid);
 
         // Initial full bake
         volume.Bake(octa, config);
