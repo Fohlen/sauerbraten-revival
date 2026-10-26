@@ -139,8 +139,14 @@ public static class GameModeCatalog
         System.Array.Sort(files, System.StringComparer.Ordinal);
         foreach (string file in files)
         {
-            if (!file.EndsWith(".tres")) continue;
-            var loaded = ResourceLoader.Load($"{dir.TrimEnd('/')}/{file}") as GameModeInfo;
+            // Exported PCKs replace each authored `foo.tres` with a
+            // `foo.tres.remap` sidecar, and DirAccess lists only the sidecar.
+            // Strip it so Load follows the remap to the packed resource.
+            string resource = file.EndsWith(".remap", System.StringComparison.OrdinalIgnoreCase)
+                ? file[..^".remap".Length]
+                : file;
+            if (!resource.EndsWith(".tres", System.StringComparison.OrdinalIgnoreCase)) continue;
+            var loaded = ResourceLoader.Load($"{dir.TrimEnd('/')}/{resource}") as GameModeInfo;
             if (loaded == null || string.IsNullOrEmpty(loaded.Id)) continue;
             if (byId.TryGetValue(loaded.Id, out int at)) modes[at] = loaded;
             else { byId[loaded.Id] = modes.Count; modes.Add(loaded); }

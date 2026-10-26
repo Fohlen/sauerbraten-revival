@@ -38,8 +38,14 @@ public static class MapListCatalog
         Array.Sort(files, StringComparer.Ordinal);
         foreach (string file in files)
         {
-            if (!file.EndsWith(".tres")) continue;
-            var loaded = ResourceLoader.Load($"{dir.TrimEnd('/')}/{file}") as MapList;
+            // Exported PCKs replace each authored `foo.tres` with a
+            // `foo.tres.remap` sidecar, and DirAccess lists only the sidecar.
+            // Strip it so Load follows the remap to the packed resource.
+            string resource = file.EndsWith(".remap", StringComparison.OrdinalIgnoreCase)
+                ? file[..^".remap".Length]
+                : file;
+            if (!resource.EndsWith(".tres", StringComparison.OrdinalIgnoreCase)) continue;
+            var loaded = ResourceLoader.Load($"{dir.TrimEnd('/')}/{resource}") as MapList;
             if (loaded == null || string.IsNullOrEmpty(loaded.Id)) continue;
             lists.Add(loaded);
         }

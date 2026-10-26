@@ -44,6 +44,39 @@ public class MapListCatalogTest : GoTestBase
     }
 
     [Test]
+    public void LoadFollowsExportedRemapSidecars()
+    {
+        // An exported PCK replaces `foo.tres` with `foo.tres.remap` and lists only
+        // the sidecar in DirAccess; loading must still resolve the authored path.
+        const string dir = "user://maplists_export_test";
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        string resPath = $"{dir}/mod_pool.res";
+        string remapPath = $"{dir}/mod_pool.tres.remap";
+        try
+        {
+            var list = new MapList { Id = "mod_pool", Name = "mod pool", Maps = new[] { "metl3", "church51" } };
+            TestAssert.Equal(Error.Ok, ResourceSaver.Save(list, resPath), "save packed resource");
+            using (var file = FileAccess.Open(remapPath, FileAccess.ModeFlags.Write))
+            {
+                TestAssert.True(file != null, "open remap sidecar");
+                file!.StoreString($"[remap]\n\npath=\"{resPath}\"\n");
+            }
+
+            var loaded = MapListCatalog.Load(dir);
+            TestAssert.Equal(1, loaded.Length, "one remapped list");
+            TestAssert.Equal("mod_pool", loaded[0].Id, "remapped list id");
+            TestAssert.Equal(2, loaded[0].Maps.Length, "remapped map count");
+            TestAssert.Equal("metl3", loaded[0].Maps[0], "remapped map order");
+        }
+        finally
+        {
+            DirAccess.RemoveAbsolute(remapPath);
+            DirAccess.RemoveAbsolute(resPath);
+            DirAccess.RemoveAbsolute(dir);
+        }
+    }
+
+    [Test]
     public void ForModeSelectsTheEnginePool()
     {
         // ML_ModeType 5/6/7 -> ML_ModeMaps 2 (ctf pool).

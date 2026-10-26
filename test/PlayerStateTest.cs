@@ -301,6 +301,42 @@ public class PlayerStateTest : GoTestBase
     }
 
     [Test]
+    public void LoadFollowsExportedRemapSidecars()
+    {
+        // An exported PCK replaces `foo.tres` with `foo.tres.remap` and lists only
+        // the sidecar in DirAccess; loading must still resolve the authored path.
+        const string dir = "user://gamemodes_export_test";
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        string resPath = $"{dir}/test_remap_mode.res";
+        string remapPath = $"{dir}/test_remap_mode.tres.remap";
+        try
+        {
+            var authored = new GameModeInfo { Id = "test_remap_mode", Name = "test remap mode", Flags = ModeFlags.Insta };
+            TestAssert.Equal(Error.Ok, ResourceSaver.Save(authored, resPath), "save packed resource");
+            using (var file = FileAccess.Open(remapPath, FileAccess.ModeFlags.Write))
+            {
+                TestAssert.True(file != null, "open remap sidecar");
+                file!.StoreString($"[remap]\n\npath=\"{resPath}\"\n");
+            }
+
+            var modes = GameModeCatalog.Load(dir);
+            GameModeInfo? loaded = null;
+            foreach (var candidate in modes)
+                if (candidate.Id == "test_remap_mode") loaded = candidate;
+
+            TestAssert.True(loaded != null, "remapped mode is loaded");
+            TestAssert.Equal("test remap mode", loaded!.Name, "remapped mode name");
+            TestAssert.True(loaded.Has(ModeFlags.Insta), "remapped mode flags");
+        }
+        finally
+        {
+            DirAccess.RemoveAbsolute(remapPath);
+            DirAccess.RemoveAbsolute(resPath);
+            DirAccess.RemoveAbsolute(dir);
+        }
+    }
+
+    [Test]
     public void ModeFlagsMatchEngineTable()
     {
         TestAssert.Equal(ModeFlags.Lobby, GameModeCatalog.Get("ffa").Flags, "ffa flags");
