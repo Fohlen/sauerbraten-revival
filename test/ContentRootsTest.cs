@@ -36,30 +36,53 @@ public class ContentRootsTest : GoTestBase
     [Test]
     public void MapCandidatesAreAssetFirstThenDump()
     {
-        var candidates = ContentRoots.CandidatePaths(ContentKind.Map, "base/church51.ogz");
-        TestAssert.Equal(2, candidates.Length, "two candidates");
-        TestAssert.Equal($"{ContentRoots.ProjectPackages}/base/church51.ogz",
-            candidates[0], "project assets first");
-        TestAssert.Equal(Path.Combine(ContentRoots.ReferencePackages, "base", "church51.ogz"),
-            candidates[1], "reference dump second");
+        WithDump("/fake/dump", () =>
+        {
+            var candidates = ContentRoots.CandidatePaths(ContentKind.Map, "base/church51.ogz");
+            TestAssert.Equal(2, candidates.Length, "two candidates");
+            TestAssert.Equal($"{ContentRoots.ProjectPackages}/base/church51.ogz",
+                candidates[0], "project assets first");
+            TestAssert.Equal(Path.Combine("/fake/dump", "packages", "base", "church51.ogz"),
+                candidates[1], "reference dump second");
+        });
+    }
+
+    [Test]
+    public void NoDumpConfiguredYieldsTheProjectCandidateOnly()
+    {
+        WithDump(null, () =>
+        {
+            var candidates = ContentRoots.CandidatePaths(ContentKind.Map, "base/church51.ogz");
+            TestAssert.Equal(1, candidates.Length, "project candidate only");
+            TestAssert.Equal($"{ContentRoots.ProjectPackages}/base/church51.ogz", candidates[0], "project path");
+            TestAssert.True(ContentRoots.ReferencePackages == null, "no dump packages tree");
+            TestAssert.True(ContentRoots.ReferenceTree(ContentKind.Sound) == null, "no dump tree");
+            TestAssert.True(!ContentRoots.HasReferenceDump, "no dump reported");
+        });
     }
 
     [Test]
     public void TextureCandidatesArePackageRelative()
     {
-        var candidates = ContentRoots.CandidatePaths(ContentKind.Texture, "base/foo.jpg");
-        TestAssert.Equal("res://assets/textures/base/foo.jpg", candidates[0], "project textures");
-        TestAssert.Equal(Path.Combine(ContentRoots.ReferencePackages, "base", "foo.jpg"),
-            candidates[1], "dump keeps the package-relative path");
+        WithDump("/fake/dump", () =>
+        {
+            var candidates = ContentRoots.CandidatePaths(ContentKind.Texture, "base/foo.jpg");
+            TestAssert.Equal("res://assets/textures/base/foo.jpg", candidates[0], "project textures");
+            TestAssert.Equal(Path.Combine("/fake/dump", "packages", "base", "foo.jpg"),
+                candidates[1], "dump keeps the package-relative path");
+        });
     }
 
     [Test]
     public void SoundCandidatesUseTheSoundsSubdirectory()
     {
-        var candidates = ContentRoots.CandidatePaths(ContentKind.Sound, "q009/rifle.ogg");
-        TestAssert.Equal("res://assets/sounds/q009/rifle.ogg", candidates[0], "project sounds");
-        TestAssert.Equal(Path.Combine(ContentRoots.ReferencePackages, "sounds", "q009", "rifle.ogg"),
-            candidates[1], "dump nests sounds/");
+        WithDump("/fake/dump", () =>
+        {
+            var candidates = ContentRoots.CandidatePaths(ContentKind.Sound, "q009/rifle.ogg");
+            TestAssert.Equal("res://assets/sounds/q009/rifle.ogg", candidates[0], "project sounds");
+            TestAssert.Equal(Path.Combine("/fake/dump", "packages", "sounds", "q009", "rifle.ogg"),
+                candidates[1], "dump nests sounds/");
+        });
     }
 
     [Test]
@@ -72,6 +95,12 @@ public class ContentRootsTest : GoTestBase
     [Test]
     public void ResolvePrefersProjectCopyWhenPresent()
     {
+        if (!ContentRoots.HasReferenceDump)
+        {
+            GD.Print("[content] no reference dump configured (set SAUER_REF); skipping dump fallback check");
+            return;
+        }
+
         // church51 exists in the dump. If a converted copy has been placed under
         // assets/packages (tools/ogztool/convert-all-maps.sh), the resolver must
         // prefer it. Skip the assertion when no converted copy exists so the test
@@ -81,13 +110,19 @@ public class ContentRootsTest : GoTestBase
         if (Godot.FileAccess.FileExists(converted))
             TestAssert.Equal(converted, resolved, "converted copy wins");
         else
-            TestAssert.Equal(Path.Combine(ContentRoots.ReferencePackages, "base", "church51.ogz"),
+            TestAssert.Equal(Path.Combine(ContentRoots.ReferencePackages!, "base", "church51.ogz"),
                 resolved, "falls back to the dump");
     }
 
     [Test]
     public void ResolveFallsBackToDumpWhenNotConverted()
     {
+        if (!ContentRoots.HasReferenceDump)
+        {
+            GD.Print("[content] no reference dump configured (set SAUER_REF); skipping dump fallback check");
+            return;
+        }
+
         // A map that is v32+ in the dump and (almost certainly) not converted.
         string resolved = ContentRoots.ResolveMap("base/bt_falls");
         TestAssert.True(Godot.FileAccess.FileExists(resolved), $"expected an existing map, got '{resolved}'");
@@ -129,12 +164,12 @@ public class ContentRootsTest : GoTestBase
                 ContentRoots.ReferenceRoot,
                 "honours ProjectSettings when env var is unset");
 
-            // Empty setting should fall back to default
+            // An empty setting means no dump at all: there is no guessed default,
+            // because a guessed path would make an unconfigured checkout read a
+            // protected folder (macOS prompts for Downloads access on first touch).
             ProjectSettings.SetSetting(ContentRoots.ProjectSettingKey, "");
-            TestAssert.Equal(
-                ContentRoots.DefaultReferenceRoot,
-                ContentRoots.ReferenceRoot,
-                "falls back to default when setting is empty");
+            TestAssert.True(ContentRoots.ReferenceRoot == null, "empty setting means no dump");
+            TestAssert.True(!ContentRoots.HasReferenceDump, "no dump reported");
 
             // Env var takes priority over ProjectSettings
             System.Environment.SetEnvironmentVariable("SAUER_REF", "/test/env/override");
@@ -147,10 +182,33 @@ public class ContentRootsTest : GoTestBase
         finally
         {
             System.Environment.SetEnvironmentVariable("SAUER_REF", originalEnv);
-            if (!string.IsNullOrEmpty(originalSetting))
-                ProjectSettings.SetSetting(ContentRoots.ProjectSettingKey, originalSetting);
-            else if (ProjectSettings.HasSetting(ContentRoots.ProjectSettingKey))
-                ProjectSettings.SetSetting(ContentRoots.ProjectSettingKey, Variant.From<string?>(null));
+            ProjectSettings.SetSetting(ContentRoots.ProjectSettingKey, originalSetting);
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="body"/> with <c>SAUER_REF</c> pointing at
+    /// <paramref name="root"/> (null = no dump configured) and the ProjectSetting
+    /// cleared, restoring both afterwards. The dump root is never a real location
+    /// here: the resolver only assembles paths, it does not read them.
+    /// </summary>
+    private static void WithDump(string? root, System.Action body)
+    {
+        string? originalEnv = System.Environment.GetEnvironmentVariable("SAUER_REF");
+        string originalSetting = ProjectSettings.HasSetting(ContentRoots.ProjectSettingKey)
+            ? ProjectSettings.GetSetting(ContentRoots.ProjectSettingKey).AsString()
+            : "";
+
+        try
+        {
+            ProjectSettings.SetSetting(ContentRoots.ProjectSettingKey, "");
+            System.Environment.SetEnvironmentVariable("SAUER_REF", root);
+            body();
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("SAUER_REF", originalEnv);
+            ProjectSettings.SetSetting(ContentRoots.ProjectSettingKey, originalSetting);
         }
     }
 }

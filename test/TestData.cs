@@ -8,11 +8,18 @@ namespace SauerbratenRevival.Tests;
 
 /// <summary>
 /// Locates the test fixtures. The OGZ maps are not committed — they are read
-/// from the read-only reference dump (same <c>SAUER_REF</c> the refharness uses).
+/// from the read-only reference dump (same <c>SAUER_REF</c> the refharness uses),
+/// or from the converted copies under <c>res://assets</c> when those exist.
 /// </summary>
 public static class TestData
 {
-    public static readonly string ReferenceRoot = ContentRoots.ReferenceRoot;
+    /// <summary>
+    /// The configured reference dump root. Tests that read original content need
+    /// one, so failing loudly here beats silently asserting against nothing.
+    /// </summary>
+    public static string ReferenceRoot => ContentRoots.ReferenceRoot
+        ?? throw new System.InvalidOperationException(
+            "No reference dump configured: set SAUER_REF (or sauerbraten/reference_path) — see docs/dependencies.md.");
 
     public static readonly string OgzPath = ContentRoots.ResolveMap("base/church51");
 

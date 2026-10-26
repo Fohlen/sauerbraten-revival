@@ -40,7 +40,11 @@ public enum ContentKind
 ///   </description></item>
 ///   <item><description>
 ///     <b><c>$SAUER_REF/packages/…</c></b> — the read-only reference dump, used as a
-///     dev-only fallback for anything not imported into the project.
+///     dev-only fallback for anything not imported into the project. Strictly
+///     opt-in: the dump is only consulted when a developer configures one (see
+///     <see cref="ReferenceRoot"/>) — there is no implicit default location, so an
+///     unconfigured checkout never probes a protected folder (macOS prompts for
+///     Downloads access the first time a process touches it).
 ///   </description></item>
 /// </list>
 ///
@@ -54,13 +58,18 @@ public enum ContentKind
 public static class ContentRoots
 {
     public const string ProjectSettingKey = "sauerbraten/reference_path";
-    public const string DefaultReferenceRoot = "/Users/fohlen/Downloads/sauerbraten-code-r6889";
 
     /// <summary>Project-owned content root, a Godot virtual path so it reads from a packed PCK.</summary>
     public const string ProjectRoot = "res://assets";
 
-    /// <summary>Reference dump root (<c>$SAUER_REF</c>, else ProjectSetting <c>sauerbraten/reference_path</c>, else the default).</summary>
-    public static string ReferenceRoot
+    /// <summary>
+    /// Reference dump root (<c>$SAUER_REF</c>, else ProjectSetting
+    /// <c>sauerbraten/reference_path</c>), or <c>null</c> when no dump is configured.
+    /// Nothing falls back to a guessed location: reading a dump is a developer
+    /// opt-in, so a checkout that never sets this never touches one (and never
+    /// triggers an OS permission prompt for it).
+    /// </summary>
+    public static string? ReferenceRoot
     {
         get
         {
@@ -74,15 +83,19 @@ public static class ContentRoots
                     return ProjectSettings.GlobalizePath(setting.Trim());
             }
 
-            return DefaultReferenceRoot;
+            return null;
         }
     }
+
+    /// <summary>Whether a reference dump is configured at all (see <see cref="ReferenceRoot"/>).</summary>
+    public static bool HasReferenceDump => ReferenceRoot != null;
 
     /// <summary>Project-owned converted maps (<c>res://assets/packages</c>), a Godot virtual path so it reads from a packed PCK.</summary>
     public static string ProjectPackages => $"{ProjectRoot}/packages";
 
-    /// <summary>Reference dump packages (<c>$SAUER_REF/packages</c>), as an OS path.</summary>
-    public static string ReferencePackages => Path.Combine(ReferenceRoot, "packages");
+    /// <summary>Reference dump packages (<c>$SAUER_REF/packages</c>), as an OS path, or null when no dump is configured.</summary>
+    public static string? ReferencePackages =>
+        ReferenceRoot is { } root ? Path.Combine(root, "packages") : null;
 
     /// <summary>Project subdirectory a kind is imported into (a <c>res://</c> path).</summary>
     public static string ProjectDir(ContentKind kind) => kind switch
@@ -104,11 +117,12 @@ public static class ContentRoots
     /// <summary>The project tree a kind resolves against (a <c>res://</c> path).</summary>
     public static string ProjectTree(ContentKind kind) => ProjectDir(kind);
 
-    /// <summary>The reference-dump tree a kind resolves against (an OS path).</summary>
-    public static string ReferenceTree(ContentKind kind)
+    /// <summary>The reference-dump tree a kind resolves against (an OS path), or null when no dump is configured.</summary>
+    public static string? ReferenceTree(ContentKind kind)
     {
+        if (ReferencePackages is not { } packages) return null;
         string sub = ReferenceDir(kind);
-        return sub.Length == 0 ? ReferencePackages : Path.Combine(ReferencePackages, sub);
+        return sub.Length == 0 ? packages : Path.Combine(packages, sub);
     }
 
     /// <summary>The project path for a kind-relative asset (existence not checked).</summary>
@@ -116,15 +130,15 @@ public static class ContentRoots
 
     /// <summary>
     /// Candidates for a kind-relative asset, in priority order: the project copy
-    /// (a <c>res://</c> path, readable from a packed PCK) then the dump (an OS path).
+    /// (a <c>res://</c> path, readable from a packed PCK) then the dump (an OS path,
+    /// only when one is configured).
     /// </summary>
     public static string[] CandidatePaths(ContentKind kind, string relative)
     {
-        return new[]
-        {
-            ProjectPath(kind, relative),
-            Path.Combine(ReferenceTree(kind), relative),
-        };
+        var candidates = new List<string> { ProjectPath(kind, relative) };
+        if (ReferenceTree(kind) is { } dump)
+            candidates.Add(Path.Combine(dump, relative));
+        return candidates.ToArray();
     }
 
     /// <summary>The first existing candidate for a kind-relative asset, or null.</summary>
@@ -142,7 +156,10 @@ public static class ContentRoots
     /// </summary>
     public static string? TryResolve(ContentKind kind, IEnumerable<string> relatives)
     {
-        foreach (string tree in new[] { ProjectTree(kind), ReferenceTree(kind) })
+        var trees = new List<string> { ProjectTree(kind) };
+        if (ReferenceTree(kind) is { } dump) trees.Add(dump);
+
+        foreach (string tree in trees)
             foreach (string relative in relatives)
             {
                 string candidate = $"{tree}/{relative}";
@@ -153,14 +170,14 @@ public static class ContentRoots
 
     /// <summary>
     /// First existing candidate, else a stable, explainable path for the caller's
-    /// not-found error: the project path when its tree exists, otherwise the dump.
+    /// not-found error: the project path when its tree exists (or when no dump is
+    /// configured), otherwise the dump.
     /// </summary>
     public static string Resolve(ContentKind kind, string relative)
     {
         if (TryResolve(kind, relative) is { } found) return found;
-        return DirAccess.DirExistsAbsolute(ProjectTree(kind))
-            ? ProjectPath(kind, relative)
-            : Path.Combine(ReferenceTree(kind), relative);
+        if (DirAccess.DirExistsAbsolute(ProjectTree(kind))) return ProjectPath(kind, relative);
+        return ReferenceTree(kind) is { } dump ? Path.Combine(dump, relative) : ProjectPath(kind, relative);
     }
 
     /// <summary>

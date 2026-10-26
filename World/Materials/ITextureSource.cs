@@ -76,17 +76,20 @@ public sealed class FallbackTextureSource : ITextureSource
     public Image? GetImage(string path) => _primary.GetImage(path) ?? _fallback.GetImage(path);
 }
 
-/// <summary>Loads textures on demand from the reference dump (see <see cref="ContentRoots.ReferenceTree"/>).</summary>
+/// <summary>Loads textures on demand from the reference dump (see <see cref="ContentRoots.ReferenceTree"/>). Inert when no dump is configured.</summary>
 public sealed class DumpTextureSource : ITextureSource
 {
-    private readonly string _packagesRoot;
+    private readonly string? _packagesRoot;
     private readonly Dictionary<string, Texture2D?> _textures = new();
     private readonly Dictionary<string, Vector2I> _sizes = new();
 
     public DumpTextureSource(string? referenceRoot = null)
-        => _packagesRoot = referenceRoot is null
-            ? ContentRoots.ReferenceTree(ContentKind.Texture)
-            : Path.Combine(referenceRoot, "packages");
+        => _packagesRoot = referenceRoot switch
+        {
+            null => ContentRoots.ReferencePackages,
+            "" => null, // explicitly disabled
+            _ => Path.Combine(referenceRoot, "packages"),
+        };
 
     public Texture2D? Get(string path)
     {
@@ -109,7 +112,8 @@ public sealed class DumpTextureSource : ITextureSource
 
     private Image? LoadImage(string path)
     {
-        string full = Path.Combine(_packagesRoot, path);
+        if (_packagesRoot is not { } packagesRoot) return null;
+        string full = Path.Combine(packagesRoot, path);
         if (!File.Exists(full)) return null;
         var image = new Image();
         return image.Load(full) == Error.Ok ? image : null;
@@ -122,7 +126,9 @@ public sealed class DumpTextureSource : ITextureSource
 /// </summary>
 public static class TextureSources
 {
-    /// <summary>Project textures first, then the reference dump.</summary>
+    /// <summary>Project textures only, plus the reference dump when one is configured.</summary>
     public static ITextureSource CreateDefault() =>
-        new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource());
+        ContentRoots.HasReferenceDump
+            ? new FallbackTextureSource(new ResourceTextureSource(), new DumpTextureSource())
+            : new ResourceTextureSource();
 }

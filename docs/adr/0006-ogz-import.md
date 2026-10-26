@@ -53,9 +53,13 @@ load time.
    exported once by the patched reference client
    ([`tools/ogztool`](../../tools/ogztool/README.md)). Users never build the
    exporter; the developer regenerates the catalogue and ships it.
-4. **The reference dump is dev-only.** The game and its tests do not require it to
-   run from the shipped asset pack; it is only needed to regenerate the catalogue
-   or normalise an old map.
+4. **The reference dump is dev-only and strictly opt-in.** The game and its tests
+   do not require it to run from the shipped asset pack; it is only needed to
+   regenerate the catalogue or normalise an old map. Nothing guesses a location
+   for it: the dump is consulted only when `SAUER_REF` (or the
+   `sauerbraten/reference_path` ProjectSetting) is set, so an unconfigured
+   checkout never touches it (and never triggers an OS permission prompt, e.g.
+   macOS Downloads access).
 5. **The native map directory stays the editor's save format.** New maps created
    in the in-game editor are saved as `world.res` + `history.res` + `Level.tscn`
    ([editor-and-commands.md §7](../editor-and-commands.md#7-map-format-versioned-command-history)).
@@ -295,7 +299,7 @@ tool's own options.
 Godot imports `assets/models/` and `assets/textures/` as Resources; the runtime
 resolves maps, textures, sounds and models through the single
 [`ContentRoots`](../../World/Content/ContentRoots.cs) resolver (project
-`res://assets/` first, then the reference dump).
+`res://assets/` first, then the reference dump — when one is configured).
 
 ---
 

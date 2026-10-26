@@ -160,6 +160,12 @@ The original engine is a pristine snapshot of **Sauerbraten SVN r6889**:
 and is **never modified** — patches are applied to a copy at build time. Use it
 for lookup when porting original behaviour.
 
+The runtime dump fallback is **opt-in**: point `SAUER_REF` (or the
+`sauerbraten/reference_path` ProjectSetting, shipped empty) at this path when you
+want it, e.g. `SAUER_REF=~/Downloads/sauerbraten-code-r6889 ./run-tests.sh`.
+Nothing guesses a default location, so an unconfigured checkout never reads the
+dump — which also keeps macOS from prompting for Downloads access on launch.
+
 ## Verifying against the original
 
 Prefer writing a **small, focused C++ probe** against the r6889 source over

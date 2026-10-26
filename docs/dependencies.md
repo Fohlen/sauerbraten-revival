@@ -50,11 +50,22 @@ tools/ogztool/build.sh                    # OGZ metadata + old-map conversion
 
 | Setting / Variable | Type | Used by | Default |
 | --- | --- | --- | --- |
-| `sauerbraten/reference_path` | `ProjectSettings` | Dev resolver (`ContentRoots`) fallback when an asset is not in the project pack | `/Users/fohlen/Downloads/sauerbraten-code-r6889` |
-| `SAUER_REF` | Env var (overrides ProjectSetting) | Tests, viewer, import tools, refharness, ogztool | Unset (falls back to ProjectSetting or default) |
+| `sauerbraten/reference_path` | `ProjectSettings` | Dev resolver (`ContentRoots`) fallback when an asset is not in the project pack | empty = no dump (opt-in only; nothing probes a guessed path) |
+| `SAUER_REF` | Env var (overrides ProjectSetting) | Tests, viewer, import tools, refharness, ogztool | Unset (falls back to ProjectSetting, else no dump) |
 | `GODOT` | Env var | `run-tests.sh` | `/Applications/Godot_mono.app/Contents/MacOS/Godot` |
 | `SAUER_TRACE` | Env var | A1/A2 instrumented reference client (refharness) | unset (features inert) |
 | `SAUER_METADATA` / `SAUER_METADATA_EXIT` / `SAUER_CONVERT_SAVE` | Env var | OGZ tooling client (ogztool) | unset (features inert) |
+
+The reference dump is **opt-in**: `sauerbraten/reference_path` ships empty, and
+nothing falls back to a guessed location. Point it (or `SAUER_REF`) at your r6889
+checkout only when you actually have one, e.g.
+
+```sh
+SAUER_REF=~/Downloads/sauerbraten-code-r6889 ./run-tests.sh
+```
+
+Leaving it unset keeps the game and editor on `res://assets/` alone, and avoids the
+OS permission prompt a protected folder (macOS Downloads) triggers on first access.
 
 ## Recreating an ad-hoc analysis environment
 

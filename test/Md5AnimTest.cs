@@ -32,7 +32,13 @@ public class Md5AnimTest : TestClass
 
     private static void Compare(string model, string anim, int frame)
     {
-        string refRoot = ContentRoots.ReferenceRoot;
+        string? refRoot = ContentRoots.ReferenceRoot;
+        if (refRoot is null)
+        {
+            GD.Print("[md5anim] no reference dump configured (set SAUER_REF); skipping");
+            return;
+        }
+
         string meshPath = Path.Combine(refRoot, "packages", "models", model, model + ".md5mesh");
         string animPath = Path.Combine(refRoot, "packages", "models", model, anim + ".md5anim");
         string goldenPath = Path.Combine(ProjectSettings.GlobalizePath("res://"),
