@@ -12,8 +12,9 @@ namespace SauerbratenRevival.Tests;
 /// world is identical to a freshly built one.
 ///
 /// Kept deliberately small: tests use a synthetic world or a coarse chunk size so
-/// the suite stays fast. church51's full mesh is ~686k triangles; building it more
-/// than once or twice per suite is the difference between seconds and minutes.
+/// the suite stays fast. church51's final mesh is ~107k triangles (a ~660 ms full
+/// build); building it more than once or twice per suite is the difference between
+/// seconds and minutes.
 /// </summary>
 public class IncrementalMeshTest : GoTestBase
 {

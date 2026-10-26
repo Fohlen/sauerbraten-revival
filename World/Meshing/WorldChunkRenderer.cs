@@ -28,11 +28,12 @@ public partial class WorldChunkRenderer : Node3D
     /// <summary>
     /// Chunk edge length in world units (must be a power of two).
     ///
-    /// Measured on church51 (~686k triangles): a full rebuild is ~660 ms and is
-    /// independent of chunk size, but *per-chunk* rebuild cost falls sharply with
-    /// smaller chunks — ~108 ms at 512, ~46 ms at 256, **~1.4 ms at 128**. Small
-    /// chunks are what make incremental rebuilds fit in a frame. 128 is the default
-    /// for that reason; it costs more chunk nodes (91 vs 8 on church51).
+    /// Measured on church51 (107,356 triangles in the final mesh): a full rebuild
+    /// is ~660 ms and is independent of chunk size, but *per-chunk* rebuild cost
+    /// falls sharply with smaller chunks — ~108 ms at 512, ~46 ms at 256,
+    /// **~1.4 ms at 128**. Small chunks are what make incremental rebuilds fit in a
+    /// frame. 128 is the default for that reason; it costs more chunk nodes
+    /// (91 vs 8 on church51).
     /// </summary>
     [Export] public int ChunkSize { get; set; } = 128;
 
