@@ -814,6 +814,6 @@ public partial class EditorController : Node3D
 
     // ---- Sauerbraten (Z-up) <-> Godot (Y-up) ----
 
-    private static Vector3 ToSauer(Vector3 g) => new(g.X, -g.Z, g.Y);
-    private static Vector3 ToSauerDir(Vector3 g) => new(g.X, -g.Z, g.Y);
+    private static Vector3 ToSauer(Vector3 g) => new(-g.X, -g.Z, g.Y);
+    private static Vector3 ToSauerDir(Vector3 g) => new(-g.X, -g.Z, g.Y);
 }

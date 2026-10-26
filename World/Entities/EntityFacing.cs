@@ -17,6 +17,6 @@ public static class EntityFacing
     {
         Vector3 forward = Forward(yawDegrees);
         if (forward.LengthSquared() > 1e-6f)
-            node.Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1));
+            node.Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1)).ScaledLocal(new Vector3(-1, 1, 1));
     }
 }

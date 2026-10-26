@@ -161,6 +161,7 @@ public partial class EmptyMap : Node3D, IGameWorld
         if (Built) return;
 
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
+        Scale = new Vector3(-1, 1, 1);
 
         // The room itself is untextured, but player/hudgun models and their skins
         // still come from the project's imported content (same sources MapWorld

@@ -96,10 +96,10 @@ public interface IMapSource
     void UnregisterPlayer(MapPlayer player) { }
 
     /// <summary>Converts a position from Sauerbraten Z-up coordinates to Godot Y-up coordinates under standard world rotation.</summary>
-    public static Vector3 SauerbratenToGodot(Vector3 sauer) => new(sauer.X, sauer.Z, -sauer.Y);
+    public static Vector3 SauerbratenToGodot(Vector3 sauer) => new(-sauer.X, sauer.Z, -sauer.Y);
 
     /// <summary>Converts a direction or position from Godot Y-up coordinates to Sauerbraten Z-up coordinates.</summary>
-    public static Vector3 GodotToSauerbraten(Vector3 godot) => new(godot.X, -godot.Z, godot.Y);
+    public static Vector3 GodotToSauerbraten(Vector3 godot) => new(-godot.X, -godot.Z, godot.Y);
 
     /// <summary>Helper resolving the N-th spawn point from a sequence, falling back to bounds center.</summary>
     public static (Vector3 Position, float Yaw) ResolveSpawn(IEnumerable<(Vector3 Pos, float Yaw)> spawns, Vector3 fallback, int index = 0)

@@ -22,7 +22,7 @@ public class MapPlayerLookTest : GoTestBase
         player.Setup(octa, new Vector3(3000, 946, 3040), 0f);
         var cam = new Camera3D();
         player.AddChild(cam);
-        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
+        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0), Scale = new Vector3(-1, 1, 1) }; // Z-up -> Y-up
         world.AddChild(player);
         TestScene.AddChild(world);
 

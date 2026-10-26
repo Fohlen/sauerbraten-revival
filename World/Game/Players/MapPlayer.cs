@@ -596,13 +596,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         ApplyMouse();
 
         // Movement keys (physics.cpp dir()): forward/back -> move, left/right -> strafe.
-        // NOTE: strafe is negated relative to dir() because the same Godot/macOS
-        // screen-X handedness that flips mouse yaw (see ApplyMouse) also flips the
-        // engine's strafe sign, so A/D would otherwise be swapped.
+        // strafe_left (+1) moves along Sauer +X (which maps to Godot -X, left).
+        // strafe_right (-1) moves along Sauer -X (which maps to Godot +X, right).
         if (!Entity.Dead)
         {
             Entity.Move = (Input.IsActionPressed("move_forward") ? 1 : 0) - (Input.IsActionPressed("move_back") ? 1 : 0);
-            Entity.Strafe = (Input.IsActionPressed("strafe_right") ? 1 : 0) - (Input.IsActionPressed("strafe_left") ? 1 : 0);
+            Entity.Strafe = (Input.IsActionPressed("strafe_left") ? 1 : 0) - (Input.IsActionPressed("strafe_right") ? 1 : 0);
             Entity.Jumping = Input.IsActionPressed("jump");
         }
         else
@@ -1250,11 +1249,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         cursens /= 33.0f * SensitivityScale;
 
         // rendergl.cpp mousemove: yaw += dx*cursens; pitch -= dy*cursens.
-        // NOTE: the yaw sign is negated relative to the original because Godot's
-        // captured-mouse Relative.X runs opposite to SDL's xrel on macOS, while
-        // Relative.Y matches SDL's (down-positive) yrel. Hence yaw uses -d.X and
-        // pitch keeps the original -d.Y.
-        Entity.Yaw -= d.X * cursens;
+        // Moving mouse right (d.X > 0) increases yaw in Sauerbraten (towards -X in Sauer, which maps to +X in Godot).
+        Entity.Yaw += d.X * cursens;
         Pitch -= d.Y * cursens * (InvertMouse ? -1f : 1f);
         FixCameraRange();
         SyncTransform();

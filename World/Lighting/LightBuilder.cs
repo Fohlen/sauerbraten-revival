@@ -46,7 +46,7 @@ public static class LightBuilder
                     ShadowEnabled = false,
                 };
                 Vector3 direction = ((Vector3)spot.Position - position).Normalized();
-                spotlight.Basis = Basis.LookingAt(direction, UpVector(direction));
+                spotlight.Basis = Basis.LookingAt(direction, UpVector(direction)).ScaledLocal(new Vector3(-1, 1, 1));
                 root.AddChild(spotlight);
             }
             else

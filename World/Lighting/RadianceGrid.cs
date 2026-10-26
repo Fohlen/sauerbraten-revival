@@ -103,15 +103,15 @@ public class RadianceGrid
 
     /// <summary>
     /// Map a point or direction from Sauerbraten space (Z-up) to Godot world space (Y-up).
-    /// Rotation −90° about X: (x, y, z) → (x, z, -y).
+    /// Rotation −90° about X with X reflection: (x, y, z) → (-x, z, -y).
     /// </summary>
-    public static Vector3 SauerToWorld(Vector3 sauer) => new(sauer.X, sauer.Z, -sauer.Y);
+    public static Vector3 SauerToWorld(Vector3 sauer) => new(-sauer.X, sauer.Z, -sauer.Y);
 
     /// <summary>
     /// Map a point or direction from Godot world space (Y-up) to Sauerbraten space (Z-up).
-    /// Inverse rotation +90° about X: (x, y, z) → (x, -z, y).
+    /// Inverse rotation +90° about X with X reflection: (x, y, z) → (-x, -z, y).
     /// </summary>
-    public static Vector3 WorldToSauer(Vector3 world) => new(world.X, -world.Z, world.Y);
+    public static Vector3 WorldToSauer(Vector3 world) => new(-world.X, -world.Z, world.Y);
 
     /// <summary>
     /// Map an AABB from Sauerbraten coordinates to Godot world coordinates.
@@ -121,10 +121,10 @@ public class RadianceGrid
         Vector3 sMin = sauerBounds.Position;
         Vector3 sMax = sauerBounds.End;
         // In Sauer space: y is forward, z is up.
-        // In Godot space: y is up (sauer.z), z is -forward (-sauer.y).
-        // Note: since world.z = -sauer.y, min world.z corresponds to -sMax.Y, and max world.z corresponds to -sMin.Y.
-        Vector3 wMin = new(Mathf.Min(sMin.X, sMax.X), Mathf.Min(sMin.Z, sMax.Z), Mathf.Min(-sMax.Y, -sMin.Y));
-        Vector3 wMax = new(Mathf.Max(sMin.X, sMax.X), Mathf.Max(sMin.Z, sMax.Z), Mathf.Max(-sMax.Y, -sMin.Y));
+        // In Godot space: x is -sauer.x, y is up (sauer.z), z is -forward (-sauer.y).
+        // Note: since world.x = -sauer.x, min world.x corresponds to -sMax.X, and max world.x corresponds to -sMin.X.
+        Vector3 wMin = new(Mathf.Min(-sMin.X, -sMax.X), Mathf.Min(sMin.Z, sMax.Z), Mathf.Min(-sMax.Y, -sMin.Y));
+        Vector3 wMax = new(Mathf.Max(-sMin.X, -sMax.X), Mathf.Max(sMin.Z, sMax.Z), Mathf.Max(-sMax.Y, -sMin.Y));
         return new Aabb(wMin, wMax - wMin);
     }
 
@@ -135,10 +135,10 @@ public class RadianceGrid
     {
         Vector3 wMin = worldBounds.Position;
         Vector3 wMax = worldBounds.End;
-        // Inverse: sauer.x = world.x, sauer.y = -world.z, sauer.z = world.y.
-        // Since sauer.y = -world.z, min sauer.y corresponds to -wMax.Z, and max sauer.y corresponds to -wMin.Z.
-        Vector3 sMin = new(Mathf.Min(wMin.X, wMax.X), Mathf.Min(-wMax.Z, -wMin.Z), Mathf.Min(wMin.Y, wMax.Y));
-        Vector3 sMax = new(Mathf.Max(wMin.X, wMax.X), Mathf.Max(-wMax.Z, -wMin.Z), Mathf.Max(wMin.Y, wMax.Y));
+        // Inverse: sauer.x = -world.x, sauer.y = -world.z, sauer.z = world.y.
+        // Since sauer.x = -world.x, min sauer.x corresponds to -wMax.X, and max sauer.x corresponds to -wMin.X.
+        Vector3 sMin = new(Mathf.Min(-wMin.X, -wMax.X), Mathf.Min(-wMax.Z, -wMin.Z), Mathf.Min(wMin.Y, wMax.Y));
+        Vector3 sMax = new(Mathf.Max(-wMin.X, -wMax.X), Mathf.Max(-wMax.Z, -wMin.Z), Mathf.Max(wMin.Y, wMax.Y));
         return new Aabb(sMin, sMax - sMin);
     }
 

@@ -142,7 +142,7 @@ public partial class PlayerView : Node3D
                 float rad = Mathf.DegToRad(Player.Entity.Yaw);
                 up = new Vector3(-Mathf.Sin(rad), Mathf.Cos(rad), 0);
             }
-            Player.Basis = Basis.LookingAt(forward, up);
+            Player.Basis = Basis.LookingAt(forward, up).ScaledLocal(new Vector3(-1, 1, 1));
         }
 
         SyncCamera();
@@ -189,7 +189,7 @@ public partial class PlayerView : Node3D
         Vector3 facing = Movement.VecFromYawPitch(Player.Entity.Yaw + 180f, 0f, 1, 0);
         if (facing.LengthSquared() > 1e-6f)
         {
-            PlayerModel.Basis = Basis.LookingAt(facing, new Vector3(0, 0, 1));
+            PlayerModel.Basis = Basis.LookingAt(facing, new Vector3(0, 0, 1)).ScaledLocal(new Vector3(-1, 1, 1));
         }
     }
 

@@ -137,6 +137,7 @@ public partial class MapLevel : Node3D, IGameWorld
         if (Octa != null || World == null) return;
 
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
+        Scale = new Vector3(-1, 1, 1);
 
         Snapshot = World.ToSnapshot();
         var octa = Snapshot.ToOcta();

@@ -125,8 +125,8 @@ public class RadianceVolumeTest : GoTestBase
         TestAssert.True(RadianceGrid.SauerToWorld(new Vector3(0, 0, 1)).IsEqualApprox(new Vector3(0, 1, 0)), "+Z Up -> +Y Up");
         // Sauerbraten +Y (Forward) -> Godot -Z (Forward)
         TestAssert.True(RadianceGrid.SauerToWorld(new Vector3(0, 1, 0)).IsEqualApprox(new Vector3(0, 0, -1)), "+Y Forward -> -Z Forward");
-        // Sauerbraten +X (Right) -> Godot +X (Right)
-        TestAssert.True(RadianceGrid.SauerToWorld(new Vector3(1, 0, 0)).IsEqualApprox(new Vector3(1, 0, 0)), "+X Right -> +X Right");
+        // Sauerbraten +X (Left) -> Godot -X (Left)
+        TestAssert.True(RadianceGrid.SauerToWorld(new Vector3(1, 0, 0)).IsEqualApprox(new Vector3(-1, 0, 0)), "+X Left -> -X Left");
 
         // Bounds transformation:
         var sBounds = new Aabb(new Vector3(10, 20, 30), new Vector3(100, 200, 300));

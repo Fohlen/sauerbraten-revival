@@ -89,7 +89,7 @@ public partial class ModelInstance : Node3D
     /// <see cref="ModelOffset"/>.
     /// </summary>
     public static Vector3 OffsetToModelFrame(Vector3 translation) =>
-        new(translation.X, translation.Z, -translation.Y);
+        new(-translation.X, translation.Z, -translation.Y);
 
     /// <summary>The holder-relative position of the model, scaled like the engine's <c>mdltrans</c>.</summary>
     private Vector3 ModelOffset() => ModelScale * OffsetToModelFrame(ModelTranslation);

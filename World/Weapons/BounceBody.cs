@@ -365,7 +365,7 @@ public partial class BounceBody : Node3D
         Position = GetVisualPosition();
         Vector3 forward = Movement.VecFromYawPitch(Entity.Yaw, 0f, 1, 0);
         if (forward.LengthSquared() > 1e-6f)
-            Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1));
+            Basis = Basis.LookingAt(forward, new Vector3(0, 0, 1)).ScaledLocal(new Vector3(-1, 1, 1));
     }
 
     private static void ApplyMaterial(Node node, Material material)

@@ -64,7 +64,7 @@ public class EntityItemTest : GoTestBase
         var map = TestData.ReadMap();
         var root = ItemBuilder.Build(map);
 
-        Basis expectedBasis = Basis.LookingAt(new Vector3(0, 1, 0), new Vector3(0, 0, 1));
+        Basis expectedBasis = Basis.LookingAt(new Vector3(0, 1, 0), new Vector3(0, 0, 1)).ScaledLocal(new Vector3(-1, 1, 1));
         foreach (var child in root.GetChildren())
         {
             if (child is not Item item) continue;

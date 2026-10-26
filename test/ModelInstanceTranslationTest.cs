@@ -29,7 +29,7 @@ public class ModelInstanceTranslationTest : GoTestBase
 
         foreach (float yaw in new[] { 0f, 37f, 90f, 180f, 270f })
         {
-            Basis basis = Basis.LookingAt(EntityFacing.Forward(yaw), new Vector3(0, 0, 1));
+            Basis basis = Basis.LookingAt(EntityFacing.Forward(yaw), new Vector3(0, 0, 1)).ScaledLocal(new Vector3(-1, 1, 1));
             Vector3 worldOffset = basis * holderOffset;
             TestAssert.True(Mathf.Abs(worldOffset.X) < 1e-4f && Mathf.Abs(worldOffset.Y) < 1e-4f,
                 $"yaw {yaw} has no horizontal offset ({worldOffset})");
@@ -58,7 +58,7 @@ public class ModelInstanceTranslationTest : GoTestBase
             return;
         }
 
-        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
+        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0), Scale = new Vector3(-1, 1, 1) }; // Z-up -> Y-up
         var root = new Node3D();
         world.AddChild(root);
         TestScene.AddChild(world);

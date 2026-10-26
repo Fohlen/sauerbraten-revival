@@ -288,6 +288,7 @@ public partial class MapWorld : Node3D, IGameWorld
 
         // The octree/collision layer is Z-up; rotate so the Godot view is Y-up.
         RotationDegrees = new Vector3(-90, 0, 0);
+        Scale = new Vector3(-1, 1, 1);
 
         var map = Map ?? LoadMap(path);
         var octa = Octa ?? map.ToOcta();

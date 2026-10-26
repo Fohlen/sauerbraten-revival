@@ -9,6 +9,7 @@ using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
+using IMapSource = SauerbratenRevival.World.Runtime.IMapSource;
 using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 using SimClock = SauerbratenRevival.World.Runtime.SimClock;
 
@@ -73,19 +74,20 @@ public class MapPlayerTest : GoTestBase
 
         var cam = new Camera3D();
         player.AddChild(cam);
-        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0) }; // Z-up -> Y-up
+        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0), Scale = new Vector3(-1, 1, 1) }; // Z-up -> Y-up
         world.AddChild(player);
         TestScene.AddChild(world);
 
         Vector3 screenRight = cam.GlobalTransform.Basis.X; // +X at yaw 0
 
         var before = player.Entity.O;
-        player.Entity.Strafe = 1; // the value the "strafe_right" action must produce
+        player.Entity.Strafe = -1; // the value the "strafe_right" action produces in physics.cpp dir()
         Step(player, 40);
         Vector3 delta = (player.Entity.O - before).Normalized();
+        Vector3 godotDelta = IMapSource.SauerbratenToGodot(delta);
 
-        GD.Print($"[player] strafe-right delta={delta} screenRight={screenRight}");
-        TestAssert.True(delta.Dot(screenRight) > 0.9f, "strafe-right moved along screen-right");
+        GD.Print($"[player] strafe-right delta={delta} godotDelta={godotDelta} screenRight={screenRight}");
+        TestAssert.True(godotDelta.Dot(screenRight) > 0.9f, "strafe-right moved along screen-right");
 
         world.QueueFree();
     }
@@ -204,12 +206,12 @@ public class MapPlayerTest : GoTestBase
 
         var camera = new Camera3D();
         player.AddChild(camera);
-        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0) }; // MapWorld Z-up -> Y-up
+        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0), Scale = new Vector3(-1, 1, 1) }; // MapWorld Z-up -> Y-up
         world.AddChild(player);
         TestScene.AddChild(world); // GlobalTransform needs a live tree
 
         Vector3 sauer = Movement.VecFromYawPitch(30f, 0f, 1, 0);
-        Vector3 expectedGodot = new(sauer.X, sauer.Z, -sauer.Y);
+        Vector3 expectedGodot = IMapSource.SauerbratenToGodot(sauer);
         Vector3 actual = -camera.GlobalTransform.Basis.Z;
 
         GD.Print($"[player] cam forward expected={expectedGodot} actual={actual}");
@@ -226,7 +228,7 @@ public class MapPlayerTest : GoTestBase
 
         var camera = new Camera3D { Name = "Camera3D" };
         player.AddChild(camera);
-        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0) }; // MapWorld Z-up -> Y-up
+        var world = new Node3D { RotationDegrees = new Vector3(-90, 0, 0), Scale = new Vector3(-1, 1, 1) }; // MapWorld Z-up -> Y-up
         world.AddChild(player);
         TestScene.AddChild(world); // a live tree lets the node transforms resolve
 

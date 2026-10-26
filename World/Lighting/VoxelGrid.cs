@@ -269,16 +269,17 @@ public sealed class VoxelGrid
             int baseIdx = axis * stride;
             for (int c = 0; c <= worldSize; c++)
             {
-                int ceilVal = (int)MathF.Ceiling((c - axisMin) * invCell - 0.5f);
+                int ceilVal = (int)MathF.Ceiling((c - axisMin) * invCell - 0.5f - 1e-4f);
                 _voxMin[baseIdx + c] = Math.Max(0, ceilVal);
                 _voxMax[baseIdx + c] = Math.Min(res - 1, ceilVal - 1);
             }
+        }
 
-            int centerBase = axis * res;
-            for (int v = 0; v < res; v++)
-            {
-                _centerCoords[centerBase + v] = (int)MathF.Floor(axisMin + (v + 0.5f) * cellSize);
-            }
+        for (int v = 0; v < res; v++)
+        {
+            _centerCoords[v] = (int)MathF.Floor(CellCenterSauer(res - 1 - v, 0, 0).X);
+            _centerCoords[res + v] = (int)MathF.Floor(CellCenterSauer(0, 0, res - 1 - v).Y);
+            _centerCoords[res * 2 + v] = (int)MathF.Floor(CellCenterSauer(0, v, 0).Z);
         }
     }
 
@@ -414,7 +415,8 @@ public sealed class VoxelGrid
                                 if (leaf.IsEmpty()) continue;
 
                                 byte subAlpha = leaf.IsEntirelySolid() ? AlphaSolid : AlphaPartial;
-                                uintData[vx + rowOffset] = ComputeCubePackedColor(leaf, subAlpha, palette);
+                                int gx = (res - 1) - vx;
+                                uintData[gx + rowOffset] = ComputeCubePackedColor(leaf, subAlpha, palette);
                             }
                         }
                     }
@@ -430,8 +432,8 @@ public sealed class VoxelGrid
             if (c.IsEmpty())
                 continue;
 
-            int gx0 = vx0;
-            int gx1 = vx1;
+            int gx0 = (res - 1) - vx1;
+            int gx1 = (res - 1) - vx0;
             int gy0 = vz0;
             int gy1 = vz1;
             int gz0 = (res - 1) - vy1;
@@ -522,8 +524,8 @@ public sealed class VoxelGrid
             int vz1 = Math.Min(res - 1, (int)MathF.Ceiling((cz + size - sMinZ) * invCell - 0.5f) - 1);
             if (vz0 > vz1) continue;
 
-            int gx0 = Math.Max(clampGx0, vx0);
-            int gx1 = Math.Min(clampGx1, vx1);
+            int gx0 = Math.Max(clampGx0, (res - 1) - vx1);
+            int gx1 = Math.Min(clampGx1, (res - 1) - vx0);
             if (gx0 > gx1) continue;
 
             int gy0 = Math.Max(clampGy0, vz0);
