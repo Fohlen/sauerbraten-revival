@@ -19,7 +19,7 @@ load time; there is **no CubeScript** and no offline converter.
 | Character animation / MD5 models | [docs/adr/0004-character-animation.md](docs/adr/0004-character-animation.md) | MD5 skeletal models: engine model, why runtime `Skeleton3D` mapping deformed the mesh, and the baked GLB approach. |
 | Editor + command system | [docs/editor-and-commands.md](docs/editor-and-commands.md) |
 | Classic content (OGZ) import | [docs/adr/0006-ogz-import.md](docs/adr/0006-ogz-import.md) |
-| Rendering strategy | [docs/rendering.md](docs/rendering.md) |
+| Rendering strategy | [ADR 0007](docs/adr/0007-world-rendering.md) |
 | Lighting (runtime) | [docs/adr/0002-radiance-hints.md](docs/adr/0002-radiance-hints.md) |
 | Networking model | [docs/authority-and-latency.md](docs/authority-and-latency.md) |
 | Toolchain requirements | [docs/dependencies.md](docs/dependencies.md) |

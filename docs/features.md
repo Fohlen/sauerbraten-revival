@@ -41,7 +41,7 @@ This list is the one place these are tracked; design lives in the linked docs.
 - **Lighting** ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)) — **chosen:** a
   world-space L1 SH probe volume ("radiance hints"): soft, diffuse-only, async
   full bake + incremental region rebake on edit. 
-- **Renderer extras** ([rendering.md](rendering.md)) — specular maps.
+- **Renderer extras** ([ADR 0007](adr/0007-world-rendering.md)) — specular maps.
 - **`movable.cpp`** (box/barrel/platform/elevator) — deliberately not ported; SP-only.
 - **Single-player / bot AI** — out of MVP scope.
 
@@ -49,7 +49,7 @@ This list is the one place these are tracked; design lives in the linked docs.
 
 ## 1. World core (octree + rendering)
 
-See [rendering.md](rendering.md).
+See [ADR 0007](adr/0007-world-rendering.md).
 
 Done:
 
@@ -72,18 +72,20 @@ Done:
       [editor-and-commands.md](editor-and-commands.md#7-map-format-versioned-command-history).
 - [x] Per-frame chunk update budget + incremental dirty-chunk rebuilds
       (`WorldChunkRenderer`, `OctaMesher.BuildChunk`, `OctaFaceWalker.WalkRegion`;
-      `test/IncrementalMeshTest.cs`). Default chunk 128, budget 4/frame — see
-      [rendering.md](rendering.md#chunking-strategy) for the measured tradeoff.
-- [x] Face merges and T-joints (done; [rendering.md](rendering.md#implementation-status)).
+      `test/IncrementalMeshTest.cs`). Load paths use 512-unit chunks (empty map
+      128), budget 4/frame — see
+      [ADR 0007 § Mesh in chunks](adr/0007-world-rendering.md#2-mesh-in-chunks-rebuild-incrementally)
+      for the measured tradeoff.
+- [x] Face merges and T-joints (done; [ADR 0007 § Surface rules](adr/0007-world-rendering.md#3-port-the-octrees-surface-rules-not-its-renderer)).
 - [x] RenderingServer mesh streaming (`WorldChunkRenderer`, `ArrayMeshBuilder.UploadTo`,
       `OctaMesher.BuildChunkBuilder`/`BuildChunkedBuilders`; bypasses the scene tree;
-      [rendering.md](rendering.md#renderingserver-usage)).
+      [ADR 0007 § Direct RenderingServer streaming](adr/0007-world-rendering.md#4-stream-chunk-meshes-directly-to-renderingserver)).
 
 Remaining:
 
 - [ ] Grass.
 - [ ] **Post-MVP fidelity** (see [Post-MVP / deferred fidelity](#post-mvp--deferred-fidelity)):
-      lighting ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)), envmap, specular maps,
+      lighting ([adr/0002-radiance-hints.md](adr/0002-radiance-hints.md)), specular maps,
       blend shader.
       - [x] **Texture layers** — bottom-layer geometry rendered (`LAYER_BOTTOM`, `vslot.layer`):
             `MaterialSet`/`MetadataCatalogue` carry the layer mapping, `OctaMesher` emits the
@@ -113,9 +115,11 @@ Done (classic maps are read at load time in both the viewer and the play scene):
       - [x] `ET_ENVMAP` (4) → `EnvMapProbe` (`ReflectionProbe`). `EnvMapBuilder`
             resolves `attr1` radius (0 → 128, clamp 0..10000), `attr2` cubemap size
             (4..9, capped by `envmapsize` 7), `attr3` blur (1..2). Asserted by
-            `test/EntityEnvMapTest.cs` on **earthstation** (38 probes). The
-            sampling material side (`SHADER_ENVMAP`, `closestenvmap`) is still
-            open (deferred post-MVP).
+            `test/EntityEnvMapTest.cs` on **earthstation** (38 probes). Sampling is
+            implemented through `SHADER_ENVMAP`/`envscale` in `MaterialBuilder` +
+            `radiance.gdshader`, using Godot's reflection pass over the `EnvMapProbe`
+            cubemaps (Godot's probe selection replaces the engine's `closestenvmap`
+            lookup; asserted by `test/MaterialBuilderTest.cs`).
       - [x] Mode entities (CTF/capture) with their **models and gizmos**:
             `ModeEntityBuilder` handles `FLAG`, `BASE`, `BOX`, `BARREL`,
             `PLATFORM`, `ELEVATOR`, `RESPAWNPOINT`, `CARROT` (the `fixentity`

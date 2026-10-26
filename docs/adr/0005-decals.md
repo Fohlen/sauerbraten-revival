@@ -15,9 +15,9 @@ When hitscan weapons (Rifle, Shotgun, Chaingun, Pistol) hit map geometry in Saue
 
 When implementing this in Godot 4 (.NET), two primary constraints shaped the architecture:
 
-1. **Unshaded World Shader**:
-   Our map geometry uses [`World/Materials/radiance.gdshader`](../../World/Materials/radiance.gdshader) which specifies `render_mode unshaded, cull_back;` to evaluate radiance hints and ambient irradiance directly.
-   In Godot 4 (Forward+ / Clustered renderer), built-in `Godot.Decal` projector nodes only run during the clustered PBR lighting pass. Because world geometry is unshaded, built-in `Decal` projections are completely bypassed and do not render on map walls.
+1. **Custom-Lit World Shader (Godot lighting bypassed):**
+   Our map geometry uses [`World/Materials/radiance.gdshader`](../../World/Materials/radiance.gdshader), which evaluates radiance hints and ambient irradiance directly. It specifies `render_mode ambient_light_disabled, cull_back;` and an empty `void light() {}` (see [ADR 0002](0002-radiance-hints.md)), so Godot's dynamic lights do not contribute to world surfaces.
+   In Godot 4 (Forward+ / Clustered renderer), built-in `Godot.Decal` projector nodes only run during the clustered PBR lighting pass. Because world geometry produces no Godot lighting output, built-in `Decal` projections are completely bypassed and do not render on map walls.
 
 2. **Original Texture Blend Mode (`DF_OVERBRIGHT`)**:
    Sauerbraten's `packages/particles/bullet.png` was originally an RGB texture rendered with `DF_OVERBRIGHT` (`glBlendFunc(GL_DST_COLOR, GL_SRC_COLOR)`), where neutral 128 meant no change, darker values darkened, and brighter values brightened. Under standard alpha blending, using raw values without transparency resulted in opaque grey quad backgrounds.
@@ -31,7 +31,7 @@ We chose **Surface Quad Mesh Decals** managed by a fixed-size ring buffer:
 ### 1. Mesh-Based Quad Decals
 - We use a pool of 256 `MeshInstance3D` nodes carrying a shared 1x1 `QuadMesh`.
 - Each quad uses `StandardMaterial3D` with:
-  - `ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded` (rendering correctly over unshaded world geometry).
+  - `ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded` (rendering correctly over custom radiance-lit world geometry).
   - `Transparency = BaseMaterial3D.TransparencyEnum.Alpha`.
   - `CullMode = BaseMaterial3D.CullModeEnum.Disabled`.
   - `DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Always`.

@@ -76,7 +76,7 @@ which wins over this doc on status.
 | Engine | Godot 4 (.NET / C#, Forward+, Jolt) |
 | World representation | Native **octree**, **dynamic at runtime** (C#/.NET) |
 | Original octree code | Reuse `octa.cpp`/`octa.h` **core**; port editor *algorithms*; do **not** copy `octaedit.cpp` plumbing |
-| Rendering | Per-chunk `ArrayMesh` (one surface per vslot, Godot materials); Forward+; see [rendering.md](rendering.md) |
+| Rendering | Per-chunk `ArrayMesh` (one surface per vslot, Godot materials); Forward+; see [ADR 0007](adr/0007-world-rendering.md) |
 | Collision & movement | Ported octree traversal (`move`/`collide`/steps) in fixed 5 ms steps, validated against the original |
 | Level format | Classic maps: shipped `.ogz`, read at load time. Editor maps: `Level.tscn` (refs + config) + external binary `Resource` world blob. **No CubeScript** ([ADR 0006](adr/0006-ogz-import.md)) |
 | Editor | Runtime, in-game, Godot UI + **command system** |
@@ -171,7 +171,7 @@ sync. It is also the foundation for multiplayer and Workshop content.
 | `octa.cpp` core | 1880 | **0** | ✅ **Ported to C#** (`World/Octa.cs`, `World/CubeGeometry.cs`) behind a small shim |
 | `octa.h` (structs) | — | — | ✅ Ported/adapted to C# (`Cube`, `CubeExt`) |
 | `octaedit.cpp` | 3003 | 19 | **Port the algorithms**, reimplement UI/undo/selection plumbing (todo) |
-| `octarender.cpp` | 1803 | 45 | ✅ **Replaced** by the ArrayMesh mesher (`World/Meshing/`); see [rendering.md](rendering.md) |
+| `octarender.cpp` | 1803 | 45 | ✅ **Replaced** by the ArrayMesh mesher (`World/Meshing/`); see [ADR 0007](adr/0007-world-rendering.md) |
 | `worldio.cpp` | 1388 | — | ✅ **Ported for classic-map loading** (`World/Ogz/OgzReader.cs`); see [ADR 0006](adr/0006-ogz-import.md). Maps we author use `Resource`. |
 | octree traversal (`physics.cpp`) | ~500 | 0 | ✅ **Ported to C#** (`World/Physics/`: `move`/`collide`/`trystepup`/`trystepdown` + clipping/visibility); see [movement-physics.md](movement-physics.md) and [ADR 0003](adr/0003-movement-verification.md) |
 

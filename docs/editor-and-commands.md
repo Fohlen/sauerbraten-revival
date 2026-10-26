@@ -5,7 +5,7 @@ that powers it, undo/redo, runtime geometry, networking, demos, and prefabs.
 
 This document is the reasoning; the implementation status lives in
 [features.md](features.md). It complements [vision.md](vision.md)
-§7 (command system) and §9 (level format) and [rendering.md](rendering.md)
+§7 (command system) and §9 (level format) and [ADR 0007](adr/0007-world-rendering.md)
 (dirty-chunk rebuilds).
 
 > **Thesis.** In Sauerbraten every edit was a local mutation of a `cube[]`, and
@@ -716,7 +716,7 @@ map archive (map.zip / map.tar)
 ## 8. Applying to the octree: dirty chunks & budget
 
 `IWorld.Apply` mutates the octree, then notifies the renderer. This ties into the
-dirty-chunk system (rendering.md §Chunking):
+dirty-chunk system ([ADR 0007 § Mesh in chunks](adr/0007-world-rendering.md#2-mesh-in-chunks-rebuild-incrementally)):
 
 1. Command reports its affected `Aabb` (selection expanded by boundary — Cube2's
    `readychanges` expands by 1 to catch merges/t-joints).
@@ -724,8 +724,8 @@ dirty-chunk system (rendering.md §Chunking):
    `MarkDirty(Aabb, margin)`.
 3. Per-frame budget re-meshes up to N dirty chunks (`OctaMesher.BuildChunk`,
    `OctaFaceWalker.WalkRegion`).
-4. Collision reads the live octree immediately — no shape rebuild (rendering.md
-   §Collision).
+4. Collision reads the live octree immediately — no shape rebuild
+   ([ADR 0007 § Decoupled collision](adr/0007-world-rendering.md#6-rendering-and-collision-are-decoupled)).
 
 Determinism caveat: meshing must not affect world state. It doesn't — the octree
 is the truth; meshes are derived. This keeps rollback cheap (re-mesh only dirty

@@ -15,9 +15,9 @@ namespace SauerbratenRevival.World.Lighting;
 ///
 /// In the original each one is rendered to a cubemap once and referenced by the
 /// nearest geometry via <c>closestenvmap</c>. Godot's <see cref="ReflectionProbe"/>
-/// is the equivalent: a box-shaped probe whose extents come from the radius. This
-/// is representation only — the materials that sample the result
-/// (<c>SHADER_ENVMAP</c>) are not ported yet (see docs/rendering.md).
+/// is the equivalent: a box-shaped probe whose extents come from the radius. World
+/// materials that use <c>SHADER_ENVMAP</c> sample these probes through Godot's
+/// reflection pass (see docs/adr/0007-world-rendering.md).
 /// </summary>
 public static class EnvMapBuilder
 {
