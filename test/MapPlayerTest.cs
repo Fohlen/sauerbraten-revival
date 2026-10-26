@@ -725,7 +725,7 @@ public class MapPlayerTest : GoTestBase
     [Test]
     public void WorldPhysicsProcessStepsRegisteredPlayersAndClock()
     {
-        var world = new MapWorld { OgzPath = "base/church51.ogz", BakeRadiance = false };
+        var world = new MapWorld { OgzPath = "base/church51.ogz", ComputeVisuals = false };
         world.Build();
         TestAssert.True(world.Physics != null, "world physics initialized");
 
@@ -751,7 +751,7 @@ public class MapPlayerTest : GoTestBase
     [Test]
     public void RegisteredPlayersDoNotAdvanceWorldClock()
     {
-        var world = new MapWorld { OgzPath = "base/church51.ogz", BakeRadiance = false };
+        var world = new MapWorld { OgzPath = "base/church51.ogz", ComputeVisuals = false };
         world.Build();
 
         var a = new MapPlayer();
@@ -783,7 +783,7 @@ public class MapPlayerTest : GoTestBase
     public void WorldBuildKeepsPreexistingSessionClock()
     {
         var sessionClock = new SimClock(12345);
-        var world = new MapWorld { OgzPath = "base/church51.ogz", Clock = sessionClock, BakeRadiance = false };
+        var world = new MapWorld { OgzPath = "base/church51.ogz", Clock = sessionClock, ComputeVisuals = false };
         world.Build();
 
         TestAssert.Equal(12345, world.LastMillis, "session clock value is preserved across world build");
@@ -806,7 +806,7 @@ public class MapPlayerTest : GoTestBase
     [Test]
     public void WorldPhysicsProcessStepsFlagsInSync()
     {
-        var world = new MapWorld { OgzPath = "base/church51.ogz", BakeRadiance = false };
+        var world = new MapWorld { OgzPath = "base/church51.ogz", ComputeVisuals = false };
         world.Build();
 
         var fm = world.Flags;
@@ -831,7 +831,7 @@ public class MapPlayerTest : GoTestBase
     [Test]
     public void WorldPhysicsProcessStepsRegisteredBouncer()
     {
-        var world = new MapWorld { OgzPath = "base/church51.ogz", BakeRadiance = false };
+        var world = new MapWorld { OgzPath = "base/church51.ogz", ComputeVisuals = false };
         world.Build();
 
         var bouncer = new BounceBody { BodyKind = BounceBody.Kind.Debris };
@@ -853,7 +853,7 @@ public class MapPlayerTest : GoTestBase
     [Test]
     public void WorldPhysicsProcessStepsActiveRockets()
     {
-        var world = new MapWorld { OgzPath = "base/church51.ogz", BakeRadiance = false };
+        var world = new MapWorld { OgzPath = "base/church51.ogz", ComputeVisuals = false };
         world.Build();
 
         var rl = WeaponCatalog.Get(Gun.RocketLauncher);

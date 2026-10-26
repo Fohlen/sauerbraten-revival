@@ -118,7 +118,7 @@ public partial class OgzMapViewer : Node3D
                 ShowEntityMarkers = ShowEntityMarkers || EditMode,
                 Mode = modeInfo,
                 // Lighting quality is a user setting (`user://settings.cfg`).
-                RadianceSettings = new Lighting.RadianceSettings { Mode = userSettings.LightingMode },
+                RadianceSettings = new Lighting.LightingSettings { Mode = userSettings.LightingMode },
             };
             AddChild(World);
             World.Build();

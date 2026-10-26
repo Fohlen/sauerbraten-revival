@@ -76,7 +76,7 @@ public partial class EmptyMap : Node3D, IGameWorld
     public Lighting.RadianceVolume? Radiance { get; set; }
 
     /// <summary>Optional quality settings for the baked radiance hints volume; null uses the defaults (32³, RadianceHints).</summary>
-    public Lighting.RadianceSettings? RadianceSettings { get; set; }
+    public Lighting.LightingSettings? RadianceSettings { get; set; }
 
     /// <summary>
     /// Bake the radiance hints volume (sky + sun + ambient) during <see cref="Build"/>
@@ -266,7 +266,7 @@ public partial class EmptyMap : Node3D, IGameWorld
             gridExtent: volume.Grid.Extent,
             skyTint: Lighting.RadianceVolume.DecodeColor(config.SkyboxColour),
             ambientColor: Lighting.RadianceVolume.DecodeColor(config.Ambient),
-            useRadiance: volume.Settings.Mode == Lighting.RadianceQualityMode.RadianceHints,
+            useRadiance: volume.Settings.Mode == Lighting.LightingQualityMode.RadianceHints,
             radianceAmbTex: volume.AmbientTexture);
 
         var uv = new Materials.TexGen[3];

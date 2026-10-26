@@ -735,22 +735,22 @@ public class RadianceVolumeTest : GoTestBase
     [Test]
     public void RadianceSettings_PresetsAndProperties_MatchExpectedValues()
     {
-        var def = RadianceSettings.Default;
-        TestAssert.Equal(RadianceQualityMode.RadianceHints, def.Mode, "Default mode is RadianceHints");
+        var def = LightingSettings.Default;
+        TestAssert.Equal(LightingQualityMode.RadianceHints, def.Mode, "Default mode is RadianceHints");
         TestAssert.Equal(16, def.SkyRays, "Default SkyRays is 16");
         TestAssert.Equal(256, def.BudgetPerFrame, "Default BudgetPerFrame is 256");
         TestAssert.True(def.MaxRayDistance == null, "Default MaxRayDistance is null (auto)");
         TestAssert.Equal(RadianceGrid.DefaultResolution, def.Resolution, "Default Resolution is 32");
 
-        var staticAmb = RadianceSettings.StaticAmbient;
-        TestAssert.Equal(RadianceQualityMode.StaticAmbient, staticAmb.Mode, "StaticAmbient mode is StaticAmbient");
+        var staticAmb = LightingSettings.StaticAmbient;
+        TestAssert.Equal(LightingQualityMode.StaticAmbient, staticAmb.Mode, "StaticAmbient mode is StaticAmbient");
 
-        var low = RadianceSettings.Low;
+        var low = LightingSettings.Low;
         TestAssert.Equal(4, low.SkyRays, "Low SkyRays is 4");
         TestAssert.Equal(128, low.BudgetPerFrame, "Low BudgetPerFrame is 128");
         TestAssert.Equal(256f, low.MaxRayDistance ?? 0f, "Low MaxRayDistance is 256");
 
-        var ultra = RadianceSettings.Ultra;
+        var ultra = LightingSettings.Ultra;
         TestAssert.Equal(32, ultra.SkyRays, "Ultra SkyRays is 32");
         TestAssert.Equal(512, ultra.BudgetPerFrame, "Ultra BudgetPerFrame is 512");
         TestAssert.Equal(48, ultra.Resolution, "Ultra Resolution is 48");
@@ -767,7 +767,7 @@ public class RadianceVolumeTest : GoTestBase
     public void RadianceVolume_SettingsForwarding_UpdatesUnderlyingKnobs()
     {
         var grid = new RadianceGrid(Vector3.Zero, 64f, 4);
-        var volume = new RadianceVolume(grid, new RadianceSettings { SkyRays = 8, BudgetPerFrame = 64 });
+        var volume = new RadianceVolume(grid, new LightingSettings { SkyRays = 8, BudgetPerFrame = 64 });
 
         TestAssert.Equal(8, volume.SkyRays, "Initial SkyRays forwarded from Settings");
         TestAssert.Equal(64, volume.BudgetPerFrame, "Initial BudgetPerFrame forwarded from Settings");
@@ -781,8 +781,8 @@ public class RadianceVolumeTest : GoTestBase
         volume.MaxRayDistance = 128f;
         TestAssert.Equal(128f, volume.Settings.MaxRayDistance, "MaxRayDistance setter updates Settings");
 
-        volume.Mode = RadianceQualityMode.StaticAmbient;
-        TestAssert.Equal(RadianceQualityMode.StaticAmbient, volume.Settings.Mode, "Mode setter updates Settings");
+        volume.Mode = LightingQualityMode.StaticAmbient;
+        TestAssert.Equal(LightingQualityMode.StaticAmbient, volume.Settings.Mode, "Mode setter updates Settings");
     }
 
     [Test]
@@ -799,7 +799,7 @@ public class RadianceVolumeTest : GoTestBase
         };
 
         var grid = new RadianceGrid(Vector3.Zero, 64f, 4);
-        var volume = new RadianceVolume(grid, RadianceSettings.StaticAmbient);
+        var volume = new RadianceVolume(grid, LightingSettings.StaticAmbient);
 
         volume.Bake(octa, config);
 
@@ -837,8 +837,8 @@ public class RadianceVolumeTest : GoTestBase
         octa.EmptyMap(10);
 
         var grid = new RadianceGrid(Vector3.Zero, 64f, 4);
-        var volHints = new RadianceVolume(grid, RadianceSettings.High);
-        var volStatic = new RadianceVolume(grid, RadianceSettings.StaticAmbient);
+        var volHints = new RadianceVolume(grid, LightingSettings.High);
+        var volStatic = new RadianceVolume(grid, LightingSettings.StaticAmbient);
 
         var catalogue = new MetadataCatalogue();
         catalogue.Config.Ambient = 0x336699;

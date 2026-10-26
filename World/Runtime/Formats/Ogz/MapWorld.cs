@@ -221,10 +221,10 @@ public partial class MapWorld : Node3D, IGameWorld
     public IReadOnlyList<Teleport> Teleports { get; private set; } = System.Array.Empty<Teleport>();
 
     /// <summary>Optional settings overriding default radiance hints volume quality.</summary>
-    public Lighting.RadianceSettings? RadianceSettings { get; set; }
+    public Lighting.LightingSettings? RadianceSettings { get; set; }
 
     /// <summary>Whether to bake the radiance hints volume during <see cref="Build"/>. True by default; disable in headless tests for fast world initialization.</summary>
-    [Export] public bool BakeRadiance { get; set; } = true;
+    [Export] public bool ComputeVisuals { get; set; } = true;
 
     /// <summary>The radiance hints volume, when baked.</summary>
     public Lighting.RadianceVolume? Radiance { get; private set; }
@@ -306,7 +306,7 @@ public partial class MapWorld : Node3D, IGameWorld
 
         // Radiance hints volume: bake sky, sun, and direct entity lights (docs/adr/0002-radiance-hints.md §4.1, §4.2)
         Lighting.RadianceVolume? radiance = null;
-        if (BakeRadiance && catalogue != null)
+        if (ComputeVisuals && catalogue != null)
         {
             var volume = Lighting.RadianceVolume.CreateForOcta(octa, RadianceSettings);
             var directLights = Lighting.DirectLightSource.CollectFromMap(map);

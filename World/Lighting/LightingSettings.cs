@@ -5,7 +5,7 @@ namespace SauerbratenRevival.World.Lighting;
 /// <summary>
 /// Lighting quality mode for the radiance hints subsystem (docs/adr/0002-radiance-hints.md §8 Stage 5).
 /// </summary>
-public enum RadianceQualityMode
+public enum LightingQualityMode
 {
     /// <summary>
     /// Simple static ambient lighting: avoids probe raycasts and 3D texture lookups,
@@ -24,10 +24,10 @@ public enum RadianceQualityMode
 /// Allows tuning ray counts, temporal slicing / frame budget, ray travel distance,
 /// grid resolution, and global quality mode.
 /// </summary>
-public sealed class RadianceSettings
+public sealed class LightingSettings
 {
     /// <summary>Global quality switch: full radiance hints volume vs simple static ambient color.</summary>
-    public RadianceQualityMode Mode { get; set; } = RadianceQualityMode.RadianceHints;
+    public LightingQualityMode Mode { get; set; } = LightingQualityMode.RadianceHints;
 
     /// <summary>Number of hemisphere rays cast per probe for sky &amp; bounce passes (default 16).</summary>
     public int SkyRays { get; set; } = 16;
@@ -49,18 +49,18 @@ public sealed class RadianceSettings
     public int VoxelResolution { get; set; } = VoxelGrid.DefaultResolution;
 
     /// <summary>Creates a default quality configuration (32³, 16 sky rays, 256 budget, auto distance).</summary>
-    public static RadianceSettings Default => new();
+    public static LightingSettings Default => new();
 
     /// <summary>Creates a static ambient configuration (no raycasts, minimal overhead).</summary>
-    public static RadianceSettings StaticAmbient => new()
+    public static LightingSettings StaticAmbient => new()
     {
-        Mode = RadianceQualityMode.StaticAmbient,
+        Mode = LightingQualityMode.StaticAmbient,
     };
 
     /// <summary>Creates a low-quality configuration (fewer rays, smaller frame budget, clamped ray distance).</summary>
-    public static RadianceSettings Low => new()
+    public static LightingSettings Low => new()
     {
-        Mode = RadianceQualityMode.RadianceHints,
+        Mode = LightingQualityMode.RadianceHints,
         SkyRays = 4,
         BudgetPerFrame = 128,
         MaxRayDistance = 256f,
@@ -68,34 +68,34 @@ public sealed class RadianceSettings
     };
 
     /// <summary>Creates a medium-quality configuration (8 rays, 256 budget).</summary>
-    public static RadianceSettings Medium => new()
+    public static LightingSettings Medium => new()
     {
-        Mode = RadianceQualityMode.RadianceHints,
+        Mode = LightingQualityMode.RadianceHints,
         SkyRays = 8,
         BudgetPerFrame = 256,
         Resolution = 32,
     };
 
     /// <summary>Creates a high-quality configuration (16 rays, 256 budget).</summary>
-    public static RadianceSettings High => new()
+    public static LightingSettings High => new()
     {
-        Mode = RadianceQualityMode.RadianceHints,
+        Mode = LightingQualityMode.RadianceHints,
         SkyRays = 16,
         BudgetPerFrame = 256,
         Resolution = 32,
     };
 
     /// <summary>Creates an ultra-quality configuration (32 rays, 512 budget, 48 resolution).</summary>
-    public static RadianceSettings Ultra => new()
+    public static LightingSettings Ultra => new()
     {
-        Mode = RadianceQualityMode.RadianceHints,
+        Mode = LightingQualityMode.RadianceHints,
         SkyRays = 32,
         BudgetPerFrame = 512,
         Resolution = 48,
     };
 
     /// <summary>Creates a deep copy of these settings.</summary>
-    public RadianceSettings Clone() => new()
+    public LightingSettings Clone() => new()
     {
         Mode = Mode,
         SkyRays = SkyRays,

@@ -57,7 +57,7 @@ public sealed record UserSettings
     private const string BorderlessToken = "borderless";
 
     /// <summary>World lighting quality mode (docs/adr/0002-radiance-hints.md §7).</summary>
-    public RadianceQualityMode LightingMode { get; init; } = RadianceQualityMode.RadianceHints;
+    public LightingQualityMode LightingMode { get; init; } = LightingQualityMode.RadianceHints;
 
     /// <summary>Whether game audio plays at all.</summary>
     public bool SoundEnabled { get; init; } = true;
@@ -145,14 +145,14 @@ public sealed record UserSettings
     }
 
     /// <summary>Config-file token for a mode (stable; used as the saved value).</summary>
-    public static string LightingModeToken(RadianceQualityMode mode) =>
-        mode == RadianceQualityMode.StaticAmbient ? StaticAmbientToken : RadianceHintsToken;
+    public static string LightingModeToken(LightingQualityMode mode) =>
+        mode == LightingQualityMode.StaticAmbient ? StaticAmbientToken : RadianceHintsToken;
 
-    /// <summary>Parse a mode token; unknown/empty falls back to <see cref="RadianceQualityMode.RadianceHints"/>.</summary>
-    public static RadianceQualityMode ParseLightingMode(string? token) => token?.Trim().ToLowerInvariant() switch
+    /// <summary>Parse a mode token; unknown/empty falls back to <see cref="LightingQualityMode.RadianceHints"/>.</summary>
+    public static LightingQualityMode ParseLightingMode(string? token) => token?.Trim().ToLowerInvariant() switch
     {
-        StaticAmbientToken => RadianceQualityMode.StaticAmbient,
-        _ => RadianceQualityMode.RadianceHints,
+        StaticAmbientToken => LightingQualityMode.StaticAmbient,
+        _ => LightingQualityMode.RadianceHints,
     };
 
     /// <summary>Config-file token for a screen mode (stable; used as the saved value).</summary>

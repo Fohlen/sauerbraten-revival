@@ -20,10 +20,10 @@ public class RadianceVolume : IDisposable
     public RadianceGrid Grid { get; }
 
     /// <summary>Quality and performance settings for this radiance volume.</summary>
-    public RadianceSettings Settings { get; set; }
+    public LightingSettings Settings { get; set; }
 
     /// <summary>Global quality mode (forwarded to <see cref="Settings"/>).</summary>
-    public RadianceQualityMode Mode
+    public LightingQualityMode Mode
     {
         get => Settings.Mode;
         set => Settings.Mode = value;
@@ -169,18 +169,18 @@ public class RadianceVolume : IDisposable
         }
     }
 
-    public RadianceVolume(RadianceGrid grid, RadianceSettings? settings = null)
+    public RadianceVolume(RadianceGrid grid, LightingSettings? settings = null)
     {
         Grid = grid ?? throw new ArgumentNullException(nameof(grid));
-        Settings = settings ?? new RadianceSettings();
+        Settings = settings ?? new LightingSettings();
     }
 
     /// <summary>
     /// Factory creating a volume sized from non-empty geometry in <paramref name="octa"/>.
     /// </summary>
-    public static RadianceVolume CreateForOcta(Octa octa, RadianceSettings? settings = null)
+    public static RadianceVolume CreateForOcta(Octa octa, LightingSettings? settings = null)
     {
-        var s = settings ?? new RadianceSettings();
+        var s = settings ?? new LightingSettings();
         var grid = RadianceGrid.FromOcta(octa, s.Resolution);
         return new RadianceVolume(grid, s);
     }
@@ -190,7 +190,7 @@ public class RadianceVolume : IDisposable
     /// </summary>
     public static RadianceVolume CreateForOcta(Octa octa, int resolution)
     {
-        return CreateForOcta(octa, new RadianceSettings { Resolution = resolution });
+        return CreateForOcta(octa, new LightingSettings { Resolution = resolution });
     }
 
     /// <summary>
@@ -249,7 +249,7 @@ public class RadianceVolume : IDisposable
     {
         public Octa Octa { get; }
         public MapConfig Config { get; }
-        public RadianceSettings Settings { get; }
+        public LightingSettings Settings { get; }
         public LightSpatialIndex? SpatialIndex { get; }
         public MetadataCatalogue? Catalogue { get; }
         public ITextureSource? TextureSource { get; }
@@ -275,7 +275,7 @@ public class RadianceVolume : IDisposable
             IReadOnlyList<DirectLightSource>? directLights,
             MetadataCatalogue? catalogue,
             ITextureSource? textureSource,
-            RadianceSettings settings,
+            LightingSettings settings,
             RadianceGrid grid)
         {
             Octa = octa;
@@ -348,7 +348,7 @@ public class RadianceVolume : IDisposable
         _dirtyQueue.Clear();
         _dirtySet.Clear();
 
-        if (Settings.Mode == RadianceQualityMode.StaticAmbient)
+        if (Settings.Mode == LightingQualityMode.StaticAmbient)
         {
             var ambVec = new Vector3(_context.AmbientColor.R, _context.AmbientColor.G, _context.AmbientColor.B);
             Grid.Fill(new RadianceProbe(Vector3.Zero, _context.AmbientRadiance, ambVec));
@@ -442,7 +442,7 @@ public class RadianceVolume : IDisposable
     {
         probe = RadianceProbe.Zero;
 
-        if (ctx.Settings.Mode == RadianceQualityMode.StaticAmbient)
+        if (ctx.Settings.Mode == LightingQualityMode.StaticAmbient)
         {
             probe.AddAmbient(ctx.AmbientColor);
             return;

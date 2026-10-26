@@ -46,7 +46,7 @@ public static class MaterialBuilder
             Material material;
             if (radiance != null)
             {
-                bool useRadiance = radiance.Settings.Mode == Lighting.RadianceQualityMode.RadianceHints;
+                bool useRadiance = radiance.Settings.Mode == Lighting.LightingQualityMode.RadianceHints;
                 bool useEnvmap = slot != null && slot.IsEnvMap;
                 Vector3? envScale = useEnvmap ? slot!.ResolveEnvScale(vs) : null;
                 material = BuildRadianceMaterial(

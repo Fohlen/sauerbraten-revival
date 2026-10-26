@@ -21,12 +21,12 @@ public class UserSettingsTest : GoTestBase
         UserSettings previous = UserSettings.Load();
         try
         {
-            (previous with { LightingMode = RadianceQualityMode.StaticAmbient }).Save();
-            TestAssert.Equal(RadianceQualityMode.StaticAmbient, UserSettings.Load().LightingMode,
+            (previous with { LightingMode = LightingQualityMode.StaticAmbient }).Save();
+            TestAssert.Equal(LightingQualityMode.StaticAmbient, UserSettings.Load().LightingMode,
                 "static ambient mode round-trips");
 
-            (previous with { LightingMode = RadianceQualityMode.RadianceHints }).Save();
-            TestAssert.Equal(RadianceQualityMode.RadianceHints, UserSettings.Load().LightingMode,
+            (previous with { LightingMode = LightingQualityMode.RadianceHints }).Save();
+            TestAssert.Equal(LightingQualityMode.RadianceHints, UserSettings.Load().LightingMode,
                 "radiance hints mode round-trips");
         }
         finally
@@ -38,20 +38,20 @@ public class UserSettingsTest : GoTestBase
     [Test]
     public void UnknownLightingModeFallsBackToRadianceHints()
     {
-        TestAssert.Equal(RadianceQualityMode.RadianceHints, UserSettings.ParseLightingMode("nonsense"),
+        TestAssert.Equal(LightingQualityMode.RadianceHints, UserSettings.ParseLightingMode("nonsense"),
             "unknown token falls back to radiance hints");
-        TestAssert.Equal(RadianceQualityMode.RadianceHints, UserSettings.ParseLightingMode(""),
+        TestAssert.Equal(LightingQualityMode.RadianceHints, UserSettings.ParseLightingMode(""),
             "empty token falls back to radiance hints");
     }
 
     [Test]
     public void LightingModeTokenIsCaseAndWhitespaceInsensitive()
     {
-        TestAssert.Equal(RadianceQualityMode.StaticAmbient, UserSettings.ParseLightingMode("  Static_Ambient "),
+        TestAssert.Equal(LightingQualityMode.StaticAmbient, UserSettings.ParseLightingMode("  Static_Ambient "),
             "token is normalized");
-        TestAssert.Equal("static_ambient", UserSettings.LightingModeToken(RadianceQualityMode.StaticAmbient),
+        TestAssert.Equal("static_ambient", UserSettings.LightingModeToken(LightingQualityMode.StaticAmbient),
             "token is stable");
-        TestAssert.Equal("radiance_hints", UserSettings.LightingModeToken(RadianceQualityMode.RadianceHints),
+        TestAssert.Equal("radiance_hints", UserSettings.LightingModeToken(LightingQualityMode.RadianceHints),
             "token is stable");
     }
 
@@ -61,13 +61,13 @@ public class UserSettingsTest : GoTestBase
         UserSettings previous = UserSettings.Load();
         try
         {
-            new UserSettings { Sensitivity = 7.5f, LightingMode = RadianceQualityMode.StaticAmbient }.Save();
+            new UserSettings { Sensitivity = 7.5f, LightingMode = LightingQualityMode.StaticAmbient }.Save();
 
             UserSettings loaded = UserSettings.Load();
             TestAssert.Near(7.5f, loaded.Sensitivity, 1e-4f, "sensitivity persists");
-            TestAssert.Equal(RadianceQualityMode.StaticAmbient, loaded.LightingMode, "mode persists");
+            TestAssert.Equal(LightingQualityMode.StaticAmbient, loaded.LightingMode, "mode persists");
 
-            (loaded with { LightingMode = RadianceQualityMode.RadianceHints }).Save();
+            (loaded with { LightingMode = LightingQualityMode.RadianceHints }).Save();
             TestAssert.Near(7.5f, UserSettings.Load().Sensitivity, 1e-4f, "unrelated field is untouched");
         }
         finally

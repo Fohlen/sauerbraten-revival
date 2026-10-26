@@ -37,7 +37,7 @@ public class GpuRadianceBakerTest : GoTestBase
     [Test]
     public void RadianceSettings_VoxelResolution_ConfigurableAndCloned()
     {
-        var settings = new RadianceSettings { VoxelResolution = 64 };
+        var settings = new LightingSettings { VoxelResolution = 64 };
         TestAssert.Equal(64, settings.VoxelResolution, "VoxelResolution sets correctly");
         var clone = settings.Clone();
         TestAssert.Equal(64, clone.VoxelResolution, "VoxelResolution clones correctly");
