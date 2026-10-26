@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/MainMenu.cs" id="1_menu"]
 
@@ -176,6 +176,7 @@ ambient_light_energy = 0.9
 tonemap_mode = 2
 
 [node name="MainMenu" type="CanvasLayer"]
+layer = 10
 script = ExtResource("1_menu")
 
 [node name="Background" type="ColorRect" parent="."]
@@ -265,6 +266,7 @@ layout_mode = 2
 text = "RESUME MATCH  (Esc)"
 
 [node name="PlayStyleRow" type="HBoxContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+visible = false
 layout_mode = 2
 theme_override_constants/separation = 6
 
@@ -294,13 +296,6 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_accent_hover")
 theme_override_styles/normal = SubResource("StyleBoxFlat_accent")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_accent_pressed")
 text = "QUICK JOIN"
-
-[node name="OrLabel" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.560784, 0.596078, 0.678431, 1)
-theme_override_font_sizes/font_size = 12
-text = "—  OR HOST GAME  —"
-horizontal_alignment = 1
 
 [node name="ModeLabel" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
 layout_mode = 2
@@ -341,7 +336,6 @@ text = "MAP"
 
 [node name="MapRow" type="HBoxContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
 layout_mode = 2
-size_flags_vertical = 3
 theme_override_constants/separation = 6
 
 [node name="MapPrevButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapRow"]
@@ -357,7 +351,6 @@ theme_override_constants/separation = 6
 
 [node name="MapFrame" type="PanelContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapRow/MapPreviewBox"]
 layout_mode = 2
-size_flags_vertical = 3
 theme_override_styles/panel = SubResource("StyleBoxFlat_preview")
 
 [node name="MapPreview" type="TextureRect" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapRow/MapPreviewBox/MapFrame"]
@@ -383,12 +376,6 @@ text = ">"
 [node name="Spacer" type="Control" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
 layout_mode = 2
 size_flags_vertical = 3
-
-[node name="LaunchButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "LAUNCH MATCH"
 
 [node name="CharacterStage" type="Control" parent="RootMargin/MainLayout/ContentArea"]
 unique_name_in_owner = true

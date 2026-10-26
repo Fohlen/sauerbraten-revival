@@ -78,7 +78,6 @@ public partial class MainMenu : CanvasLayer
     private Button _compButton = null!;
     private Button _resumeButton = null!;
     private Button _quickJoinButton = null!;
-    private Button _launchButton = null!;
 
     private Button _modePrevButton = null!;
     private Button _modeNextButton = null!;
@@ -124,7 +123,6 @@ public partial class MainMenu : CanvasLayer
         _compButton = GetNode<Button>("%CompButton");
         _resumeButton = GetNode<Button>("%ResumeButton");
         _quickJoinButton = GetNode<Button>("%QuickJoinButton");
-        _launchButton = GetNode<Button>("%LaunchButton");
 
         _modePrevButton = GetNode<Button>("%ModePrevButton");
         _modeNextButton = GetNode<Button>("%ModeNextButton");
@@ -155,7 +153,6 @@ public partial class MainMenu : CanvasLayer
         _compButton.Toggled += pressed => { if (pressed) SetCompetitive(true); };
 
         _quickJoinButton.Pressed += Launch;
-        _launchButton.Pressed += Launch;
         _resumeButton.Pressed += () => EmitSignal(SignalName.ResumeRequested);
 
         _modePrevButton.Pressed += () => StepMode(-1);
