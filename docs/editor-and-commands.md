@@ -639,14 +639,15 @@ make versioned maps huge) or replaying the entire command history on load (which
 breaks across lossy ops like `Remip`), our format works like Git's **Merkle tree +
 object pack** ([ADR 0008](adr/0008-reference-based-maps.md)):
 
-- **Content-addressed intermediate objects (`MapObjectPack`)**:
+- **Content-addressed intermediate objects (`MapObjectStore`)**:
   - Every `Cube[8]` octree node is a packable **`OctaNode`** object keyed by its
-    64-bit content hash, referencing child `OctaNode`s by hash rather than
+    SHA-256 `ObjectId`, referencing child `OctaNode`s by `ObjectId` rather than
     inlining them.
-  - The entity list is a packable **`EntityList`** object keyed by its content
-    hash.
-  - A world state is a **`WorldTree`** object `(Scale, RootOctaNodeHash,
-    EntityListHash)` whose content hash **is the commit's `TreeHash`**.
+  - The entity list is an **`EntityList`** object keyed by its `ObjectId`.
+  - A world state is a **`WorldTree`** object `(Scale, RootOctaNodeId,
+    EntityListId)` whose content hash is its `TreeId`.
+  - Stored transparently in `HistoryResource.Objects` / `WorldResource.Objects`
+    as standard `Dictionary<ObjectId, byte[]>`, with fallback chaining to `BaseRef`.
 - **Structural sharing across commits and `BaseRef`**:
   - When an edit modifies a region of the map, only the `OctaNode`s along the
     path from the modified leaf to the root (~6–10 nodes) get new hashes. All
@@ -654,17 +655,16 @@ object pack** ([ADR 0008](adr/0008-reference-based-maps.md)):
     duplicated** — neither across commits nor against `BaseRef`
     (`"res://resources/maps/empty_map/world.res"`).
 - **`MapCommit`**: each save appends a commit to `history.res` carrying:
-  - `ParentHash` (`ulong` — the previous commit's `TreeHash`, or the base
-    world's `TreeHash` for the first commit),
-  - `TreeHash` (`ulong` — **the commit hash is the `WorldTree` content hash of the
-    octree + entities**),
-  - `Commands` (`List<Command>` — the geometry and entity edit operations in that
-    commit, preserved for audit, diffing, and replay).
-- **$O(1)$ `HEAD` load & instant historical checkout (even across `Remip`)**:
-  - Loading a map (`MapStore.Load`) or checking out any historical commit
-    (`MapStore.Checkout(mapDir, targetTreeHash)`) resolves `TreeHash` directly
-    from the map's delta object pack + `BaseRef` pack and materializes the octree
-    and entities without replaying the command chain.
+  - `CommitId` (`ObjectId` — SHA-256 of the commit object itself),
+  - `ParentId` (`ObjectId` — the parent commit's `CommitId`, or null for initial commit),
+  - `TreeId` (`ObjectId` — the `WorldTree` content hash of the octree + entities at this commit),
+  - `CommandsId` (`ObjectId` — hash of the serialized `Command[]` blob),
+  - `Author`, `Timestamp`, and `Message`.
+- **Materialized `Tree` load & historical checkout (even across `Remip`)**:
+  - Loading a map (`MapStore.Load`) or checking out any commit (`CommitId` /
+    `TreeId`) resolves `TreeId` directly from the map's delta object store +
+    `BaseRef` store and materializes the octree and entities in $O(\text{nodes in tree})$
+    without replaying commands.
 - **No merging**: history is strictly linear; we do not offer branch merging.
 
 `Level.tscn` holds **references** to the data, not the data itself:
@@ -1058,9 +1058,11 @@ World/Entities/
 └── MapEntity.cs           # the stored entity: float in memory, fixed-point on disk/wire
 World/Runtime/Formats/Save/
 ├── WorldSnapshot.cs       # canonical snapshot encode/decode + content hash (M5)
+├── ObjectId.cs            # cryptographic 20/32-byte SHA-256 identifier (ADR 0008)
+├── MapObjectStore.cs      # transparent dictionary-backed object store with BaseStore fallback (ADR 0008)
 ├── WorldResource.cs       # Godot Resource wrapper for world.res (M5)
-├── HistoryResource.cs     # Godot Resource wrapper for history.res + MapCommit chain (M5, ADR 0008)
-├── MapStore.cs            # reference-based map load/commit/checkout/compact + archive hash (M5, ADR 0008)
+├── HistoryResource.cs     # Godot Resource wrapper for history.res + Commit chain + delta Objects (M5, ADR 0008)
+├── MapStore.cs            # reference-based map load/commit/checkout/GC + archive hash (M5, ADR 0008)
 └── MapLevel.cs            # scene node: refs World / History.BaseRef + runtime projections (M5)
 resources/maps/empty_map/
 ├── Level.tscn             # canonical base empty map scene
