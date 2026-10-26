@@ -13,8 +13,9 @@ namespace SauerbratenRevival.Tests;
 
 /// <summary>
 /// Verifies editor scenes (<c>scenes/editor_scene.tscn</c> and <c>scenes/empty_map.tscn</c>)
-/// instantiate a <see cref="MapPlayer"/> with edit mode enabled, and that an
-/// <see cref="EditorController"/> is automatically wired to the underlying <see cref="IMapSource"/>.
+/// instantiate a <see cref="MapPlayer"/> with edit mode enabled, that an
+/// <see cref="EditorController"/> is automatically wired to the underlying <see cref="IMapSource"/>,
+/// and that the play scene launched in the front-end's <c>coop_edit</c> mode does the same.
 /// </summary>
 public class EditorViewSceneTest : GoTestBase
 {
@@ -124,6 +125,45 @@ public class EditorViewSceneTest : GoTestBase
         TestAssert.True(editor != null, "editor controller attached under world");
         TestAssert.Equal(root.MapSource.Octa, editor!.Octa, "editor controller bound to map octa");
         TestAssert.Equal(root.MapSource.Sink, editor.Sink, "editor controller bound to map sink");
+
+        root.QueueFree();
+    }
+
+    /// <summary>
+    /// The play scene launched with the front-end's EDIT objective: the menu emits
+    /// the <c>coop_edit</c> mode and <see cref="Main"/> maps that mode's
+    /// <see cref="ModeFlags.Edit"/> flag onto the viewer's edit entry point, so the
+    /// player spawns floating with a live editor + edit HUD (not a match player).
+    /// </summary>
+    [Test]
+    public void CoopEditModeLaunchesTheEditor()
+    {
+        var scene = GD.Load<PackedScene>("res://scenes/player_scene.tscn");
+        TestAssert.True(scene != null, "player_scene.tscn loaded");
+
+        var root = scene!.Instantiate<OgzMapViewer>();
+        root.OgzPath = TestData.OgzPath;
+        root.GameMode = "coop_edit";
+        // Mirrors Main.StartMatch: the mode's Edit flag selects edit mode.
+        root.EditMode = GameModeCatalog.TryGet(root.GameMode)?.Has(ModeFlags.Edit) ?? false;
+        TestAssert.True(root.EditMode, "coop_edit carries ModeFlags.Edit");
+
+        TestScene.AddChild(root);
+
+        MapPlayer? player = null;
+        EditorController? editor = null;
+        foreach (var child in root.MapSource!.WorldNode.GetChildren())
+        {
+            if (child is MapPlayer p) player = p;
+            if (child is EditorController ec) editor = ec;
+        }
+
+        TestAssert.True(player != null, "player spawned under world");
+        TestAssert.True(player!.EditMode, "player is in edit mode");
+        TestAssert.True(player.Floating, "edit player floats instead of walking");
+        TestAssert.True(editor != null, "editor controller attached under world");
+        TestAssert.Equal(root.MapSource.Octa, editor!.Octa, "editor bound to map octa");
+        TestAssert.True(editor.Hud != null, "editor drives the edit HUD");
 
         root.QueueFree();
     }

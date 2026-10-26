@@ -1,5 +1,6 @@
 using Godot;
 using SauerbratenRevival.World.Audio;
+using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Weapons;
@@ -91,13 +92,18 @@ public partial class Main : Node
             viewer.OgzPath = map;
             viewer.GameMode = mode;
             viewer.PlayerModelIndex = playerModel;
+            // EDIT is one of the menu's objectives but a plain mode to the world
+            // (`coop_edit`, ModeFlags.Edit). It maps onto the editor's entry point,
+            // the same one scenes/editor_scene.tscn uses through its EditMode export:
+            // spawn floating with a live EditorController instead of a match player.
+            viewer.EditMode = GameModeCatalog.TryGet(mode)?.Has(ModeFlags.Edit) ?? false;
         }
         // Set before the viewer's _Ready runs (on AddChild), so spawn/visuals use it.
         if (game.GetNodeOrNull<MapPlayer>("Player") is { } player) player.Team = team;
 
         _gameHost.AddChild(game);
         _game = game;
-        GD.Print($"[main] match started: map={map} mode={mode} team={team} model={playerModel} name='{playerName}'");
+        GD.Print($"[main] match started: map={map} mode={mode} team={team} model={playerModel} name='{playerName}' edit={(game is OgzMapViewer { EditMode: true })}");
         ResumeGame();
     }
 

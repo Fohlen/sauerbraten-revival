@@ -174,10 +174,11 @@ public partial class OgzMapViewer : Node3D
         mapSource.Items?.SpawnItems(force: true);
 
         bool isEdit = EditMode || player.EditMode;
+        Editor.EditorController? editor = null;
         if (isEdit)
         {
             player.EditMode = true;
-            var editor = mapSource.WorldNode.GetNodeOrNull<Editor.EditorController>("EditorController")
+            editor = mapSource.WorldNode.GetNodeOrNull<Editor.EditorController>("EditorController")
                 ?? new Editor.EditorController { Name = "EditorController" };
             editor.BindMapSource(mapSource);
             if (editor.GetParent() == null)
@@ -198,6 +199,11 @@ public partial class OgzMapViewer : Node3D
         hud.SetupTextures(mapSource.Textures ?? new Materials.ResourceTextureSource());
         canvas.AddChild(hud);
         AddChild(canvas);
+
+        // The editor drives the edit HUD (grid size/power, selection cube count,
+        // material, allfaces) every frame; without the link it only ever shows
+        // the defaults from HudController.
+        if (editor != null) editor.Hud = hud;
 
         GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw} (edit={isEdit})");
     }

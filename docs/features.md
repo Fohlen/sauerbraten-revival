@@ -293,6 +293,11 @@ order** (design detail for this roadmap item).
       `history.res`, `Level.tscn`) + compaction + archive hash;
       `F2` save / `F3` load binds in `EditorController`. See
       [editor-and-commands.md](editor-and-commands.md#7-map-format-versioned-command-history).
+- [x] Launch edit from the front-end: the menu's EDIT objective emits the
+      `coop_edit` mode; `Main` maps its `ModeFlags.Edit` onto the viewer's edit
+      entry point, so the play scene spawns the floating edit player with a live
+      `EditorController` and edit HUD (same seam as `scenes/editor_scene.tscn`).
+      Asserted by `test/EditorViewSceneTest.cs`.
 - [x] Persistent user keybinds (`user://input.cfg`) — persistence implemented
       (`scripts/InputBindings.cs`); the rebind UI lands with M4e. See
       [Cross-cutting: configuration](#cross-cutting-configuration).
