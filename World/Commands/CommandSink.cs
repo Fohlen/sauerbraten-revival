@@ -13,10 +13,10 @@ namespace SauerbratenRevival.World.Commands;
 /// is derived from a pre-state capture (Rule 4). This is the offline (M3) form;
 /// networking wraps it with request/broadcast and conflict rejection (M6).
 /// </summary>
-public sealed class WorldCommandSink
+public sealed class CommandSink
 {
     private readonly IWorld _world;
-    private readonly WorldCommandLog _log;
+    private readonly CommandLog _log;
 
     /// <summary>Ops whose forward application is destructive and needs a pre-state capture to undo.</summary>
     private static readonly HashSet<WorldOp> Destructive = new()
@@ -32,12 +32,12 @@ public sealed class WorldCommandSink
     };
 
     public IWorld World => _world;
-    public WorldCommandLog Log => _log;
+    public CommandLog Log => _log;
 
-    public WorldCommandSink(IWorld world, int localPeerId = 0)
+    public CommandSink(IWorld world, int localPeerId = 0)
     {
         _world = world;
-        _log = new WorldCommandLog(localPeerId);
+        _log = new CommandLog(localPeerId);
     }
 
     /// <summary>True if a given op needs a captured pre-state for undo.</summary>
@@ -47,7 +47,7 @@ public sealed class WorldCommandSink
     /// Submit a locally-issued command: capture undo state, apply, record. Returns
     /// the log entry.
     /// </summary>
-    public LogEntry Submit(WorldCommand cmd)
+    public LogEntry Submit(Command cmd)
     {
         var entry = PrepareUndo(cmd);
         _world.Apply(cmd);
@@ -59,7 +59,7 @@ public sealed class WorldCommandSink
     }
 
     /// <summary>Apply and record a command that originated on another peer (no undo entry for us).</summary>
-    public void Receive(WorldCommand cmd)
+    public void Receive(Command cmd)
     {
         _world.Apply(cmd);
         _log.RecordRemote(cmd);
@@ -78,7 +78,7 @@ public sealed class WorldCommandSink
         {
             // Restore the captured region (Rule 4: the pre-state was captured when
             // the forward command was applied).
-            var restore = new WorldCommand(WorldOp.ReplaceBlock,
+            var restore = new Command(WorldOp.ReplaceBlock,
                 new ReplaceBlockPayload(new SelectionPayload(entry.UndoRegion.O, entry.UndoRegion.S, entry.UndoRegion.Grid, entry.UndoRegion.Orient), entry.UndoBlock))
             { AuthorPeerId = _log.LocalPeerId };
             _world.Apply(restore);
@@ -104,7 +104,7 @@ public sealed class WorldCommandSink
         var fresh = PrepareUndo(entry.Command);
         if (entry.Command.Op == WorldOp.ReplaceBlock && entry.RedoBlock != null)
         {
-            var again = new WorldCommand(WorldOp.ReplaceBlock,
+            var again = new Command(WorldOp.ReplaceBlock,
                 new ReplaceBlockPayload(new SelectionPayload(entry.UndoRegion.O, entry.UndoRegion.S, entry.UndoRegion.Grid, entry.UndoRegion.Orient), entry.RedoBlock))
             { AuthorPeerId = _log.LocalPeerId };
             _world.Apply(again);
@@ -126,7 +126,7 @@ public sealed class WorldCommandSink
     /// capture the region they are about to change; <see cref="WorldOp.ReplaceBlock"/>
     /// additionally captures what it is about to write (for redo).
     /// </summary>
-    private LogEntry PrepareUndo(WorldCommand cmd)
+    private LogEntry PrepareUndo(Command cmd)
     {
         var entry = new LogEntry { Command = cmd };
         if (!IsDestructive(cmd.Op)) return entry;
@@ -193,7 +193,7 @@ public sealed class WorldCommandSink
         return entry;
     }
 
-    private static Block3 SelectionRegion(WorldCommand cmd) => cmd.Payload switch
+    private static Block3 SelectionRegion(Command cmd) => cmd.Payload switch
     {
         DeleteCubePayload p => p.Selection.ToBlock(),
         EditFacePayload p => p.Selection.ToBlock(),

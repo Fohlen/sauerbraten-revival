@@ -13,7 +13,7 @@ namespace SauerbratenRevival.World.Editor;
 /// camera's eye ray, casts it against the octree (<see cref="OctaRay"/>), runs the
 /// cursor (<see cref="EditCursor"/>), and draws the selection box. Mouse-wheel and
 /// key input drive grid size and the fill/push edits through a local
-/// <see cref="WorldCommandSink"/>.
+/// <see cref="CommandSink"/>.
 ///
 /// **Scroll dispatch** is a port of Cube2's universal delta (`data/stdlib.cfg`): a
 /// held <c>delta_use</c> key sets the *active modifier*, and the mouse wheel calls
@@ -52,7 +52,7 @@ public partial class EditorController : Node3D
     public EditCursor Cursor { get; } = new();
 
     /// <summary>The sink commands are submitted through (prototype: single-player, peer 0).</summary>
-    public WorldCommandSink? Sink { get; set; }
+    public CommandSink? Sink { get; set; }
 
     /// <summary>The chunk renderer to invalidate after an edit (may be null in headless tests).</summary>
     public WorldChunkRenderer? Renderer { get; set; }
@@ -434,7 +434,7 @@ public partial class EditorController : Node3D
     {
         if (Sink == null) return;
         var sel = CurrentSelection();
-        Sink.Submit(new WorldCommand(WorldOp.EditFace,
+        Sink.Submit(new Command(WorldOp.EditFace,
             new EditFacePayload(new SelectionPayload(sel), dir, mode),
             source: CommandSource.Editor));
         InvalidateRegion(sel);
@@ -445,7 +445,7 @@ public partial class EditorController : Node3D
     {
         if (Sink == null) return;
         var sel = CurrentSelection();
-        Sink.Submit(new WorldCommand(WorldOp.RotateCube,
+        Sink.Submit(new Command(WorldOp.RotateCube,
             new TransformCubePayload(new SelectionPayload(sel), cw),
             source: CommandSource.Editor));
         InvalidateRegion(sel);
@@ -456,7 +456,7 @@ public partial class EditorController : Node3D
     {
         if (Sink == null || !flip) return;
         var sel = CurrentSelection();
-        Sink.Submit(new WorldCommand(WorldOp.FlipCube,
+        Sink.Submit(new Command(WorldOp.FlipCube,
             new TransformCubePayload(new SelectionPayload(sel)),
             source: CommandSource.Editor));
         InvalidateRegion(sel);
@@ -483,7 +483,7 @@ public partial class EditorController : Node3D
         if (Sink == null) return;
         CurrentTexture = tex;
         var sel = CurrentSelection();
-        Sink.Submit(new WorldCommand(WorldOp.SetFaceTexture,
+        Sink.Submit(new Command(WorldOp.SetFaceTexture,
             new SetFaceTexturePayload(new SelectionPayload(sel), tex, AllFaces ? -1 : sel.Orient),
             source: CommandSource.Editor));
         InvalidateRegion(sel);
@@ -499,7 +499,7 @@ public partial class EditorController : Node3D
         if (Sink == null) return;
         CurrentMaterial = materialId;
         var sel = CurrentSelection();
-        Sink.Submit(new WorldCommand(WorldOp.SetFaceMaterial,
+        Sink.Submit(new Command(WorldOp.SetFaceMaterial,
             new SetFaceMaterialPayload(new SelectionPayload(sel), materialId, filter),
             source: CommandSource.Editor));
         InvalidateRegion(sel);
@@ -513,7 +513,7 @@ public partial class EditorController : Node3D
     public void EditRemip(bool mipvis = false)
     {
         if (Sink == null) return;
-        Sink.Submit(new WorldCommand(WorldOp.Remip, new RemipPayload(mipvis),
+        Sink.Submit(new Command(WorldOp.Remip, new RemipPayload(mipvis),
             source: CommandSource.Editor));
         InvalidateAll();
     }
@@ -551,7 +551,7 @@ public partial class EditorController : Node3D
     {
         if (Sink == null) return;
         var sel = CurrentSelection();
-        Sink.Submit(new WorldCommand(WorldOp.DeleteCube, new DeleteCubePayload(new SelectionPayload(sel)),
+        Sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(new SelectionPayload(sel)),
             source: CommandSource.Editor));
         InvalidateRegion(sel);
     }
@@ -588,7 +588,7 @@ public partial class EditorController : Node3D
     {
         if (Sink == null || Clipboard == null) return;
         var sel = CurrentSelection();
-        Sink.Submit(new WorldCommand(WorldOp.ReplaceBlock,
+        Sink.Submit(new Command(WorldOp.ReplaceBlock,
             new ReplaceBlockPayload(new SelectionPayload(sel), Clipboard),
             source: CommandSource.Editor));
         InvalidateRegion(sel);
@@ -635,7 +635,7 @@ public partial class EditorController : Node3D
         if (!DirAccess.DirExistsAbsolute(ProjectSettings.GlobalizePath(MapDir))) return;
         var loaded = MapStore.Load(MapDir);
         Octa = loaded.World;
-        Sink = new WorldCommandSink(new OctaWorld(loaded.World));
+        Sink = new CommandSink(new OctaWorld(loaded.World));
 
         // The renderer was built for the old octree: rebuild it against the loaded one.
         Renderer?.Setup(loaded.World, materials: null);

@@ -8,7 +8,7 @@ namespace SauerbratenRevival.World.Runtime.Formats.Save;
 /// Godot <see cref="Resource"/> wrapper for the command history since the base
 /// snapshot (docs/editor-and-commands.md §7). Saved as <c>history.res</c>.
 ///
-/// The history is a sequence of canonical command blobs (<see cref="WorldCommandCodec"/>),
+/// The history is a sequence of canonical command blobs (<see cref="CommandCodec"/>),
 /// each self-describing, so a newer build can skip an unknown op tail rather than
 /// fail the whole file (§7.3).
 ///
@@ -18,25 +18,25 @@ namespace SauerbratenRevival.World.Runtime.Formats.Save;
 [GlobalClass]
 public partial class HistoryResource : Resource
 {
-    /// <summary>One encoded <see cref="WorldCommand"/> per entry, in sequence order.</summary>
+    /// <summary>One encoded <see cref="Command"/> per entry, in sequence order.</summary>
     [Export] public Godot.Collections.Array<byte[]> Commands { get; set; } = new();
 
     /// <summary>Script resource path, assigned so <see cref="ResourceSaver"/> writes a proper ext_resource reference.</summary>
     public const string ScriptPath = "res://World/Runtime/Formats/Save/HistoryResource.cs";
 
-    public static HistoryResource FromCommands(IEnumerable<WorldCommand> commands)
+    public static HistoryResource FromCommands(IEnumerable<Command> commands)
     {
         var res = new HistoryResource();
-        foreach (var c in commands) res.Commands.Add(WorldCommandCodec.Encode(c));
+        foreach (var c in commands) res.Commands.Add(CommandCodec.Encode(c));
         AttachScript(res);
         return res;
     }
 
     /// <summary>Decode every command, in order. Throws on a malformed entry.</summary>
-    public List<WorldCommand> ToCommands()
+    public List<Command> ToCommands()
     {
-        var list = new List<WorldCommand>(Commands.Count);
-        foreach (var blob in Commands) list.Add(WorldCommandCodec.Decode(blob));
+        var list = new List<Command>(Commands.Count);
+        foreach (var blob in Commands) list.Add(CommandCodec.Decode(blob));
         return list;
     }
 

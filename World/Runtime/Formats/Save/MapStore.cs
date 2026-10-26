@@ -53,19 +53,19 @@ public static class MapStore
     }
 
     /// <summary>Read the command history from a map directory (empty if the file is absent).</summary>
-    public static List<WorldCommand> LoadHistory(string mapDir)
+    public static List<Command> LoadHistory(string mapDir)
     {
         string path = Globalize(Path.Combine(mapDir, HistoryResourceName));
-        if (!ResourceLoader.Exists(path) && !File.Exists(path)) return new List<WorldCommand>();
+        if (!ResourceLoader.Exists(path) && !File.Exists(path)) return new List<Command>();
         var res = ResourceLoader.Load(path, "", ResourceLoader.CacheMode.Replace);
         if (res == null) throw new InvalidDataException($"Failed to load {path}.");
         if (res is HistoryResource typed) return typed.ToCommands();
 
-        var list = new List<WorldCommand>();
+        var list = new List<Command>();
         var commands = res.Get("Commands");
         if (commands.VariantType == Variant.Type.Array)
             foreach (var blob in commands.As<Godot.Collections.Array>())
-                list.Add(WorldCommandCodec.Decode(blob.As<byte[]>()));
+                list.Add(CommandCodec.Decode(blob.As<byte[]>()));
         return list;
     }
 
@@ -78,7 +78,7 @@ public static class MapStore
     {
         public Octa World = null!;
         public WorldSnapshot Snapshot = null!;
-        public List<WorldCommand> History = new();
+        public List<Command> History = new();
     }
 
     /// <summary>Load the base world, then replay the history tail on top of it (§4 strategy 2).</summary>
@@ -102,7 +102,7 @@ public static class MapStore
     /// <c>materials/manifest.res</c>, making the directory self-describing; a null
     /// manifest (editor maps with no imported resources) leaves the dir empty.
     /// </summary>
-    public static void Save(string mapDir, WorldSnapshot snapshot, IReadOnlyList<WorldCommand>? history,
+    public static void Save(string mapDir, WorldSnapshot snapshot, IReadOnlyList<Command>? history,
         bool compact = true, ManifestData? manifest = null)
     {
         string dir = Globalize(mapDir);
@@ -175,7 +175,7 @@ public static class MapStore
         Mix(sha, snapshot.Hash());
 
         // Command history, in order (base + tail fully determine the session world).
-        foreach (var cmd in LoadHistory(mapDir)) Mix(sha, cmd.Sequence, WorldCommandCodec.Encode(cmd));
+        foreach (var cmd in LoadHistory(mapDir)) Mix(sha, cmd.Sequence, CommandCodec.Encode(cmd));
 
         // Material manifest files, sorted, so a manifest change also changes the hash.
         string materials = Path.Combine(dir, MaterialsDirName);

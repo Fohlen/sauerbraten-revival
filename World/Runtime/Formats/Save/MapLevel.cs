@@ -109,7 +109,7 @@ public partial class MapLevel : Node3D, IGameWorld
     private Materials.ITextureSource? _textures;
 
     public Octa? Octa { get; set; }
-    public WorldCommandSink? Sink { get; set; }
+    public CommandSink? Sink { get; set; }
     public WorldChunkRenderer? Renderer { get; set; }
     public Lighting.RadianceVolume? Radiance { get; set; }
 
@@ -144,7 +144,7 @@ public partial class MapLevel : Node3D, IGameWorld
         Octa = octa;
         Physics = new OctaPhysics(octa);
         if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
-        Sink = new WorldCommandSink(new OctaWorld(octa));
+        Sink = new CommandSink(new OctaWorld(octa));
 
         // Replay the saved history tail on top of the base snapshot (§4 strategy 2).
         if (History != null)

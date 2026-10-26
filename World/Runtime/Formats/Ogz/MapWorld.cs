@@ -48,7 +48,7 @@ public partial class MapWorld : Node3D, IGameWorld
     [Export] public int ChunkSize { get; set; } = 512;
 
     public Node3D WorldNode => this;
-    public Commands.WorldCommandSink? Sink { get; set; }
+    public Commands.CommandSink? Sink { get; set; }
     public Meshing.WorldChunkRenderer? Renderer { get; set; }
 
     /// <summary>Show edit-mode blue entity markers and facing arrows.</summary>
@@ -426,7 +426,7 @@ public partial class MapWorld : Node3D, IGameWorld
         // Sauerbraten bounds are Z-up; the node rotates them to Godot Y-up.
         Bounds = Renderer.Bounds;
 
-        Sink = new Commands.WorldCommandSink(new Commands.OctaWorld(octa));
+        Sink = new Commands.CommandSink(new Commands.OctaWorld(octa));
         LinkChildEditors();
 
         GD.Print($"[world] {path}: chunks={Renderer.ChunkCount} triangles={Renderer.TriangleCount}");

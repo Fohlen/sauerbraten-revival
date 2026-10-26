@@ -8,9 +8,9 @@ namespace SauerbratenRevival.World.Commands;
 /// (attribution, not authority — docs/editor-and-commands.md §1.1).
 ///
 /// Payloads are typed objects here; their canonical <c>byte[]</c> form is the
-/// codec's job (<see cref="WorldCommandCodec"/>), so save/demo/network share one encoding.
+/// codec's job (<see cref="CommandCodec"/>), so save/demo/network share one encoding.
 /// </summary>
-public sealed class WorldCommand
+public sealed class Command
 {
     /// <summary>What the command does.</summary>
     public WorldOp Op { get; init; }
@@ -30,9 +30,9 @@ public sealed class WorldCommand
     /// <summary>Op-specific parameters.</summary>
     public ICommandPayload Payload { get; init; } = EmptyPayload.Instance;
 
-    public WorldCommand() { }
+    public Command() { }
 
-    public WorldCommand(WorldOp op, ICommandPayload payload, int author = 0,
+    public Command(WorldOp op, ICommandPayload payload, int author = 0,
         CommandSource source = CommandSource.Editor)
     {
         Op = op;

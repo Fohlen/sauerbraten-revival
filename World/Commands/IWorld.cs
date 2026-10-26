@@ -14,7 +14,7 @@ public interface IWorld
     Octa Octa { get; }
 
     /// <summary>Apply a command. Must be deterministic and must not depend on wall-clock state.</summary>
-    void Apply(WorldCommand cmd);
+    void Apply(Command cmd);
 
     /// <summary>Capture a region into a portable block (the pre-state for a destructive edit).</summary>
     OctaEdit.CapturedBlock Capture(Block3 region, int rgrid);
@@ -33,7 +33,7 @@ public sealed class OctaWorld : IWorld
 
     public OctaEdit.CapturedBlock Capture(Block3 region, int rgrid) => OctaEdit.BlockCopy(Octa, region, rgrid);
 
-    public void Apply(WorldCommand cmd)
+    public void Apply(Command cmd)
     {
         switch (cmd.Op)
         {

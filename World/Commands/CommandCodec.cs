@@ -21,7 +21,7 @@ namespace SauerbratenRevival.World.Commands;
 /// real cost is meshing). If a shared C#/C++/Python format is ever needed, it swaps
 /// in behind this one class.
 /// </summary>
-public static class WorldCommandCodec
+public static class CommandCodec
 {
     /// <summary>Bump when the payload layout changes incompatibly.</summary>
     public const byte FormatVersion = 1;
@@ -29,7 +29,7 @@ public static class WorldCommandCodec
     // ---- command framing ----
 
     /// <summary>Encode a command as [u8 version][u64 sequence][i32 author][u8 source][Variant array].</summary>
-    public static byte[] Encode(WorldCommand cmd)
+    public static byte[] Encode(Command cmd)
     {
         var payload = new Godot.Collections.Array { (int)cmd.Op };
         WritePayload(payload, cmd);
@@ -45,7 +45,7 @@ public static class WorldCommandCodec
     }
 
     /// <summary>Decode bytes produced by <see cref="Encode"/>. Object-free and safe for untrusted input.</summary>
-    public static WorldCommand Decode(byte[] data)
+    public static Command Decode(byte[] data)
     {
         byte version = data[0];
         if (version != FormatVersion)
@@ -64,7 +64,7 @@ public static class WorldCommandCodec
             throw new InvalidOperationException("Malformed command payload");
 
         var op = (WorldOp)(int)arr[0];
-        return new WorldCommand(op, ReadPayload(op, arr), author, source) { Sequence = sequence };
+        return new Command(op, ReadPayload(op, arr), author, source) { Sequence = sequence };
     }
 
     // ---- payloads (positional arrays) ----
@@ -82,7 +82,7 @@ public static class WorldCommandCodec
         new Vector3I((int)a[i + 3], (int)a[i + 4], (int)a[i + 5]),
         (int)a[i + 6], (int)a[i + 7]);
 
-    private static void WritePayload(Godot.Collections.Array a, WorldCommand cmd)
+    private static void WritePayload(Godot.Collections.Array a, Command cmd)
     {
         switch (cmd.Op)
         {

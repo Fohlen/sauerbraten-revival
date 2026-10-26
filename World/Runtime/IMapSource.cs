@@ -24,7 +24,7 @@ public interface IMapSource
     Node3D WorldNode { get; }
 
     /// <summary>Command sink for submitting and undoing geometry/entity edits.</summary>
-    WorldCommandSink? Sink { get; set; }
+    CommandSink? Sink { get; set; }
 
     /// <summary>Chunked mesh renderer, supporting dynamic dirty-chunk invalidation.</summary>
     WorldChunkRenderer? Renderer { get; set; }

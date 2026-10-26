@@ -54,12 +54,12 @@ public class MapFormatTest : GoTestBase
         return h;
     }
 
-    private static Octa EditedWorld(out List<WorldCommand> history)
+    private static Octa EditedWorld(out List<Command> history)
     {
         var octa = new Octa(8);
         octa.EmptyMap(8);
-        var sink = new WorldCommandSink(new OctaWorld(octa));
-        var cmds = new List<WorldCommand>
+        var sink = new CommandSink(new OctaWorld(octa));
+        var cmds = new List<Command>
         {
             new(WorldOp.EditFace, new EditFacePayload(
                 new SelectionPayload(new Vector3I(64, 64, 64), new Vector3I(2, 2, 2), 8, 0), -1, 1)),
@@ -146,8 +146,8 @@ public class MapFormatTest : GoTestBase
 
         var changed = new Octa(8);
         changed.EmptyMap(8);
-        var sink = new WorldCommandSink(new OctaWorld(changed));
-        sink.Submit(new WorldCommand(WorldOp.DeleteCube, new DeleteCubePayload(
+        var sink = new CommandSink(new OctaWorld(changed));
+        sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(
             new SelectionPayload(new Vector3I(0, 0, 0), new Vector3I(1, 1, 1), 8, 0))));
         MapStore.SaveCompacted(a, changed);
 

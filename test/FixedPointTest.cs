@@ -44,12 +44,12 @@ public class FixedPointTest : GoTestBase
     public void CommandPayloadsContainNoFloats()
     {
         // Encode a representative command and assert its Variant tree has no float.
-        var cmd = new WorldCommand(WorldOp.NewMap, new NewMapPayload(12));
-        var bytes = WorldCommandCodec.Encode(cmd);
+        var cmd = new Command(WorldOp.NewMap, new NewMapPayload(12));
+        var bytes = CommandCodec.Encode(cmd);
         TestAssert.True(bytes.Length > 0, "encoded");
         // The Variant type byte for Float is 3; the payload array should only carry
         // int/bool/array. We check the decoded payload tree instead of raw bytes.
-        var back = WorldCommandCodec.Decode(bytes);
+        var back = CommandCodec.Decode(bytes);
         TestAssert.True(back.Payload is NewMapPayload, "round-trips without float coercion");
         TestAssert.Equal(12, ((NewMapPayload)back.Payload).Scale, "scale is an int");
     }

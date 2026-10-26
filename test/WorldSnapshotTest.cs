@@ -24,13 +24,13 @@ public class WorldSnapshotTest : GoTestBase
     {
         var octa = new Octa(8);
         octa.EmptyMap(8);
-        var sink = new WorldCommandSink(new OctaWorld(octa));
+        var sink = new CommandSink(new OctaWorld(octa));
         // A handful of edits so the octree has normal (deformed-capable) leaves.
-        sink.Submit(new WorldCommand(WorldOp.EditFace,
+        sink.Submit(new Command(WorldOp.EditFace,
             new EditFacePayload(new SelectionPayload(new Vector3I(64, 64, 64), new Vector3I(2, 2, 2), 8, 0), -1, 1)));
-        sink.Submit(new WorldCommand(WorldOp.DeleteCube,
+        sink.Submit(new Command(WorldOp.DeleteCube,
             new DeleteCubePayload(new SelectionPayload(new Vector3I(80, 80, 80), new Vector3I(1, 1, 1), 8, 0))));
-        sink.Submit(new WorldCommand(WorldOp.SetFaceTexture,
+        sink.Submit(new Command(WorldOp.SetFaceTexture,
             new SetFaceTexturePayload(new SelectionPayload(new Vector3I(72, 72, 72), new Vector3I(1, 1, 1), 8, 0), 5, -1)));
         return octa;
     }
@@ -79,8 +79,8 @@ public class WorldSnapshotTest : GoTestBase
         var octa = new Octa(6);
         ulong before = WorldSnapshot.Capture(octa).Hash();
 
-        var sink = new WorldCommandSink(new OctaWorld(octa));
-        sink.Submit(new WorldCommand(WorldOp.SetFaceTexture,
+        var sink = new CommandSink(new OctaWorld(octa));
+        sink.Submit(new Command(WorldOp.SetFaceTexture,
             new SetFaceTexturePayload(new SelectionPayload(new Vector3I(0, 0, 0), new Vector3I(1, 1, 1), 8, 0), 9, -1)));
 
         TestAssert.True(WorldSnapshot.Capture(octa).Hash() != before, "hash changes after a texture edit");

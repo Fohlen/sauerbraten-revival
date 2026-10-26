@@ -10,7 +10,7 @@ namespace SauerbratenRevival.World.Commands;
 /// </summary>
 public sealed class LogEntry
 {
-    public WorldCommand Command = null!;
+    public Command Command = null!;
 
     /// <summary>
     /// Pre-state captured before the command was applied, for ops whose inverse is
@@ -36,7 +36,7 @@ public sealed class LogEntry
 /// are undoable, and a rejected/conflicted undo is discarded rather than merged.
 /// This class is offline — networking wraps it (M6).
 /// </summary>
-public sealed class WorldCommandLog
+public sealed class CommandLog
 {
     private readonly List<LogEntry> _entries = new();
     private readonly List<LogEntry> _undone = new();
@@ -63,13 +63,13 @@ public sealed class WorldCommandLog
     public bool IsUndoCandidate(LogEntry e) =>
         e.Command.AuthorPeerId == LocalPeerId && e.Command.Source == CommandSource.Editor;
 
-    public WorldCommandLog(int localPeerId = 0) => LocalPeerId = localPeerId;
+    public CommandLog(int localPeerId = 0) => LocalPeerId = localPeerId;
 
     /// <summary>Assign the next sequence number to a command (caller then applies it).</summary>
     public ulong NextSequence() => _nextSequence;
 
     /// <summary>Record an applied command and advance the sequence. Clears the redo stack.</summary>
-    public LogEntry Record(WorldCommand cmd)
+    public LogEntry Record(Command cmd)
     {
         cmd.Sequence = _nextSequence++;
         var entry = new LogEntry { Command = cmd };
@@ -132,7 +132,7 @@ public sealed class WorldCommandLog
     }
 
     /// <summary>Append an already-sequenced remote command (does not affect redo).</summary>
-    public LogEntry RecordRemote(WorldCommand cmd)
+    public LogEntry RecordRemote(Command cmd)
     {
         var entry = new LogEntry { Command = cmd };
         _entries.Add(entry);

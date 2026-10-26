@@ -71,7 +71,7 @@ public partial class EmptyMap : Node3D, IGameWorld
     }
 
     public Octa? Octa { get; set; }
-    public WorldCommandSink? Sink { get; set; }
+    public CommandSink? Sink { get; set; }
     public WorldChunkRenderer? Renderer { get; set; }
     public Lighting.RadianceVolume? Radiance { get; set; }
 
@@ -175,7 +175,7 @@ public partial class EmptyMap : Node3D, IGameWorld
             // Fast path: clone the cached octree and reuse its meshes.
             var cachedOcta = seed.Seed.Clone();
             Octa = cachedOcta;
-            Sink = new WorldCommandSink(new OctaWorld(cachedOcta));
+            Sink = new CommandSink(new OctaWorld(cachedOcta));
             Physics = new OctaPhysics(cachedOcta);
             CreateRenderer(cachedOcta, seed.Mesh, materials: null);
             LinkChildEditors();
@@ -187,8 +187,8 @@ public partial class EmptyMap : Node3D, IGameWorld
         // seed cache is on) remember it for later instances.
         var octa = new Octa(WorldScale);
         Octa = octa;
-        Sink = new WorldCommandSink(new OctaWorld(octa));
-        Sink.Submit(new WorldCommand(WorldOp.NewMap, new NewMapPayload(WorldScale),
+        Sink = new CommandSink(new OctaWorld(octa));
+        Sink.Submit(new Command(WorldOp.NewMap, new NewMapPayload(WorldScale),
             source: CommandSource.Editor));
         Physics = new OctaPhysics(octa);
 
