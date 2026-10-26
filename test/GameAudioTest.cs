@@ -3,6 +3,7 @@ using System.IO;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Audio;
+using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.Tests;
@@ -68,6 +69,45 @@ public class GameAudioTest : TestClass
         var punchStream = GameAudio.LoadSound("free/punch1");
         TestAssert.True(punchStream != null, "Punch1 sound stream should load from assets or dump fallback");
     }
+
+    [Test]
+    public void SoundStreamsLoadFromImportedResources()
+    {
+        // Exported PCKs ship the imported stream (.oggvorbisstr / .sample) but not the
+        // source .ogg/.wav, so reading the raw file (AudioStream*.LoadFromFile) fails
+        // there. Both kinds of sound must still resolve through the project copy.
+        foreach (string name in new[] { "q009/rifle", "free/punch1" })
+        {
+            string? path = SoundFiles.Resolve(name);
+            TestAssert.True(path != null, $"{name} resolves");
+            TestAssert.True(path!.StartsWith($"{ContentRoots.ProjectDir(ContentKind.Sound)}/", StringComparison.Ordinal),
+                $"{name} prefers the shipped res:// copy, got '{path}'");
+            TestAssert.True(ResourceLoader.Exists(path), $"{name} is an imported resource");
+            TestAssert.True(SoundFiles.Load(path, loop: false) != null, $"{name} loads from the imported resource");
+        }
+    }
+
+    [Test]
+    public void LoopModeIsPerRequest()
+    {
+        string? path = SoundFiles.Resolve("ambience/creek");
+        TestAssert.True(path != null, "ambience resolves");
+
+        var looping = SoundFiles.Load(path!, loop: true);
+        var oneShot = SoundFiles.Load(path!, loop: false);
+
+        TestAssert.True(looping != null && oneShot != null, "both loop variants load");
+        TestAssert.True(!ReferenceEquals(looping, oneShot), "variants are independent streams");
+        TestAssert.True(LoopOf(looping!), "looping variant loops");
+        TestAssert.False(LoopOf(oneShot!), "one-shot variant does not loop");
+    }
+
+    private static bool LoopOf(AudioStream stream) => stream switch
+    {
+        AudioStreamOggVorbis ogg => ogg.Loop,
+        AudioStreamWav wav => wav.LoopMode != AudioStreamWav.LoopModeEnum.Disabled,
+        _ => throw new InvalidOperationException($"unexpected stream type {stream.GetType().Name}"),
+    };
 
     [Test]
     public void ApplySetsEnabledAndClampsVolume()

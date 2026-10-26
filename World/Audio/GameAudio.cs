@@ -68,26 +68,48 @@ public static class SoundFiles
     {
         if (Loaded.TryGetValue((path, loop), out var cached)) return cached;
 
-        AudioStream? stream = null;
-        if (path.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
-        {
-            var ogg = AudioStreamOggVorbis.LoadFromFile(path);
-            if (ogg != null)
-            {
-                ogg.Loop = loop;
-                stream = ogg;
-            }
-        }
-        else if (path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
-        {
-            var wav = AudioStreamWav.LoadFromFile(path);
-            if (wav != null)
-            {
-                wav.LoopMode = loop ? AudioStreamWav.LoopModeEnum.Forward : AudioStreamWav.LoopModeEnum.Disabled;
-                stream = wav;
-            }
-        }
+        AudioStream? stream = ReadStream(path);
+        if (stream != null) stream = WithLoop(stream, loop);
         Loaded[(path, loop)] = stream;
+        return stream;
+    }
+
+    /// <summary>
+    /// Read a stream. An imported resource (<c>ResourceLoader</c>) is preferred over
+    /// reading the raw file: an exported PCK ships the imported stream (e.g.
+    /// <c>.oggvorbisstr</c>) but not the source <c>.ogg</c>/<c>.wav</c>, so
+    /// <see cref="AudioStreamOggVorbis.LoadFromFile"/> cannot open a shipped sound.
+    /// Raw files are still read directly for the dev-only reference dump (an OS path),
+    /// which has no <c>.import</c> metadata.
+    /// </summary>
+    private static AudioStream? ReadStream(string path)
+    {
+        if (path.StartsWith("res://", StringComparison.Ordinal) && ResourceLoader.Exists(path))
+        {
+            if (ResourceLoader.Load<AudioStream>(path) is { } imported)
+                // Never mutate the cached import: loop state is per request.
+                return imported.Duplicate() as AudioStream;
+        }
+
+        if (path.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
+            return AudioStreamOggVorbis.LoadFromFile(path);
+        if (path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+            return AudioStreamWav.LoadFromFile(path);
+        return null;
+    }
+
+    private static AudioStream? WithLoop(AudioStream stream, bool loop)
+    {
+        if (stream is AudioStreamOggVorbis ogg)
+        {
+            ogg.Loop = loop;
+            return ogg;
+        }
+        if (stream is AudioStreamWav wav)
+        {
+            wav.LoopMode = loop ? AudioStreamWav.LoopModeEnum.Forward : AudioStreamWav.LoopModeEnum.Disabled;
+            return wav;
+        }
         return stream;
     }
 }
