@@ -1,12 +1,12 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/MainMenu.cs" id="1_menu"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-content_margin_left = 18.0
-content_margin_top = 18.0
-content_margin_right = 18.0
-content_margin_bottom = 18.0
+content_margin_left = 14.0
+content_margin_top = 14.0
+content_margin_right = 14.0
+content_margin_bottom = 14.0
 bg_color = Color(0.0784314, 0.0862745, 0.109804, 0.941176)
 border_width_left = 1
 border_width_top = 1
@@ -147,7 +147,10 @@ corner_radius_top_right = 6
 corner_radius_bottom_right = 6
 corner_radius_bottom_left = 6
 
-[sub_resource type="ButtonGroup" id="ButtonGroup_tabs"]
+[sub_resource type="ButtonGroup" id="ButtonGroup_objective"]
+
+[sub_resource type="ButtonGroup" id="ButtonGroup_mutators"]
+allow_unpress = true
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_team"]
 
@@ -257,7 +260,7 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
 [node name="LeftVBox" type="VBoxContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 7
 
 [node name="ResumeButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
 unique_name_in_owner = true
@@ -265,27 +268,160 @@ visible = false
 layout_mode = 2
 text = "RESUME MATCH  (Esc)"
 
-[node name="PlayStyleRow" type="HBoxContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
-visible = false
+[node name="ObjectiveHeader" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_colors/font_color = Color(0.862745, 0.45098, 0.160784, 1)
+theme_override_font_sizes/font_size = 12
+text = "1.  OBJECTIVE"
 
-[node name="CasualButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/PlayStyleRow"]
+[node name="ObjectiveGrid" type="GridContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+layout_mode = 2
+columns = 4
+theme_override_constants/h_separation = 6
+theme_override_constants/v_separation = 6
+
+[node name="ObjectiveDmButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/ObjectiveGrid"]
 unique_name_in_owner = true
 layout_mode = 2
+custom_minimum_size = Vector2(0, 34)
+size_flags_horizontal = 3
+toggle_mode = true
+button_group = SubResource("ButtonGroup_objective")
+text = "DM"
+
+[node name="ObjectiveTdmButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/ObjectiveGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 34)
+size_flags_horizontal = 3
+toggle_mode = true
+button_group = SubResource("ButtonGroup_objective")
+text = "TDM"
+
+[node name="ObjectiveCtfButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/ObjectiveGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 34)
 size_flags_horizontal = 3
 toggle_mode = true
 button_pressed = true
-button_group = SubResource("ButtonGroup_tabs")
-text = "CASUAL"
+button_group = SubResource("ButtonGroup_objective")
+text = "CTF"
 
-[node name="CompButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/PlayStyleRow"]
+[node name="ObjectiveEditButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/ObjectiveGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 34)
+size_flags_horizontal = 3
+toggle_mode = true
+button_group = SubResource("ButtonGroup_objective")
+text = "EDIT"
+
+[node name="MutatorHeader" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.862745, 0.45098, 0.160784, 1)
+theme_override_font_sizes/font_size = 12
+text = "2.  MUTATORS"
+
+[node name="MutatorGrid" type="GridContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+layout_mode = 2
+columns = 2
+theme_override_constants/h_separation = 6
+theme_override_constants/v_separation = 6
+
+[node name="InstaButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MutatorGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 34)
+size_flags_horizontal = 3
+toggle_mode = true
+button_pressed = true
+button_group = SubResource("ButtonGroup_mutators")
+text = "INSTAGIB"
+
+[node name="EfficButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MutatorGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 34)
+size_flags_horizontal = 3
+toggle_mode = true
+button_group = SubResource("ButtonGroup_mutators")
+text = "EFFIC."
+
+[node name="ActiveModeRow" type="HBoxContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ActiveModeCaption" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/ActiveModeRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.560784, 0.596078, 0.678431, 1)
+theme_override_font_sizes/font_size = 12
+text = "ACTIVE MODE"
+vertical_alignment = 1
+
+[node name="ActiveModeValueLabel" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/ActiveModeRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-toggle_mode = true
-button_group = SubResource("ButtonGroup_tabs")
-text = "COMPETITIVE"
+theme_override_colors/font_color = Color(0.862745, 0.45098, 0.160784, 1)
+theme_override_font_sizes/font_size = 17
+text = "INSTAGIB CTF"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="ActiveModeRule" type="HSeparator" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+layout_mode = 2
+
+[node name="MapLabel" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.862745, 0.45098, 0.160784, 1)
+theme_override_font_sizes/font_size = 12
+text = "3.  MAP SELECTION"
+
+[node name="MapPreviewBox" type="VBoxContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="MapFrame" type="PanelContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapPreviewBox"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_preview")
+
+[node name="MapPreview" type="TextureRect" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapPreviewBox/MapFrame"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 150)
+expand_mode = 1
+stretch_mode = 6
+
+[node name="MapNavRow" type="HBoxContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="MapPrevButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapNavRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(44, 0)
+text = "<"
+
+[node name="MapValueLabel" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapNavRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 15
+text = "METL3"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="MapNextButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapNavRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(44, 0)
+text = ">"
+
+[node name="Spacer" type="Control" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+layout_mode = 2
+size_flags_vertical = 3
 
 [node name="QuickJoinButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
 unique_name_in_owner = true
@@ -296,87 +432,6 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_accent_hover")
 theme_override_styles/normal = SubResource("StyleBoxFlat_accent")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_accent_pressed")
 text = "QUICK JOIN"
-
-[node name="ModeLabel" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.560784, 0.596078, 0.678431, 1)
-theme_override_font_sizes/font_size = 12
-text = "MODE"
-
-[node name="ModeRow" type="HBoxContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="ModePrevButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/ModeRow"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(44, 0)
-text = "<"
-
-[node name="ModeValueLabel" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/ModeRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 17
-text = "INSTA CTF"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="ModeNextButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/ModeRow"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(44, 0)
-text = ">"
-
-[node name="MapLabel" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.560784, 0.596078, 0.678431, 1)
-theme_override_font_sizes/font_size = 12
-text = "MAP"
-
-[node name="MapRow" type="HBoxContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="MapPrevButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapRow"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(44, 0)
-text = "<"
-
-[node name="MapPreviewBox" type="VBoxContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 6
-
-[node name="MapFrame" type="PanelContainer" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapRow/MapPreviewBox"]
-layout_mode = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_preview")
-
-[node name="MapPreview" type="TextureRect" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapRow/MapPreviewBox/MapFrame"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(0, 170)
-expand_mode = 1
-stretch_mode = 6
-
-[node name="MapValueLabel" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapRow/MapPreviewBox"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 15
-text = "METL3"
-horizontal_alignment = 1
-
-[node name="MapNextButton" type="Button" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox/MapRow"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(44, 0)
-text = ">"
-
-[node name="Spacer" type="Control" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
-layout_mode = 2
-size_flags_vertical = 3
 
 [node name="CharacterStage" type="Control" parent="RootMargin/MainLayout/ContentArea"]
 unique_name_in_owner = true

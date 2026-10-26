@@ -14,9 +14,15 @@ namespace SauerbratenRevival;
 /// map/mode/team/playermodel and emits <see cref="StartMatchEventHandler"/>; the
 /// shell (<see cref="Main"/>) instantiates the play scene.
 ///
+/// Mode selection is split the way the player thinks about it: an
+/// <see cref="Objective"/> (DM, TDM, CTF, EDIT) and an optional
+/// <see cref="Mutator"/> (instagib, efficiency). The pair resolves to one of the
+/// engine's shipped gamemodes (<see cref="ModeId"/>) because Cube 2 encodes
+/// insta/efficiency as separate modes (<c>M_INSTA</c> / <c>M_EFFICIENCY</c>), not
+/// as composable flags. Edit is a mode of its own and offers no mutators.
+///
 /// The map picker follows the engine's per-mode <c>MapList_*</c> pools from
-/// <c>data/lists.cfg</c> via <see cref="MapListCatalog"/> (CTF modes only offer
-/// CTF maps, capture/hold modes the capture pool, the rest the deathmatch pool).
+/// <c>data/lists.cfg</c> via <see cref="MapListCatalog"/>.
 ///
 /// The right-hand "stage" is a self-contained <see cref="SubViewport"/> with its
 /// own 3D world, so the character preview does not show or disturb the game world
@@ -41,11 +47,25 @@ public partial class MainMenu : CanvasLayer
     [Signal]
     public delegate void QuitRequestedEventHandler();
 
-    /// <summary>Mode ids offered under the CASUAL tab.</summary>
-    private static readonly string[] CasualModes = { "ffa", "insta", "insta_ctf", "effic_ctf" };
+    /// <summary>The mode family the player picks first.</summary>
+    private enum Objective
+    {
+        Dm,
+        Tdm,
+        Ctf,
+        Edit,
+    }
 
-    /// <summary>Mode ids offered under the COMPETITIVE tab.</summary>
-    private static readonly string[] CompModes = { "effic_ctf", "ctf", "insta_ctf", "effic_team" };
+    /// <summary>
+    /// Weapon/mode override. These are exclusive because the engine models them as
+    /// distinct gamemodes; <see cref="None"/> is normal weapon/item play.
+    /// </summary>
+    private enum Mutator
+    {
+        None,
+        Instagib,
+        Efficiency,
+    }
 
     /// <summary>Display names for <see cref="Playermodels"/> indices.</summary>
     private static readonly string[] ModelNames = { "MR. FIXIT", "SNOUTX10K", "OGRO", "INKY", "CAPTAIN CANNON" };
@@ -53,8 +73,8 @@ public partial class MainMenu : CanvasLayer
     private readonly List<string> _maps = new(); // current mode's map pool (engine MapList_*)
     private string _mapListId = "";       // pool id the selection index belongs to
     private int _mapIndex;
-    private int _modeIndex = 2;          // insta ctf under CASUAL
-    private bool _competitive;
+    private Objective _objective = Objective.Ctf;
+    private Mutator _mutator = Mutator.Instagib;
     private int _team = 1;               // blue
     private int _modelIndex;
     private float _stageYaw = 180f;      // start roughly facing the camera
@@ -74,14 +94,13 @@ public partial class MainMenu : CanvasLayer
     private Button _soundToggle = null!;
     private PanelContainer _settingsPanel = null!;
 
-    private Button _casualButton = null!;
-    private Button _compButton = null!;
     private Button _resumeButton = null!;
     private Button _quickJoinButton = null!;
+    private Button[] _objectiveButtons = null!;
 
-    private Button _modePrevButton = null!;
-    private Button _modeNextButton = null!;
-    private Label _modeValue = null!;
+    private Button _instaButton = null!;
+    private Button _efficButton = null!;
+    private Label _activeModeValue = null!;
 
     private Button _mapPrevButton = null!;
     private Button _mapNextButton = null!;
@@ -120,14 +139,19 @@ public partial class MainMenu : CanvasLayer
         _settingsBackButton = GetNode<Button>("%SettingsBackButton");
         _soundToggle = GetNode<Button>("%SoundToggle");
 
-        _casualButton = GetNode<Button>("%CasualButton");
-        _compButton = GetNode<Button>("%CompButton");
         _resumeButton = GetNode<Button>("%ResumeButton");
         _quickJoinButton = GetNode<Button>("%QuickJoinButton");
+        _objectiveButtons = new[]
+        {
+            GetNode<Button>("%ObjectiveDmButton"),
+            GetNode<Button>("%ObjectiveTdmButton"),
+            GetNode<Button>("%ObjectiveCtfButton"),
+            GetNode<Button>("%ObjectiveEditButton"),
+        };
 
-        _modePrevButton = GetNode<Button>("%ModePrevButton");
-        _modeNextButton = GetNode<Button>("%ModeNextButton");
-        _modeValue = GetNode<Label>("%ModeValueLabel");
+        _instaButton = GetNode<Button>("%InstaButton");
+        _efficButton = GetNode<Button>("%EfficButton");
+        _activeModeValue = GetNode<Label>("%ActiveModeValueLabel");
 
         _mapPrevButton = GetNode<Button>("%MapPrevButton");
         _mapNextButton = GetNode<Button>("%MapNextButton");
@@ -151,14 +175,20 @@ public partial class MainMenu : CanvasLayer
 
     private void WireSignals()
     {
-        _casualButton.Toggled += pressed => { if (pressed) SetCompetitive(false); };
-        _compButton.Toggled += pressed => { if (pressed) SetCompetitive(true); };
+        for (int i = 0; i < _objectiveButtons.Length; i++)
+        {
+            int index = i;
+            _objectiveButtons[i].Toggled += pressed =>
+            {
+                if (pressed) SetObjective((Objective)index);
+            };
+        }
+
+        _instaButton.Toggled += pressed => OnMutatorToggled(Mutator.Instagib, pressed);
+        _efficButton.Toggled += pressed => OnMutatorToggled(Mutator.Efficiency, pressed);
 
         _quickJoinButton.Pressed += Launch;
         _resumeButton.Pressed += () => EmitSignal(SignalName.ResumeRequested);
-
-        _modePrevButton.Pressed += () => StepMode(-1);
-        _modeNextButton.Pressed += () => StepMode(1);
 
         _mapPrevButton.Pressed += () => StepMap(-1);
         _mapNextButton.Pressed += () => StepMap(1);
@@ -201,22 +231,83 @@ public partial class MainMenu : CanvasLayer
 
     // ---- selection ---------------------------------------------------------
 
-    private string[] ActiveModes => _competitive ? CompModes : CasualModes;
-
-    private string CurrentMode => ActiveModes[_modeIndex];
-
-    private void SetCompetitive(bool competitive)
+    /// <summary>
+    /// The engine mode id for an objective/mutator pair. Insta and efficiency are
+    /// separate modes in Cube 2, so each objective has one shipped mode per
+    /// override (e.g. ctf → insta_ctf / effic_ctf). Edit has no overrides.
+    /// </summary>
+    private static string ModeId(Objective objective, Mutator mutator) => objective switch
     {
-        if (_competitive == competitive) return;
-        _competitive = competitive;
-        _modeIndex = 0;
-        RefreshMode();
+        Objective.Dm => mutator switch
+        {
+            Mutator.Instagib => "insta",
+            Mutator.Efficiency => "effic",
+            _ => "ffa",
+        },
+        Objective.Tdm => mutator switch
+        {
+            Mutator.Instagib => "instateam",
+            Mutator.Efficiency => "efficteam",
+            _ => "teamplay",
+        },
+        Objective.Ctf => mutator switch
+        {
+            Mutator.Instagib => "insta_ctf",
+            Mutator.Efficiency => "effic_ctf",
+            _ => "ctf",
+        },
+        _ => "coop_edit",
+    };
+
+    /// <summary>Player-facing label for the active selection (see the sketch's "ACTIVE MODE").</summary>
+    private string ActiveModeLabel => _objective switch
+    {
+        Objective.Dm when _mutator == Mutator.None => "DEATHMATCH",
+        Objective.Tdm when _mutator == Mutator.None => "TEAM DEATHMATCH",
+        Objective.Ctf when _mutator == Mutator.None => "CTF",
+        Objective.Edit => "CO-OP EDIT",
+        _ => $"{MutatorLabel(_mutator)} {_objective.ToString().ToUpperInvariant()}",
+    };
+
+    private static string MutatorLabel(Mutator mutator) => mutator switch
+    {
+        Mutator.Instagib => "INSTAGIB",
+        Mutator.Efficiency => "EFFICIENCY",
+        _ => "",
+    };
+
+    private bool IsTeamObjective => _objective is Objective.Tdm or Objective.Ctf;
+
+    private void SetObjective(Objective objective)
+    {
+        if (_objective == objective) return;
+        _objective = objective;
+
+        // Edit carries no mutator; force none so returning to another objective
+        // starts from normal play instead of a hidden stale toggle.
+        if (objective == Objective.Edit) _mutator = Mutator.None;
+
+        // DM/EDIT are team-less; a team objective needs an actual team.
+        if (!IsTeamObjective) _team = 0;
+        else if (_team == 0) _team = 1;
+
+        RefreshAll();
+        ApplyPreviewModel();
     }
 
-    private void StepMode(int delta)
+    private void OnMutatorToggled(Mutator mutator, bool pressed)
     {
-        _modeIndex = Wrap(_modeIndex + delta, ActiveModes.Length);
-        RefreshMode();
+        if (_objective == Objective.Edit) return;
+
+        if (pressed) SetMutator(mutator);
+        else if (!_instaButton.ButtonPressed && !_efficButton.ButtonPressed) SetMutator(Mutator.None);
+    }
+
+    private void SetMutator(Mutator mutator)
+    {
+        if (_mutator == mutator) return;
+        _mutator = mutator;
+        RefreshAll();
     }
 
     private void StepMap(int delta)
@@ -235,7 +326,7 @@ public partial class MainMenu : CanvasLayer
 
     private void SetTeam(int team)
     {
-        if (_team == team) return;
+        if (!IsTeamObjective || _team == team) return;
         _team = team;
         ApplyPreviewModel();
     }
@@ -249,12 +340,8 @@ public partial class MainMenu : CanvasLayer
         if (_maps.Count == 0) return;
 
         string map = "base/" + _maps[_mapIndex];
-        string mode = CurrentMode;
-
-        // A team mode cannot run with the FFA skin choice; default to blue rather
-        // than handing the mode an invalid team.
-        ModeFlags flags = GameModeCatalog.TryGet(mode)?.Flags ?? ModeFlags.None;
-        int team = (flags & ModeFlags.Team) != 0 && _team == 0 ? 1 : _team;
+        string mode = ModeId(_objective, _mutator);
+        int team = IsTeamObjective ? (_team == 0 ? 1 : _team) : 0;
 
         string name = _nametag.Text.Trim();
         if (name.Length == 0) name = "PLAYER";
@@ -353,19 +440,35 @@ public partial class MainMenu : CanvasLayer
 
     private void RefreshAll()
     {
-        _casualButton.ButtonPressed = !_competitive;
-        _compButton.ButtonPressed = _competitive;
+        RefreshObjectives();
+        RefreshMutators();
         RefreshMode();
-        RefreshModel();
         RefreshTeam();
+        RefreshModel();
         RefreshSound();
+    }
+
+    private void RefreshObjectives()
+    {
+        for (int i = 0; i < _objectiveButtons.Length; i++)
+            _objectiveButtons[i].ButtonPressed = (int)_objective == i;
+    }
+
+    private void RefreshMutators()
+    {
+        bool enabled = _objective != Objective.Edit;
+        _instaButton.Disabled = !enabled;
+        _efficButton.Disabled = !enabled;
+        _instaButton.ButtonPressed = _mutator == Mutator.Instagib;
+        _efficButton.ButtonPressed = _mutator == Mutator.Efficiency;
     }
 
     private void RefreshMode()
     {
-        string id = CurrentMode;
+        _activeModeValue.Text = ActiveModeLabel;
+
+        string id = ModeId(_objective, _mutator);
         GameModeInfo? info = GameModeCatalog.TryGet(id);
-        _modeValue.Text = (info?.Name ?? id).ToUpperInvariant();
         RefreshMapList(info);
     }
 
@@ -387,8 +490,8 @@ public partial class MainMenu : CanvasLayer
         if (changed) _mapIndex = 0;
 
         _mapLabel.Text = list == null
-            ? "MAP"
-            : $"MAP  ·  {list.Name.ToUpperInvariant()}  ·  {_maps.Count}";
+            ? "3.  MAP SELECTION"
+            : $"3.  MAP SELECTION  ·  {list.Name.ToUpperInvariant()} POOL  ·  {_maps.Count}";
         if (changed) GD.Print($"[menu] map pool '{listId}' ({_maps.Count} maps)");
         RefreshMap();
     }
@@ -417,6 +520,13 @@ public partial class MainMenu : CanvasLayer
 
     private void RefreshTeam()
     {
+        bool teamMode = IsTeamObjective;
+
+        // DM is implicitly FFA; edit has no teams at all.
+        _teamFfaButton.Disabled = teamMode || _objective == Objective.Edit;
+        _teamBlueButton.Disabled = !teamMode;
+        _teamRedButton.Disabled = !teamMode;
+
         _teamFfaButton.ButtonPressed = _team == 0;
         _teamBlueButton.ButtonPressed = _team == 1;
         _teamRedButton.ButtonPressed = _team == 2;
