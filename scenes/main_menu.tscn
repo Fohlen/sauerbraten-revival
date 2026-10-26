@@ -329,6 +329,7 @@ custom_minimum_size = Vector2(44, 0)
 text = ">"
 
 [node name="MapLabel" type="Label" parent="RootMargin/MainLayout/ContentArea/LeftMatchPanel/LeftVBox"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.560784, 0.596078, 0.678431, 1)
 theme_override_font_sizes/font_size = 12

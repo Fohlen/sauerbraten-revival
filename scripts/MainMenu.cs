@@ -14,6 +14,10 @@ namespace SauerbratenRevival;
 /// map/mode/team/playermodel and emits <see cref="StartMatchEventHandler"/>; the
 /// shell (<see cref="Main"/>) instantiates the play scene.
 ///
+/// The map picker follows the engine's per-mode <c>MapList_*</c> pools from
+/// <c>data/lists.cfg</c> via <see cref="MapListCatalog"/> (CTF modes only offer
+/// CTF maps, capture/hold modes the capture pool, the rest the deathmatch pool).
+///
 /// The right-hand "stage" is a self-contained <see cref="SubViewport"/> with its
 /// own 3D world, so the character preview does not show or disturb the game world
 /// when the menu is an overlay.
@@ -37,12 +41,6 @@ public partial class MainMenu : CanvasLayer
     [Signal]
     public delegate void QuitRequestedEventHandler();
 
-    /// <summary>Curated maps for the prototype picker (all shipped with thumbnails).</summary>
-    private static readonly string[] Maps =
-    {
-        "metl3", "church51", "bt_falls", "complex", "douze", "nmp8", "ot", "reissen",
-    };
-
     /// <summary>Mode ids offered under the CASUAL tab.</summary>
     private static readonly string[] CasualModes = { "ffa", "insta", "insta_ctf", "effic_ctf" };
 
@@ -52,7 +50,9 @@ public partial class MainMenu : CanvasLayer
     /// <summary>Display names for <see cref="Playermodels"/> indices.</summary>
     private static readonly string[] ModelNames = { "MR. FIXIT", "SNOUTX10K", "OGRO", "INKY", "CAPTAIN CANNON" };
 
-    private int _mapIndex;               // metl3 first, matching the sketch
+    private readonly List<string> _maps = new(); // current mode's map pool (engine MapList_*)
+    private string _mapListId = "";       // pool id the selection index belongs to
+    private int _mapIndex;
     private int _modeIndex = 2;          // insta ctf under CASUAL
     private bool _competitive;
     private int _team = 1;               // blue
@@ -85,6 +85,7 @@ public partial class MainMenu : CanvasLayer
 
     private Button _mapPrevButton = null!;
     private Button _mapNextButton = null!;
+    private Label _mapLabel = null!;
     private Label _mapValue = null!;
     private TextureRect _mapPreview = null!;
 
@@ -130,6 +131,7 @@ public partial class MainMenu : CanvasLayer
 
         _mapPrevButton = GetNode<Button>("%MapPrevButton");
         _mapNextButton = GetNode<Button>("%MapNextButton");
+        _mapLabel = GetNode<Label>("%MapLabel");
         _mapValue = GetNode<Label>("%MapValueLabel");
         _mapPreview = GetNode<TextureRect>("%MapPreview");
 
@@ -219,7 +221,8 @@ public partial class MainMenu : CanvasLayer
 
     private void StepMap(int delta)
     {
-        _mapIndex = Wrap(_mapIndex + delta, Maps.Length);
+        if (_maps.Count == 0) return;
+        _mapIndex = Wrap(_mapIndex + delta, _maps.Count);
         RefreshMap();
     }
 
@@ -243,7 +246,9 @@ public partial class MainMenu : CanvasLayer
 
     private void Launch()
     {
-        string map = "base/" + Maps[_mapIndex];
+        if (_maps.Count == 0) return;
+
+        string map = "base/" + _maps[_mapIndex];
         string mode = CurrentMode;
 
         // A team mode cannot run with the FFA skin choice; default to blue rather
@@ -351,7 +356,6 @@ public partial class MainMenu : CanvasLayer
         _casualButton.ButtonPressed = !_competitive;
         _compButton.ButtonPressed = _competitive;
         RefreshMode();
-        RefreshMap();
         RefreshModel();
         RefreshTeam();
         RefreshSound();
@@ -362,11 +366,46 @@ public partial class MainMenu : CanvasLayer
         string id = CurrentMode;
         GameModeInfo? info = GameModeCatalog.TryGet(id);
         _modeValue.Text = (info?.Name ?? id).ToUpperInvariant();
+        RefreshMapList(info);
+    }
+
+    /// <summary>
+    /// Swap in the map pool the selected mode uses (engine <c>ML_ModeMaps</c> /
+    /// <see cref="MapListCatalog.ForMode"/>) and restart the picker on a new pool.
+    /// Stepping between two modes that share a pool (ctf → insta ctf) keeps the
+    /// current map.
+    /// </summary>
+    private void RefreshMapList(GameModeInfo? mode)
+    {
+        MapList? list = MapListCatalog.ForMode(mode);
+        string listId = list?.Id ?? "";
+        bool changed = listId != _mapListId;
+        _mapListId = listId;
+
+        _maps.Clear();
+        if (list != null) _maps.AddRange(list.Maps);
+        if (changed) _mapIndex = 0;
+
+        _mapLabel.Text = list == null
+            ? "MAP"
+            : $"MAP  ·  {list.Name.ToUpperInvariant()}  ·  {_maps.Count}";
+        if (changed) GD.Print($"[menu] map pool '{listId}' ({_maps.Count} maps)");
+        RefreshMap();
     }
 
     private void RefreshMap()
     {
-        string map = Maps[_mapIndex];
+        _quickJoinButton.Disabled = _maps.Count == 0;
+
+        if (_maps.Count == 0)
+        {
+            _mapValue.Text = "NO MAPS";
+            _mapPreview.Texture = null;
+            return;
+        }
+
+        _mapIndex = Wrap(_mapIndex, _maps.Count);
+        string map = _maps[_mapIndex];
         _mapValue.Text = map.ToUpperInvariant();
         _mapPreview.Texture = LoadMapThumbnail(map);
     }

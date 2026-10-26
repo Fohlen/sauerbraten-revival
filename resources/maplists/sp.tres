@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="MapList" format=3]
+
+[ext_resource type="Script" path="res://World/Game/MapList.cs" id="1_sp"]
+
+[resource]
+script = ExtResource("1_sp")
+Id = "sp"
+Name = "single player"
+Maps = PackedStringArray(
+	"crnsp1",
+	"level9",
+	"lost",
+	"mpsp6a",
+	"mpsp6b",
+	"mpsp6c",
+	"mpsp9a",
+	"mpsp9b",
+	"mpsp9c",
+	"mpsp10",
+	"skrsp1")

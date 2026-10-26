@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="MapList" format=3]
+
+[ext_resource type="Script" path="res://World/Game/MapList.cs" id="1_concept"]
+
+[resource]
+script = ExtResource("1_concept")
+Id = "concept"
+Name = "concept"
+Maps = PackedStringArray(
+	"firstevermap",
+	"secondevermap",
+	"canyon",
+	"ladder",
+	"spiralz",
+	"box_demo",
+	"door_demo",
+	"platform_demo",
+	"sauerbraten",
+	"sauerbraten2")
