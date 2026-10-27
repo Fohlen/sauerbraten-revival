@@ -45,10 +45,6 @@ graph TD
     FlatSharp --> Wire[Live Network Packet<br>ENet / Zero-Copy Span]
     FlatSharp --> Rec[Recorded Session / Demo<br>Appendable Packet Vector]
     FlatSharp --> MapPkg[Map Package / Workshop Diff<br>Checkpoints + Deltas]
-    
-    FBS -.-> flatc[flatc CLI Tool]
-    MapPkg -.-> flatc
-    flatc -.-> JSON[Optional JSON Export<br>Human Introspection / Tooling]
 ```
 
 ---
@@ -59,7 +55,7 @@ graph TD
 2. **Flexible-Sized Vectors**: First-class, zero-copy support for `vector<ubyte>` (binary octree blobs) and `vector<Command>` (command streams).
 3. **Schema Evolution & Backward Compatibility**: FlatBuffers supports adding new fields, deprecating old ones, and evolving packet structures without breaking older clients or saved maps.
 4. **Unified Codebase**: Network packets, recorded demos, map files, and workshop diffs share identical schemas and types. No duplicate codecs (`WireCodec` vs `TextCodec` vs `CommandCodec`).
-5. **No Repository Bloat, Optional Introspection**: Binary files are maintained in the repository/distribution. When human inspection or debugging is needed, the standard `flatc` compiler converts binary FlatBuffers to and from JSON instantly (`flatc --json --raw-binary schema.fbs -- map.bin`). JSON is strictly an introspection artifact and is **not** committed to version control.
+5. **No Repository Bloat**: Clean binary packages are tracked directly without multi-megabyte text churn or unmergeable `.tres` files. No external `flatc` CLI or JSON conversion pipeline is required for map distribution.
 
 ---
 
@@ -245,7 +241,6 @@ A major risk with binary keyframe caches in collaborative development is **silen
 * **On Load Drift Detection**:
   - In editor and dev-builds, `MapStore.LoadWorld()` checks `keyframe.git_commit` against current `HEAD`.
   - If they diverge, a clear warning is logged indicating the keyframe was generated at a different repository revision, and the editor prompts or auto-recomputes the keyframe if necessary.
-  - In `flatc --json` exports, every keyframe explicitly states the Git commit that produced it, giving a 100% auditable history.
 
 ---
 
@@ -257,8 +252,7 @@ A map is stored as a clean directory of external resources, separating engine sc
 res://resources/maps/<map_name>/
 ├── Level.tscn              # Godot Scene: Skybox, Sun yaw/pitch, fog, mode rules, sound triggers
 ├── manifest.tres           # Godot Resource: Material/vslot bindings & model paths (engine asset links)
-├── map.bin                 # FlatSharp Package: Header, Keyframe Octree Blobs, Entities, Deltas
-└── (optional) debug.json   # Generated on-demand via `flatc --json` (Git-ignored)
+└── map.bin                 # FlatSharp Package: Header, Keyframe Octree Blobs, Entities, Deltas
 ```
 
 1. **`Level.tscn`**: Shipped Godot scene providing scene-tree nodes: `WorldEnvironment`, `DirectionalLight3D`, audio streams, spawn points, and game mode logic.
@@ -451,8 +445,6 @@ root_type MapPackage;
    * Clear active transaction deltas in `CommandSink`.
 4. **Fast Level Loading**:
    * `MapStore.LoadWorld()`: Reads `map.bin`, reads the latest `KeyframePackage`, decodes chunk spans into `Cube` arrays in $O(\text{nodes})$, and replays trailing deltas.
-5. **Tooling & Inspection**:
-   * Provide an engine CLI flag (`--dump-json <map.bin>`) calling `flatc` to convert binary packages to readable JSON for debugging.
 
 ---
 

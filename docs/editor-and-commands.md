@@ -441,12 +441,11 @@ plan):
 (fields walked in a fixed order) as the hash input, not raw bytes. That is robust
 under any future encoding change.
 
-**FlatBuffers — considered, not adopted.** Zero-parse reads and a shared
-C#/C++/Python schema are attractive, but FlatBuffers is *not canonical by default*
-(breaks parity hashing) and adds a `flatc` toolchain. At our command sizes
-(remip ≈ 20 bytes; a large block ≈ hundreds of KB) parse cost is not the
-bottleneck — meshing is (~1.4 ms/chunk). If a shared tool/runtime format is ever
-needed it swaps in behind `WorldCommandCodec` without touching the sink. Decision 5.1b.
+**FlatBuffers via FlatSharp — adopted (ADR 0008).** Zero-copy reads directly
+from byte spans, unified networking, recorded streams, and keyframed map packages
+compiled in-process via C# NuGet (`FlatSharp.Compiler`) without requiring external
+`flatc` CLI toolchains or JSON conversion pipelines. Parity hashing hashes the
+canonical semantic keyframes and base map SHA-256 (ADR 0008). Decision 5.1b.
 
 ### 5.2 Op payloads (examples)
 
