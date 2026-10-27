@@ -441,11 +441,13 @@ root_type MapPackage;
    * Add `FlatSharp.Runtime` and `FlatSharp.Compiler` via NuGet to `SauerbratenRevival.csproj`.
    * Remove `System.IO.Hashing` from `SauerbratenRevival.csproj`.
    * Delete `ObjectId.cs` and `MapObjectStore.cs`.
-2. **Retire Manual Bit-Packing**:
+2. **Retire Manual Bit-Packing & Eliminate `CommandSource`**:
    * Deprecate manual integer-packing in `CommandCodec.cs` / `WireCodec.cs`.
+   * Remove the `CommandSource` enum from `WorldOp.cs`, `Command.cs`, `CommandCodec.cs`, `CommandLog.cs`, and `EditorController.cs`.
+   * Scope undo/redo tracking directly to `EditorController` (filtering by local user attribution and interactive actions rather than tagging low-level command structs).
    * Use FlatSharp generated classes for live ENet networking and command logs.
 3. **Implement Keyframe Capture in `OctaEdit.Remip`**:
-   * When `RemipAll` executes, invoke keyframe generation to serialize the 8 root chunks into `ChunkKeyframe` payloads.
+   * When `RemipAll` executes, invoke keyframe generation to serialize the 8 root chunks into `ChunkKeyframe` payloads pegged to `git_commit`.
    * Clear active transaction deltas in `CommandSink`.
 4. **Fast Level Loading**:
    * `MapStore.LoadWorld()`: Reads `map.bin`, reads the latest `KeyframePackage`, decodes chunk spans into `Cube` arrays in $O(\text{nodes})$, and replays trailing deltas.
@@ -462,6 +464,7 @@ root_type MapPackage;
 * **Lean Dependencies**: Deletes `System.IO.Hashing`, `ObjectId.cs`, and `MapObjectStore.cs`. Standard SHA-256 handles all map hashing with hardware acceleration.
 * **High Density & Speed**: The hybrid container + pre-order stream achieves ~25–29 bytes per cube and sub-10ms deserialization.
 * **Zero Drift via Git Commit Pegging**: Every keyframe records the exact Git commit SHA that generated it, enabling instant drift detection when branch assets or entity schemas diverge.
+* **Simplified Command Pipeline**: Eliminates `CommandSource` tagging across network packets and storage structs; undo/redo is scoped directly by `EditorController` based on peer attribution and interactive user actions.
 * **Workshop-Ready**: Diff packages depend solely on a 32-byte SHA-256 `base_map_hash` and intermediate chunk keyframes.
 * **Zero Repo Bloat**: Git tracks clean binary packages without millions of lines of unmergeable `.tres` text logs.
 

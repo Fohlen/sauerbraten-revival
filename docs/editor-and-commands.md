@@ -83,9 +83,9 @@ public enum WorldOp : ushort
     NewMap = 101,              // world.cpp emptymap: fresh world (floor + air)
 }
 
-/// Who issued a command. Semantic (part of the wire/save format): it decides what
-/// consumers may do with an entry, e.g. only `Editor` commands are undoable (§5.5).
-public enum CommandSource : byte { Editor = 0, GameMode = 1, Script = 2 }
+// CommandSource has been eliminated: authority is governed by network peer ID / session,
+// and undo/redo history is captured directly by the local EditorController rather
+// than tagging low-level command structs.
 ```
 
 ```csharp
@@ -94,8 +94,7 @@ public sealed class Command
     public WorldOp Op;
     public ulong Sequence;        // monotonic; total order in the log
     public int AuthorPeerId;      // who issued it (attribution, not authority)
-    public CommandSource Source;  // Editor / GameMode / Script — see §5.5, §9
-    public ICommandPayload Payload; // op-specific, typed; encoded by CommandCodec (§5)
+    public ICommandPayload Payload; // op-specific, typed; encoded via FlatSharp / CommandCodec (§5)
 }
 ```
 
@@ -313,7 +312,7 @@ the octree and are a *separate* system (M6/M7). They never become
 | `MOVEMENT` | player physics state (features.md #8) | Unreliable (latest wins) |
 
 **Do not put world mutations on multiple channels.** A crumbling wall is a world
-mutation (`RemoveCube`, `CommandSource.GameMode`) and rides the *edit* channels
+mutation (`RemoveCube`) and rides the *edit* channels
 with editor edits. Splitting them would give two independent orderings; a race
 between "player places a wall" and "wall crumbles" could then resolve
 differently on different peers, breaking determinism. The axis that matters is
@@ -539,15 +538,15 @@ world is shared: the inverse is a *proposal* against state that other editors ma
 have changed. We pin down the model here.
 
 **Rule 1 — You may only roll back your own *editor* changes.** The undo/redo
-stack holds the commands *this* client issued **with `CommandSource.Editor`**, and
-nothing else. Two exclusions, both by construction:
+stack is maintained locally by `EditorController`. Two exclusions, both by construction:
 
-- another peer's commands (`AuthorPeerId`, §1.1), and
-- **game-mode and script commands** (`CommandSource.GameMode`/`Script`) — a
-  crumbling wall or a scripted platform is never undoable, even if this client's
-  server authored it.
+- another peer's commands (`AuthorPeerId != LocalPeerId`, §1.1), and
+- **game-mode and script commands** — a crumbling wall or a scripted platform is
+  never submitted through the local editor undo tracking.
 
-So undo filters the log by *both* `AuthorPeerId == me` and `Source == Editor`.
+Because undo tracking is owned by the local editor controller at submission time,
+commands themselves do not need an artificial `CommandSource` tag stamped into
+network packets or storage streams.
 
 **Rule 2 — Undo is an ordinary command, server-sequenced.** Ctrl-Z does not apply
 an inverse locally. It submits an `ApplyInverse` command through the same
@@ -912,10 +911,9 @@ snapshot transfer, late join. Headless multi-client tests. *Unblocks coop edit.*
 **M8 — Prefabs, recipes, cross-map paste.** `ReplaceBlock` content resources,
 rotation, recipe API, Workshop packaging hook. *The payoff layer.*
 
-**M9 — Runtime geometry for game modes.** Modes submit `WorldCommand`s with
-`CommandSource.GameMode` through the same sink (crumbling walls, scripted
-platforms; vision.md §6.1). They are never undoable and ride the edit
-channels. *Shares everything above; no new mechanism.*
+**M9 — Runtime geometry for game modes.** Modes submit `WorldCommand`s
+through the same sink (crumbling walls, scripted platforms; vision.md §6.1).
+They are never undoable and ride the edit channels. *Shares everything above; no new mechanism.*
 
 Milestones M0–M3 are the real work and are all testable without a window. M4 is
 the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
@@ -933,10 +931,10 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
 3. ~~**Text vs binary history log**~~ — **decided: binary.** The command
   history is a binary blob (`.res`/custom). A text sidecar may be *generated*
   for VCS review, but is not the on-disk format. Matches §7.3.
-4. ~~**Prediction policy by source**~~ — **decided:** it is a property of
-  `CommandSource`. Editor submissions are optimistic (local stamp, reconcile);
-  `GameMode`/`Script` geometry is server-authored and applied on broadcast. No
-  per-`WorldOp` flag needed. (See authority-and-latency.md §7 for the scope rule.)
+4. ~~**Prediction policy by source**~~ — **decided:** governed by author peer session.
+  Client editor submissions are optimistic (local stamp, reconcile);
+  server-authored geometry (game mode / script events) is applied on broadcast. No
+  `CommandSource` enum needed in the command struct or wire packet. (See authority-and-latency.md §7.)
 5. ~~**Undo across remip**~~ — **decided (§5.4, §5.5):** `Remip` is a
    pass-through replicated op (payload `{selection, mipvis}`, deterministic
    integer re-execution). Undo is a normal `ApplyInverse` command, capturing the
@@ -1002,10 +1000,10 @@ A: Ctrl-Z  (wants to undo E_A1)
 
 What happens, per the rules:
 
-- **Rule 1:** A's Ctrl-Z is about `E_A1` (A's own `Editor` command). It is
+- **Rule 1:** A's Ctrl-Z is about `E_A1` (A's own editor command). It is
   permitted in principle; B's `E_B1` is not on A's stack and cannot be undone by
-  A. Nor could a `GameMode` command (e.g. a crumbling wall) ever be undone — it
-  is not `CommandSource.Editor`.
+  A. Nor could a game-mode command (e.g. a crumbling wall) ever be undone — it
+  is never captured in the editor's undo stack.
 - **Rule 4:** A's inverse is computed *now*, from `S3` (the current world), not
   from a block captured back at `S1`. So there is no stale payload.
 - **Rule 2:** A submits `ApplyInverse(E_A1)` through the sink; the server
@@ -1037,7 +1035,7 @@ The invariants this relies on:
 
 ```
 World/Commands/
-├── WorldOp.cs              # append-only op enum + CommandSource
+├── WorldOp.cs              # append-only op enum (CommandSource eliminated)
 ├── Command.cs              # command + typed payloads (geometry + entities)
 ├── CommandCodec.cs         # canonical wire/save/demo encoding
 ├── Selection.cs            # selinfo / block3 port (done, M0)

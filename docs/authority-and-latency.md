@@ -167,8 +167,9 @@ causing a correction.
 - **Game mode has no editor edits** — the map is static during play, as in CS:GO,
   so the in-flight-`WorldCommand` race essentially does not arise.
 - **Runtime mutations are server-run and ordered.** A crumbling wall or race-mode
-  door is `CommandSource.GameMode`/`Script`, executed by the server and broadcast
-  in sequence order — bounded and deterministic, not a client-originated race.
+  door is executed by the server and broadcast in sequence order
+  (authored by the server peer) — bounded and deterministic, not a client-originated race.
+  World mutations share a single total order; no artificial `CommandSource` tag is needed.
 - **A map hash gates the session.** Clients and server agree on the map before
   play; a mismatch refuses the match, eliminating the "client has geometry the
   server doesn't" class at the session level.

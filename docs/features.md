@@ -257,13 +257,12 @@ order** (design detail for this roadmap item).
 - [x] **Selection model** (M0): `Selection`/`Block3` port of `selinfo`
       (`World/Commands/`, asserted by `test/SelectionTest.cs`).
 - [x] **World-command system** (M3): `WorldOp`/`Command`/payloads (including
-      `AddEntity`/`RemoveEntity`/`EditEntity`), `CommandCodec` (`var_to_bytes`
-      over positional arrays), `IWorld`/`OctaWorld` apply seam (`Octa` +
+      `AddEntity`/`RemoveEntity`/`EditEntity`), `CommandCodec`, `IWorld`/`OctaWorld` apply seam (`Octa` +
       `Entities` in `World/Commands/`, asserted by `test/CommandSystemTest.cs`).
-      Shared by editor, game modes and scripts; a `CommandSource` tag
-      distinguishes them.
+      Shared by editor, game modes and scripts; peer ID and editor-level undo
+      tracking eliminate the need for `CommandSource`.
 - [x] Undo/redo via the command stack (see editor doc §5.5: undo is a
-      server-sequenced `ApplyInverse`, own-`Editor`-changes-only; redo re-applies).
+      server-sequenced `ApplyInverse`, own-editor-changes-only; redo re-applies).
 - [x] Port editor algorithms (add/remove/fill/texture/remip/select).
       - [x] **M1a structural primitives**: `CopyCube`/`PasteCube`
             (`World/OctaEdit.cs`), `DiscardChildren`/`GetMippedTexture`/`FreeOcta`/
@@ -314,6 +313,11 @@ order** (design detail for this roadmap item).
 
 Remaining:
 
+- [ ] **M5 FlatSharp map format & command cleanup** ([ADR 0008](adr/0008-reference-based-maps.md)):
+      - Adopt FlatSharp schema (`schema.fbs`) for unified networking, replay logs, and map packages.
+      - Implement keyframe checkpoints at `remip` boundaries pegged to clean `git_commit`.
+      - Prune `CommandSource` across `Command.cs`, `CommandCodec.cs`, `CommandLog.cs`, and `EditorController.cs`.
+      - Delete `ObjectId.cs`, `MapObjectStore.cs`, and remove `System.IO.Hashing` dependency.
 - [ ] **M4e GUI**: texture/material pickers, entity placement, keybinds via
       `InputMap` ([editor-and-commands.md §10](editor-and-commands.md#10-implementation-order-milestones)).
 - [ ] Texturing, blending (layers no longer ride the lightmap alpha — that

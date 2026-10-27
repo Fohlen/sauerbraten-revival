@@ -128,13 +128,12 @@ Every world mutation is expressed as a `Command` — there is no "edit
 command" distinct from a "game command", only different **sources**:
 
 ```
-Command { op, args, source }   // the inverse is derived, not always stored
-CommandSource = Editor | GameMode | Script
+Command { op, args }   // the inverse is derived, not always stored
 ```
 
-- **Editor UI** submits commands (`CommandSource.Editor`): add cube, delete cube,
+- **Editor UI** submits commands: add cube, delete cube,
   texture face, fill, remip, paste, add/remove/edit entity.
-- **Game modes** submit commands (`CommandSource.GameMode`; e.g. `crumbling_wall`
+- **Game modes** submit commands (e.g. `crumbling_wall`
   schedules repeated cube removals; `spawn_platform` adds geometry). Modes get a
   safe, data-driven API — not raw memory access.
 - **One sink, one log, one total order.** All sources go through the same
@@ -143,7 +142,7 @@ CommandSource = Editor | GameMode | Script
   peer.
 - **Undo/redo** resubmits an inverse command (`ApplyInverse`) through the same
   sink — it is *not* a local-only path. In a shared world you may only undo your
-  own **editor** commands (`CommandSource.Editor`): another peer's edits and any
+  own interactive editor commands: another peer's edits and any
   game-mode/script geometry are never undoable. Conflicting undos are rejected
   rather than merged. Full model:
   [editor-and-commands.md §5.5](editor-and-commands.md#55-undo-in-a-shared-world).
