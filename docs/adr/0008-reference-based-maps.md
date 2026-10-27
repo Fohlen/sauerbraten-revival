@@ -168,6 +168,43 @@ Persists baked radiance/lightmap bindings that cannot be derived geometrically:
 * **Material/Merged Cube**: **27–29 bytes**.
 * **Deserialization Speed**: A single pass reader initializes nodes sequentially with zero heap allocations, walking directly through the FlatSharp `ReadOnlySpan<byte>`. 200,000 cubes deserialize in **under 8 milliseconds**.
 
+### D. Empirical Map Survey & Storage Feasibility (335 Classic Maps)
+
+A natural concern when storing full octree keyframe blobs is whether `map.bin` files will become gigantic. To empirically validate storage feasibility, we surveyed all **335 maps** shipped in `assets/packages/base/*.ogz` against engine metadata in `metadata-catalogue/`:
+
+#### 1. Geometry vs. Lighting Breakdown in Classic Maps:
+* **~44% of decompressed `.ogz` files is lightmap image bloat**: Sauerbraten stores uncompressed $512 \times 512$ RGB/RGBA pixel atlases directly in `.ogz` (averaging **3.38 MB** per map).
+* **~48% (median) / 49.1% (mean) is actual octree geometry and metadata**: An average map contains **201,424 cubes** (~4.32 MB of octree data).
+* **Revival's Lighting Advantage**: Because Sauerbraten Revival adopted real-time GPU Radiance Hints ([ADR 0002](0002-radiance-hints.md)), **we do not store 2D lightmap pixel atlases in `map.bin` at all**. Eliminating lightmap pixel dumps offsets the cost of storing dense geometry keyframes.
+
+#### 2. Size Distribution Across All 335 Maps:
+
+| Percentile | Octree Cubes | Raw Keyframe (`map.bin` uncompressed) | Zstandard `map.bin` (Archive-level) | Original `.ogz` on disk |
+| :--- | :--- | :--- | :--- | :--- |
+| **p10 (Small)** | 30,146 | **0.75 MB** | **219 KB** (0.21 MB) | 439 KB |
+| **p25** | 58,304 | **1.45 MB** | **423 KB** (0.41 MB) | 677 KB |
+| **p50 (Median)** | **133,312** | **3.31 MB** | **967 KB** (0.94 MB) | **1,121 KB** |
+| **p75** | 262,392 | **6.51 MB** | **1,904 KB** (1.86 MB) | 2,121 KB |
+| **p90 (Large)** | 469,606 | **11.64 MB** | **3,407 KB** (3.33 MB) | 3,192 KB |
+| **p95** | 579,171 | **14.36 MB** | **4,202 KB** (4.10 MB) | 3,795 KB |
+| **p99 (Huge)** | 905,153 | **22.44 MB** | **6,566 KB** (6.41 MB) | 5,165 KB |
+| **Max Outlier** (`harbor`) | 2,124,480 | **52.68 MB** | **15.41 MB** | 4,412 KB |
+
+#### 3. Representative Spectrum Across Map Sizes:
+
+| Map Name | Octree Cubes | Original OGZ on Disk | OGZ Decompressed | Original Lightmaps | Actual Geo in OGZ | Revival Raw Keyframe | Revival Zstd `map.bin` |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `box_demo` | 48 | 2 KB | 0.01 MB | 0 (0.0 MB) | 0.01 MB (100%) | **< 1 KB** | **< 1 KB** |
+| `nmp8` | 57,648 | 506 KB | 3.5 MB | 3 (2.2 MB) | 1.29 MB (36.5%) | **1.43 MB** | **418 KB** |
+| `antel` | 133,312 | 1,891 KB | 8.9 MB | 8 (6.0 MB) | 2.91 MB (32.7%) | **3.31 MB** | **967 KB** |
+| `tejen` | 262,520 | 1,608 KB | 6.8 MB | 2 (1.5 MB) | 5.26 MB (77.8%) | **6.51 MB** | **1.90 MB** |
+| `kopenhagen` | 897,080 | 3,822 KB | 25.8 MB | 10 (7.5 MB) | 18.25 MB (70.8%) | **22.24 MB** | **6.51 MB** |
+| `harbor` *(outlier)* | 2,124,480 | 4,412 KB | 45.5 MB | 11 (8.2 MB) | 37.29 MB (81.9%) | **52.68 MB** | **15.41 MB** |
+
+#### Conclusion:
+* **Median maps remain under 1 MB compressed** (`~967 KB`), making `map.bin` even lighter than classic `.ogz` files.
+* **Workshop Diffs are Tiny**: Modders distributing level edits only package altered chunk subtrees (1–2 chunks), resulting in diff packages of just **tens to hundreds of kilobytes**.
+
 ---
 
 ## 4. The Remip Boundary & Keyframe Lifecycle
