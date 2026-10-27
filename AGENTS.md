@@ -18,7 +18,7 @@ load time; there is **no CubeScript** and no offline converter.
 | Movement/physics fidelity | [docs/movement-physics.md](docs/movement-physics.md), [docs/adr/0003-movement-verification.md](docs/adr/0003-movement-verification.md) |
 | Character animation / MD5 models | [docs/adr/0004-character-animation.md](docs/adr/0004-character-animation.md) | MD5 skeletal models: engine model, why runtime `Skeleton3D` mapping deformed the mesh, and the baked GLB approach. |
 | Editor + command system | [docs/editor-and-commands.md](docs/editor-and-commands.md) |
-| Reference-based map format | [docs/adr/0008-reference-based-maps.md](docs/adr/0008-reference-based-maps.md) | Git-style base snapshot reference (`empty_map`), linear commit chain, octree+entity `TreeHash`, zero-copy checkouts. |
+| Reference-based map format | [docs/adr/0008-reference-based-maps.md](docs/adr/0008-reference-based-maps.md) | Hybrid map format: Git-tracked text history (`history.tres`) & manifest (`manifest.tres`), compiled binary geometry cache (`world.res`), low-latency `WireCodec` network packets. |
 | Classic content (OGZ) import | [docs/adr/0006-ogz-import.md](docs/adr/0006-ogz-import.md) |
 | Rendering strategy | [ADR 0007](docs/adr/0007-world-rendering.md) |
 | Lighting (runtime) | [docs/adr/0002-radiance-hints.md](docs/adr/0002-radiance-hints.md) |

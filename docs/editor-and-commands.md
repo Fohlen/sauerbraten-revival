@@ -613,67 +613,59 @@ mechanically identical to a cube edit.
 ## 7. Map format: reference-based command history (Git-style)
 
 See [ADR 0008](adr/0008-reference-based-maps.md) for the full architectural
-decision. The native format (vision.md §9) is **reference-based, like Git**:
+decision. The native format (vision.md §9) is **hybrid: Git-tracked text history & manifest with a compiled binary geometry cache**:
 
 ```
 res://resources/maps/empty_map/   # canonical base map shipped on disk
 ├── Level.tscn
-├── world.res                     # base WorldSnapshot / Merkle pack (Hash H_0)
-└── materials/
+├── history.tres                  # base command log
+├── manifest.tres                 # material, model, sound manifest
+└── world.res                     # compiled binary snapshot
 
 map/                              # any authored map
-├── Level.tscn                    # scene: mode config, environment; REFS BaseRef + history.res
-├── world.res                     # optional standalone/compacted snapshot
-├── history.res                   # BaseRef + HeadHash + MapCommits[] + delta Merkle object pack
-└── materials/                    # material manifest
+├── Level.tscn                    # scene: mode config, environment, refs to history/manifest
+├── manifest.tres                 # human-readable text manifest (materials, models, sounds) (Git-tracked)
+├── history.tres                  # human-readable text command log (authoritative, diffable) (Git-tracked)
+└── world.res                     # compiled binary geometry cache at HEAD (Git-ignored)
 ```
 
 The map is a **directory, not a single file**. That is deliberate — it matches
-Godot's external-resource idiom, it is diffable, and it packages cleanly into the
+Godot's external-resource idiom, it is diffable in Git, and it packages cleanly into the
 `.zip`/`.tar` archives Workshop expects (§7.4).
 
-### 7.1 Zero-copy base reference, Merkle Octree object pack & linear commit chain
+### 7.1 Authoritative text history (`history.tres`) & compiled geometry cache (`world.res`)
 
-Rather than duplicating a full `world.res` snapshot on every commit (which would
-make versioned maps huge) or replaying the entire command history on load (which
-breaks across lossy ops like `Remip`), our format works like Git's **Merkle tree +
-object pack** ([ADR 0008](adr/0008-reference-based-maps.md)):
+Rather than forcing Git to store multi-megabyte binary geometry churn on every commit,
+our format separates authoritative versioned history from the runtime load cache ([ADR 0008](adr/0008-reference-based-maps.md)):
 
-- **Content-addressed intermediate objects (`MapObjectStore`)**:
-  - Every `Cube[8]` octree node is an **`OctaNode`** object keyed by its
-    128-bit `XxHash128` `ObjectId`, referencing child `OctaNode`s by `ObjectId`
-    rather than inlining them.
-  - The entity list is an **`EntityList`** object keyed by its `ObjectId`.
-  - A world state is a **`WorldTree`** object `(Scale, RootOctaNodeId,
-    EntityListId)` whose content hash is its `TreeId`.
-  - Stored transparently in `HistoryResource.Objects` / `WorldResource.Objects`
-    as standard `Dictionary<ObjectId, byte[]>`, with fallback chaining to `BaseRef`.
-- **Structural sharing across commits and `BaseRef`**:
-  - When an edit modifies a region of the map, only the `OctaNode`s along the
-    path from the modified leaf to the root (~6–10 nodes) get new hashes. All
-    untouched octants and subtrees keep their existing hashes and are **never
-    duplicated** — neither across commits nor against `BaseRef`
-    (`"res://resources/maps/empty_map/world.res"`).
-- **`MapCommit`**: each save appends a commit to `history.res` carrying:
-  - `CommitId` (`ObjectId` — SHA-256 of the commit object itself),
-  - `ParentId` (`ObjectId` — the parent commit's `CommitId`, or null for initial commit),
-  - `TreeId` (`ObjectId` — the `WorldTree` content hash of the octree + entities at this commit),
-  - `CommandsId` (`ObjectId` — hash of the serialized `Command[]` blob),
-  - `Author`, `Timestamp`, and `Message`.
-- **Materialized `Tree` load & historical checkout (even across `Remip`)**:
-  - Loading a map (`MapStore.Load`) or checking out any commit (`CommitId` /
-    `TreeId`) resolves `TreeId` directly from the map's delta object store +
-    `BaseRef` store and materializes the octree and entities in $O(\text{nodes in tree})$
-    without replaying commands.
-- **No merging**: history is strictly linear; we do not offer branch merging.
+- **Authoritative Text History (`history.tres`)**:
+  - Encoded via `TextCodec`: readable, line-by-line diffable in Git.
+  - Carries a version tag and references the base map (`base = "res://resources/maps/empty_map"`).
+  - Every geometry or entity mutation (`EditFace`, `SetFaceTexture`, `AddEntity`) produces
+    a clean text diff in version control.
+- **Compiled Geometry Cache (`world.res`)**:
+  - Binary compacted snapshot of the octree and entities at HEAD.
+  - **Git-ignored**: Never committed to the repository, eliminating binary bloat.
+  - **Instant load**: Deserializes in $O(\text{nodes})$ directly into live `Cube` nodes without
+    command replay during normal gameplay.
+  - **Regenerated on clone/load**: If `world.res` is absent or out of date, the runtime replays
+    `history.tres` from the base map once, saves the local cache, and proceeds.
+- **Resource Manifest (`manifest.tres`)**:
+  - Human-readable Godot `.tres` text resource mapping integer vslot, model, and sound
+    indices to engine asset paths and properties. Adding a texture or model produces
+    a 1-line Git diff.
+- **Decoupled Codecs (`WireCodec` vs `TextCodec`)**:
+  - **`WireCodec`**: Network-optimized binary codec using Sauerbraten-style variable-int packing
+    (`putint`), compressing edit packets to **12–20 bytes** with zero redundant headers.
+  - **`TextCodec`**: Human-readable text format for `history.tres`.
 
 `Level.tscn` holds **references** to the data, not the data itself:
 
 ```
 Level.tscn
   ├─ Level : MapLevel
-  │    World   = ExtResource("res://resources/maps/empty_map/world.res") # or local "world.res"
-  │    History = ExtResource("history.res")
+  │    History  = ExtResource("history.tres")
+  │    Manifest = ExtResource("manifest.tres")
 ```
 
 Godot scenes store external resources by path and only inline them if the path is
@@ -1056,14 +1048,20 @@ World/Commands/
 World/OctaEdit.cs          # structural primitives + ported edit algorithms (M1)
 World/Entities/
 └── MapEntity.cs           # the stored entity: float in memory, fixed-point on disk/wire
+World/Commands/
+├── Command.cs             # op + unmanaged payload structs
+├── WireCodec.cs           # low-latency variable-int binary network codec (ADR 0008)
+├── TextCodec.cs           # Git-friendly .tres text command serializer (ADR 0008)
+├── CommandSink.cs         # captures undo pre-state, applies forward, records in log
+├── CommandLog.cs          # append-only log with local undo/redo stacks
+└── IWorld.cs              # abstract octree + entities mutation target
 World/Runtime/Formats/Save/
 ├── WorldSnapshot.cs       # canonical snapshot encode/decode + content hash (M5)
-├── ObjectId.cs            # 128-bit XxHash128 identifier struct (ADR 0008)
-├── MapObjectStore.cs      # transparent dictionary-backed object store with BaseStore fallback (ADR 0008)
-├── WorldResource.cs       # Godot Resource wrapper for world.res (M5)
-├── HistoryResource.cs     # Godot Resource wrapper for history.res + Commit chain + delta Objects (M5, ADR 0008)
-├── MapStore.cs            # reference-based map load/commit/checkout/GC + archive hash (M5, ADR 0008)
-└── MapLevel.cs            # scene node: refs World / History.BaseRef + runtime projections (M5)
+├── WorldResource.cs       # Godot Resource wrapper for cached world.res (M5)
+├── HistoryResource.cs     # Godot Resource wrapper for history.tres command log (ADR 0008)
+├── ResourceManifest.cs    # Godot Resource wrapper for manifest.tres (ADR 0008)
+├── MapStore.cs            # hybrid map load/save, cache compilation (ADR 0008)
+└── MapLevel.cs            # scene node: refs history.tres / manifest.tres + runtime projections (M5)
 resources/maps/empty_map/
 ├── Level.tscn             # canonical base empty map scene
 └── world.res              # canonical hollow-room base snapshot
