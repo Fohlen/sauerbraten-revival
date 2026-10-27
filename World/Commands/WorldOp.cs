@@ -38,6 +38,10 @@ public enum WorldOp : ushort
     RotateCube = 14,      // mprotate (selected cubes, axis d, direction cw)
     // --- merge ---
     Remip = 20,           // pass-through, deterministic (docs §5.4)
+    // --- entity ---
+    AddEntity = 30,       // spawn a map entity
+    RemoveEntity = 31,    // delete a map entity by stable EntityId
+    EditEntity = 32,      // modify entity attributes / position
     // --- lifecycle ---
     Snapshot = 100,       // no-op marker; carries a snapshot-ring index
     NewMap = 101,         // world.cpp emptymap: build a fresh empty world (floor + air)

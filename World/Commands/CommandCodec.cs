@@ -142,6 +142,17 @@ public static class CommandCodec
             case WorldOp.NewMap:
                 a.Add(((NewMapPayload)cmd.Payload).Scale);
                 break;
+            case WorldOp.AddEntity:
+            case WorldOp.RemoveEntity:
+            case WorldOp.EditEntity:
+                {
+                    var p = (EntityPayload)cmd.Payload;
+                    a.Add((long)p.Id);
+                    a.Add(p.Type);
+                    a.Add(p.FixedX); a.Add(p.FixedY); a.Add(p.FixedZ);
+                    a.Add(p.Attr1); a.Add(p.Attr2); a.Add(p.Attr3); a.Add(p.Attr4); a.Add(p.Attr5);
+                    break;
+                }
             default:
                 throw new NotSupportedException($"Cannot encode payload for {cmd.Op}");
         }
@@ -186,6 +197,14 @@ public static class CommandCodec
                 return EmptyPayload.Instance;
             case WorldOp.NewMap:
                 return new NewMapPayload((int)a[b]);
+            case WorldOp.AddEntity:
+            case WorldOp.RemoveEntity:
+            case WorldOp.EditEntity:
+                return new EntityPayload(
+                    (ulong)(long)a[b],
+                    (byte)(int)a[b + 1],
+                    (int)a[b + 2], (int)a[b + 3], (int)a[b + 4],
+                    (short)(int)a[b + 5], (short)(int)a[b + 6], (short)(int)a[b + 7], (short)(int)a[b + 8], (short)(int)a[b + 9]);
             default:
                 throw new NotSupportedException($"Cannot decode payload for {op}");
         }

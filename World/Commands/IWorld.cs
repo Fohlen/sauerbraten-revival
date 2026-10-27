@@ -13,6 +13,9 @@ public interface IWorld
     /// <summary>The octree being mutated.</summary>
     Octa Octa { get; }
 
+    /// <summary>Active map entities mutated by entity commands.</summary>
+    System.Collections.Generic.List<Entities.MapEntity> Entities { get; }
+
     /// <summary>Apply a command. Must be deterministic and must not depend on wall-clock state.</summary>
     void Apply(Command cmd);
 
@@ -28,8 +31,13 @@ public interface IWorld
 public sealed class OctaWorld : IWorld
 {
     public Octa Octa { get; }
+    public System.Collections.Generic.List<Entities.MapEntity> Entities { get; } = new();
 
-    public OctaWorld(Octa octa) => Octa = octa;
+    public OctaWorld(Octa octa, System.Collections.Generic.IEnumerable<Entities.MapEntity>? entities = null)
+    {
+        Octa = octa;
+        if (entities != null) Entities.AddRange(entities);
+    }
 
     public OctaEdit.CapturedBlock Capture(Block3 region, int rgrid) => OctaEdit.BlockCopy(Octa, region, rgrid);
 
@@ -103,6 +111,29 @@ public sealed class OctaWorld : IWorld
                 {
                     var p = (NewMapPayload)cmd.Payload;
                     Octa.EmptyMap(p.Scale);
+                    break;
+                }
+            case WorldOp.AddEntity:
+                {
+                    var p = (EntityPayload)cmd.Payload;
+                    Entities.RemoveAll(e => e.Id == p.Id);
+                    Entities.Add(p.ToEntity());
+                    break;
+                }
+            case WorldOp.RemoveEntity:
+                {
+                    var p = (EntityPayload)cmd.Payload;
+                    Entities.RemoveAll(e => e.Id == p.Id);
+                    break;
+                }
+            case WorldOp.EditEntity:
+                {
+                    var p = (EntityPayload)cmd.Payload;
+                    int idx = Entities.FindIndex(e => e.Id == p.Id);
+                    if (idx >= 0)
+                        Entities[idx] = p.ToEntity();
+                    else
+                        Entities.Add(p.ToEntity());
                     break;
                 }
             default:

@@ -156,6 +156,7 @@ public sealed class OgzReader
             var position = new Vector3(_r.ReadSingle(), _r.ReadSingle(), _r.ReadSingle());
             var e = new MapEntity
             {
+                Id = (ulong)(i + 1),
                 Position = position,
                 Attr1 = _r.ReadInt16(),
                 Attr2 = _r.ReadInt16(),

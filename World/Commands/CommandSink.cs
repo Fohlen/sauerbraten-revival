@@ -29,6 +29,9 @@ public sealed class CommandSink
         WorldOp.FlipCube,
         WorldOp.RotateCube,
         WorldOp.ReplaceBlock,
+        WorldOp.AddEntity,
+        WorldOp.RemoveEntity,
+        WorldOp.EditEntity,
     };
 
     public IWorld World => _world;
@@ -55,6 +58,8 @@ public sealed class CommandSink
         recorded.UndoBlock = entry.UndoBlock;
         recorded.UndoRegion = entry.UndoRegion;
         recorded.RedoBlock = entry.RedoBlock;
+        recorded.UndoEntity = entry.UndoEntity;
+        recorded.RedoEntity = entry.RedoEntity;
         return recorded;
     }
 
@@ -81,6 +86,22 @@ public sealed class CommandSink
             var restore = new Command(WorldOp.ReplaceBlock,
                 new ReplaceBlockPayload(new SelectionPayload(entry.UndoRegion.O, entry.UndoRegion.S, entry.UndoRegion.Grid, entry.UndoRegion.Orient), entry.UndoBlock))
             { AuthorPeerId = _log.LocalPeerId };
+            _world.Apply(restore);
+        }
+        else if (entry.Command.Op == WorldOp.AddEntity)
+        {
+            var p = (EntityPayload)entry.Command.Payload;
+            var revert = new Command(WorldOp.RemoveEntity, new EntityPayload { Id = p.Id }, _log.LocalPeerId);
+            _world.Apply(revert);
+        }
+        else if (entry.Command.Op == WorldOp.RemoveEntity && entry.UndoEntity != null)
+        {
+            var restore = new Command(WorldOp.AddEntity, new EntityPayload(entry.UndoEntity), _log.LocalPeerId);
+            _world.Apply(restore);
+        }
+        else if (entry.Command.Op == WorldOp.EditEntity && entry.UndoEntity != null)
+        {
+            var restore = new Command(WorldOp.EditEntity, new EntityPayload(entry.UndoEntity), _log.LocalPeerId);
             _world.Apply(restore);
         }
         else if (entry.Command.Op == WorldOp.Remip)
@@ -118,6 +139,8 @@ public sealed class CommandSink
         recorded.UndoBlock = fresh.UndoBlock;
         recorded.UndoRegion = fresh.UndoRegion;
         recorded.RedoBlock = fresh.RedoBlock;
+        recorded.UndoEntity = fresh.UndoEntity;
+        recorded.RedoEntity = fresh.RedoEntity;
         return recorded;
     }
 
@@ -189,6 +212,49 @@ public sealed class CommandSink
                     entry.RedoBlock = p.Block;
                     break;
                 }
+            case WorldOp.RemoveEntity:
+                {
+                    var p = (EntityPayload)cmd.Payload;
+                    var existing = _world.Entities.Find(e => e.Id == p.Id);
+                    if (existing != null)
+                    {
+                        entry.UndoEntity = new Entities.MapEntity
+                        {
+                            Id = existing.Id,
+                            Type = existing.Type,
+                            Position = existing.Position,
+                            Attr1 = existing.Attr1,
+                            Attr2 = existing.Attr2,
+                            Attr3 = existing.Attr3,
+                            Attr4 = existing.Attr4,
+                            Attr5 = existing.Attr5,
+                        };
+                    }
+                    break;
+                }
+            case WorldOp.EditEntity:
+                {
+                    var p = (EntityPayload)cmd.Payload;
+                    var existing = _world.Entities.Find(e => e.Id == p.Id);
+                    if (existing != null)
+                    {
+                        entry.UndoEntity = new Entities.MapEntity
+                        {
+                            Id = existing.Id,
+                            Type = existing.Type,
+                            Position = existing.Position,
+                            Attr1 = existing.Attr1,
+                            Attr2 = existing.Attr2,
+                            Attr3 = existing.Attr3,
+                            Attr4 = existing.Attr4,
+                            Attr5 = existing.Attr5,
+                        };
+                    }
+                    entry.RedoEntity = p.ToEntity();
+                    break;
+                }
+            case WorldOp.AddEntity:
+                break;
         }
         return entry;
     }

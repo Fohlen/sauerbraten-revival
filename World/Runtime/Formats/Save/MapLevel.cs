@@ -134,21 +134,48 @@ public partial class MapLevel : Node3D, IGameWorld
     /// <summary>Materialize the octree and history, then mesh. Idempotent.</summary>
     public void Build()
     {
-        if (Octa != null || World == null) return;
+        if (Octa != null) return;
+        if (World == null && History == null) return;
 
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
         Scale = new Vector3(-1, 1, 1);
 
-        Snapshot = World.ToSnapshot();
-        var octa = Snapshot.ToOcta();
-        Octa = octa;
-        Physics = new OctaPhysics(octa);
-        if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
-        Sink = new CommandSink(new OctaWorld(octa));
+        if (History != null && !string.IsNullOrEmpty(History.HeadCommitId))
+        {
+            MapObjectStore? baseStore = null;
+            if (!string.IsNullOrEmpty(History.BaseRef))
+            {
+                var baseMap = MapStore.Load(History.BaseRef);
+                baseStore = baseMap.Store;
+            }
+            var store = History.ToStore(baseStore);
+            if (ObjectId.TryParse(History.HeadCommitId, out var headId))
+            {
+                var commit = store.GetCommit(headId);
+                var (octaFromHead, entitiesFromHead) = store.UnpackTree(commit.TreeId);
+                Octa = octaFromHead;
+                Snapshot = WorldSnapshot.Capture(octaFromHead, entitiesFromHead);
+                Physics = new OctaPhysics(octaFromHead);
+                if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
+                Sink = new CommandSink(new OctaWorld(octaFromHead, entitiesFromHead));
+            }
+        }
 
-        // Replay the saved history tail on top of the base snapshot (§4 strategy 2).
-        if (History != null)
-            foreach (var cmd in History.ToCommands()) Sink.Receive(cmd);
+        if (Octa == null && World != null)
+        {
+            Snapshot = World.ToSnapshot();
+            var octa = Snapshot.ToOcta();
+            Octa = octa;
+            Physics = new OctaPhysics(octa);
+            if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
+            Sink = new CommandSink(new OctaWorld(octa, Snapshot.Entities));
+
+            // Replay the saved history tail on top of the base snapshot (§4 strategy 2).
+            if (History != null && History.Commands.Count > 0)
+                foreach (var cmd in History.ToCommands()) Sink.Receive(cmd);
+        }
+
+        if (Octa == null) return;
 
         Renderer = new WorldChunkRenderer
         {
@@ -174,7 +201,7 @@ public partial class MapLevel : Node3D, IGameWorld
                 materials = ManifestBuilder.ToMaterialSet(manifest, textures);
             }
         }
-        Renderer.Setup(octa, materials);
+        Renderer.Setup(Octa, materials);
 
         // Converted mapmodels (assimp), imported by Godot as Resources.
         var modelCatalog = ModelCatalog.LoadFromProject();
@@ -205,7 +232,7 @@ public partial class MapLevel : Node3D, IGameWorld
             if (child is Editor.EditorController ec)
                 ec.BindMapSource(this);
 
-        GD.Print($"[maplevel] worldsize={octa.WorldSize} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount} entities={Entities.Count}");
+        GD.Print($"[maplevel] worldsize={Octa.WorldSize} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount} entities={Entities.Count}");
     }
 
     private readonly WorldSimulation _simulation = new();

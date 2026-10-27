@@ -23,6 +23,9 @@ namespace SauerbratenRevival.World.Entities;
 /// </summary>
 public sealed class MapEntity
 {
+    /// <summary>Stable 64-bit entity identity across edits and sessions.</summary>
+    public ulong Id { get; set; }
+
     /// <summary>shared/ents.h type id (see <see cref="EntityType"/>).</summary>
     public byte Type { get; set; }
 
@@ -42,6 +45,7 @@ public sealed class MapEntity
     public void Write(BinaryWriter w)
     {
         var (x, y, z) = FixedPosition;
+        w.Write(Id);
         w.Write(Type);
         w.Write(x); w.Write(y); w.Write(z);
         w.Write(Attr1); w.Write(Attr2); w.Write(Attr3); w.Write(Attr4); w.Write(Attr5);
@@ -49,6 +53,7 @@ public sealed class MapEntity
 
     public static MapEntity Read(BinaryReader r) => new()
     {
+        Id = r.ReadUInt64(),
         Type = r.ReadByte(),
         Position = new Vector3(
             r.ReadInt32() / (float)FixedPoint.DMF,
@@ -65,9 +70,11 @@ public sealed class MapEntity
     public void Hash(Action<byte> mix)
     {
         var (x, y, z) = FixedPosition;
-        mix(Type);
+        void MixU64(ulong v) { for (int i = 0; i < 8; i++) mix((byte)(v >> (i * 8))); }
         void MixI32(int v) { for (int i = 0; i < 4; i++) mix((byte)(v >> (i * 8))); }
         void MixI16(short v) { mix((byte)v); mix((byte)(v >> 8)); }
+        MixU64(Id);
+        mix(Type);
         MixI32(x); MixI32(y); MixI32(z);
         MixI16(Attr1); MixI16(Attr2); MixI16(Attr3); MixI16(Attr4); MixI16(Attr5);
     }

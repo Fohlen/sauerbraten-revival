@@ -26,6 +26,12 @@ public sealed class LogEntry
 
     /// <summary>Redo state: for <see cref="WorldOp.ReplaceBlock"/>, the block that was written.</summary>
     public OctaEdit.CapturedBlock? RedoBlock;
+
+    /// <summary>Pre-state entity captured before a <see cref="WorldOp.RemoveEntity"/> or <see cref="WorldOp.EditEntity"/>.</summary>
+    public Entities.MapEntity? UndoEntity;
+
+    /// <summary>Entity state for re-applying <see cref="WorldOp.EditEntity"/>.</summary>
+    public Entities.MapEntity? RedoEntity;
 }
 
 /// <summary>

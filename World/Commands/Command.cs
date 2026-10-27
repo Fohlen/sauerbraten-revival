@@ -202,3 +202,64 @@ public sealed class ReplaceBlockPayload : ICommandPayload
         Block = block;
     }
 }
+
+/// <summary><see cref="WorldOp.AddEntity"/>, <see cref="WorldOp.RemoveEntity"/>, <see cref="WorldOp.EditEntity"/> payload.</summary>
+public sealed class EntityPayload : ICommandPayload
+{
+    public ulong Id;
+    public byte Type;
+    public int FixedX;
+    public int FixedY;
+    public int FixedZ;
+    public short Attr1;
+    public short Attr2;
+    public short Attr3;
+    public short Attr4;
+    public short Attr5;
+
+    public EntityPayload() { }
+
+    public EntityPayload(ulong id, byte type, int fx, int fy, int fz, short a1, short a2, short a3, short a4, short a5)
+    {
+        Id = id;
+        Type = type;
+        FixedX = fx;
+        FixedY = fy;
+        FixedZ = fz;
+        Attr1 = a1;
+        Attr2 = a2;
+        Attr3 = a3;
+        Attr4 = a4;
+        Attr5 = a5;
+    }
+
+    public EntityPayload(Entities.MapEntity entity)
+    {
+        Id = entity.Id;
+        Type = entity.Type;
+        var (x, y, z) = entity.FixedPosition;
+        FixedX = x;
+        FixedY = y;
+        FixedZ = z;
+        Attr1 = entity.Attr1;
+        Attr2 = entity.Attr2;
+        Attr3 = entity.Attr3;
+        Attr4 = entity.Attr4;
+        Attr5 = entity.Attr5;
+    }
+
+    public Entities.MapEntity ToEntity() => new()
+    {
+        Id = Id,
+        Type = Type,
+        Position = new Vector3(
+            FixedX / (float)FixedPoint.DMF,
+            FixedY / (float)FixedPoint.DMF,
+            FixedZ / (float)FixedPoint.DMF),
+        Attr1 = Attr1,
+        Attr2 = Attr2,
+        Attr3 = Attr3,
+        Attr4 = Attr4,
+        Attr5 = Attr5,
+    };
+}
