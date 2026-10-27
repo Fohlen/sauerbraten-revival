@@ -3,6 +3,7 @@ using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Editor;
+using SauerbratenRevival.World.Runtime.Formats.Save;
 
 namespace SauerbratenRevival.Tests;
 
@@ -151,6 +152,30 @@ public class EditorClipboardTest : GoTestBase
 
         // Cleanup the temp map directory.
         System.IO.Directory.Delete(ProjectSettings.GlobalizePath(ec.MapDir), recursive: true);
+        map.QueueFree();
+    }
+
+    [Test]
+    public void SaveWithHistoryCommitsToStore()
+    {
+        var ec = Setup(out var map);
+        string tempDir = $"user://test_maps/editor_hist_{System.Guid.NewGuid():N}";
+        ec.MapDir = tempDir;
+
+        MapStore.InitFromReference(tempDir, MapStore.EmptyMapDir);
+
+        ec.Cursor.Selection.O = new Vector3I(512, 512, 128);
+        ec.Cursor.Selection.S = new Vector3I(1, 1, 1);
+        ec.EditDelete();
+
+        ec.SaveMap();
+
+        var loaded = MapStore.Load(tempDir);
+        TestAssert.True(loaded.HeadCommit != null, "HEAD commit exists in loaded map");
+        TestAssert.True(!loaded.HeadCommit!.ParentId.IsEmpty, "new commit has parent");
+        TestAssert.True(loaded.History.Count > 0, "history commands recorded");
+
+        System.IO.Directory.Delete(ProjectSettings.GlobalizePath(tempDir), recursive: true);
         map.QueueFree();
     }
 

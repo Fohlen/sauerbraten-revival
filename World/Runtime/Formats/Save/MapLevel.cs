@@ -135,18 +135,33 @@ public partial class MapLevel : Node3D, IGameWorld
     public void Build()
     {
         if (Octa != null) return;
-        if (World == null && History == null) return;
+        if (World == null && History == null && string.IsNullOrEmpty(MapDir)) return;
 
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
         Scale = new Vector3(-1, 1, 1);
 
-        if (History != null && !string.IsNullOrEmpty(History.HeadCommitId))
+        if (!string.IsNullOrEmpty(MapDir) && World == null && History == null)
+        {
+            var loaded = MapStore.Load(MapDir);
+            Octa = loaded.World;
+            Snapshot = loaded.Snapshot;
+            Physics = new OctaPhysics(loaded.World);
+            if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
+            Sink = new CommandSink(new OctaWorld(loaded.World, loaded.Snapshot.Entities));
+        }
+        else if (History != null && !string.IsNullOrEmpty(History.HeadCommitId))
         {
             MapObjectStore? baseStore = null;
             if (!string.IsNullOrEmpty(History.BaseRef))
             {
                 var baseMap = MapStore.Load(History.BaseRef);
                 baseStore = baseMap.Store;
+                if (ObjectId.TryParse(History.ExpectedBaseTreeId, out var expectedBase) && !expectedBase.IsEmpty
+                    && baseMap.HeadCommit != null && baseMap.HeadCommit.TreeId != expectedBase)
+                {
+                    throw new InvalidDataException(
+                        $"Base map mismatch: '{History.BaseRef}' tree ID is '{baseMap.HeadCommit.TreeId}', expected '{expectedBase}'");
+                }
             }
             var store = History.ToStore(baseStore);
             if (ObjectId.TryParse(History.HeadCommitId, out var headId))

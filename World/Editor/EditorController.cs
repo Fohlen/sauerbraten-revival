@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
@@ -614,15 +615,27 @@ public partial class EditorController : Node3D
     // ---- save / load (native format, docs §7) ----
 
     /// <summary>
-    /// Save the current world to <see cref="MapDir"/> in the native format. Compacts:
-    /// the octree is snapshotted as the new base and any prior history is truncated
-    /// (docs §7.3). Entities are stored in the snapshot (runtime projections on load).
+    /// Save the current world to <see cref="MapDir"/> in the native format. If history.res
+    /// exists, commits the editor changes into the linear commit chain (ADR 0008).
+    /// Otherwise, saves a compacted base snapshot (docs §7.3).
     /// </summary>
     public void SaveMap()
     {
         if (Octa == null) return;
-        MapStore.SaveCompacted(MapDir, Octa);
-        GD.Print($"[editor] saved '{MapDir}' (hash {MapStore.ContentHash(MapDir)})");
+        var commands = Sink?.Log.Entries.Select(e => e.Command).ToList();
+        var entities = Sink?.World.Entities;
+        string globalDir = ProjectSettings.GlobalizePath(MapDir);
+        string historyPath = System.IO.Path.Combine(globalDir, MapStore.HistoryResourceName);
+        if (System.IO.File.Exists(historyPath))
+        {
+            var commit = MapStore.Commit(MapDir, Octa, entities, commands, "Editor", "Editor save");
+            GD.Print($"[editor] committed '{MapDir}' (commit {commit.Id})");
+        }
+        else
+        {
+            MapStore.SaveCompacted(MapDir, Octa, entities);
+            GD.Print($"[editor] saved '{MapDir}' (hash {MapStore.ContentHash(MapDir)})");
+        }
     }
 
     /// <summary>
@@ -635,7 +648,7 @@ public partial class EditorController : Node3D
         if (!DirAccess.DirExistsAbsolute(ProjectSettings.GlobalizePath(MapDir))) return;
         var loaded = MapStore.Load(MapDir);
         Octa = loaded.World;
-        Sink = new CommandSink(new OctaWorld(loaded.World));
+        Sink = new CommandSink(new OctaWorld(loaded.World, loaded.Snapshot.Entities));
 
         // The renderer was built for the old octree: rebuild it against the loaded one.
         Renderer?.Setup(loaded.World, materials: null);
@@ -650,19 +663,35 @@ public partial class EditorController : Node3D
         Sink = source.Sink;
         Renderer = source.Renderer;
         Radiance = source.Radiance;
+        if (source is MapLevel ml && !string.IsNullOrEmpty(ml.MapDir))
+        {
+            MapDir = ml.MapDir;
+        }
     }
 
     /// <summary>Re-point the owning map node at the newly loaded octree, if any.</summary>
     private void DetachWorldFromParent()
     {
-        foreach (var node in GetParent().GetChildren())
+        var parent = GetParent();
+        if (parent is IMapSource parentMs)
         {
-            if (node is IMapSource ms)
+            parentMs.Octa = Octa;
+            parentMs.Sink = Sink;
+            parentMs.Renderer = Renderer;
+            return;
+        }
+
+        if (parent != null)
+        {
+            foreach (var node in parent.GetChildren())
             {
-                ms.Octa = Octa;
-                ms.Sink = Sink;
-                ms.Renderer = Renderer;
-                break;
+                if (node is IMapSource ms)
+                {
+                    ms.Octa = Octa;
+                    ms.Sink = Sink;
+                    ms.Renderer = Renderer;
+                    break;
+                }
             }
         }
     }
