@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Godot;
 
 namespace SauerbratenRevival.World.Commands;
@@ -7,8 +8,8 @@ namespace SauerbratenRevival.World.Commands;
 /// gives it a total order in the log, and the author identifies who issued it
 /// (attribution, not authority — docs/editor-and-commands.md §1.1).
 ///
-/// Payloads are typed objects here; their canonical <c>byte[]</c> form is the
-/// codec's job (<see cref="CommandCodec"/>), so save/demo/network share one encoding.
+/// Payloads are lightweight value-type structs blitted via MemoryMarshal (<see cref="CommandCodec"/>),
+/// so save/demo/network share a single zero-allocation encoding.
 /// </summary>
 public sealed class Command
 {
@@ -47,18 +48,22 @@ public sealed class Command
 /// <summary>Marker for op-specific parameter sets. Each concrete type maps 1:1 to an <see cref="WorldOp"/>.</summary>
 public interface ICommandPayload { }
 
-/// <summary>Payload for ops that carry no parameters (e.g. <see cref="WorldOp.Snapshot"/> has an index, but the no-arg form is a valid marker).</summary>
-public sealed class EmptyPayload : ICommandPayload
+/// <summary>Payload for ops that carry no parameters (e.g. <see cref="WorldOp.Snapshot"/>).</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct EmptyPayload : ICommandPayload
 {
-    public static readonly EmptyPayload Instance = new();
+    public static readonly EmptyPayload Instance = default;
 }
 
 /// <summary>
 /// A rectangular selection, as commands carry it (the serializable subset of
 /// <see cref="Selection"/>: origin, size, grid, orient — no cursor state).
 /// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
 public readonly struct SelectionPayload : ICommandPayload
 {
+    public const int PayloadSize = 32;
+
     public readonly Vector3I Origin;
     public readonly Vector3I Size;
     public readonly int Grid;
@@ -80,18 +85,20 @@ public readonly struct SelectionPayload : ICommandPayload
 }
 
 /// <summary><see cref="WorldOp.DeleteCube"/>: empty every cube in the selection.</summary>
-public sealed class DeleteCubePayload : ICommandPayload
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct DeleteCubePayload : ICommandPayload
 {
-    public SelectionPayload Selection;
+    public readonly SelectionPayload Selection;
     public DeleteCubePayload(SelectionPayload sel) => Selection = sel;
 }
 
 /// <summary><see cref="WorldOp.EditFace"/>: mpeditface mode 1 over a selection.</summary>
-public sealed class EditFacePayload : ICommandPayload
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct EditFacePayload : ICommandPayload
 {
-    public SelectionPayload Selection;
-    public int Dir;    // +1 push (carve), -1 pull (fill)
-    public int Mode;   // 0/1/2 as in mpeditface; mode 1 is the fill branch
+    public readonly SelectionPayload Selection;
+    public readonly int Dir;    // +1 push (carve), -1 pull (fill)
+    public readonly int Mode;   // 0/1/2 as in mpeditface; mode 1 is the fill branch
 
     public EditFacePayload(SelectionPayload sel, int dir, int mode)
     {
@@ -102,11 +109,12 @@ public sealed class EditFacePayload : ICommandPayload
 }
 
 /// <summary><see cref="WorldOp.SetFaceTexture"/>: edittexcube over a selection.</summary>
-public sealed class SetFaceTexturePayload : ICommandPayload
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct SetFaceTexturePayload : ICommandPayload
 {
-    public SelectionPayload Selection;
-    public int Texture;
-    public int Orient;   // -1 = all faces, else the single face orientation
+    public readonly SelectionPayload Selection;
+    public readonly int Texture;
+    public readonly int Orient;   // -1 = all faces, else the single face orientation
 
     public SetFaceTexturePayload(SelectionPayload sel, int texture, int orient)
     {
@@ -117,28 +125,35 @@ public sealed class SetFaceTexturePayload : ICommandPayload
 }
 
 /// <summary><see cref="WorldOp.ReplaceTexture"/>: replacetexcube.</summary>
-public sealed class ReplaceTexturePayload : ICommandPayload
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct ReplaceTexturePayload : ICommandPayload
 {
-    public SelectionPayload? Selection;   // null = whole world
-    public bool InSelection;
-    public int OldTexture;
-    public int NewTexture;
+    private readonly SelectionPayload _selection;
+    private readonly byte _hasSelection;
+    private readonly byte _inSelection;
+    public readonly int OldTexture;
+    public readonly int NewTexture;
+
+    public SelectionPayload? Selection => _hasSelection != 0 ? _selection : null;
+    public bool InSelection => _inSelection != 0;
 
     public ReplaceTexturePayload(SelectionPayload? sel, bool inSelection, int oldTexture, int newTexture)
     {
-        Selection = sel;
-        InSelection = inSelection;
+        _selection = sel ?? default;
+        _hasSelection = sel.HasValue ? (byte)1 : (byte)0;
+        _inSelection = inSelection ? (byte)1 : (byte)0;
         OldTexture = oldTexture;
         NewTexture = newTexture;
     }
 }
 
 /// <summary><see cref="WorldOp.SetFaceMaterial"/>: mpeditmat.</summary>
-public sealed class SetFaceMaterialPayload : ICommandPayload
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct SetFaceMaterialPayload : ICommandPayload
 {
-    public SelectionPayload Selection;
-    public int MaterialId;   // < 0 removes the filtered material
-    public int Filter;       // < 0 = no filter; else filtermat | (filtergeom << 16)
+    public readonly SelectionPayload Selection;
+    public readonly int MaterialId;   // < 0 removes the filtered material
+    public readonly int Filter;       // < 0 = no filter; else filtermat | (filtergeom << 16)
 
     public SetFaceMaterialPayload(SelectionPayload sel, int materialId, int filter)
     {
@@ -148,16 +163,16 @@ public sealed class SetFaceMaterialPayload : ICommandPayload
     }
 }
 
-/// <summary><see cref="WorldOp.FlipCube"/> / <see cref="WorldOp.RotateCube"/>: a selection plus an axis (and direction for rotate).</summary>
 /// <summary>
 /// <see cref="WorldOp.FlipCube"/> / <see cref="WorldOp.RotateCube"/>: a selection to
 /// mirror or rotate. The axis comes from the selection's <c>Orient</c>; only the
 /// rotation direction is a payload field.
 /// </summary>
-public sealed class TransformCubePayload : ICommandPayload
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct TransformCubePayload : ICommandPayload
 {
-    public SelectionPayload Selection;
-    public int Direction;   // rotate: +1/-1 clockwise; unused for flip
+    public readonly SelectionPayload Selection;
+    public readonly int Direction;   // rotate: +1/-1 clockwise; unused for flip
 
     public TransformCubePayload(SelectionPayload sel, int direction = 0)
     {
@@ -167,17 +182,20 @@ public sealed class TransformCubePayload : ICommandPayload
 }
 
 /// <summary><see cref="WorldOp.Remip"/>: pass-through. Only the selection and the user's mipvis toggle (docs §5.4).</summary>
-public sealed class RemipPayload : ICommandPayload
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct RemipPayload : ICommandPayload
 {
-    public bool MipVis;
+    private readonly byte _mipVis;
+    public bool MipVis => _mipVis != 0;
 
-    public RemipPayload(bool mipVis) => MipVis = mipVis;
+    public RemipPayload(bool mipVis) => _mipVis = mipVis ? (byte)1 : (byte)0;
 }
 
 /// <summary><see cref="WorldOp.NewMap"/>: build a fresh empty world at a scale (world.cpp <c>emptymap</c>).</summary>
-public sealed class NewMapPayload : ICommandPayload
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct NewMapPayload : ICommandPayload
 {
-    public int Scale;
+    public readonly int Scale;
 
     public NewMapPayload(int scale) => Scale = scale;
 }
@@ -185,8 +203,7 @@ public sealed class NewMapPayload : ICommandPayload
 /// <summary>
 /// <see cref="WorldOp.ReplaceBlock"/>: the universal carrier (docs §5.3). Writes a
 /// captured region into the world. Paste, prefab placement and paste-style undo
-/// all reduce to this. The block is held as live cubes for now; its canonical
-/// serialized form lands with the save format (M5).
+/// all reduce to this.
 /// </summary>
 public sealed class ReplaceBlockPayload : ICommandPayload
 {
@@ -204,22 +221,22 @@ public sealed class ReplaceBlockPayload : ICommandPayload
 }
 
 /// <summary><see cref="WorldOp.AddEntity"/>, <see cref="WorldOp.RemoveEntity"/>, <see cref="WorldOp.EditEntity"/> payload.</summary>
-public sealed class EntityPayload : ICommandPayload
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct EntityPayload : ICommandPayload
 {
-    public ulong Id;
-    public byte Type;
-    public int FixedX;
-    public int FixedY;
-    public int FixedZ;
-    public short Attr1;
-    public short Attr2;
-    public short Attr3;
-    public short Attr4;
-    public short Attr5;
+    public ulong Id { get; init; }
+    public byte Type { get; init; }
+    public int FixedX { get; init; }
+    public int FixedY { get; init; }
+    public int FixedZ { get; init; }
+    public short Attr1 { get; init; }
+    public short Attr2 { get; init; }
+    public short Attr3 { get; init; }
+    public short Attr4 { get; init; }
+    public short Attr5 { get; init; }
 
-    public EntityPayload() { }
-
-    public EntityPayload(ulong id, byte type, int fx, int fy, int fz, short a1, short a2, short a3, short a4, short a5)
+    public EntityPayload(ulong id, byte type = 0, int fx = 0, int fy = 0, int fz = 0,
+        short a1 = 0, short a2 = 0, short a3 = 0, short a4 = 0, short a5 = 0)
     {
         Id = id;
         Type = type;

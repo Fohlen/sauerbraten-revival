@@ -1,237 +1,194 @@
 using System;
+using System.IO;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Godot;
 
 namespace SauerbratenRevival.World.Commands;
 
 /// <summary>
-/// Canonical binary encoding for commands — the bytes shared by save, network and
-/// demo (docs/editor-and-commands.md §5.1).
+/// Canonical binary encoding for commands using MemoryMarshal over unmanaged structs.
 ///
-/// Uses Godot's <c>var_to_bytes</c> over **positional arrays** (never dictionaries,
-/// which are not canonically ordered). Two logically-identical commands encode to
-/// identical bytes, which is what parity hashing and byte-stable demos need.
-/// A leading format-version byte lets us migrate if the layout ever changes.
-///
-/// Untrusted input (network) must use <see cref="Decode"/> which goes through the
-/// object-free <c>bytes_to_var</c>, so a peer cannot smuggle an <c>Object</c>.
-///
-/// Design note: FlatBuffers was considered for zero-parse reads and cross-language
-/// tooling, but it is not canonical by default (breaks parity hashing) and adds a
-/// <c>flatc</c> toolchain; at our command sizes parse cost is not a bottleneck (the
-/// real cost is meshing). If a shared C#/C++/Python format is ever needed, it swaps
-/// in behind this one class.
+/// Every fixed-size command is blitted directly with MemoryMarshal.Write/Read,
+/// ensuring zero heap allocations and exact, deterministic memory layouts.
 /// </summary>
 public static class CommandCodec
 {
-    /// <summary>Bump when the payload layout changes incompatibly.</summary>
-    public const byte FormatVersion = 1;
+    public const byte FormatVersion = 2;
 
-    // ---- command framing ----
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public readonly struct CommandHeader
+    {
+        public const int HeaderSize = 16;
 
-    /// <summary>Encode a command as [u8 version][u64 sequence][i32 author][u8 source][Variant array].</summary>
+        public readonly byte Version;
+        public readonly ulong Sequence;
+        public readonly int AuthorPeerId;
+        public readonly byte Source;
+        public readonly ushort Op;
+
+        public CommandHeader(byte version, ulong sequence, int author, CommandSource source, WorldOp op)
+        {
+            Version = version;
+            Sequence = sequence;
+            AuthorPeerId = author;
+            Source = (byte)source;
+            Op = (ushort)op;
+        }
+    }
+
     public static byte[] Encode(Command cmd)
     {
-        var payload = new Godot.Collections.Array { (int)cmd.Op };
-        WritePayload(payload, cmd);
+        var header = new CommandHeader(FormatVersion, cmd.Sequence, cmd.AuthorPeerId, cmd.Source, cmd.Op);
 
-        var body = GD.VarToBytes(payload);
-        var outBytes = new byte[1 + 8 + 4 + 1 + body.Length];
-        outBytes[0] = FormatVersion;
-        BitConverter.TryWriteBytes(outBytes.AsSpan(1, 8), cmd.Sequence);
-        BitConverter.TryWriteBytes(outBytes.AsSpan(9, 4), cmd.AuthorPeerId);
-        outBytes[13] = (byte)cmd.Source;
-        body.CopyTo(outBytes, 14);
-        return outBytes;
-    }
-
-    /// <summary>Decode bytes produced by <see cref="Encode"/>. Object-free and safe for untrusted input.</summary>
-    public static Command Decode(byte[] data)
-    {
-        byte version = data[0];
-        if (version != FormatVersion)
-            throw new InvalidOperationException($"Unsupported command format version {version} (expected {FormatVersion})");
-        ulong sequence = BitConverter.ToUInt64(data, 1);
-        int author = BitConverter.ToInt32(data, 9);
-        var source = (CommandSource)data[13];
-        var body = new byte[data.Length - 14];
-        Array.Copy(data, 14, body, 0, body.Length);
-
-        var decoded = GD.BytesToVar(body);
-        if (decoded.VariantType != Variant.Type.Array)
-            throw new InvalidOperationException("Malformed command payload");
-        var arr = decoded.As<Godot.Collections.Array>();
-        if (arr.Count < 1)
-            throw new InvalidOperationException("Malformed command payload");
-
-        var op = (WorldOp)(int)arr[0];
-        return new Command(op, ReadPayload(op, arr), author, source) { Sequence = sequence };
-    }
-
-    // ---- payloads (positional arrays) ----
-
-    private static void WriteSelection(Godot.Collections.Array a, SelectionPayload s)
-    {
-        a.Add(s.Origin.X); a.Add(s.Origin.Y); a.Add(s.Origin.Z);
-        a.Add(s.Size.X); a.Add(s.Size.Y); a.Add(s.Size.Z);
-        a.Add(s.Grid);
-        a.Add(s.Orient);
-    }
-
-    private static SelectionPayload ReadSelection(Godot.Collections.Array a, int i) => new(
-        new Vector3I((int)a[i], (int)a[i + 1], (int)a[i + 2]),
-        new Vector3I((int)a[i + 3], (int)a[i + 4], (int)a[i + 5]),
-        (int)a[i + 6], (int)a[i + 7]);
-
-    private static void WritePayload(Godot.Collections.Array a, Command cmd)
-    {
         switch (cmd.Op)
         {
             case WorldOp.DeleteCube:
-                WriteSelection(a, ((DeleteCubePayload)cmd.Payload).Selection);
-                break;
+                return EncodeBlit(header, (DeleteCubePayload)cmd.Payload);
             case WorldOp.EditFace:
-                {
-                    var p = (EditFacePayload)cmd.Payload;
-                    WriteSelection(a, p.Selection);
-                    a.Add(p.Dir); a.Add(p.Mode);
-                    break;
-                }
-            case WorldOp.ReplaceBlock:
-                {
-                    var p = (ReplaceBlockPayload)cmd.Payload;
-                    WriteSelection(a, p.Target);
-                    if (p.Block == null) a.Add(false);
-                    else { a.Add(true); WriteBlock(a, p.Block); }
-                    break;
-                }
+                return EncodeBlit(header, (EditFacePayload)cmd.Payload);
             case WorldOp.SetFaceTexture:
-                {
-                    var p = (SetFaceTexturePayload)cmd.Payload;
-                    WriteSelection(a, p.Selection);
-                    a.Add(p.Texture); a.Add(p.Orient);
-                    break;
-                }
+                return EncodeBlit(header, (SetFaceTexturePayload)cmd.Payload);
             case WorldOp.ReplaceTexture:
-                {
-                    var p = (ReplaceTexturePayload)cmd.Payload;
-                    a.Add(p.InSelection);
-                    if (p.Selection.HasValue) { a.Add(true); WriteSelection(a, p.Selection.Value); } else a.Add(false);
-                    a.Add(p.OldTexture); a.Add(p.NewTexture);
-                    break;
-                }
+                return EncodeBlit(header, (ReplaceTexturePayload)cmd.Payload);
             case WorldOp.SetFaceMaterial:
-                {
-                    var p = (SetFaceMaterialPayload)cmd.Payload;
-                    WriteSelection(a, p.Selection);
-                    a.Add(p.MaterialId); a.Add(p.Filter);
-                    break;
-                }
+                return EncodeBlit(header, (SetFaceMaterialPayload)cmd.Payload);
             case WorldOp.FlipCube:
             case WorldOp.RotateCube:
-                {
-                    var p = (TransformCubePayload)cmd.Payload;
-                    WriteSelection(a, p.Selection);
-                    a.Add(p.Direction);
-                    break;
-                }
+                return EncodeBlit(header, (TransformCubePayload)cmd.Payload);
             case WorldOp.Remip:
-                a.Add(((RemipPayload)cmd.Payload).MipVis);
-                break;
-            case WorldOp.Snapshot:
-                break;
+                return EncodeBlit(header, (RemipPayload)cmd.Payload);
             case WorldOp.NewMap:
-                a.Add(((NewMapPayload)cmd.Payload).Scale);
-                break;
+                return EncodeBlit(header, (NewMapPayload)cmd.Payload);
             case WorldOp.AddEntity:
             case WorldOp.RemoveEntity:
             case WorldOp.EditEntity:
-                {
-                    var p = (EntityPayload)cmd.Payload;
-                    a.Add((long)p.Id);
-                    a.Add(p.Type);
-                    a.Add(p.FixedX); a.Add(p.FixedY); a.Add(p.FixedZ);
-                    a.Add(p.Attr1); a.Add(p.Attr2); a.Add(p.Attr3); a.Add(p.Attr4); a.Add(p.Attr5);
-                    break;
-                }
+                return EncodeBlit(header, (EntityPayload)cmd.Payload);
+            case WorldOp.Snapshot:
+                return EncodeBlit(header, (EmptyPayload)cmd.Payload);
+            case WorldOp.ReplaceBlock:
+                return EncodeReplaceBlock(header, (ReplaceBlockPayload)cmd.Payload);
             default:
                 throw new NotSupportedException($"Cannot encode payload for {cmd.Op}");
         }
     }
 
-    private static ICommandPayload ReadPayload(WorldOp op, Godot.Collections.Array a)
+    public static Command Decode(ReadOnlySpan<byte> data)
     {
-        // Index 0 is the op; payload begins at 1.
-        const int b = 1;
-        switch (op)
+        if (data.Length < CommandHeader.HeaderSize)
+            throw new InvalidOperationException($"Command payload too short ({data.Length} bytes, expected at least {CommandHeader.HeaderSize})");
+
+        var header = MemoryMarshal.Read<CommandHeader>(data[..CommandHeader.HeaderSize]);
+        if (header.Version != FormatVersion)
+            throw new InvalidOperationException($"Unsupported command format version {header.Version} (expected {FormatVersion})");
+
+        var op = (WorldOp)header.Op;
+        var source = (CommandSource)header.Source;
+        var payloadSpan = data[CommandHeader.HeaderSize..];
+
+        ICommandPayload payload = op switch
         {
-            case WorldOp.DeleteCube:
-                return new DeleteCubePayload(ReadSelection(a, b));
-            case WorldOp.EditFace:
-                {
-                    var sel = ReadSelection(a, b);
-                    return new EditFacePayload(sel, (int)a[b + 8], (int)a[b + 9]);
-                }
-            case WorldOp.ReplaceBlock:
-                {
-                    var target = ReadSelection(a, b);
-                    if (!(bool)a[b + 8]) return new ReplaceBlockPayload(target, null);
-                    return new ReplaceBlockPayload(target, ReadBlock(a, b + 9));
-                }
-            case WorldOp.SetFaceTexture:
-                return new SetFaceTexturePayload(ReadSelection(a, b), (int)a[b + 8], (int)a[b + 9]);
-            case WorldOp.ReplaceTexture:
-                {
-                    bool inSel = (bool)a[b];
-                    SelectionPayload? sel = (bool)a[b + 1] ? ReadSelection(a, b + 2) : null;
-                    int idx = inSel && sel.HasValue ? b + 2 + 8 : b + 2;
-                    return new ReplaceTexturePayload(sel, inSel, (int)a[idx], (int)a[idx + 1]);
-                }
-            case WorldOp.SetFaceMaterial:
-                return new SetFaceMaterialPayload(ReadSelection(a, b), (int)a[b + 8], (int)a[b + 9]);
-            case WorldOp.FlipCube:
-            case WorldOp.RotateCube:
-                return new TransformCubePayload(ReadSelection(a, b), (int)a[b + 8]);
-            case WorldOp.Remip:
-                return new RemipPayload((bool)a[b]);
-            case WorldOp.Snapshot:
-                return EmptyPayload.Instance;
-            case WorldOp.NewMap:
-                return new NewMapPayload((int)a[b]);
-            case WorldOp.AddEntity:
-            case WorldOp.RemoveEntity:
-            case WorldOp.EditEntity:
-                return new EntityPayload(
-                    (ulong)(long)a[b],
-                    (byte)(int)a[b + 1],
-                    (int)a[b + 2], (int)a[b + 3], (int)a[b + 4],
-                    (short)(int)a[b + 5], (short)(int)a[b + 6], (short)(int)a[b + 7], (short)(int)a[b + 8], (short)(int)a[b + 9]);
-            default:
-                throw new NotSupportedException($"Cannot decode payload for {op}");
-        }
+            WorldOp.DeleteCube => ReadBlit<DeleteCubePayload>(payloadSpan),
+            WorldOp.EditFace => ReadBlit<EditFacePayload>(payloadSpan),
+            WorldOp.SetFaceTexture => ReadBlit<SetFaceTexturePayload>(payloadSpan),
+            WorldOp.ReplaceTexture => ReadBlit<ReplaceTexturePayload>(payloadSpan),
+            WorldOp.SetFaceMaterial => ReadBlit<SetFaceMaterialPayload>(payloadSpan),
+            WorldOp.FlipCube or WorldOp.RotateCube => ReadBlit<TransformCubePayload>(payloadSpan),
+            WorldOp.Remip => ReadBlit<RemipPayload>(payloadSpan),
+            WorldOp.NewMap => ReadBlit<NewMapPayload>(payloadSpan),
+            WorldOp.AddEntity or WorldOp.RemoveEntity or WorldOp.EditEntity => ReadBlit<EntityPayload>(payloadSpan),
+            WorldOp.Snapshot => EmptyPayload.Instance,
+            WorldOp.ReplaceBlock => DecodeReplaceBlock(payloadSpan),
+            _ => throw new NotSupportedException($"Cannot decode payload for {op}")
+        };
+
+        return new Command(op, payload, header.AuthorPeerId, source) { Sequence = header.Sequence };
     }
 
-    // ---- block / cube blobs ----
+    public static Command Decode(byte[] data) => Decode(data.AsSpan());
 
-    private static void WriteBlock(Godot.Collections.Array a, OctaEdit.CapturedBlock block)
+    private static byte[] EncodeBlit<T>(in CommandHeader header, in T payload) where T : struct
+    {
+        int payloadSize = Unsafe.SizeOf<T>();
+        byte[] bytes = new byte[CommandHeader.HeaderSize + payloadSize];
+        MemoryMarshal.Write(bytes.AsSpan(0, CommandHeader.HeaderSize), in header);
+        MemoryMarshal.Write(bytes.AsSpan(CommandHeader.HeaderSize), in payload);
+        return bytes;
+    }
+
+    private static T ReadBlit<T>(ReadOnlySpan<byte> span) where T : struct
+    {
+        int expectedSize = Unsafe.SizeOf<T>();
+        if (span.Length < expectedSize)
+            throw new InvalidOperationException($"Payload span too short for {typeof(T).Name}: got {span.Length}, expected {expectedSize}");
+        return MemoryMarshal.Read<T>(span);
+    }
+
+    // ---- ReplaceBlock (variable length cube payload) ----
+
+    private static byte[] EncodeReplaceBlock(in CommandHeader header, ReplaceBlockPayload p)
+    {
+        using var ms = new MemoryStream();
+        using var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true);
+        Span<byte> headerSpan = stackalloc byte[CommandHeader.HeaderSize];
+        MemoryMarshal.Write(headerSpan, in header);
+        w.Write(headerSpan);
+
+        Span<byte> targetSpan = stackalloc byte[SelectionPayload.PayloadSize];
+        MemoryMarshal.Write(targetSpan, in p.Target);
+        w.Write(targetSpan);
+
+        if (p.Block == null)
+        {
+            w.Write(false);
+        }
+        else
+        {
+            w.Write(true);
+            WriteBlock(w, p.Block);
+        }
+        w.Flush();
+        return ms.ToArray();
+    }
+
+    private static ReplaceBlockPayload DecodeReplaceBlock(ReadOnlySpan<byte> span)
+    {
+        if (span.Length < SelectionPayload.PayloadSize + 1)
+            throw new InvalidOperationException("ReplaceBlock payload too short");
+
+        var target = MemoryMarshal.Read<SelectionPayload>(span[..SelectionPayload.PayloadSize]);
+        bool hasBlock = span[SelectionPayload.PayloadSize] != 0;
+        if (!hasBlock)
+            return new ReplaceBlockPayload(target, null);
+
+        var body = span[(SelectionPayload.PayloadSize + 1)..];
+        using var ms = new MemoryStream(body.ToArray(), writable: false);
+        using var r = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true);
+        var block = ReadBlock(r);
+        return new ReplaceBlockPayload(target, block);
+    }
+
+    private static void WriteBlock(BinaryWriter w, OctaEdit.CapturedBlock block)
     {
         var d = block.Descriptor;
-        a.Add(d.O.X); a.Add(d.O.Y); a.Add(d.O.Z);
-        a.Add(d.S.X); a.Add(d.S.Y); a.Add(d.S.Z);
-        a.Add(d.Grid); a.Add(d.Orient);
+        w.Write(d.O.X); w.Write(d.O.Y); w.Write(d.O.Z);
+        w.Write(d.S.X); w.Write(d.S.Y); w.Write(d.S.Z);
+        w.Write(d.Grid);
+        w.Write(d.Orient);
 
-        var cubes = new Godot.Collections.Array();
-        foreach (var c in block.Cubes) cubes.Add(WriteCube(c));
-        a.Add(cubes);
+        w.Write(block.Cubes.Length);
+        foreach (var c in block.Cubes) WriteCube(w, c);
     }
 
-    private static OctaEdit.CapturedBlock ReadBlock(Godot.Collections.Array a, int i)
+    private static OctaEdit.CapturedBlock ReadBlock(BinaryReader r)
     {
-        var o = new Vector3I((int)a[i], (int)a[i + 1], (int)a[i + 2]);
-        var s = new Vector3I((int)a[i + 3], (int)a[i + 4], (int)a[i + 5]);
-        int grid = (int)a[i + 6], orient = (int)a[i + 7];
-        var cubesArr = a[i + 8].As<Godot.Collections.Array>();
-        var cubes = new Cube[cubesArr.Count];
-        for (int k = 0; k < cubesArr.Count; k++) cubes[k] = ReadCube(cubesArr[k].As<Godot.Collections.Array>());
+        var o = new Vector3I(r.ReadInt32(), r.ReadInt32(), r.ReadInt32());
+        var s = new Vector3I(r.ReadInt32(), r.ReadInt32(), r.ReadInt32());
+        int grid = r.ReadInt32();
+        int orient = r.ReadInt32();
+        int count = r.ReadInt32();
+        var cubes = new Cube[count];
+        for (int k = 0; k < count; k++) cubes[k] = ReadCube(r);
         return new OctaEdit.CapturedBlock
         {
             Descriptor = new Block3(o, s, grid, orient),
@@ -239,43 +196,40 @@ public static class CommandCodec
         };
     }
 
-    /// <summary>Encode one cube: [faces0, faces1, faces2, tex0..5, material, merged, visible, children?].</summary>
-    public static Godot.Collections.Array WriteCube(Cube c)
+    private static void WriteCube(BinaryWriter w, Cube c)
     {
-        var a = new Godot.Collections.Array
+        w.Write(c.Faces[0]);
+        w.Write(c.Faces[1]);
+        w.Write(c.Faces[2]);
+        for (int i = 0; i < 6; i++) w.Write(c.Texture[i]);
+        w.Write(c.Material);
+        w.Write(c.Merged);
+        w.Write(c.Visible);
+        if (c.Children == null)
         {
-            (long)c.Faces[0], (long)c.Faces[1], (long)c.Faces[2],
-        };
-        for (int i = 0; i < 6; i++) a.Add((int)c.Texture[i]);
-        a.Add((int)c.Material);
-        a.Add((int)c.Merged);
-        a.Add((int)c.Visible);
-        if (c.Children == null) a.Add(false);
+            w.Write(false);
+        }
         else
         {
-            a.Add(true);
-            var ch = new Godot.Collections.Array();
-            for (int i = 0; i < 8; i++) ch.Add(WriteCube(c.Children[i]));
-            a.Add(ch);
+            w.Write(true);
+            for (int i = 0; i < 8; i++) WriteCube(w, c.Children[i]);
         }
-        return a;
     }
 
-    public static Cube ReadCube(Godot.Collections.Array a)
+    private static Cube ReadCube(BinaryReader r)
     {
         var c = new Cube();
-        c.Faces[0] = (uint)(long)a[0];
-        c.Faces[1] = (uint)(long)a[1];
-        c.Faces[2] = (uint)(long)a[2];
-        for (int i = 0; i < 6; i++) c.Texture[i] = (ushort)(int)a[3 + i];
-        c.Material = (ushort)(int)a[9];
-        c.Merged = (byte)(int)a[10];
-        c.Visible = (byte)(int)a[11];
-        if ((bool)a[12])
+        c.Faces[0] = r.ReadUInt32();
+        c.Faces[1] = r.ReadUInt32();
+        c.Faces[2] = r.ReadUInt32();
+        for (int i = 0; i < 6; i++) c.Texture[i] = r.ReadUInt16();
+        c.Material = r.ReadUInt16();
+        c.Merged = r.ReadByte();
+        c.Visible = r.ReadByte();
+        if (r.ReadBoolean())
         {
-            var ch = a[13].As<Godot.Collections.Array>();
             c.Children = new Cube[8];
-            for (int i = 0; i < 8; i++) c.Children[i] = ReadCube(ch[i].As<Godot.Collections.Array>());
+            for (int i = 0; i < 8; i++) c.Children[i] = ReadCube(r);
         }
         return c;
     }
