@@ -128,6 +128,7 @@ table KeyframePackage {
     keyframe_index: uint32;          // Monotonically increasing milestone ID
     format_version: uint32 = 1;
     world_scale: int32;              // WorldSize = 1 << world_scale
+    git_commit: string;              // Git commit SHA pegging keyframe to repository state
     base_snapshot_hash: [ubyte];     // 32-byte SHA-256 of the immediate parent keyframe
     chunks: [ChunkKeyframe];         // Independent 8 root octants
     entities: [EntityCmd];           // Active map entities at this keyframe
@@ -196,6 +197,18 @@ sequenceDiagram
 3. **Squashing Pre-Remip History**: Commands submitted prior to the `remip` are retired from the active delta stream. The new keyframe becomes the new base ground truth.
 4. **Instant Runtime Load**:
    $$\text{World at HEAD} = \text{LoadKeyframe}(\text{LatestKeyframe}) \xrightarrow{\text{replay}} \text{ApplyDeltas}(\text{PostRemipCommands})$$
+
+### Pegging Keyframes to Git Commits (Preventing Drift)
+A major risk with binary keyframe caches in collaborative development is **silent drift**:
+* Level geometry depends on engine assets: texture vslots in `manifest.tres`, GLTF mapmodels, material shaders, and entity property definitions.
+* If a developer bakes a keyframe at Git commit $C_A$, and another developer checks out commit $C_B$ (where textures or entity attributes were re-indexed or refactored), playing on the old keyframe causes subtle asset corruption or misalignments.
+
+**Mechanism**:
+* Whenever `CaptureKeyframe` runs, the editor queries the clean Git repository commit (`git rev-parse HEAD`).
+* **On Load Drift Detection**:
+  - In editor and dev-builds, `MapStore.LoadWorld()` checks `keyframe.git_commit` against current `HEAD`.
+  - If they diverge, a clear warning is logged indicating the keyframe was generated at a different repository revision, and the editor prompts or auto-recomputes the keyframe if necessary.
+  - In `flatc --json` exports, every keyframe explicitly states the Git commit that produced it, giving a 100% auditable history.
 
 ---
 
@@ -357,6 +370,7 @@ table KeyframePackage {
     keyframe_index: uint32;
     format_version: uint32 = 1;
     world_scale: int32;
+    git_commit: string;              // Git commit SHA pegging keyframe to clean repository state
     base_snapshot_hash: [ubyte];     // 32-byte SHA-256
     chunks: [ChunkKeyframe];
     entities: [EntityCmd];
@@ -410,6 +424,7 @@ root_type MapPackage;
 * **Solves the Remip Wall**: Keyframe snapshots at remip boundaries eliminate the need to replay thousands of obsolete pre-remip micro-operations.
 * **Lean Dependencies**: Deletes `System.IO.Hashing`, `ObjectId.cs`, and `MapObjectStore.cs`. Standard SHA-256 handles all map hashing with hardware acceleration.
 * **High Density & Speed**: The hybrid container + pre-order stream achieves ~25–29 bytes per cube and sub-10ms deserialization.
+* **Zero Drift via Git Commit Pegging**: Every keyframe records the exact Git commit SHA that generated it, enabling instant drift detection when branch assets or entity schemas diverge.
 * **Workshop-Ready**: Diff packages depend solely on a 32-byte SHA-256 `base_map_hash` and intermediate chunk keyframes.
 * **Zero Repo Bloat**: Git tracks clean binary packages without millions of lines of unmergeable `.tres` text logs.
 
