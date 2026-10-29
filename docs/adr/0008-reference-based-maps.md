@@ -120,6 +120,18 @@ table ChunkKeyframe {
     data: [ubyte];                   // Dense pre-order cube stream
 }
 
+table EnvironmentSettings {
+    sun_color: uint32;               // 0xRRGGBB packed hex (sunlight)
+    sun_scale: float32;              // Intensity multiplier (sunlightscale)
+    sun_yaw: float32;                // Direction yaw in degrees (sunlightyaw)
+    sun_pitch: float32;              // Direction pitch in degrees (sunlightpitch)
+    sky_color: uint32;               // 0xRRGGBB (skylight)
+    ambient_color: uint32;           // 0xRRGGBB (ambient)
+    skybox: string;                  // Cubemap texture prefix/path
+    fog_distance: float32;           // Fog view distance in world units
+    fog_color: uint32;               // 0xRRGGBB (fogcolour)
+}
+
 table KeyframePackage {
     keyframe_index: uint32;          // Monotonically increasing milestone ID
     format_version: uint32 = 1;
@@ -128,6 +140,7 @@ table KeyframePackage {
     base_snapshot_hash: [ubyte];     // 32-byte SHA-256 of the immediate parent keyframe
     chunks: [ChunkKeyframe];         // Independent 8 root octants
     entities: [EntityCmd];           // Active map entities at this keyframe
+    environment: EnvironmentSettings; // Authoritative map environment & sun configuration
 }
 ```
 
@@ -314,6 +327,7 @@ enum WorldOp : ubyte {
     AddEntity = 40,
     RemoveEntity = 41,
     EditEntity = 42,
+    SetEnvironment = 43,
     ReplaceBlock = 50
 }
 
@@ -374,12 +388,25 @@ table EntityCmd {
     attr5: int32;
 }
 
+table SetEnvironmentCmd {
+    sun_color: uint32;               // 0xRRGGBB packed hex (sunlight)
+    sun_scale: float32;              // Intensity multiplier (sunlightscale)
+    sun_yaw: float32;                // Direction yaw in degrees (sunlightyaw)
+    sun_pitch: float32;              // Direction pitch in degrees (sunlightpitch)
+    sky_color: uint32;               // 0xRRGGBB (skylight)
+    ambient_color: uint32;           // 0xRRGGBB (ambient)
+    skybox: string;                  // Cubemap texture prefix/path
+    fog_distance: float32;           // Fog view distance in world units
+    fog_color: uint32;               // 0xRRGGBB (fogcolour)
+}
+
 union CommandPayload {
     EditFaceCmd,
     SetTextureCmd,
     DeleteCubeCmd,
     RemipCmd,
-    EntityCmd
+    EntityCmd,
+    SetEnvironmentCmd
 }
 
 table WorldCommand {
@@ -405,6 +432,7 @@ table KeyframePackage {
     base_snapshot_hash: [ubyte];     // 32-byte SHA-256
     chunks: [ChunkKeyframe];
     entities: [EntityCmd];
+    environment: SetEnvironmentCmd;  // Authoritative lighting & skybox state
 }
 
 table MapPackage {
@@ -417,6 +445,7 @@ table MapPackage {
     keyframes: [KeyframePackage];    // Intermediary snapshots taken at remip / milestones
     deltas: [WorldCommand];          // Commands applied since the latest keyframe
     entities: [EntityCmd];           // Active world entities
+    environment: SetEnvironmentCmd;  // Baseline map environment
 }
 
 table NetworkPacket {
@@ -429,7 +458,81 @@ root_type MapPackage;
 
 ---
 
-## 8. Migration & Implementation Strategy
+## 8. Lighting and Scene Tree Synchronization
+
+A critical question is how lights and environmental lighting parameters synchronize between the low-latency FlatBuffers wire protocol (`schema.fbs`), the saved map files (`map.bin`), the Godot scene tree (`Level.tscn`), and the GPU Radiance Hints baker ([ADR 0002](0002-radiance-hints.md)).
+
+### A. How Sauerbraten Handled Sun & Environment (SVN r6889)
+In classic Sauerbraten, sun and environment parameters were **not entities** (`ET_LIGHT`) and were not part of the `.ogz` octree payload:
+1. **Map-Override Variables (`IDF_OVERRIDE`)**:
+   `sunlight`, `sunlightyaw`, `sunlightpitch`, `sunlightscale`, `skylight`, `ambient`, `skybox`, and `fog` were engine variables declared with macros like `VARFR`, `HVARFR`, and `FVARFR` (`lightmap.cpp`). The trailing `R` marked them with `IDF_OVERRIDE` (`command.h`).
+2. **Network Replication (`N_EDITVAR`)**:
+   During coop editing (`m_edit`), modifying any `IDF_OVERRIDE` variable triggered `vartrigger(ident *id)` (`client.cpp`), transmitting `N_EDITVAR` (`addmsg(N_EDITVAR, "risi", ...)`). The server broadcast this to all peers, invoking `setvar` / `setfvar` / `setsvar`.
+3. **Internal Virtual Light (`sunlightent`)**:
+   Adjusting `sunlight` called `setupsunlight()`, constructing an internal directional entity (`ET_LIGHT`) placed at infinity along `sunlightdir` to feed the shadowray lightmapper.
+4. **Persistence**:
+   Variables were dumped to `<map>.cfg` (CubeScript). Maps transferred over the wire via `N_SENDMAP` sent the `.ogz` geometry and `.cfg` text script together.
+
+### B. The Scene Tree Problem in Revival
+In Revival, [`Level.tscn`](#5-map-package-directory-layout) provides Godot engine nodes (`DirectionalLight3D`, `WorldEnvironment`). However, **`Level.tscn` is a static Godot scene file on disk and is not streamed over ENet during live coop-edit sessions**. 
+
+If sunlight and skybox were only stored in `Level.tscn`, coop-edit peers could never modify the sun angle, lighting color, or fog collaboratively.
+
+### C. The Two Synchronization Paths in Revival
+
+```mermaid
+graph TD
+    subgraph FlatBuffers Wire / Command Stream
+        Cmd[WorldCommand]
+        Cmd -->|WorldOp.AddEntity / EditEntity| ECmd[EntityCmd<br>ET_LIGHT / ET_SPOTLIGHT]
+        Cmd -->|WorldOp.SetEnvironment| EnvCmd[SetEnvironmentCmd<br>Sun yaw/pitch, colors, fog]
+    end
+
+    subgraph Scene Tree Projections MapLevel
+        ECmd -->|LightBuilder.Build| LightNodes[OmniLight3D / SpotLight3D<br>Parent: Lights Node<br>Owner: null]
+        EnvCmd -->|Update Scene| SunNode[DirectionalLight3D & WorldEnvironment<br>Yaw, Pitch, Energy, Fog]
+    end
+
+    subgraph GPU Radiance Hints ADR 0002
+        ECmd -->|RadianceVolume.UpdateLights| LightSSBO[LightBuffer SSBO & Dirty AABB]
+        EnvCmd -->|RadianceVolume.UpdateSun| SunParams[SunDirSauer & Direct Sun Shadow Ray]
+        LightSSBO --> GPUBake[GpuRadianceBaker Compute Shader<br>~2 ms probe update]
+        SunParams --> GPUBake
+    end
+
+    subgraph Shading
+        LightNodes --> DynamicShading[Godot Forward+ Pass<br>Players, Models, Items, Projectiles]
+        GPUBake --> OctreeShading[radiance.gdshader<br>World Octree Geometry<br>render_mode ambient_light_disabled]
+    end
+```
+
+#### 1. In-World Entity Lights (`ET_LIGHT` & `ET_SPOTLIGHT`)
+* **Storage & Transmission**:
+  * Carried in `KeyframePackage.entities: [EntityCmd]` and `MapPackage.entities: [EntityCmd]`.
+  * Streamed across ENet via `WorldCommand` with `op = WorldOp.AddEntity`, `EditEntity`, or `RemoveEntity`.
+* **Scene Tree Materialization (Runtime Projections)**:
+  * On load, `MapLevel` materializes entities via `LightBuilder.Build(Entities)` under a child `Lights` node.
+  * These nodes are instantiated with `Node.Owner = null`. As established in [editor-and-commands.md §7.2](../editor-and-commands.md#72-entities-are-command-versioned-runtime-projections-not-scene-data), **they are never serialized back into `Level.tscn`**.
+* **Role in Rendering**:
+  * **Dynamic Entities**: Godot's Forward+ pipeline uses these `OmniLight3D` / `SpotLight3D` nodes to illuminate dynamic objects (`MapPlayer`, mapmodels, pickups, projectiles).
+  * **World Octree Geometry**: As specified in [ADR 0002](0002-radiance-hints.md#30-33), world surfaces use `render_mode ambient_light_disabled` with an empty `void light() {}` to avoid Forward+ light overhead. Instead, editing an entity light calls `RadianceVolume.UpdateLights()`, marking the light's radius dirty for an incremental ~2 ms GPU probe rebake.
+
+#### 2. Global Sun & Environment (`SetEnvironmentCmd` / `N_EDITVAR` Modernization)
+* **Storage & Transmission**:
+  * Carried in `KeyframePackage.environment` and `MapPackage.environment`.
+  * Streamed across ENet via `WorldCommand` with `op = WorldOp.SetEnvironment` and payload `SetEnvironmentCmd`.
+* **Scene Tree Synchronization**:
+  * On receiving `SetEnvironmentCmd`, `MapLevel` updates the scene's `DirectionalLight3D` (`LightColor`, `LightEnergy`, and Euler rotation calculated from `sun_yaw` and `sun_pitch`).
+  * `WorldEnvironment` is updated with `ambient_color`, `sky_color`, and fog settings.
+* **GPU Radiance Hints**:
+  * Updates `RadianceVolume.SunDirSauer`, `SunColor`, and `SunRadiance`.
+  * Triggers an immediate direct sun shadow ray update in `GpuRadianceBaker`, updating the probe volume across all clients in real time.
+* **Keyframe & Workshop Parity**:
+  * When baking keyframes or distributing Steam Workshop diffs, the active `SetEnvironmentCmd` is serialized directly into `map.bin`. Headless dedicated servers and downloading clients achieve 100% lighting parity without needing to modify or regenerate `Level.tscn`.
+
+---
+
+## 9. Migration & Implementation Strategy
 
 1. **Add `FlatSharp` Package & Prune `System.IO.Hashing`**:
    * Add `FlatSharp.Runtime` and `FlatSharp.Compiler` via NuGet to `SauerbratenRevival.csproj`.
