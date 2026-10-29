@@ -5,6 +5,7 @@ using FlatSharp;
 using Godot;
 using SauerbratenRevival.Format;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Editor;
 
 namespace SauerbratenRevival.World.Network;
 

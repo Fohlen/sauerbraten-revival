@@ -2,6 +2,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 namespace SauerbratenRevival.Tests;
@@ -310,7 +311,7 @@ public class OctaFaceTest : GoTestBase
         for (int l = 0; l < 6; l++) upper.Texture[l] = 9;
         upper.EmptyFaces();
 
-        var sel = new SauerbratenRevival.World.Commands.Selection(
+        var sel = new Selection(
             new Vector3I(0, 0, 2), new Vector3I(1, 1, 1), 2, (int)Orient.Bottom);
         OctaEdit.EditFace(w, sel, dir: -1, mode: 1);
         TestAssert.True(lower.IsEntirelySolid(), "mode 1 fill pulls the slice solid");

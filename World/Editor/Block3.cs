@@ -1,6 +1,6 @@
 using Godot;
 
-namespace SauerbratenRevival.World.Commands;
+namespace SauerbratenRevival.World.Editor;
 
 /// <summary>
 /// A rectangular region of an octree at a fixed grid size — a C# port of

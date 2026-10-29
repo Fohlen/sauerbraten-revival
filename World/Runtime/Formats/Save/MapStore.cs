@@ -4,6 +4,7 @@ using System.IO;
 using System.Security.Cryptography;
 using Godot;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Network;
 

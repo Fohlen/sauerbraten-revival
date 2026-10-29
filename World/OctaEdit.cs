@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Physics;
 
@@ -266,7 +267,7 @@ public static class OctaEdit
     /// octaedit.cpp:282 <c>blockcube(x, y, z, b, rgrid)</c> — look up a cube inside
     /// a block by (x,y,z) grid coordinates, mapping through the block's orientation.
     /// </summary>
-    public static Cube BlockCube(Octa octa, int x, int y, int z, Commands.Block3 b, int rgrid)
+    public static Cube BlockCube(Octa octa, int x, int y, int z, Block3 b, int rgrid)
     {
         return BlockCube(octa, x, y, z, b, rgrid, out _, out _);
     }
@@ -275,7 +276,7 @@ public static class OctaEdit
     /// octaedit.cpp:282 <c>blockcube(x, y, z, b, rgrid)</c>, also returning the
     /// resolved cube origin/size via <paramref name="ro"/>/<paramref name="rsize"/>.
     /// </summary>
-    public static Cube BlockCube(Octa octa, int x, int y, int z, Commands.Block3 b, int rgrid,
+    public static Cube BlockCube(Octa octa, int x, int y, int z, Block3 b, int rgrid,
         out Vector3I ro, out int rsize)
     {
         int dim = b.Orient >> 1, dc = b.Orient & 1;
@@ -303,7 +304,7 @@ public static class OctaEdit
     /// The iteration order matches the original's
     /// <c>loop(z, s[D[dim]]) loop(y, s[C[dim]]) loop(x, s[R[dim]])</c>.
     /// </summary>
-    public static void ForEachSelCube(Octa octa, Commands.Block3 sel, int rgrid,
+    public static void ForEachSelCube(Octa octa, Block3 sel, int rgrid,
         System.Action<int, int, int, Cube> body)
     {
         int dim = sel.Orient >> 1;
@@ -339,16 +340,16 @@ public static class OctaEdit
     /// </summary>
     public sealed class CapturedBlock
     {
-        public Commands.Block3 Descriptor;
+        public Block3 Descriptor;
         public Cube[] Cubes = System.Array.Empty<Cube>();
     }
 
     /// <summary>
     /// octaedit.cpp:663 <c>blockcopy(s, rgrid)</c> — capture every cube in a
-    /// selection into a portable block. The block's own <see cref="Commands.Block3"/>
+    /// selection into a portable block. The block's own <see cref="Block3"/>
     /// keeps the origin/size/grid/orient so it can be re-oriented on paste.
     /// </summary>
-    public static CapturedBlock BlockCopy(Octa octa, Commands.Block3 s, int rgrid)
+    public static CapturedBlock BlockCopy(Octa octa, Block3 s, int rgrid)
     {
         var cap = new CapturedBlock { Descriptor = s };
         int dim = s.Orient >> 1;
@@ -372,7 +373,7 @@ public static class OctaEdit
     /// children, or carries a non-air material. Empty source cells leave the
     /// destination untouched.
     /// </summary>
-    public static void PasteBlock(Octa octa, CapturedBlock block, Commands.Block3 target, int rgrid)
+    public static void PasteBlock(Octa octa, CapturedBlock block, Block3 target, int rgrid)
     {
         int dim = block.Descriptor.Orient >> 1;
         int n = 0;
@@ -395,7 +396,7 @@ public static class OctaEdit
     /// octaedit.cpp:2098 <c>mpdelcube</c> — delete the selected cubes: discard any
     /// children and empty the faces. This is the editor's "remove".
     /// </summary>
-    public static void DeleteCube(Octa octa, Commands.Block3 sel)
+    public static void DeleteCube(Octa octa, Block3 sel)
     {
         ForEachSelCube(octa, sel, sel.Grid, (x, y, z, c) =>
         {
@@ -416,14 +417,14 @@ public static class OctaEdit
     /// 0 = push/pull faces (whole cube), 1 = fill/empty slice, 2 = push/pull a single
     /// corner. <paramref name="sel"/> is mutated (origin/slice) as in the original.
     /// </summary>
-    public static void EditFace(Octa octa, Commands.Selection sel, int dir, int mode)
+    public static void EditFace(Octa octa, Selection sel, int dir, int mode)
     {
         // octaedit.cpp:1986 — corner/edge state only permits mode 1 when centred.
         if (mode == 1 && (sel.Cx != 0 || sel.Cy != 0 || (sel.Cxs & 1) != 0 || (sel.Cys & 1) != 0))
             mode = 0;
 
-        int d = Commands.Selection.Dimension(sel.Orient);
-        int dc = Commands.Selection.DimCoord(sel.Orient);
+        int d = Selection.Dimension(sel.Orient);
+        int dc = Selection.DimCoord(sel.Orient);
         int seldir = dc != 0 ? -dir : dir;
 
         if (mode == 1)
@@ -436,7 +437,7 @@ public static class OctaEdit
         if (dc != 0) sel.O = SetAxis(sel.O, d, sel.O[d] + sel.Us(d) - sel.Grid);
         sel.S = SetAxis(sel.S, d, 1);
 
-        var slab = new Commands.Block3(sel.O, sel.S, sel.Grid, sel.Orient);
+        var slab = new Block3(sel.O, sel.S, sel.Grid, sel.Orient);
         ForEachSelCube(octa, slab, sel.Grid, (x, y, z, c) =>
         {
             if (c.Children != null) c.SolidFaces();
@@ -533,7 +534,7 @@ public static class OctaEdit
     }
 
     /// <summary>Backwards-compatible wrapper: <c>Fill</c> is <see cref="EditFace"/> with the fill mode.</summary>
-    public static void Fill(Octa octa, Commands.Selection sel, int dir, int mode) => EditFace(octa, sel, dir, mode);
+    public static void Fill(Octa octa, Selection sel, int dir, int mode) => EditFace(octa, sel, dir, mode);
 
     // ---- selection flip / rotate (octaedit.cpp mpflip / mprotate) ----
 
@@ -567,12 +568,12 @@ public static class OctaEdit
     /// octaedit.cpp:2673 <c>mpflip</c> — mirror the whole selection along the oriented
     /// axis: flip each cube and swap the two halves.
     /// </summary>
-    public static void FlipSelection(Octa octa, Commands.Selection sel)
+    public static void FlipSelection(Octa octa, Selection sel)
     {
-        int d = Commands.Selection.Dimension(sel.Orient);
+        int d = Selection.Dimension(sel.Orient);
         int r = Octa.R[d], cc = Octa.C[d], zz = Octa.D[d];
         int zs = sel.S[zz];
-        var b = new Commands.Block3(sel);
+        var b = new Block3(sel);
         for (int y = 0; y < sel.S[cc]; y++)
             for (int x = 0; x < sel.S[r]; x++)
             {
@@ -589,16 +590,16 @@ public static class OctaEdit
     /// the oriented axis, permuting positions (<c>rotatequad</c>) and rotating each
     /// cube's faces (<c>rotatecube</c>). <paramref name="cw"/> &gt; 0 = clockwise.
     /// </summary>
-    public static void RotateSelection(Octa octa, Commands.Selection sel, int cw)
+    public static void RotateSelection(Octa octa, Selection sel, int cw)
     {
-        int d = Commands.Selection.Dimension(sel.Orient);
-        if (Commands.Selection.DimCoord(sel.Orient) == 0) cw = -cw;
+        int d = Selection.Dimension(sel.Orient);
+        if (Selection.DimCoord(sel.Orient) == 0) cw = -cw;
         int r = Octa.R[d], cc = Octa.C[d], zz = Octa.D[d];
         int m = sel.S[cc] < sel.S[r] ? cc : r;
         int ss = System.Math.Max(sel.S[r], sel.S[cc]);
         sel.S = SetAxis(sel.S, m, ss);
 
-        var b = new Commands.Block3(sel);
+        var b = new Block3(sel);
         for (int z = 0; z < sel.S[zz]; z++)
             for (int pass = 0; pass < (cw > 0 ? 1 : 3); pass++)
             {
@@ -651,7 +652,7 @@ public static class OctaEdit
     /// octaedit.cpp:2565 <c>mpreplacetex</c> — replace a texture across a selection
     /// (or the whole world when <paramref name="insel"/> is false).
     /// </summary>
-    public static void ReplaceTexture(Octa octa, Commands.Block3? sel, int oldtex, int newtex, bool insel)
+    public static void ReplaceTexture(Octa octa, Block3? sel, int oldtex, int newtex, bool insel)
     {
         if (insel && sel.HasValue)
         {
@@ -708,7 +709,7 @@ public static class OctaEdit
     /// the same mask/filter derivation the original uses. <paramref name="matid"/> &lt; 0
     /// removes the filtered material.
     /// </summary>
-    public static void EditMaterial(Octa octa, Commands.Block3 sel, int matid, int filter)
+    public static void EditMaterial(Octa octa, Block3 sel, int matid, int filter)
     {
         ushort filtermat = 0, filtermask = 0, matmask;
         int filtergeom = 0;

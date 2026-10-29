@@ -1,6 +1,6 @@
 using Godot;
 
-namespace SauerbratenRevival.World.Commands;
+namespace SauerbratenRevival.World.Editor;
 
 /// <summary>
 /// Editor selection state — a C# port of <c>selinfo</c> (shared/iengine.h:62) plus

@@ -2,6 +2,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Editor;
 
 namespace SauerbratenRevival.Tests;
 

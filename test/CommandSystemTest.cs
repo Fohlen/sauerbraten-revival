@@ -3,6 +3,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Network;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
@@ -61,7 +62,7 @@ public class CommandSystemTest : GoTestBase
     public void CodecRoundTripsDeleteCube()
     {
         var cmd = new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(8, 0, 0), 8)));
-        var back = CommandCodec.Decode(CommandCodec.Encode(cmd));
+        var back = NetMessage.Decode(NetMessage.Encode(cmd));
         TestAssert.Equal(WorldOp.DeleteCube, back.Op, "op");
         var p = (DeleteCubePayload)back.Payload;
         TestAssert.Equal(new Vector3I(8, 0, 0), p.Selection.Origin, "origin");
@@ -72,7 +73,7 @@ public class CommandSystemTest : GoTestBase
     public void CodecRoundTripsFill()
     {
         var cmd = new Command(WorldOp.EditFace, new EditFacePayload(Cell(new Vector3I(0, 0, 8), 4), dir: -1, mode: 1));
-        var back = (EditFacePayload)CommandCodec.Decode(CommandCodec.Encode(cmd)).Payload;
+        var back = (EditFacePayload)NetMessage.Decode(NetMessage.Encode(cmd)).Payload;
         TestAssert.Equal(-1, back.Dir, "dir");
         TestAssert.Equal(1, back.Mode, "mode");
         TestAssert.Equal(new Vector3I(0, 0, 8), back.Selection.Origin, "origin");
@@ -82,12 +83,12 @@ public class CommandSystemTest : GoTestBase
     public void CodecRoundTripsSetFaceTextureAndMaterial()
     {
         var tex = new Command(WorldOp.SetFaceTexture, new SetFaceTexturePayload(Cell(new Vector3I(0, 0, 0), 8), 7, -1));
-        var btex = (SetFaceTexturePayload)CommandCodec.Decode(CommandCodec.Encode(tex)).Payload;
+        var btex = (SetFaceTexturePayload)NetMessage.Decode(NetMessage.Encode(tex)).Payload;
         TestAssert.Equal(7, btex.Texture, "texture");
         TestAssert.Equal(-1, btex.Orient, "orient");
 
         var mat = new Command(WorldOp.SetFaceMaterial, new SetFaceMaterialPayload(Cell(new Vector3I(0, 0, 0), 8), Octa.MAT_WATER, 0x3F));
-        var bmat = (SetFaceMaterialPayload)CommandCodec.Decode(CommandCodec.Encode(mat)).Payload;
+        var bmat = (SetFaceMaterialPayload)NetMessage.Decode(NetMessage.Encode(mat)).Payload;
         TestAssert.Equal(Octa.MAT_WATER, bmat.MaterialId, "material");
         TestAssert.Equal(0x3F, bmat.Filter, "filter");
     }
@@ -103,7 +104,7 @@ public class CommandSystemTest : GoTestBase
         var block = OctaEdit.BlockCopy(w, src, 4);
 
         var cmd = new Command(WorldOp.ReplaceBlock, new ReplaceBlockPayload(Cell(new Vector3I(4, 0, 0), 4), block));
-        var back = (ReplaceBlockPayload)CommandCodec.Decode(CommandCodec.Encode(cmd)).Payload;
+        var back = (ReplaceBlockPayload)NetMessage.Decode(NetMessage.Encode(cmd)).Payload;
 
         TestAssert.True(back.Block != null, "block present");
         TestAssert.Equal(block.Cubes.Length, back.Block!.Cubes.Length, "cube count");
@@ -115,7 +116,7 @@ public class CommandSystemTest : GoTestBase
     public void CodecRoundTripsNewMap()
     {
         var cmd = new Command(WorldOp.NewMap, new NewMapPayload(12));
-        var back = CommandCodec.Decode(CommandCodec.Encode(cmd));
+        var back = NetMessage.Decode(NetMessage.Encode(cmd));
         TestAssert.Equal(WorldOp.NewMap, back.Op, "op");
         TestAssert.Equal(12, ((NewMapPayload)back.Payload).Scale, "scale");
     }
@@ -180,7 +181,7 @@ public class CommandSystemTest : GoTestBase
     public void CodecRoundTripsRemipAndPreservesSequence()
     {
         var cmd = new Command(WorldOp.Remip, new RemipPayload(true)) { Sequence = 42, AuthorPeerId = 3 };
-        var back = CommandCodec.Decode(CommandCodec.Encode(cmd));
+        var back = NetMessage.Decode(NetMessage.Encode(cmd));
         TestAssert.Equal(WorldOp.Remip, back.Op, "op");
         TestAssert.Equal(42UL, back.Sequence, "sequence");
         TestAssert.Equal(3, back.AuthorPeerId, "author");
@@ -296,7 +297,7 @@ public class CommandSystemTest : GoTestBase
     public void CodecRoundTripsCommand()
     {
         var cmd = new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8)), 2);
-        var back = CommandCodec.Decode(CommandCodec.Encode(cmd));
+        var back = NetMessage.Decode(NetMessage.Encode(cmd));
         TestAssert.Equal(WorldOp.DeleteCube, back.Op, "op preserved");
         TestAssert.Equal(2, back.AuthorPeerId, "author preserved");
     }

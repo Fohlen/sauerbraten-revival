@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Editor;
 
 namespace SauerbratenRevival.World.Commands;
 
