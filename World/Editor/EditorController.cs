@@ -436,8 +436,7 @@ public partial class EditorController : Node3D
         if (Sink == null) return;
         var sel = CurrentSelection();
         Sink.Submit(new Command(WorldOp.EditFace,
-            new EditFacePayload(new SelectionPayload(sel), dir, mode),
-            source: CommandSource.Editor));
+            new EditFacePayload(new SelectionPayload(sel), dir, mode)));
         InvalidateRegion(sel);
     }
 
@@ -447,8 +446,7 @@ public partial class EditorController : Node3D
         if (Sink == null) return;
         var sel = CurrentSelection();
         Sink.Submit(new Command(WorldOp.RotateCube,
-            new TransformCubePayload(new SelectionPayload(sel), cw),
-            source: CommandSource.Editor));
+            new TransformCubePayload(new SelectionPayload(sel), cw)));
         InvalidateRegion(sel);
     }
 
@@ -458,8 +456,7 @@ public partial class EditorController : Node3D
         if (Sink == null || !flip) return;
         var sel = CurrentSelection();
         Sink.Submit(new Command(WorldOp.FlipCube,
-            new TransformCubePayload(new SelectionPayload(sel)),
-            source: CommandSource.Editor));
+            new TransformCubePayload(new SelectionPayload(sel))));
         InvalidateRegion(sel);
     }
 
@@ -485,8 +482,7 @@ public partial class EditorController : Node3D
         CurrentTexture = tex;
         var sel = CurrentSelection();
         Sink.Submit(new Command(WorldOp.SetFaceTexture,
-            new SetFaceTexturePayload(new SelectionPayload(sel), tex, AllFaces ? -1 : sel.Orient),
-            source: CommandSource.Editor));
+            new SetFaceTexturePayload(new SelectionPayload(sel), tex, AllFaces ? -1 : sel.Orient)));
         InvalidateRegion(sel);
     }
 
@@ -501,8 +497,7 @@ public partial class EditorController : Node3D
         CurrentMaterial = materialId;
         var sel = CurrentSelection();
         Sink.Submit(new Command(WorldOp.SetFaceMaterial,
-            new SetFaceMaterialPayload(new SelectionPayload(sel), materialId, filter),
-            source: CommandSource.Editor));
+            new SetFaceMaterialPayload(new SelectionPayload(sel), materialId, filter)));
         InvalidateRegion(sel);
     }
 
@@ -514,8 +509,7 @@ public partial class EditorController : Node3D
     public void EditRemip(bool mipvis = false)
     {
         if (Sink == null) return;
-        Sink.Submit(new Command(WorldOp.Remip, new RemipPayload(mipvis),
-            source: CommandSource.Editor));
+        Sink.Submit(new Command(WorldOp.Remip, new RemipPayload(mipvis)));
         InvalidateAll();
     }
 
@@ -552,8 +546,7 @@ public partial class EditorController : Node3D
     {
         if (Sink == null) return;
         var sel = CurrentSelection();
-        Sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(new SelectionPayload(sel)),
-            source: CommandSource.Editor));
+        Sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(new SelectionPayload(sel))));
         InvalidateRegion(sel);
     }
 
@@ -590,8 +583,7 @@ public partial class EditorController : Node3D
         if (Sink == null || Clipboard == null) return;
         var sel = CurrentSelection();
         Sink.Submit(new Command(WorldOp.ReplaceBlock,
-            new ReplaceBlockPayload(new SelectionPayload(sel), Clipboard),
-            source: CommandSource.Editor));
+            new ReplaceBlockPayload(new SelectionPayload(sel), Clipboard)));
         InvalidateRegion(sel);
     }
 

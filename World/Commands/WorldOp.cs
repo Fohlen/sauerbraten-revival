@@ -1,23 +1,6 @@
 namespace SauerbratenRevival.World.Commands;
 
 /// <summary>
-/// Who issued a world command. Semantic (part of the wire/save format): it decides
-/// what consumers may do with an entry — in particular, only <see cref="Editor"/>
-/// commands are undoable (docs/editor-and-commands.md §5.5).
-/// </summary>
-public enum CommandSource : byte
-{
-    /// <summary>A human editor (Ctrl-Z applies only to these, authored by this peer).</summary>
-    Editor = 0,
-
-    /// <summary>A game mode (e.g. a crumbling wall, a scripted platform). Never undoable.</summary>
-    GameMode = 1,
-
-    /// <summary>A script or other automated author. Never undoable.</summary>
-    Script = 2,
-}
-
-/// <summary>
 /// Stable numeric id for a world-mutation command. Part of the wire, save and
 /// demo formats — **never reorder, append only** (docs/editor-and-commands.md §1.1).
 ///
@@ -42,6 +25,7 @@ public enum WorldOp : ushort
     AddEntity = 30,       // spawn a map entity
     RemoveEntity = 31,    // delete a map entity by stable EntityId
     EditEntity = 32,      // modify entity attributes / position
+    SetEnvironment = 43,  // sun/sky/fog lighting environment
     // --- lifecycle ---
     Snapshot = 100,       // no-op marker; carries a snapshot-ring index
     NewMap = 101,         // world.cpp emptymap: build a fresh empty world (floor + air)

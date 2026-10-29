@@ -63,11 +63,10 @@ public sealed class CommandLog
 
     /// <summary>
     /// Whether an entry is undoable by this client: it must be our own command
-    /// (§5.5 Rule 1, part 1) **and** an editor command (Rule 1, part 2 — game-mode
-    /// and script geometry is never undoable).
+    /// (§5.5 Rule 1: only commands authored by this peer are undoable).
     /// </summary>
     public bool IsUndoCandidate(LogEntry e) =>
-        e.Command.AuthorPeerId == LocalPeerId && e.Command.Source == CommandSource.Editor;
+        e.Command.AuthorPeerId == LocalPeerId;
 
     public CommandLog(int localPeerId = 0) => LocalPeerId = localPeerId;
 

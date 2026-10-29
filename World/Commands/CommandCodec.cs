@@ -12,34 +12,33 @@ namespace SauerbratenRevival.World.Commands;
 /// Every fixed-size command is blitted directly with MemoryMarshal.Write/Read,
 /// ensuring zero heap allocations and exact, deterministic memory layouts.
 /// </summary>
+[Obsolete("Manual byte blitting in CommandCodec is deprecated in favor of FlatSharp schema serialization (ADR 0008).")]
 public static class CommandCodec
 {
-    public const byte FormatVersion = 2;
+    public const byte FormatVersion = 3;
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public readonly struct CommandHeader
     {
-        public const int HeaderSize = 16;
+        public const int HeaderSize = 15;
 
         public readonly byte Version;
         public readonly ulong Sequence;
         public readonly int AuthorPeerId;
-        public readonly byte Source;
         public readonly ushort Op;
 
-        public CommandHeader(byte version, ulong sequence, int author, CommandSource source, WorldOp op)
+        public CommandHeader(byte version, ulong sequence, int author, WorldOp op)
         {
             Version = version;
             Sequence = sequence;
             AuthorPeerId = author;
-            Source = (byte)source;
             Op = (ushort)op;
         }
     }
 
     public static byte[] Encode(Command cmd)
     {
-        var header = new CommandHeader(FormatVersion, cmd.Sequence, cmd.AuthorPeerId, cmd.Source, cmd.Op);
+        var header = new CommandHeader(FormatVersion, cmd.Sequence, cmd.AuthorPeerId, cmd.Op);
 
         switch (cmd.Op)
         {
@@ -83,7 +82,6 @@ public static class CommandCodec
             throw new InvalidOperationException($"Unsupported command format version {header.Version} (expected {FormatVersion})");
 
         var op = (WorldOp)header.Op;
-        var source = (CommandSource)header.Source;
         var payloadSpan = data[CommandHeader.HeaderSize..];
 
         ICommandPayload payload = op switch
@@ -102,7 +100,7 @@ public static class CommandCodec
             _ => throw new NotSupportedException($"Cannot decode payload for {op}")
         };
 
-        return new Command(op, payload, header.AuthorPeerId, source) { Sequence = header.Sequence };
+        return new Command(op, payload, header.AuthorPeerId) { Sequence = header.Sequence };
     }
 
     public static Command Decode(byte[] data) => Decode(data.AsSpan());

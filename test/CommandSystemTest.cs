@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Network;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 namespace SauerbratenRevival.Tests;
@@ -291,28 +293,24 @@ public class CommandSystemTest : GoTestBase
     }
 
     [Test]
-    public void CodecRoundTripsCommandSource()
+    public void CodecRoundTripsCommand()
     {
-        foreach (var source in new[] { CommandSource.Editor, CommandSource.GameMode, CommandSource.Script })
-        {
-            var cmd = new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8)), 2, source);
-            var back = CommandCodec.Decode(CommandCodec.Encode(cmd));
-            TestAssert.Equal(source, back.Source, $"source {source} round-trips");
-            TestAssert.Equal(2, back.AuthorPeerId, "author preserved");
-        }
+        var cmd = new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8)), 2);
+        var back = CommandCodec.Decode(CommandCodec.Encode(cmd));
+        TestAssert.Equal(WorldOp.DeleteCube, back.Op, "op preserved");
+        TestAssert.Equal(2, back.AuthorPeerId, "author preserved");
     }
 
     [Test]
-    public void GameModeCommandIsNotUndoable()
+    public void RemoteCommandIsNotUndoable()
     {
         var (sink, octa) = SmallWorld();
-        // A game mode (crumbling wall) submits via the sink but is never undoable,
-        // even though it is our own server's command.
+        // A remote peer's command submits via the sink but is never undoable by local peer 0.
         sink.Submit(new Command(WorldOp.DeleteCube,
-            new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8)), author: 0, source: CommandSource.GameMode));
+            new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8)), author: 7));
 
-        TestAssert.True(sink.Log.PeekUndo() == null, "game-mode command is not an undo candidate");
-        TestAssert.True(sink.Undo() == null, "undo does not touch game-mode geometry");
+        TestAssert.True(sink.Log.PeekUndo() == null, "remote command is not an undo candidate");
+        TestAssert.True(sink.Undo() == null, "undo does not touch remote geometry");
     }
 
     [Test]
@@ -325,5 +323,96 @@ public class CommandSystemTest : GoTestBase
         var discarded = sink.Log.DiscardForUndo();
         TestAssert.True(discarded != null, "discarded an entry");
         TestAssert.True(sink.Log.PeekUndo() == null, "stack no longer offers it");
+    }
+
+    [Test]
+    public void NetMessageRoundTripsCommands()
+    {
+        var sel = new SelectionPayload(new Vector3I(16, 32, 64), new Vector3I(2, 4, 8), 8, 1);
+        var cmds = new List<Command>
+        {
+            new(WorldOp.DeleteCube, new DeleteCubePayload(sel), author: 3) { Sequence = 10 },
+            new(WorldOp.EditFace, new EditFacePayload(sel, dir: 1, mode: 0), author: 3) { Sequence = 11 },
+            new(WorldOp.SetFaceTexture, new SetFaceTexturePayload(sel, texture: 42, orient: 2), author: 3) { Sequence = 12 },
+            new(WorldOp.Remip, new RemipPayload(mipVis: true), author: 3) { Sequence = 13 },
+            new(WorldOp.AddEntity, new EntityPayload(101, 1, 100 * FixedPoint.DMF, 200 * FixedPoint.DMF, 300 * FixedPoint.DMF, 90), author: 3) { Sequence = 14 },
+            new(WorldOp.SetEnvironment, new SetEnvironmentPayload
+            {
+                SunColor = 0xFFAA55,
+                SunScale = 1.5f,
+                SunYaw = 120f,
+                SunPitch = 45f,
+                Skybox = "skyboxes/morning",
+            }, author: 3) { Sequence = 15 },
+        };
+
+        foreach (var original in cmds)
+        {
+            var flat = original.ToFlatCommand(timestamp: 12345);
+            var back = flat.ToCommand();
+
+            TestAssert.Equal(original.Op, back.Op, $"{original.Op} preserves Op");
+            TestAssert.Equal(original.Sequence, back.Sequence, $"{original.Op} preserves Sequence");
+            TestAssert.Equal(original.AuthorPeerId, back.AuthorPeerId, $"{original.Op} preserves Author");
+
+            switch (original.Payload)
+            {
+                case DeleteCubePayload d:
+                    var bd = (DeleteCubePayload)back.Payload;
+                    TestAssert.Equal(d.Selection.Origin, bd.Selection.Origin, "DeleteCube origin matches");
+                    TestAssert.Equal(d.Selection.Size, bd.Selection.Size, "DeleteCube size matches");
+                    break;
+                case EditFacePayload ef:
+                    var bef = (EditFacePayload)back.Payload;
+                    TestAssert.Equal(ef.Dir, bef.Dir, "EditFace dir matches");
+                    TestAssert.Equal(ef.Mode, bef.Mode, "EditFace mode matches");
+                    break;
+                case SetFaceTexturePayload st:
+                    var bst = (SetFaceTexturePayload)back.Payload;
+                    TestAssert.Equal(st.Texture, bst.Texture, "SetFaceTexture texture matches");
+                    TestAssert.Equal(st.Orient, bst.Orient, "SetFaceTexture orient matches");
+                    break;
+                case RemipPayload rp:
+                    var brp = (RemipPayload)back.Payload;
+                    TestAssert.Equal(rp.MipVis, brp.MipVis, "Remip mipvis matches");
+                    break;
+                case EntityPayload ep:
+                    var bep = (EntityPayload)back.Payload;
+                    TestAssert.Equal(ep.Id, bep.Id, "Entity id matches");
+                    TestAssert.Equal(ep.Attr1, bep.Attr1, "Entity attr1 matches");
+                    break;
+                case SetEnvironmentPayload env:
+                    var benv = (SetEnvironmentPayload)back.Payload;
+                    TestAssert.Equal(env.SunColor, benv.SunColor, "SetEnvironment sun_color matches");
+                    TestAssert.Equal(env.SunYaw, benv.SunYaw, "SetEnvironment sun_yaw matches");
+                    TestAssert.Equal(env.Skybox, benv.Skybox, "SetEnvironment skybox matches");
+                    break;
+            }
+        }
+    }
+
+    [Test]
+    public void NetMessagePackUnpackPacket()
+    {
+        var sel = new SelectionPayload(new Vector3I(64, 64, 64), new Vector3I(1, 1, 1), 8, 0);
+        var cmds = new List<Command>
+        {
+            new(WorldOp.DeleteCube, new DeleteCubePayload(sel), author: 1) { Sequence = 1 },
+            new(WorldOp.Remip, new RemipPayload(false), author: 1) { Sequence = 2 },
+        };
+
+        byte[] packetBytes = NetMessage.Pack(packetId: 77, cmds, timestamp: 999);
+        TestAssert.True(packetBytes.Length > 0, "Pack generated byte payload");
+
+        var packet = NetMessage.Unpack(packetBytes);
+        TestAssert.Equal(77u, packet.PacketId, "packet ID matches");
+        TestAssert.Equal(2, packet.Commands?.Count ?? 0, "packet command count matches");
+
+        var unpackedCmds = NetMessage.UnpackCommands(packetBytes);
+        TestAssert.Equal(2, unpackedCmds.Count, "unpacked commands count matches");
+        TestAssert.Equal(WorldOp.DeleteCube, unpackedCmds[0].Op, "first op matches");
+        TestAssert.Equal(WorldOp.Remip, unpackedCmds[1].Op, "second op matches");
+        TestAssert.Equal(1UL, unpackedCmds[0].Sequence, "first sequence matches");
+        TestAssert.Equal(2UL, unpackedCmds[1].Sequence, "second sequence matches");
     }
 }

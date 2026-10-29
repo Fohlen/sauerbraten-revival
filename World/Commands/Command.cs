@@ -22,27 +22,19 @@ public sealed class Command
     /// <summary>Which peer issued it (undo may only roll back this peer's commands, §5.5 Rule 1).</summary>
     public int AuthorPeerId { get; init; }
 
-    /// <summary>
-    /// What kind of author issued it. Only <see cref="CommandSource.Editor"/> commands
-    /// by this peer are undoable; game-mode and script commands never are (§5.5).
-    /// </summary>
-    public CommandSource Source { get; init; } = CommandSource.Editor;
-
     /// <summary>Op-specific parameters.</summary>
     public ICommandPayload Payload { get; init; } = EmptyPayload.Instance;
 
     public Command() { }
 
-    public Command(WorldOp op, ICommandPayload payload, int author = 0,
-        CommandSource source = CommandSource.Editor)
+    public Command(WorldOp op, ICommandPayload payload, int author = 0)
     {
         Op = op;
         Payload = payload;
         AuthorPeerId = author;
-        Source = source;
     }
 
-    public override string ToString() => $"{Op}#{Sequence}(peer {AuthorPeerId}, {Source})";
+    public override string ToString() => $"{Op}#{Sequence}(peer {AuthorPeerId})";
 }
 
 /// <summary>Marker for op-specific parameter sets. Each concrete type maps 1:1 to an <see cref="WorldOp"/>.</summary>
@@ -279,4 +271,18 @@ public readonly struct EntityPayload : ICommandPayload
         Attr4 = Attr4,
         Attr5 = Attr5,
     };
+}
+
+/// <summary><see cref="WorldOp.SetEnvironment"/>: map environment parameters (sun, sky, ambient, fog).</summary>
+public sealed class SetEnvironmentPayload : ICommandPayload
+{
+    public uint SunColor { get; init; } = 0xFFFFFF;
+    public float SunScale { get; init; } = 1f;
+    public float SunYaw { get; init; } = 104f;
+    public float SunPitch { get; init; } = 42f;
+    public uint SkyColor { get; init; } = 0x000000;
+    public uint AmbientColor { get; init; } = 0x191919;
+    public string Skybox { get; init; } = "";
+    public float FogDistance { get; init; } = 1000f;
+    public uint FogColor { get; init; } = 0x8099B3;
 }
