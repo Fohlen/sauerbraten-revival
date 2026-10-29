@@ -175,7 +175,7 @@ public partial class EmptyMap : Node3D, IGameWorld
             // Fast path: clone the cached octree and reuse its meshes.
             var cachedOcta = seed.Seed.Clone();
             Octa = cachedOcta;
-            Sink = new CommandSink(new OctaWorld(cachedOcta));
+            Sink = new CommandSink(cachedOcta);
             Physics = new OctaPhysics(cachedOcta);
             CreateRenderer(cachedOcta, seed.Mesh, materials: null);
             LinkChildEditors();
@@ -187,7 +187,7 @@ public partial class EmptyMap : Node3D, IGameWorld
         // seed cache is on) remember it for later instances.
         var octa = new Octa(WorldScale);
         Octa = octa;
-        Sink = new CommandSink(new OctaWorld(octa));
+        Sink = new CommandSink(octa);
         Sink.Submit(Command.CreateNewMap(WorldScale));
         Physics = new OctaPhysics(octa);
 

@@ -23,7 +23,7 @@ public class CommandSystemTest : GoTestBase
     private static (CommandSink Sink, Octa Octa) SmallWorld(int worldscale = 6)
     {
         var octa = new Octa(worldscale);
-        var sink = new CommandSink(new OctaWorld(octa));
+        var sink = new CommandSink(octa);
         return (sink, octa);
     }
 

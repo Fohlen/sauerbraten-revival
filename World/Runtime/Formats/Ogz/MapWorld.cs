@@ -426,7 +426,7 @@ public partial class MapWorld : Node3D, IGameWorld
         // Sauerbraten bounds are Z-up; the node rotates them to Godot Y-up.
         Bounds = Renderer.Bounds;
 
-        Sink = new Commands.CommandSink(new Commands.OctaWorld(octa));
+        Sink = new Commands.CommandSink(octa);
         LinkChildEditors();
 
         GD.Print($"[world] {path}: chunks={Renderer.ChunkCount} triangles={Renderer.TriangleCount}");

@@ -623,7 +623,7 @@ public partial class EditorController : Node3D
         if (!DirAccess.DirExistsAbsolute(ProjectSettings.GlobalizePath(MapDir))) return;
         var loaded = MapStore.Load(MapDir);
         Octa = loaded.World;
-        Sink = new CommandSink(new OctaWorld(loaded.World, loaded.Entities, loaded.Package?.Environment));
+        Sink = new CommandSink(loaded.World, loaded.Entities, loaded.Package?.Environment);
 
         // The renderer was built for the old octree: rebuild it against the loaded one.
         Renderer?.Setup(loaded.World, materials: null);

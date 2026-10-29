@@ -154,7 +154,7 @@ public partial class MapLevel : Node3D, IGameWorld
                 Package = loaded.Package;
                 Physics = new OctaPhysics(loaded.World);
                 if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
-                Sink = new CommandSink(new OctaWorld(loaded.World, EntitiesList, loaded.Package?.Environment));
+                Sink = new CommandSink(loaded.World, EntitiesList, loaded.Package?.Environment);
             }
         }
 

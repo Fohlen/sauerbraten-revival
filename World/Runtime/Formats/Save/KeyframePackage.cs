@@ -178,14 +178,14 @@ public partial class KeyframePackage
     }
 
     /// <summary>
-    /// Applies this keyframe package to an <see cref="OctaWorld"/>, restoring geometry, entities, and environment.
+    /// Applies this keyframe package to a <see cref="CommandSink"/>, restoring geometry, entities, and environment.
     /// </summary>
-    public void ApplyTo(OctaWorld world)
+    public void ApplyTo(CommandSink sink)
     {
-        ApplyTo(world.Octa, world.Entities);
+        ApplyTo(sink.Octa, sink.Entities);
         if (Environment != null)
         {
-            world.Environment = Environment;
+            sink.Environment = Environment;
         }
     }
 

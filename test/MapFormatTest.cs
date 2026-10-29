@@ -61,7 +61,7 @@ public class MapFormatTest : GoTestBase
     {
         var octa = new Octa(8);
         octa.EmptyMap(8);
-        var sink = new CommandSink(new OctaWorld(octa));
+        var sink = new CommandSink(octa);
         var cmds = new List<Command>
         {
             Command.CreateEditFace(
@@ -147,7 +147,7 @@ public class MapFormatTest : GoTestBase
 
         var changed = new Octa(8);
         changed.EmptyMap(8);
-        var sink = new CommandSink(new OctaWorld(changed));
+        var sink = new CommandSink(changed);
         sink.Submit(Command.CreateDeleteCube(
             new Selection(new Vector3I(0, 0, 0), new Vector3I(1, 1, 1), 8, 0)));
         MapStore.SaveCompacted(a, changed);
@@ -280,8 +280,7 @@ public class MapFormatTest : GoTestBase
     {
         var octa = new Octa(8);
         octa.EmptyMap(8);
-        var world = new OctaWorld(octa);
-        var sink = new CommandSink(world);
+        var sink = new CommandSink(octa);
 
         var entity = new MapEntity
         {
@@ -293,8 +292,8 @@ public class MapFormatTest : GoTestBase
 
         // 1. AddEntity
         sink.Submit(Command.CreateAddEntity(entity));
-        TestAssert.Equal(1, world.Entities.Count, "entity added");
-        TestAssert.Equal(42UL, world.Entities[0].Id, "entity ID preserved");
+        TestAssert.Equal(1, sink.Entities.Count, "entity added");
+        TestAssert.Equal(42UL, sink.Entities[0].Id, "entity ID preserved");
 
         // 2. EditEntity
         var edited = new MapEntity
@@ -305,27 +304,27 @@ public class MapFormatTest : GoTestBase
             Attr1 = 180,
         };
         sink.Submit(Command.CreateEditEntity(edited));
-        TestAssert.Equal(1, world.Entities.Count, "entity count remains 1");
-        TestAssert.Equal(200f, world.Entities[0].Position.X, "entity position edited");
-        TestAssert.Equal((short)180, world.Entities[0].Attr1, "entity attr edited");
+        TestAssert.Equal(1, sink.Entities.Count, "entity count remains 1");
+        TestAssert.Equal(200f, sink.Entities[0].Position.X, "entity position edited");
+        TestAssert.Equal((short)180, sink.Entities[0].Attr1, "entity attr edited");
 
         // Undo edit -> restores pre-edit state
         sink.Undo();
-        TestAssert.Equal(100f, world.Entities[0].Position.X, "undo restored pre-edit position");
-        TestAssert.Equal((short)90, world.Entities[0].Attr1, "undo restored pre-edit attr");
+        TestAssert.Equal(100f, sink.Entities[0].Position.X, "undo restored pre-edit position");
+        TestAssert.Equal((short)90, sink.Entities[0].Attr1, "undo restored pre-edit attr");
 
         // Redo edit -> reapplies edit
         sink.Redo();
-        TestAssert.Equal(200f, world.Entities[0].Position.X, "redo reapplied edited position");
+        TestAssert.Equal(200f, sink.Entities[0].Position.X, "redo reapplied edited position");
 
         // 3. RemoveEntity
         sink.Submit(Command.CreateRemoveEntity(42));
-        TestAssert.Equal(0, world.Entities.Count, "entity removed");
+        TestAssert.Equal(0, sink.Entities.Count, "entity removed");
 
         // Undo remove -> restores entity
         sink.Undo();
-        TestAssert.Equal(1, world.Entities.Count, "undo remove restored entity");
-        TestAssert.Equal(42UL, world.Entities[0].Id, "restored entity has correct ID");
+        TestAssert.Equal(1, sink.Entities.Count, "undo remove restored entity");
+        TestAssert.Equal(42UL, sink.Entities[0].Id, "restored entity has correct ID");
     }
 
     [Test]
@@ -472,8 +471,7 @@ public class MapFormatTest : GoTestBase
     {
         var octa = new Octa(10);
         octa.EmptyMap(10);
-        var world = new OctaWorld(octa);
-        var sink = new CommandSink(world);
+        var sink = new CommandSink(octa);
 
         TestAssert.Equal(0, sink.Keyframes.Count, "initially 0 keyframes");
         TestAssert.Equal(0, sink.Log.Entries.Count, "initially 0 log entries");
@@ -533,7 +531,7 @@ public class MapFormatTest : GoTestBase
 
         // Load via LoadWorld
         var loadedWorld = MapStore.LoadWorld(dir);
-        TestAssert.Equal(10, loadedWorld.Octa.WorldScale, "scale matches");
+        TestAssert.Equal(10, loadedWorld.World.WorldScale, "scale matches");
         TestAssert.Equal(1, loadedWorld.Entities.Count, "entities loaded");
         TestAssert.Equal(100UL, loadedWorld.Entities[0].Id, "entity ID matches");
 

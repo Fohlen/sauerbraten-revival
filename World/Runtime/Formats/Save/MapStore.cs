@@ -95,14 +95,14 @@ public static class MapStore
     }
 
     /// <summary>Read the world from a map directory via map.bin.</summary>
-    public static OctaWorld LoadWorld(string mapDir)
+    public static (Octa World, List<MapEntity> Entities, SetEnvironmentCmd? Environment) LoadWorld(string mapDir)
     {
         var loaded = Load(mapDir);
-        return new OctaWorld(loaded.World, loaded.Entities, loaded.Package?.Environment);
+        return (loaded.World, loaded.Entities, loaded.Package?.Environment);
     }
 
     /// <summary>Load a map: materializes latest keyframe from map.bin and replays trailing deltas.</summary>
-    public static LoadedMap Load(string mapDir, OctaWorld? world = null)
+    public static LoadedMap Load(string mapDir, CommandSink? sink = null)
     {
         string binPath = Globalize(Path.Combine(mapDir, MapPackageFileName));
         if (!File.Exists(binPath) && !ResourceLoader.Exists(binPath))
@@ -127,14 +127,14 @@ public static class MapStore
         }
 
         var env = latestKeyframe.Environment ?? package.Environment;
-        var target = world ?? new OctaWorld(octa, entities, env);
+        var targetSink = sink ?? new CommandSink(octa, entities, env);
         var deltas = package.Deltas != null ? package.Deltas.ToList() : new List<Command>();
-        foreach (var cmd in deltas) target.Apply(cmd);
+        foreach (var cmd in deltas) targetSink.Apply(cmd);
 
         return new LoadedMap
         {
             World = octa,
-            Entities = target.Entities,
+            Entities = targetSink.Entities,
             History = deltas,
             Package = package,
         };
