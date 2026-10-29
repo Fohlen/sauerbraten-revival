@@ -59,8 +59,9 @@ graph TD
 
 ---
 
-## 2. Retiring Custom Merkle DAGs, `System.IO.Hashing`, and `XxHash`
+## 2. Retiring Custom Merkle DAGs, Dual Command Representations, and Premature Interfaces
 
+### A. Merkle Hashing & `System.IO.Hashing`
 In earlier iterations, the codebase introduced `System.IO.Hashing` and `XxHash128` to support an in-binary Git clone: every octree cube, vertex block, and commit node was hashed into a 128-bit `ObjectId` to build a content-addressed Merkle DAG (`MapObjectStore`).
 
 By establishing that **map diffing only occurs between major `remip` keyframe snapshots and whole map packages**:
@@ -72,6 +73,20 @@ By establishing that **map diffing only occurs between major `remip` keyframe sn
 * **Clean Dependency Removal**:
   - Remove `System.IO.Hashing` from `SauerbratenRevival.csproj`.
   - Delete `World/Runtime/Formats/Save/ObjectId.cs` and `World/Runtime/Formats/Save/MapObjectStore.cs`.
+
+### B. Unifying on FlatSharp `Command` & Retiring In-Memory Duplication
+Previously, the engine maintained duplicate command representations:
+1. In-memory: `Command` class, `WorldOp` enum, and 12 distinct `ICommandPayload` structs (`EditFacePayload`, `DeleteCubePayload`, etc.) with manual struct layouts.
+2. Serialization/Wire: `WorldCommand` and table payloads in `schema.fbs`.
+3. An adapter translation layer (`NetMessage.cs`) copying fields back and forth between them.
+
+We retire the dual representations completely:
+* **`Command` in `schema.fbs` is the Single Source of Truth**: The FlatSharp-generated `Command` table is used directly as the first-class command object across the entire engine: in `CommandSink`, in `CommandLog` (undo/redo), over ENet wire transport, in session recordings, and on disk.
+* **No Translation Layer**: Commands constructed by editor tools or game modes are serialized directly with zero intermediate object copying.
+* **Direct FlatSharp POCOs**: FlatSharp generates idiomatic C# `partial class` definitions that serve natively as domain models.
+
+### C. Retiring `IWorld` Seam
+`IWorld` was an interface with only a single implementation: `OctaWorld`. With no alternative world implementations or test mocks required, `IWorld` is dropped and `OctaWorld` is used directly, eliminating redundant indirection and virtual dispatch.
 
 ---
 
@@ -299,7 +314,7 @@ graph LR
    * The package includes:
      - `base_map_hash`: 32-byte SHA-256 hash of the parent map or base snapshot.
      - `keyframes`: Intermediary `ChunkKeyframe` blobs capturing only the chunks modified across `remip`s.
-     - `deltas`: Vector of `WorldCommand`s applied on top of the latest keyframe.
+     - `deltas`: Vector of `Command`s applied on top of the latest keyframe.
      - `manifest_delta`: Texture and model additions.
 2. **Standalone Compilation**:
    * For maps built from scratch or for clients without the base map, the editor compiles a **Standalone Map Package** containing the full keyframe blob and all assets.
@@ -409,7 +424,7 @@ union CommandPayload {
     SetEnvironmentCmd
 }
 
-table WorldCommand {
+table Command {
     sequence: uint64;
     peer_id: int32;
     timestamp: uint32;
@@ -443,14 +458,14 @@ table MapPackage {
     base_map_hash: [ubyte];          // 32-byte SHA-256 if diff package, empty if standalone
     
     keyframes: [KeyframePackage];    // Intermediary snapshots taken at remip / milestones
-    deltas: [WorldCommand];          // Commands applied since the latest keyframe
+    deltas: [Command];               // Commands applied since the latest keyframe
     entities: [EntityCmd];           // Active world entities
     environment: SetEnvironmentCmd;  // Baseline map environment
 }
 
 table NetworkPacket {
     packet_id: uint32;
-    commands: [WorldCommand];
+    commands: [Command];
 }
 
 root_type MapPackage;
@@ -483,7 +498,7 @@ If sunlight and skybox were only stored in `Level.tscn`, coop-edit peers could n
 ```mermaid
 graph TD
     subgraph FlatBuffers Wire / Command Stream
-        Cmd[WorldCommand]
+        Cmd[Command]
         Cmd -->|WorldOp.AddEntity / EditEntity| ECmd[EntityCmd<br>ET_LIGHT / ET_SPOTLIGHT]
         Cmd -->|WorldOp.SetEnvironment| EnvCmd[SetEnvironmentCmd<br>Sun yaw/pitch, colors, fog]
     end
@@ -509,7 +524,7 @@ graph TD
 #### 1. In-World Entity Lights (`ET_LIGHT` & `ET_SPOTLIGHT`)
 * **Storage & Transmission**:
   * Carried in `KeyframePackage.entities: [EntityCmd]` and `MapPackage.entities: [EntityCmd]`.
-  * Streamed across ENet via `WorldCommand` with `op = WorldOp.AddEntity`, `EditEntity`, or `RemoveEntity`.
+  * Streamed across ENet via `Command` with `op = WorldOp.AddEntity`, `EditEntity`, or `RemoveEntity`.
 * **Scene Tree Materialization (Runtime Projections)**:
   * On load, `MapLevel` materializes entities via `LightBuilder.Build(Entities)` under a child `Lights` node.
   * These nodes are instantiated with `Node.Owner = null`. As established in [editor-and-commands.md §7.2](../editor-and-commands.md#72-entities-are-command-versioned-runtime-projections-not-scene-data), **they are never serialized back into `Level.tscn`**.
@@ -520,7 +535,7 @@ graph TD
 #### 2. Global Sun & Environment (`SetEnvironmentCmd` / `N_EDITVAR` Modernization)
 * **Storage & Transmission**:
   * Carried in `KeyframePackage.environment` and `MapPackage.environment`.
-  * Streamed across ENet via `WorldCommand` with `op = WorldOp.SetEnvironment` and payload `SetEnvironmentCmd`.
+  * Streamed across ENet via `Command` with `op = WorldOp.SetEnvironment` and payload `SetEnvironmentCmd`.
 * **Scene Tree Synchronization**:
   * On receiving `SetEnvironmentCmd`, `MapLevel` updates the scene's `DirectionalLight3D` (`LightColor`, `LightEnergy`, and Euler rotation calculated from `sun_yaw` and `sun_pitch`).
   * `WorldEnvironment` is updated with `ambient_color`, `sky_color`, and fog settings.

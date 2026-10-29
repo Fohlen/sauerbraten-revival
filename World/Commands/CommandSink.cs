@@ -1,6 +1,10 @@
+using System;
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.Format;
 using SauerbratenRevival.World.Editor;
+using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Network;
 
 namespace SauerbratenRevival.World.Commands;
 
@@ -16,7 +20,7 @@ namespace SauerbratenRevival.World.Commands;
 /// </summary>
 public sealed class CommandSink
 {
-    private readonly IWorld _world;
+    private readonly OctaWorld _world;
     private readonly CommandLog _log;
 
     /// <summary>Ops whose forward application is destructive and needs a pre-state capture to undo.</summary>
@@ -35,10 +39,10 @@ public sealed class CommandSink
         WorldOp.EditEntity,
     };
 
-    public IWorld World => _world;
+    public OctaWorld World => _world;
     public CommandLog Log => _log;
 
-    public CommandSink(IWorld world, int localPeerId = 0)
+    public CommandSink(OctaWorld world, int localPeerId = 0)
     {
         _world = world;
         _log = new CommandLog(localPeerId);
@@ -84,25 +88,26 @@ public sealed class CommandSink
         {
             // Restore the captured region (Rule 4: the pre-state was captured when
             // the forward command was applied).
-            var restore = new Command(WorldOp.ReplaceBlock,
-                new ReplaceBlockPayload(new SelectionPayload(entry.UndoRegion.O, entry.UndoRegion.S, entry.UndoRegion.Grid, entry.UndoRegion.Orient), entry.UndoBlock))
-            { AuthorPeerId = _log.LocalPeerId };
+            var restore = Command.CreateReplaceBlock(
+                entry.UndoRegion.ToSelection(),
+                NetMessage.SerializeBlock(entry.UndoBlock),
+                _log.LocalPeerId);
             _world.Apply(restore);
         }
-        else if (entry.Command.Op == WorldOp.AddEntity)
+        else if (entry.Command.Op == WorldOp.AddEntity && entry.Command.Payload.HasValue)
         {
-            var p = (EntityPayload)entry.Command.Payload;
-            var revert = new Command(WorldOp.RemoveEntity, new EntityPayload { Id = p.Id }, _log.LocalPeerId);
+            var p = entry.Command.Payload.Value.Item8;
+            var revert = Command.CreateRemoveEntity(p.EntityId, _log.LocalPeerId);
             _world.Apply(revert);
         }
         else if (entry.Command.Op == WorldOp.RemoveEntity && entry.UndoEntity != null)
         {
-            var restore = new Command(WorldOp.AddEntity, new EntityPayload(entry.UndoEntity), _log.LocalPeerId);
+            var restore = Command.CreateAddEntity(entry.UndoEntity, _log.LocalPeerId);
             _world.Apply(restore);
         }
         else if (entry.Command.Op == WorldOp.EditEntity && entry.UndoEntity != null)
         {
-            var restore = new Command(WorldOp.EditEntity, new EntityPayload(entry.UndoEntity), _log.LocalPeerId);
+            var restore = Command.CreateEditEntity(entry.UndoEntity, _log.LocalPeerId);
             _world.Apply(restore);
         }
         else if (entry.Command.Op == WorldOp.Remip)
@@ -126,9 +131,10 @@ public sealed class CommandSink
         var fresh = PrepareUndo(entry.Command);
         if (entry.Command.Op == WorldOp.ReplaceBlock && entry.RedoBlock != null)
         {
-            var again = new Command(WorldOp.ReplaceBlock,
-                new ReplaceBlockPayload(new SelectionPayload(entry.UndoRegion.O, entry.UndoRegion.S, entry.UndoRegion.Grid, entry.UndoRegion.Orient), entry.RedoBlock))
-            { AuthorPeerId = _log.LocalPeerId };
+            var again = Command.CreateReplaceBlock(
+                entry.UndoRegion.ToSelection(),
+                NetMessage.SerializeBlock(entry.RedoBlock),
+                _log.LocalPeerId);
             _world.Apply(again);
         }
         else
@@ -153,8 +159,9 @@ public sealed class CommandSink
     private LogEntry PrepareUndo(Command cmd)
     {
         var entry = new LogEntry { Command = cmd };
-        if (!IsDestructive(cmd.Op)) return entry;
+        if (!IsDestructive(cmd.Op) || !cmd.Payload.HasValue) return entry;
 
+        var payload = cmd.Payload.Value;
         switch (cmd.Op)
         {
             case WorldOp.DeleteCube:
@@ -173,13 +180,12 @@ public sealed class CommandSink
                     // Rotate squares the selection's in-plane extent (mprotate sets
                     // ss = max(S[R], S[C])), so capture the square the edit can touch, not
                     // the pre-rotation rectangle — otherwise undo under-captures a thin one.
-                    var p = (TransformCubePayload)cmd.Payload;
-                    var sel = p.Selection;
+                    var sel = cmd.Selection!.ToBlock();
                     int d = Selection.Dimension(sel.Orient);
                     int r = Octa.R[d], c = Octa.C[d];
-                    int ss = System.Math.Max(sel.Size[r], sel.Size[c]);
-                    var origin = sel.Origin;
-                    var size = sel.Size;
+                    int ss = Math.Max(sel.S[r], sel.S[c]);
+                    var origin = sel.O;
+                    var size = sel.S;
                     size = SetAxis(size, r, ss);
                     size = SetAxis(size, c, ss);
                     var region = new Block3(origin, size, sel.Grid, sel.Orient);
@@ -192,11 +198,10 @@ public sealed class CommandSink
                     // Fill collapses the selection to one grid slice and may move it by
                     // one cell along the oriented axis, so capture one cell either side to
                     // cover whichever slice is actually mutated.
-                    var p = (EditFacePayload)cmd.Payload;
-                    var sel = p.Selection;
+                    var sel = payload.Item1.Sel.ToBlock();
                     int d = Selection.Dimension(sel.Orient);
-                    var origin = sel.Origin;
-                    var size = sel.Size;
+                    var origin = sel.O;
+                    var size = sel.S;
                     origin = SetAxis(origin, d, origin[d] - sel.Grid);
                     size = SetAxis(size, d, size[d] + 2);
                     var region = new Block3(origin, size, sel.Grid, sel.Orient);
@@ -206,20 +211,21 @@ public sealed class CommandSink
                 }
             case WorldOp.ReplaceBlock:
                 {
-                    var p = (ReplaceBlockPayload)cmd.Payload;
-                    var region = p.Target.ToBlock();
+                    var p = payload.Item12;
+                    var region = p.Sel.ToBlock();
                     entry.UndoRegion = region;
                     entry.UndoBlock = _world.Capture(region, region.Grid);
-                    entry.RedoBlock = p.Block;
+                    if (p.Data.HasValue)
+                        entry.RedoBlock = NetMessage.DeserializeBlock(p.Data.Value.ToArray());
                     break;
                 }
             case WorldOp.RemoveEntity:
                 {
-                    var p = (EntityPayload)cmd.Payload;
-                    var existing = _world.Entities.Find(e => e.Id == p.Id);
+                    var p = payload.Item8;
+                    var existing = _world.Entities.Find(e => e.Id == p.EntityId);
                     if (existing != null)
                     {
-                        entry.UndoEntity = new Entities.MapEntity
+                        entry.UndoEntity = new MapEntity
                         {
                             Id = existing.Id,
                             Type = existing.Type,
@@ -235,11 +241,11 @@ public sealed class CommandSink
                 }
             case WorldOp.EditEntity:
                 {
-                    var p = (EntityPayload)cmd.Payload;
-                    var existing = _world.Entities.Find(e => e.Id == p.Id);
+                    var p = payload.Item8;
+                    var existing = _world.Entities.Find(e => e.Id == p.EntityId);
                     if (existing != null)
                     {
-                        entry.UndoEntity = new Entities.MapEntity
+                        entry.UndoEntity = new MapEntity
                         {
                             Id = existing.Id,
                             Type = existing.Type,
@@ -251,7 +257,7 @@ public sealed class CommandSink
                             Attr5 = existing.Attr5,
                         };
                     }
-                    entry.RedoEntity = p.ToEntity();
+                    entry.RedoEntity = p.ToMapEntity();
                     break;
                 }
             case WorldOp.AddEntity:
@@ -260,16 +266,8 @@ public sealed class CommandSink
         return entry;
     }
 
-    private static Block3 SelectionRegion(Command cmd) => cmd.Payload switch
-    {
-        DeleteCubePayload p => p.Selection.ToBlock(),
-        EditFacePayload p => p.Selection.ToBlock(),
-        SetFaceTexturePayload p => p.Selection.ToBlock(),
-        ReplaceTexturePayload p => p.Selection?.ToBlock() ?? default,
-        SetFaceMaterialPayload p => p.Selection.ToBlock(),
-        TransformCubePayload p => p.Selection.ToBlock(),
-        _ => default,
-    };
+    private static Block3 SelectionRegion(Command cmd) =>
+        cmd.Selection?.ToBlock() ?? default;
 
     private static Vector3I SetAxis(Vector3I v, int d, int value) => d switch
     {

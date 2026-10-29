@@ -58,6 +58,13 @@ table SetTextureCmd {
     flags: int32;
 }
 
+table ReplaceTextureCmd {
+    sel: SelectionBox;
+    old_texture: int16;
+    new_texture: int16;
+    in_selection: bool;
+}
+
 table DeleteCubeCmd {
     sel: SelectionBox;
 }
@@ -66,10 +73,19 @@ table RemipCmd {
     mip_vis: bool;
 }
 
+table FlipCubeCmd {
+    sel: SelectionBox;
+}
+
+table RotateCubeCmd {
+    sel: SelectionBox;
+    direction: int32;
+}
+
 table EntityCmd {
     entity_id: uint64;
     type: int32;
-    pos: Vec3f;
+    pos: Vec3i;
     attr1: int32;
     attr2: int32;
     attr3: int32;
@@ -107,8 +123,11 @@ table ReplaceBlockCmd {
 union CommandPayload {
     EditFaceCmd,
     SetTextureCmd,
+    ReplaceTextureCmd,
     DeleteCubeCmd,
     RemipCmd,
+    FlipCubeCmd,
+    RotateCubeCmd,
     EntityCmd,
     SetEnvironmentCmd,
     SetMaterialCmd,
@@ -116,7 +135,7 @@ union CommandPayload {
     ReplaceBlockCmd
 }
 
-table WorldCommand (fs_serializer) {
+table Command (fs_serializer) {
     sequence: uint64;
     peer_id: int32;
     timestamp: uint32;
@@ -150,14 +169,14 @@ table MapPackage (fs_serializer) {
     base_map_hash: [ubyte];          // 32-byte SHA-256 if diff package, empty if standalone
     
     keyframes: [KeyframePackage];    // Intermediary snapshots taken at remip / milestones
-    deltas: [WorldCommand];          // Commands applied since the latest keyframe
+    deltas: [Command];               // Commands applied since the latest keyframe
     entities: [EntityCmd];           // Active world entities
     environment: SetEnvironmentCmd;  // Baseline map environment
 }
 
 table NetworkPacket (fs_serializer) {
     packet_id: uint32;
-    commands: [WorldCommand];
+    commands: [Command];
 }
 
 root_type MapPackage;

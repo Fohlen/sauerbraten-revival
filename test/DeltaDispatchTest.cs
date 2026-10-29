@@ -41,7 +41,7 @@ public class DeltaDispatchTest : GoTestBase
 
         ec.DeltaDo(+1);
         TestAssert.Equal(WorldOp.EditFace, LastOp(ec), "default scroll is a fill (EditFace)");
-        var p = (EditFacePayload)ec.Sink!.Log.PeekUndo()!.Command.Payload;
+        var p = ec.Sink!.Log.PeekUndo()!.Command.Payload!.Value.Item1;
         TestAssert.Equal(1, p.Mode, "default fill is mpeditface mode 1");
         map.QueueFree();
     }
@@ -70,7 +70,7 @@ public class DeltaDispatchTest : GoTestBase
         ec.DeltaDo(+1);
 
         TestAssert.Equal(WorldOp.EditFace, LastOp(ec), "face modifier uses EditFace");
-        var p = (EditFacePayload)ec.Sink!.Log.PeekUndo()!.Command.Payload;
+        var p = ec.Sink!.Log.PeekUndo()!.Command.Payload!.Value.Item1;
         TestAssert.Equal(0, p.Mode, "face modifier is mpeditface mode 0");
         map.QueueFree();
     }
@@ -83,7 +83,7 @@ public class DeltaDispatchTest : GoTestBase
         ec.DeltaDo(+1);
 
         TestAssert.Equal(WorldOp.EditFace, LastOp(ec), "corner modifier uses EditFace");
-        var p = (EditFacePayload)ec.Sink!.Log.PeekUndo()!.Command.Payload;
+        var p = ec.Sink!.Log.PeekUndo()!.Command.Payload!.Value.Item1;
         TestAssert.Equal(2, p.Mode, "corner modifier is mpeditface mode 2");
         map.QueueFree();
     }
@@ -106,9 +106,9 @@ public class DeltaDispatchTest : GoTestBase
         ec.DeltaDo(+1);
 
         TestAssert.Equal(WorldOp.SetFaceTexture, LastOp(ec), "texture modifier uses SetFaceTexture");
-        var p = (SetFaceTexturePayload)ec.Sink!.Log.PeekUndo()!.Command.Payload;
-        TestAssert.Equal(ec.CurrentTexture, p.Texture, "texture modifier paints the current texture");
-        TestAssert.Equal(ec.Cursor.Selection.Orient, p.Orient, "single-face unless allfaces");
+        var p = ec.Sink!.Log.PeekUndo()!.Command.Payload!.Value.Item2;
+        TestAssert.Equal(ec.CurrentTexture, p.TextureId, "texture modifier paints the current texture");
+        TestAssert.Equal(ec.Cursor.Selection.Orient, p.Flags, "single-face unless allfaces");
         map.QueueFree();
     }
 
@@ -168,8 +168,8 @@ public class DeltaDispatchTest : GoTestBase
         ec.ToggleAllFaces();
         ec.EditTex(42);
 
-        var p = (SetFaceTexturePayload)ec.Sink!.Log.PeekUndo()!.Command.Payload;
-        TestAssert.Equal(-1, p.Orient, "allfaces paints all six faces (orient -1)");
+        var p = ec.Sink!.Log.PeekUndo()!.Command.Payload!.Value.Item2;
+        TestAssert.Equal(-1, p.Flags, "allfaces paints all six faces (orient -1)");
         map.QueueFree();
     }
 
@@ -190,7 +190,7 @@ public class DeltaDispatchTest : GoTestBase
         var entry = ec.Sink!.Log.PeekUndo();
         TestAssert.True(entry != null, "remip was submitted");
         TestAssert.Equal(WorldOp.Remip, entry!.Command.Op, "remip op");
-        TestAssert.True(((RemipPayload)entry.Command.Payload).MipVis, "mipvis rides the payload");
+        TestAssert.True(entry.Command.Payload!.Value.Item5.MipVis, "mipvis rides the payload");
         map.QueueFree();
     }
 

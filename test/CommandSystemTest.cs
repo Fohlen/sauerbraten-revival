@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
+using SauerbratenRevival.Format;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Editor;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Network;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
@@ -53,7 +55,7 @@ public class CommandSystemTest : GoTestBase
         return h.ToString("x16");
     }
 
-    private static SelectionPayload Cell(Vector3I origin, int grid) =>
+    private static Selection Cell(Vector3I origin, int grid) =>
         new(origin, new Vector3I(1, 1, 1), grid, 0);
 
     // ---- codec round-trips ----
@@ -61,34 +63,34 @@ public class CommandSystemTest : GoTestBase
     [Test]
     public void CodecRoundTripsDeleteCube()
     {
-        var cmd = new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(8, 0, 0), 8)));
+        var cmd = Command.CreateDeleteCube(Cell(new Vector3I(8, 0, 0), 8));
         var back = NetMessage.Decode(NetMessage.Encode(cmd));
         TestAssert.Equal(WorldOp.DeleteCube, back.Op, "op");
-        var p = (DeleteCubePayload)back.Payload;
-        TestAssert.Equal(new Vector3I(8, 0, 0), p.Selection.Origin, "origin");
-        TestAssert.Equal(8, p.Selection.Grid, "grid");
+        var p = back.Payload!.Value.Item4;
+        TestAssert.Equal(new Vector3I(8, 0, 0), p.Sel.Origin.ToVector3I(), "origin");
+        TestAssert.Equal(8, p.Sel.Grid, "grid");
     }
 
     [Test]
     public void CodecRoundTripsFill()
     {
-        var cmd = new Command(WorldOp.EditFace, new EditFacePayload(Cell(new Vector3I(0, 0, 8), 4), dir: -1, mode: 1));
-        var back = (EditFacePayload)NetMessage.Decode(NetMessage.Encode(cmd)).Payload;
+        var cmd = Command.CreateEditFace(Cell(new Vector3I(0, 0, 8), 4), dir: -1, mode: 1);
+        var back = NetMessage.Decode(NetMessage.Encode(cmd)).Payload!.Value.Item1;
         TestAssert.Equal(-1, back.Dir, "dir");
         TestAssert.Equal(1, back.Mode, "mode");
-        TestAssert.Equal(new Vector3I(0, 0, 8), back.Selection.Origin, "origin");
+        TestAssert.Equal(new Vector3I(0, 0, 8), back.Sel.Origin.ToVector3I(), "origin");
     }
 
     [Test]
     public void CodecRoundTripsSetFaceTextureAndMaterial()
     {
-        var tex = new Command(WorldOp.SetFaceTexture, new SetFaceTexturePayload(Cell(new Vector3I(0, 0, 0), 8), 7, -1));
-        var btex = (SetFaceTexturePayload)NetMessage.Decode(NetMessage.Encode(tex)).Payload;
-        TestAssert.Equal(7, btex.Texture, "texture");
-        TestAssert.Equal(-1, btex.Orient, "orient");
+        var tex = Command.CreateSetTexture(Cell(new Vector3I(0, 0, 0), 8), 7, -1);
+        var btex = NetMessage.Decode(NetMessage.Encode(tex)).Payload!.Value.Item2;
+        TestAssert.Equal(7, btex.TextureId, "texture");
+        TestAssert.Equal(-1, btex.Flags, "orient");
 
-        var mat = new Command(WorldOp.SetFaceMaterial, new SetFaceMaterialPayload(Cell(new Vector3I(0, 0, 0), 8), Octa.MAT_WATER, 0x3F));
-        var bmat = (SetFaceMaterialPayload)NetMessage.Decode(NetMessage.Encode(mat)).Payload;
+        var mat = Command.CreateSetMaterial(Cell(new Vector3I(0, 0, 0), 8), Octa.MAT_WATER, 0x3F);
+        var bmat = NetMessage.Decode(NetMessage.Encode(mat)).Payload!.Value.Item10;
         TestAssert.Equal(Octa.MAT_WATER, bmat.MaterialId, "material");
         TestAssert.Equal(0x3F, bmat.Filter, "filter");
     }
@@ -103,22 +105,23 @@ public class CommandSystemTest : GoTestBase
         var src = new Block3(new Vector3I(0, 0, 0), new Vector3I(1, 1, 1), 4, 0);
         var block = OctaEdit.BlockCopy(w, src, 4);
 
-        var cmd = new Command(WorldOp.ReplaceBlock, new ReplaceBlockPayload(Cell(new Vector3I(4, 0, 0), 4), block));
-        var back = (ReplaceBlockPayload)NetMessage.Decode(NetMessage.Encode(cmd)).Payload;
+        var cmd = Command.CreateReplaceBlock(Cell(new Vector3I(4, 0, 0), 4), NetMessage.SerializeBlock(block));
+        var back = NetMessage.Decode(NetMessage.Encode(cmd)).Payload!.Value.Item12;
+        var backBlock = NetMessage.DeserializeBlock(back.Data.Value.ToArray());
 
-        TestAssert.True(back.Block != null, "block present");
-        TestAssert.Equal(block.Cubes.Length, back.Block!.Cubes.Length, "cube count");
-        TestAssert.True(back.Block.Cubes[0].Children != null, "children preserved");
-        TestAssert.Equal(block.Descriptor.O, back.Block.Descriptor.O, "descriptor origin");
+        TestAssert.True(backBlock != null, "block present");
+        TestAssert.Equal(block.Cubes.Length, backBlock!.Cubes.Length, "cube count");
+        TestAssert.True(backBlock.Cubes[0].Children != null, "children preserved");
+        TestAssert.Equal(block.Descriptor.O, backBlock.Descriptor.O, "descriptor origin");
     }
 
     [Test]
     public void CodecRoundTripsNewMap()
     {
-        var cmd = new Command(WorldOp.NewMap, new NewMapPayload(12));
+        var cmd = Command.CreateNewMap(12);
         var back = NetMessage.Decode(NetMessage.Encode(cmd));
         TestAssert.Equal(WorldOp.NewMap, back.Op, "op");
-        TestAssert.Equal(12, ((NewMapPayload)back.Payload).Scale, "scale");
+        TestAssert.Equal(12, back.Payload!.Value.Item11.Scale, "scale");
     }
 
     [Test]
@@ -126,7 +129,7 @@ public class CommandSystemTest : GoTestBase
     {
         // world.cpp emptymap: bottom four octants solid (floor), top four empty.
         var (sink, octa) = SmallWorld();
-        sink.Submit(new Command(WorldOp.NewMap, new NewMapPayload(10)));
+        sink.Submit(Command.CreateNewMap(10));
 
         TestAssert.Equal(1024, octa.WorldSize, "worldsize = 1<<scale");
         for (int i = 0; i < 4; i++)
@@ -139,7 +142,7 @@ public class CommandSystemTest : GoTestBase
     public void NewMapClampsScale()
     {
         var (sink, octa) = SmallWorld();
-        sink.Submit(new Command(WorldOp.NewMap, new NewMapPayload(2))); // below 10
+        sink.Submit(Command.CreateNewMap(2)); // below 10
         TestAssert.Equal(1024, octa.WorldSize, "scale clamped up to 10");
     }
 
@@ -180,12 +183,13 @@ public class CommandSystemTest : GoTestBase
     [Test]
     public void CodecRoundTripsRemipAndPreservesSequence()
     {
-        var cmd = new Command(WorldOp.Remip, new RemipPayload(true)) { Sequence = 42, AuthorPeerId = 3 };
+        var cmd = Command.CreateRemip(true, author: 3);
+        cmd.Sequence = 42;
         var back = NetMessage.Decode(NetMessage.Encode(cmd));
         TestAssert.Equal(WorldOp.Remip, back.Op, "op");
         TestAssert.Equal(42UL, back.Sequence, "sequence");
         TestAssert.Equal(3, back.AuthorPeerId, "author");
-        TestAssert.True(((RemipPayload)back.Payload).MipVis, "mipvis");
+        TestAssert.True(back.Payload!.Value.Item5.MipVis, "mipvis");
     }
 
     // ---- apply through the sink matches direct OctaEdit ----
@@ -197,7 +201,7 @@ public class CommandSystemTest : GoTestBase
         var direct = new Octa(6);
         var region = Cell(new Vector3I(0, 0, 0), 8);
 
-        sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(region)));
+        sink.Submit(Command.CreateDeleteCube(region));
         OctaEdit.DeleteCube(direct, region.ToBlock());
 
         TestAssert.Equal(Checksum(direct), Checksum(octa), "sink apply == direct op");
@@ -207,8 +211,8 @@ public class CommandSystemTest : GoTestBase
     public void SinkAssignsMonotonicSequences()
     {
         var (sink, _) = SmallWorld();
-        var a = sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8))));
-        var b = sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(8, 0, 0), 8))));
+        var a = sink.Submit(Command.CreateDeleteCube(Cell(new Vector3I(0, 0, 0), 8)));
+        var b = sink.Submit(Command.CreateDeleteCube(Cell(new Vector3I(8, 0, 0), 8)));
         TestAssert.Equal(0UL, a.Command.Sequence, "first sequence");
         TestAssert.Equal(1UL, b.Command.Sequence, "second sequence");
     }
@@ -221,7 +225,7 @@ public class CommandSystemTest : GoTestBase
         var (sink, octa) = SmallWorld();
         string before = ContentSnapshot(octa);
 
-        sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8))));
+        sink.Submit(Command.CreateDeleteCube(Cell(new Vector3I(0, 0, 0), 8)));
         TestAssert.True(ContentSnapshot(octa) != before, "delete changed the world");
 
         var undone = sink.Undo();
@@ -233,7 +237,7 @@ public class CommandSystemTest : GoTestBase
     public void RedoReappliesUndoneEdit()
     {
         var (sink, octa) = SmallWorld();
-        var cmd = new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8)));
+        var cmd = Command.CreateDeleteCube(Cell(new Vector3I(0, 0, 0), 8));
         sink.Submit(cmd);
         string afterEdit = ContentSnapshot(octa);
 
@@ -248,7 +252,7 @@ public class CommandSystemTest : GoTestBase
     {
         var (sink, octa) = SmallWorld();
         string before = ContentSnapshot(octa);
-        sink.Submit(new Command(WorldOp.SetFaceTexture, new SetFaceTexturePayload(Cell(new Vector3I(0, 0, 0), 8), 5, -1)));
+        sink.Submit(Command.CreateSetTexture(Cell(new Vector3I(0, 0, 0), 8), 5, -1));
         string after = ContentSnapshot(octa);
 
         sink.Undo(); TestAssert.Equal(before, ContentSnapshot(octa), "undo -> before");
@@ -260,11 +264,11 @@ public class CommandSystemTest : GoTestBase
     public void NewEditClearsRedo()
     {
         var (sink, octa) = SmallWorld();
-        sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8))));
+        sink.Submit(Command.CreateDeleteCube(Cell(new Vector3I(0, 0, 0), 8)));
         sink.Undo();
         TestAssert.True(sink.Log.PeekRedo() != null, "redo available after undo");
 
-        sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(8, 0, 0), 8))));
+        sink.Submit(Command.CreateDeleteCube(Cell(new Vector3I(8, 0, 0), 8)));
         TestAssert.True(sink.Log.PeekRedo() == null, "new edit clears redo");
     }
 
@@ -275,7 +279,7 @@ public class CommandSystemTest : GoTestBase
     {
         var (sink, octa) = SmallWorld();
         // A remote peer deletes a cube — it enters the log but must not be undoable.
-        sink.Receive(new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8)), author: 7));
+        sink.Receive(Command.CreateDeleteCube(Cell(new Vector3I(0, 0, 0), 8), author: 7));
         TestAssert.True(sink.Log.PeekUndo() == null, "remote command is not an undo candidate");
         TestAssert.True(sink.Undo() == null, "undo returns null with no own commands");
     }
@@ -284,9 +288,9 @@ public class CommandSystemTest : GoTestBase
     public void OwnCommandIsUndoableEvenAfterRemoteEdit()
     {
         var (sink, octa) = SmallWorld();
-        sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8))));
+        sink.Submit(Command.CreateDeleteCube(Cell(new Vector3I(0, 0, 0), 8)));
         ulong afterOwn = Checksum(octa);
-        sink.Receive(new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(8, 0, 0), 8)), author: 7));
+        sink.Receive(Command.CreateDeleteCube(Cell(new Vector3I(8, 0, 0), 8), author: 7));
 
         var entry = sink.Log.PeekUndo();
         TestAssert.True(entry != null, "own command is undoable");
@@ -296,7 +300,7 @@ public class CommandSystemTest : GoTestBase
     [Test]
     public void CodecRoundTripsCommand()
     {
-        var cmd = new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8)), 2);
+        var cmd = Command.CreateDeleteCube(Cell(new Vector3I(0, 0, 0), 8), author: 2);
         var back = NetMessage.Decode(NetMessage.Encode(cmd));
         TestAssert.Equal(WorldOp.DeleteCube, back.Op, "op preserved");
         TestAssert.Equal(2, back.AuthorPeerId, "author preserved");
@@ -307,8 +311,7 @@ public class CommandSystemTest : GoTestBase
     {
         var (sink, octa) = SmallWorld();
         // A remote peer's command submits via the sink but is never undoable by local peer 0.
-        sink.Submit(new Command(WorldOp.DeleteCube,
-            new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8)), author: 7));
+        sink.Submit(Command.CreateDeleteCube(Cell(new Vector3I(0, 0, 0), 8), author: 7));
 
         TestAssert.True(sink.Log.PeekUndo() == null, "remote command is not an undo candidate");
         TestAssert.True(sink.Undo() == null, "undo does not touch remote geometry");
@@ -318,7 +321,7 @@ public class CommandSystemTest : GoTestBase
     public void RejectedUndoIsDiscarded()
     {
         var (sink, octa) = SmallWorld();
-        sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(Cell(new Vector3I(0, 0, 0), 8))));
+        sink.Submit(Command.CreateDeleteCube(Cell(new Vector3I(0, 0, 0), 8)));
         TestAssert.True(sink.Log.PeekUndo() != null, "undo candidate present");
 
         var discarded = sink.Log.DiscardForUndo();
@@ -329,64 +332,58 @@ public class CommandSystemTest : GoTestBase
     [Test]
     public void NetMessageRoundTripsCommands()
     {
-        var sel = new SelectionPayload(new Vector3I(16, 32, 64), new Vector3I(2, 4, 8), 8, 1);
+        var sel = new Selection(new Vector3I(16, 32, 64), new Vector3I(2, 4, 8), 8, 1);
         var cmds = new List<Command>
         {
-            new(WorldOp.DeleteCube, new DeleteCubePayload(sel), author: 3) { Sequence = 10 },
-            new(WorldOp.EditFace, new EditFacePayload(sel, dir: 1, mode: 0), author: 3) { Sequence = 11 },
-            new(WorldOp.SetFaceTexture, new SetFaceTexturePayload(sel, texture: 42, orient: 2), author: 3) { Sequence = 12 },
-            new(WorldOp.Remip, new RemipPayload(mipVis: true), author: 3) { Sequence = 13 },
-            new(WorldOp.AddEntity, new EntityPayload(101, 1, 100 * FixedPoint.DMF, 200 * FixedPoint.DMF, 300 * FixedPoint.DMF, 90), author: 3) { Sequence = 14 },
-            new(WorldOp.SetEnvironment, new SetEnvironmentPayload
+            Command.CreateDeleteCube(sel, author: 3),
+            Command.CreateEditFace(sel, dir: 1, mode: 0, author: 3),
+            Command.CreateSetTexture(sel, textureId: 42, flags: 2, author: 3),
+            Command.CreateRemip(mipVis: true, author: 3),
+            Command.CreateAddEntity(new MapEntity { Id = 101, Type = 1, Position = new Vector3(100, 200, 300), Attr1 = 90 }, author: 3),
+            Command.CreateSetEnvironment(new SetEnvironmentCmd
             {
                 SunColor = 0xFFAA55,
                 SunScale = 1.5f,
                 SunYaw = 120f,
                 SunPitch = 45f,
                 Skybox = "skyboxes/morning",
-            }, author: 3) { Sequence = 15 },
+            }, author: 3),
         };
 
         foreach (var original in cmds)
         {
-            var flat = original.ToFlatCommand(timestamp: 12345);
-            var back = flat.ToCommand();
+            var bytes = NetMessage.Encode(original);
+            var back = NetMessage.Decode(bytes);
 
             TestAssert.Equal(original.Op, back.Op, $"{original.Op} preserves Op");
             TestAssert.Equal(original.Sequence, back.Sequence, $"{original.Op} preserves Sequence");
             TestAssert.Equal(original.AuthorPeerId, back.AuthorPeerId, $"{original.Op} preserves Author");
 
-            switch (original.Payload)
+            switch (original.Op)
             {
-                case DeleteCubePayload d:
-                    var bd = (DeleteCubePayload)back.Payload;
-                    TestAssert.Equal(d.Selection.Origin, bd.Selection.Origin, "DeleteCube origin matches");
-                    TestAssert.Equal(d.Selection.Size, bd.Selection.Size, "DeleteCube size matches");
+                case WorldOp.DeleteCube:
+                    TestAssert.Equal(original.Payload!.Value.Item4.Sel.Origin.ToVector3I(), back.Payload!.Value.Item4.Sel.Origin.ToVector3I(), "DeleteCube origin matches");
+                    TestAssert.Equal(original.Payload!.Value.Item4.Sel.Size.ToVector3I(), back.Payload!.Value.Item4.Sel.Size.ToVector3I(), "DeleteCube size matches");
                     break;
-                case EditFacePayload ef:
-                    var bef = (EditFacePayload)back.Payload;
-                    TestAssert.Equal(ef.Dir, bef.Dir, "EditFace dir matches");
-                    TestAssert.Equal(ef.Mode, bef.Mode, "EditFace mode matches");
+                case WorldOp.EditFace:
+                    TestAssert.Equal(original.Payload!.Value.Item1.Dir, back.Payload!.Value.Item1.Dir, "EditFace dir matches");
+                    TestAssert.Equal(original.Payload!.Value.Item1.Mode, back.Payload!.Value.Item1.Mode, "EditFace mode matches");
                     break;
-                case SetFaceTexturePayload st:
-                    var bst = (SetFaceTexturePayload)back.Payload;
-                    TestAssert.Equal(st.Texture, bst.Texture, "SetFaceTexture texture matches");
-                    TestAssert.Equal(st.Orient, bst.Orient, "SetFaceTexture orient matches");
+                case WorldOp.SetFaceTexture:
+                    TestAssert.Equal(original.Payload!.Value.Item2.TextureId, back.Payload!.Value.Item2.TextureId, "SetFaceTexture texture matches");
+                    TestAssert.Equal(original.Payload!.Value.Item2.Flags, back.Payload!.Value.Item2.Flags, "SetFaceTexture orient matches");
                     break;
-                case RemipPayload rp:
-                    var brp = (RemipPayload)back.Payload;
-                    TestAssert.Equal(rp.MipVis, brp.MipVis, "Remip mipvis matches");
+                case WorldOp.Remip:
+                    TestAssert.Equal(original.Payload!.Value.Item5.MipVis, back.Payload!.Value.Item5.MipVis, "Remip mipvis matches");
                     break;
-                case EntityPayload ep:
-                    var bep = (EntityPayload)back.Payload;
-                    TestAssert.Equal(ep.Id, bep.Id, "Entity id matches");
-                    TestAssert.Equal(ep.Attr1, bep.Attr1, "Entity attr1 matches");
+                case WorldOp.AddEntity:
+                    TestAssert.Equal(original.Payload!.Value.Item8.EntityId, back.Payload!.Value.Item8.EntityId, "Entity id matches");
+                    TestAssert.Equal(original.Payload!.Value.Item8.Attr1, back.Payload!.Value.Item8.Attr1, "Entity attr1 matches");
                     break;
-                case SetEnvironmentPayload env:
-                    var benv = (SetEnvironmentPayload)back.Payload;
-                    TestAssert.Equal(env.SunColor, benv.SunColor, "SetEnvironment sun_color matches");
-                    TestAssert.Equal(env.SunYaw, benv.SunYaw, "SetEnvironment sun_yaw matches");
-                    TestAssert.Equal(env.Skybox, benv.Skybox, "SetEnvironment skybox matches");
+                case WorldOp.SetEnvironment:
+                    TestAssert.Equal(original.Payload!.Value.Item9.SunColor, back.Payload!.Value.Item9.SunColor, "SetEnvironment sun_color matches");
+                    TestAssert.Equal(original.Payload!.Value.Item9.SunYaw, back.Payload!.Value.Item9.SunYaw, "SetEnvironment sun_yaw matches");
+                    TestAssert.Equal(original.Payload!.Value.Item9.Skybox, back.Payload!.Value.Item9.Skybox, "SetEnvironment skybox matches");
                     break;
             }
         }
@@ -395,19 +392,17 @@ public class CommandSystemTest : GoTestBase
     [Test]
     public void NetMessagePackUnpackPacket()
     {
-        var sel = new SelectionPayload(new Vector3I(64, 64, 64), new Vector3I(1, 1, 1), 8, 0);
+        var sel = Cell(new Vector3I(64, 64, 64), 8);
         var cmds = new List<Command>
         {
-            new(WorldOp.DeleteCube, new DeleteCubePayload(sel), author: 1) { Sequence = 1 },
-            new(WorldOp.Remip, new RemipPayload(false), author: 1) { Sequence = 2 },
+            Command.CreateDeleteCube(sel, author: 1),
+            Command.CreateRemip(false, author: 1),
         };
+        cmds[0].Sequence = 1;
+        cmds[1].Sequence = 2;
 
-        byte[] packetBytes = NetMessage.Pack(packetId: 77, cmds, timestamp: 999);
+        byte[] packetBytes = NetMessage.PackCommands(cmds, packetId: 77);
         TestAssert.True(packetBytes.Length > 0, "Pack generated byte payload");
-
-        var packet = NetMessage.Unpack(packetBytes);
-        TestAssert.Equal(77u, packet.PacketId, "packet ID matches");
-        TestAssert.Equal(2, packet.Commands?.Count ?? 0, "packet command count matches");
 
         var unpackedCmds = NetMessage.UnpackCommands(packetBytes);
         TestAssert.Equal(2, unpackedCmds.Count, "unpacked commands count matches");

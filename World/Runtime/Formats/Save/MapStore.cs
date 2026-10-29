@@ -112,7 +112,7 @@ public static class MapStore
     }
 
     /// <summary>Load a map: materializes world snapshot and replays command history.</summary>
-    public static LoadedMap Load(string mapDir, IWorld? world = null)
+    public static LoadedMap Load(string mapDir, OctaWorld? world = null)
     {
         var snapshot = LoadWorld(mapDir);
         var octa = snapshot.ToOcta();

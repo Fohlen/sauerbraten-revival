@@ -5,6 +5,7 @@ using FlatSharp;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Runtime.Formats.Save;
@@ -62,10 +63,10 @@ public class MapFormatTest : GoTestBase
         var sink = new CommandSink(new OctaWorld(octa));
         var cmds = new List<Command>
         {
-            new(WorldOp.EditFace, new EditFacePayload(
-                new SelectionPayload(new Vector3I(64, 64, 64), new Vector3I(2, 2, 2), 8, 0), -1, 1)),
-            new(WorldOp.SetFaceTexture, new SetFaceTexturePayload(
-                new SelectionPayload(new Vector3I(72, 72, 72), new Vector3I(1, 1, 1), 8, 0), 5, -1)),
+            Command.CreateEditFace(
+                new Selection(new Vector3I(64, 64, 64), new Vector3I(2, 2, 2), 8, 0), -1, 1),
+            Command.CreateSetTexture(
+                new Selection(new Vector3I(72, 72, 72), new Vector3I(1, 1, 1), 8, 0), 5, -1),
         };
         foreach (var c in cmds) sink.Submit(c);
         history = cmds;
@@ -148,8 +149,8 @@ public class MapFormatTest : GoTestBase
         var changed = new Octa(8);
         changed.EmptyMap(8);
         var sink = new CommandSink(new OctaWorld(changed));
-        sink.Submit(new Command(WorldOp.DeleteCube, new DeleteCubePayload(
-            new SelectionPayload(new Vector3I(0, 0, 0), new Vector3I(1, 1, 1), 8, 0))));
+        sink.Submit(Command.CreateDeleteCube(
+            new Selection(new Vector3I(0, 0, 0), new Vector3I(1, 1, 1), 8, 0)));
         MapStore.SaveCompacted(a, changed);
 
         TestAssert.True(MapStore.ContentHash(a) != MapStore.ContentHash(b), "edit changes the archive hash");
@@ -299,7 +300,7 @@ public class MapFormatTest : GoTestBase
         };
 
         // 1. AddEntity
-        sink.Submit(new Command(WorldOp.AddEntity, new EntityPayload(entity)));
+        sink.Submit(Command.CreateAddEntity(entity));
         TestAssert.Equal(1, world.Entities.Count, "entity added");
         TestAssert.Equal(42UL, world.Entities[0].Id, "entity ID preserved");
 
@@ -311,7 +312,7 @@ public class MapFormatTest : GoTestBase
             Position = new Vector3(200, 200, 200),
             Attr1 = 180,
         };
-        sink.Submit(new Command(WorldOp.EditEntity, new EntityPayload(edited)));
+        sink.Submit(Command.CreateEditEntity(edited));
         TestAssert.Equal(1, world.Entities.Count, "entity count remains 1");
         TestAssert.Equal(200f, world.Entities[0].Position.X, "entity position edited");
         TestAssert.Equal((short)180, world.Entities[0].Attr1, "entity attr edited");
@@ -326,7 +327,7 @@ public class MapFormatTest : GoTestBase
         TestAssert.Equal(200f, world.Entities[0].Position.X, "redo reapplied edited position");
 
         // 3. RemoveEntity
-        sink.Submit(new Command(WorldOp.RemoveEntity, new EntityPayload { Id = 42 }));
+        sink.Submit(Command.CreateRemoveEntity(42));
         TestAssert.Equal(0, world.Entities.Count, "entity removed");
 
         // Undo remove -> restores entity

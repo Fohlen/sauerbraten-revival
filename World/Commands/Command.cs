@@ -1,289 +1,219 @@
-using System.Runtime.InteropServices;
-using Godot;
-using SauerbratenRevival.World.Editor;
+global using Command = SauerbratenRevival.Format.Command;
+global using WorldOp = SauerbratenRevival.Format.WorldOp;
 
-namespace SauerbratenRevival.World.Commands;
+using System;
+using Godot;
+using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Editor;
+using SauerbratenRevival.World.Entities;
+
+namespace SauerbratenRevival.Format;
 
 /// <summary>
-/// A world mutation. The op plus its op-specific parameters; the sequence number
-/// gives it a total order in the log, and the author identifies who issued it
-/// (attribution, not authority — docs/editor-and-commands.md §1.1).
-///
-/// Payloads are lightweight value-type structs encoded via FlatSharp (<see cref="Network.NetMessage"/>),
-/// so save/demo/network share a single zero-allocation encoding.
+/// Domain methods and constructors extending the FlatSharp-generated <see cref="Command"/>.
+/// Serves as the single unified command representation for in-memory execution,
+/// undo/redo, network transmission, and disk storage.
 /// </summary>
-public sealed class Command
+public partial class Command
 {
-    /// <summary>What the command does.</summary>
-    public WorldOp Op { get; init; }
+    public int AuthorPeerId
+    {
+        get => PeerId;
+        set => PeerId = value;
+    }
 
-    /// <summary>Monotonic position in the log; assigned by the sink, not the caller.</summary>
-    public ulong Sequence { get; set; }
-
-    /// <summary>Which peer issued it (undo may only roll back this peer's commands, §5.5 Rule 1).</summary>
-    public int AuthorPeerId { get; init; }
-
-    /// <summary>Op-specific parameters.</summary>
-    public ICommandPayload Payload { get; init; } = EmptyPayload.Instance;
-
-    public Command() { }
-
-    public Command(WorldOp op, ICommandPayload payload, int author = 0)
+    public Command(WorldOp op, CommandPayload payload, int author = 0)
     {
         Op = op;
         Payload = payload;
-        AuthorPeerId = author;
+        PeerId = author;
     }
 
-    public override string ToString() => $"{Op}#{Sequence}(peer {AuthorPeerId})";
-}
-
-/// <summary>Marker for op-specific parameter sets. Each concrete type maps 1:1 to an <see cref="WorldOp"/>.</summary>
-public interface ICommandPayload { }
-
-/// <summary>Payload for ops that carry no parameters (e.g. <see cref="WorldOp.Snapshot"/>).</summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct EmptyPayload : ICommandPayload
-{
-    public static readonly EmptyPayload Instance = default;
-}
-
-/// <summary>
-/// A rectangular selection, as commands carry it (the serializable subset of
-/// <see cref="Selection"/>: origin, size, grid, orient — no cursor state).
-/// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct SelectionPayload : ICommandPayload
-{
-    public const int PayloadSize = 32;
-
-    public readonly Vector3I Origin;
-    public readonly Vector3I Size;
-    public readonly int Grid;
-    public readonly int Orient;
-
-    public SelectionPayload(Vector3I origin, Vector3I size, int grid, int orient)
+    public SelectionBox? Selection => Payload?.Kind switch
     {
-        Origin = origin;
-        Size = size;
+        CommandPayload.ItemKind.EditFaceCmd => Payload.Value.Item1.Sel,
+        CommandPayload.ItemKind.SetTextureCmd => Payload.Value.Item2.Sel,
+        CommandPayload.ItemKind.ReplaceTextureCmd => Payload.Value.Item3.Sel,
+        CommandPayload.ItemKind.DeleteCubeCmd => Payload.Value.Item4.Sel,
+        CommandPayload.ItemKind.FlipCubeCmd => Payload.Value.Item6.Sel,
+        CommandPayload.ItemKind.RotateCubeCmd => Payload.Value.Item7.Sel,
+        CommandPayload.ItemKind.SetMaterialCmd => Payload.Value.Item10.Sel,
+        CommandPayload.ItemKind.ReplaceBlockCmd => Payload.Value.Item12.Sel,
+        _ => null
+    };
+
+    public override string ToString() => $"{Op}#{Sequence}(peer {PeerId})";
+
+    public static Command CreateDeleteCube(Selection sel, int author = 0) => new()
+    {
+        Op = WorldOp.DeleteCube,
+        PeerId = author,
+        Payload = new(new DeleteCubeCmd { Sel = sel.ToSelectionBox() })
+    };
+
+    public static Command CreateEditFace(Selection sel, int dir, int mode, int stride = 1, int author = 0) => new()
+    {
+        Op = WorldOp.EditFace,
+        PeerId = author,
+        Payload = new(new EditFaceCmd { Sel = sel.ToSelectionBox(), Dir = dir, Mode = mode, Stride = stride })
+    };
+
+    public static Command CreateSetTexture(Selection sel, int textureId, int flags = 0, int author = 0) => new()
+    {
+        Op = WorldOp.SetFaceTexture,
+        PeerId = author,
+        Payload = new(new SetTextureCmd { Sel = sel.ToSelectionBox(), TextureId = textureId, Flags = flags })
+    };
+
+    public static Command CreateReplaceTexture(Selection? sel, short oldTex, short newTex, bool inSel, int author = 0) => new()
+    {
+        Op = WorldOp.ReplaceTexture,
+        PeerId = author,
+        Payload = new(new ReplaceTextureCmd
+        {
+            Sel = sel?.ToSelectionBox() ?? new SelectionBox(),
+            OldTexture = oldTex,
+            NewTexture = newTex,
+            InSelection = inSel
+        })
+    };
+
+    public static Command CreateSetMaterial(Selection sel, int matId, int filter = 0, int author = 0) => new()
+    {
+        Op = WorldOp.SetFaceMaterial,
+        PeerId = author,
+        Payload = new(new SetMaterialCmd { Sel = sel.ToSelectionBox(), MaterialId = matId, Filter = filter })
+    };
+
+    public static Command CreateFlip(Selection sel, int author = 0) => new()
+    {
+        Op = WorldOp.FlipCube,
+        PeerId = author,
+        Payload = new(new FlipCubeCmd { Sel = sel.ToSelectionBox() })
+    };
+
+    public static Command CreateRotate(Selection sel, int direction, int author = 0) => new()
+    {
+        Op = WorldOp.RotateCube,
+        PeerId = author,
+        Payload = new(new RotateCubeCmd { Sel = sel.ToSelectionBox(), Direction = direction })
+    };
+
+    public static Command CreateRemip(bool mipVis, int author = 0) => new()
+    {
+        Op = WorldOp.Remip,
+        PeerId = author,
+        Payload = new(new RemipCmd { MipVis = mipVis })
+    };
+
+    public static Command CreateNewMap(int scale, int author = 0) => new()
+    {
+        Op = WorldOp.NewMap,
+        PeerId = author,
+        Payload = new(new NewMapCmd { Scale = scale })
+    };
+
+    public static Command CreateReplaceBlock(Selection sel, byte[] blockData, int author = 0) => new()
+    {
+        Op = WorldOp.ReplaceBlock,
+        PeerId = author,
+        Payload = new(new ReplaceBlockCmd { Sel = sel.ToSelectionBox(), Data = blockData })
+    };
+
+    public static Command CreateAddEntity(MapEntity entity, int author = 0) => new()
+    {
+        Op = WorldOp.AddEntity,
+        PeerId = author,
+        Payload = new(entity.ToEntityCmd())
+    };
+
+    public static Command CreateRemoveEntity(ulong entityId, int author = 0) => new()
+    {
+        Op = WorldOp.RemoveEntity,
+        PeerId = author,
+        Payload = new(new EntityCmd { EntityId = entityId })
+    };
+
+    public static Command CreateEditEntity(MapEntity entity, int author = 0) => new()
+    {
+        Op = WorldOp.EditEntity,
+        PeerId = author,
+        Payload = new(entity.ToEntityCmd())
+    };
+
+    public static Command CreateSetEnvironment(SetEnvironmentCmd env, int author = 0) => new()
+    {
+        Op = WorldOp.SetEnvironment,
+        PeerId = author,
+        Payload = new(env)
+    };
+}
+
+public partial class SelectionBox
+{
+    public SelectionBox(Vector3I origin, Vector3I size, int grid, int orient)
+    {
+        Origin = new Vec3i { X = origin.X, Y = origin.Y, Z = origin.Z };
+        Size = new Vec3i { X = size.X, Y = size.Y, Z = size.Z };
         Grid = grid;
         Orient = orient;
     }
 
-    public SelectionPayload(Selection sel) : this(sel.O, sel.S, sel.Grid, sel.Orient) { }
+    public SelectionBox(Selection sel) : this(sel.O, sel.S, sel.Grid, sel.Orient) { }
+    public SelectionBox(Block3 b) : this(b.O, b.S, b.Grid, b.Orient) { }
 
-    public Block3 ToBlock() => new(Origin, Size, Grid, Orient);
+    public Block3 ToBlock() => new(
+        new Vector3I(Origin?.X ?? 0, Origin?.Y ?? 0, Origin?.Z ?? 0),
+        new Vector3I(Size?.X ?? 0, Size?.Y ?? 0, Size?.Z ?? 0),
+        Grid,
+        Orient);
 
-    public Selection ToSelection() => new(Origin, Size, Grid, Orient);
+    public Selection ToSelection() => new(
+        new Vector3I(Origin?.X ?? 0, Origin?.Y ?? 0, Origin?.Z ?? 0),
+        new Vector3I(Size?.X ?? 0, Size?.Y ?? 0, Size?.Z ?? 0),
+        Grid,
+        Orient);
 }
 
-/// <summary><see cref="WorldOp.DeleteCube"/>: empty every cube in the selection.</summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct DeleteCubePayload : ICommandPayload
+public static class CommandFormatExtensions
 {
-    public readonly SelectionPayload Selection;
-    public DeleteCubePayload(SelectionPayload sel) => Selection = sel;
-}
+    public static Vector3I ToVector3I(this Vec3i v) => new(v.X, v.Y, v.Z);
+    public static Selection ToSelection(this Block3 b) => new(b.O, b.S, b.Grid, b.Orient);
+    public static Block3 ToBlock(this Selection s) => new(s.O, s.S, s.Grid, s.Orient);
+    public static SelectionBox ToSelectionBox(this Selection sel) => new(sel);
+    public static SelectionBox ToSelectionBox(this Block3 block) => new(block);
 
-/// <summary><see cref="WorldOp.EditFace"/>: mpeditface mode 1 over a selection.</summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct EditFacePayload : ICommandPayload
-{
-    public readonly SelectionPayload Selection;
-    public readonly int Dir;    // +1 push (carve), -1 pull (fill)
-    public readonly int Mode;   // 0/1/2 as in mpeditface; mode 1 is the fill branch
-
-    public EditFacePayload(SelectionPayload sel, int dir, int mode)
+    public static EntityCmd ToEntityCmd(this MapEntity e)
     {
-        Selection = sel;
-        Dir = dir;
-        Mode = mode;
-    }
-}
-
-/// <summary><see cref="WorldOp.SetFaceTexture"/>: edittexcube over a selection.</summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct SetFaceTexturePayload : ICommandPayload
-{
-    public readonly SelectionPayload Selection;
-    public readonly int Texture;
-    public readonly int Orient;   // -1 = all faces, else the single face orientation
-
-    public SetFaceTexturePayload(SelectionPayload sel, int texture, int orient)
-    {
-        Selection = sel;
-        Texture = texture;
-        Orient = orient;
-    }
-}
-
-/// <summary><see cref="WorldOp.ReplaceTexture"/>: replacetexcube.</summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct ReplaceTexturePayload : ICommandPayload
-{
-    private readonly SelectionPayload _selection;
-    private readonly byte _hasSelection;
-    private readonly byte _inSelection;
-    public readonly int OldTexture;
-    public readonly int NewTexture;
-
-    public SelectionPayload? Selection => _hasSelection != 0 ? _selection : null;
-    public bool InSelection => _inSelection != 0;
-
-    public ReplaceTexturePayload(SelectionPayload? sel, bool inSelection, int oldTexture, int newTexture)
-    {
-        _selection = sel ?? default;
-        _hasSelection = sel.HasValue ? (byte)1 : (byte)0;
-        _inSelection = inSelection ? (byte)1 : (byte)0;
-        OldTexture = oldTexture;
-        NewTexture = newTexture;
-    }
-}
-
-/// <summary><see cref="WorldOp.SetFaceMaterial"/>: mpeditmat.</summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct SetFaceMaterialPayload : ICommandPayload
-{
-    public readonly SelectionPayload Selection;
-    public readonly int MaterialId;   // < 0 removes the filtered material
-    public readonly int Filter;       // < 0 = no filter; else filtermat | (filtergeom << 16)
-
-    public SetFaceMaterialPayload(SelectionPayload sel, int materialId, int filter)
-    {
-        Selection = sel;
-        MaterialId = materialId;
-        Filter = filter;
-    }
-}
-
-/// <summary>
-/// <see cref="WorldOp.FlipCube"/> / <see cref="WorldOp.RotateCube"/>: a selection to
-/// mirror or rotate. The axis comes from the selection's <c>Orient</c>; only the
-/// rotation direction is a payload field.
-/// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct TransformCubePayload : ICommandPayload
-{
-    public readonly SelectionPayload Selection;
-    public readonly int Direction;   // rotate: +1/-1 clockwise; unused for flip
-
-    public TransformCubePayload(SelectionPayload sel, int direction = 0)
-    {
-        Selection = sel;
-        Direction = direction;
-    }
-}
-
-/// <summary><see cref="WorldOp.Remip"/>: pass-through. Only the selection and the user's mipvis toggle (docs §5.4).</summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct RemipPayload : ICommandPayload
-{
-    private readonly byte _mipVis;
-    public bool MipVis => _mipVis != 0;
-
-    public RemipPayload(bool mipVis) => _mipVis = mipVis ? (byte)1 : (byte)0;
-}
-
-/// <summary><see cref="WorldOp.NewMap"/>: build a fresh empty world at a scale (world.cpp <c>emptymap</c>).</summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct NewMapPayload : ICommandPayload
-{
-    public readonly int Scale;
-
-    public NewMapPayload(int scale) => Scale = scale;
-}
-
-/// <summary>
-/// <see cref="WorldOp.ReplaceBlock"/>: the universal carrier (docs §5.3). Writes a
-/// captured region into the world. Paste, prefab placement and paste-style undo
-/// all reduce to this.
-/// </summary>
-public sealed class ReplaceBlockPayload : ICommandPayload
-{
-    /// <summary>Where the block is written (the target selection).</summary>
-    public SelectionPayload Target;
-
-    /// <summary>The captured cubes, in the block's own (x,y,z) order. May be null for an all-empty block.</summary>
-    public World.OctaEdit.CapturedBlock? Block;
-
-    public ReplaceBlockPayload(SelectionPayload target, World.OctaEdit.CapturedBlock? block)
-    {
-        Target = target;
-        Block = block;
-    }
-}
-
-/// <summary><see cref="WorldOp.AddEntity"/>, <see cref="WorldOp.RemoveEntity"/>, <see cref="WorldOp.EditEntity"/> payload.</summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct EntityPayload : ICommandPayload
-{
-    public ulong Id { get; init; }
-    public byte Type { get; init; }
-    public int FixedX { get; init; }
-    public int FixedY { get; init; }
-    public int FixedZ { get; init; }
-    public short Attr1 { get; init; }
-    public short Attr2 { get; init; }
-    public short Attr3 { get; init; }
-    public short Attr4 { get; init; }
-    public short Attr5 { get; init; }
-
-    public EntityPayload(ulong id, byte type = 0, int fx = 0, int fy = 0, int fz = 0,
-        short a1 = 0, short a2 = 0, short a3 = 0, short a4 = 0, short a5 = 0)
-    {
-        Id = id;
-        Type = type;
-        FixedX = fx;
-        FixedY = fy;
-        FixedZ = fz;
-        Attr1 = a1;
-        Attr2 = a2;
-        Attr3 = a3;
-        Attr4 = a4;
-        Attr5 = a5;
+        var (x, y, z) = e.FixedPosition;
+        return new EntityCmd
+        {
+            EntityId = e.Id,
+            Type = e.Type,
+            Pos = new Vec3i { X = x, Y = y, Z = z },
+            Attr1 = e.Attr1,
+            Attr2 = e.Attr2,
+            Attr3 = e.Attr3,
+            Attr4 = e.Attr4,
+            Attr5 = e.Attr5
+        };
     }
 
-    public EntityPayload(Entities.MapEntity entity)
+    public static MapEntity ToMapEntity(this EntityCmd c)
     {
-        Id = entity.Id;
-        Type = entity.Type;
-        var (x, y, z) = entity.FixedPosition;
-        FixedX = x;
-        FixedY = y;
-        FixedZ = z;
-        Attr1 = entity.Attr1;
-        Attr2 = entity.Attr2;
-        Attr3 = entity.Attr3;
-        Attr4 = entity.Attr4;
-        Attr5 = entity.Attr5;
+        return new MapEntity
+        {
+            Id = c.EntityId,
+            Type = (byte)c.Type,
+            Position = new Vector3(
+                (c.Pos?.X ?? 0) / (float)FixedPoint.DMF,
+                (c.Pos?.Y ?? 0) / (float)FixedPoint.DMF,
+                (c.Pos?.Z ?? 0) / (float)FixedPoint.DMF),
+            Attr1 = (short)c.Attr1,
+            Attr2 = (short)c.Attr2,
+            Attr3 = (short)c.Attr3,
+            Attr4 = (short)c.Attr4,
+            Attr5 = (short)c.Attr5
+        };
     }
-
-    public Entities.MapEntity ToEntity() => new()
-    {
-        Id = Id,
-        Type = Type,
-        Position = new Vector3(
-            FixedX / (float)FixedPoint.DMF,
-            FixedY / (float)FixedPoint.DMF,
-            FixedZ / (float)FixedPoint.DMF),
-        Attr1 = Attr1,
-        Attr2 = Attr2,
-        Attr3 = Attr3,
-        Attr4 = Attr4,
-        Attr5 = Attr5,
-    };
-}
-
-/// <summary><see cref="WorldOp.SetEnvironment"/>: map environment parameters (sun, sky, ambient, fog).</summary>
-public sealed class SetEnvironmentPayload : ICommandPayload
-{
-    public uint SunColor { get; init; } = 0xFFFFFF;
-    public float SunScale { get; init; } = 1f;
-    public float SunYaw { get; init; } = 104f;
-    public float SunPitch { get; init; } = 42f;
-    public uint SkyColor { get; init; } = 0x000000;
-    public uint AmbientColor { get; init; } = 0x191919;
-    public string Skybox { get; init; } = "";
-    public float FogDistance { get; init; } = 1000f;
-    public uint FogColor { get; init; } = 0x8099B3;
 }

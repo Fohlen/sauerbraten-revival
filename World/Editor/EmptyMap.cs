@@ -188,7 +188,7 @@ public partial class EmptyMap : Node3D, IGameWorld
         var octa = new Octa(WorldScale);
         Octa = octa;
         Sink = new CommandSink(new OctaWorld(octa));
-        Sink.Submit(new Command(WorldOp.NewMap, new NewMapPayload(WorldScale)));
+        Sink.Submit(Command.CreateNewMap(WorldScale));
         Physics = new OctaPhysics(octa);
 
         // Carve a hollow room so the prototype has interior space to fly around.

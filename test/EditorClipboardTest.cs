@@ -184,7 +184,7 @@ public class EditorClipboardTest : GoTestBase
         ec.EditTransform(flip: true);
         var entry = ec.Sink!.Log.PeekUndo();
         TestAssert.True(entry != null, "transform edits are undo candidates");
-        TestAssert.Equal(SauerbratenRevival.World.Commands.WorldOp.FlipCube, entry!.Command.Op,
+        TestAssert.Equal(WorldOp.FlipCube, entry!.Command.Op,
             "last recorded op is the flip");
         map.QueueFree();
     }

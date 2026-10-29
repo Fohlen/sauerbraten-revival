@@ -1,5 +1,6 @@
 using Chickensoft.GoDotTest;
 using Godot;
+using SauerbratenRevival.Format;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Network;
 
@@ -45,12 +46,12 @@ public class FixedPointTest : GoTestBase
     public void CommandPayloadsContainNoFloats()
     {
         // Encode a representative command and assert its Variant tree has no float.
-        var cmd = new Command(WorldOp.NewMap, new NewMapPayload(12));
+        var cmd = Command.CreateNewMap(12);
         var bytes = NetMessage.Encode(cmd);
         TestAssert.True(bytes.Length > 0, "encoded");
         // Check the decoded payload tree instead of raw bytes.
         var back = NetMessage.Decode(bytes);
-        TestAssert.True(back.Payload is NewMapPayload, "round-trips without float coercion");
-        TestAssert.Equal(12, ((NewMapPayload)back.Payload).Scale, "scale is an int");
+        TestAssert.Equal(CommandPayload.ItemKind.NewMapCmd, back.Payload?.Kind, "round-trips without float coercion");
+        TestAssert.Equal(12, back.Payload!.Value.Item11.Scale, "scale is an int");
     }
 }
