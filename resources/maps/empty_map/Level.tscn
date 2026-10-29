@@ -1,10 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://World/Runtime/Formats/Save/MapLevel.cs" id="1_level"]
 [ext_resource type="Resource" path="world.res" id="2_world"]
-[ext_resource type="Resource" path="history.res" id="3_history"]
 
 [node name="Level" type="Node3D"]
 script = ExtResource("1_level")
 World = ExtResource("2_world")
-History = ExtResource("3_history")

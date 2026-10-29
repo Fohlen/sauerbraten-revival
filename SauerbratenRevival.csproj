@@ -16,6 +16,14 @@
   <ItemGroup>
     <!-- GoDotTest runs the unit tests inside the Godot runtime (see test/). -->
     <PackageReference Include="Chickensoft.GoDotTest" Version="2.0.47" />
-    <PackageReference Include="System.IO.Hashing" Version="8.0.0" />
+    <PackageReference Include="FlatSharp.Runtime" Version="7.9.0" />
+    <PackageReference Include="FlatSharp.Compiler" Version="7.9.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <FlatSharpSchema Include="World/Schema/schema.fbs" />
   </ItemGroup>
 </Project>

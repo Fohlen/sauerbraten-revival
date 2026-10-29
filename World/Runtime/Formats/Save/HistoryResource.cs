@@ -35,32 +35,6 @@ public partial class HistoryResource : Resource
     /// <summary>Script resource path, assigned so <see cref="ResourceSaver"/> writes a proper ext_resource reference.</summary>
     public const string ScriptPath = "res://World/Runtime/Formats/Save/HistoryResource.cs";
 
-    public MapObjectStore ToStore(MapObjectStore? baseStore = null)
-    {
-        var store = new MapObjectStore { BaseStore = baseStore };
-        foreach (var (k, v) in Objects)
-        {
-            if (ObjectId.TryParse(k, out var id))
-                store.Put(id, v);
-        }
-        return store;
-    }
-
-    public static HistoryResource FromStore(MapObjectStore store, string headCommitId,
-        IEnumerable<string> commitChain, string baseRef = "", string expectedBaseTreeId = "")
-    {
-        var res = new HistoryResource
-        {
-            BaseRef = baseRef,
-            ExpectedBaseTreeId = expectedBaseTreeId,
-            HeadCommitId = headCommitId,
-        };
-        foreach (var c in commitChain) res.CommitChain.Add(c);
-        foreach (var (k, v) in store.Objects) res.Objects[k.ToString()] = v;
-        AttachScript(res);
-        return res;
-    }
-
     public static HistoryResource FromCommands(IEnumerable<Command> commands)
     {
         var res = new HistoryResource();
@@ -70,33 +44,13 @@ public partial class HistoryResource : Resource
     }
 
     /// <summary>Decode every command, in order. Throws on a malformed entry.</summary>
-    public List<Command> ToCommands(MapObjectStore? baseStore = null)
+    public List<Command> ToCommands()
     {
         if (Commands.Count > 0)
         {
             var list = new List<Command>(Commands.Count);
             foreach (var blob in Commands) list.Add(CommandCodec.Decode(blob));
             return list;
-        }
-
-        // If stored as commits in object store:
-        if (!string.IsNullOrEmpty(HeadCommitId) && ObjectId.TryParse(HeadCommitId, out var headId))
-        {
-            var store = ToStore(baseStore);
-            var allCommands = new List<Command>();
-            foreach (var cHex in CommitChain)
-            {
-                if (ObjectId.TryParse(cHex, out var cId))
-                {
-                    if (store.Has(cId))
-                    {
-                        var commit = store.GetCommit(cId);
-                        if (!commit.CommandsId.IsEmpty && store.Has(commit.CommandsId))
-                            allCommands.AddRange(store.GetCommands(commit.CommandsId));
-                    }
-                }
-            }
-            return allCommands;
         }
 
         return new List<Command>();

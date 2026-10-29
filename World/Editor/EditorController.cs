@@ -622,20 +622,9 @@ public partial class EditorController : Node3D
     public void SaveMap()
     {
         if (Octa == null) return;
-        var commands = Sink?.Log.Entries.Select(e => e.Command).ToList();
         var entities = Sink?.World.Entities;
-        string globalDir = ProjectSettings.GlobalizePath(MapDir);
-        string historyPath = System.IO.Path.Combine(globalDir, MapStore.HistoryResourceName);
-        if (System.IO.File.Exists(historyPath))
-        {
-            var commit = MapStore.Commit(MapDir, Octa, entities, commands, "Editor", "Editor save");
-            GD.Print($"[editor] committed '{MapDir}' (commit {commit.Id})");
-        }
-        else
-        {
-            MapStore.SaveCompacted(MapDir, Octa, entities);
-            GD.Print($"[editor] saved '{MapDir}' (hash {MapStore.ContentHash(MapDir)})");
-        }
+        MapStore.SaveCompacted(MapDir, Octa, entities);
+        GD.Print($"[editor] saved '{MapDir}' (hash {MapStore.ContentHash(MapDir)})");
     }
 
     /// <summary>

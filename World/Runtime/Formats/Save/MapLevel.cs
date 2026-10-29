@@ -149,32 +149,6 @@ public partial class MapLevel : Node3D, IGameWorld
             if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
             Sink = new CommandSink(new OctaWorld(loaded.World, loaded.Snapshot.Entities));
         }
-        else if (History != null && !string.IsNullOrEmpty(History.HeadCommitId))
-        {
-            MapObjectStore? baseStore = null;
-            if (!string.IsNullOrEmpty(History.BaseRef))
-            {
-                var baseMap = MapStore.Load(History.BaseRef);
-                baseStore = baseMap.Store;
-                if (ObjectId.TryParse(History.ExpectedBaseTreeId, out var expectedBase) && !expectedBase.IsEmpty
-                    && baseMap.HeadCommit != null && baseMap.HeadCommit.TreeId != expectedBase)
-                {
-                    throw new InvalidDataException(
-                        $"Base map mismatch: '{History.BaseRef}' tree ID is '{baseMap.HeadCommit.TreeId}', expected '{expectedBase}'");
-                }
-            }
-            var store = History.ToStore(baseStore);
-            if (ObjectId.TryParse(History.HeadCommitId, out var headId))
-            {
-                var commit = store.GetCommit(headId);
-                var (octaFromHead, entitiesFromHead) = store.UnpackTree(commit.TreeId);
-                Octa = octaFromHead;
-                Snapshot = WorldSnapshot.Capture(octaFromHead, entitiesFromHead);
-                Physics = new OctaPhysics(octaFromHead);
-                if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
-                Sink = new CommandSink(new OctaWorld(octaFromHead, entitiesFromHead));
-            }
-        }
 
         if (Octa == null && World != null)
         {

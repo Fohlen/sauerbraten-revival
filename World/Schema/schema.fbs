@@ -1,0 +1,145 @@
+namespace SauerbratenRevival.Format;
+
+attribute "fs_serializer";
+
+enum WorldOp : ubyte {
+    None = 0,
+    DeleteCube = 1,
+    EditFace = 2,
+    SetFaceTexture = 3,
+    ReplaceTexture = 4,
+    SetFaceMaterial = 5,
+    FlipCube = 6,
+    RotateCube = 7,
+    Remip = 20,
+    NewMap = 30,
+    AddEntity = 40,
+    RemoveEntity = 41,
+    EditEntity = 42,
+    SetEnvironment = 43,
+    ReplaceBlock = 50
+}
+
+enum CompressionCodec : ubyte {
+    None = 0,
+    Zstd = 1,
+    Lz4 = 2
+}
+
+struct Vec3i {
+    x: int32;
+    y: int32;
+    z: int32;
+}
+
+struct Vec3f {
+    x: float32;
+    y: float32;
+    z: float32;
+}
+
+struct SelectionBox {
+    origin: Vec3i;
+    size: Vec3i;
+    grid: int32;
+    orient: int32;
+}
+
+table EditFaceCmd {
+    sel: SelectionBox;
+    dir: int32;
+    mode: int32;
+    stride: int32;
+}
+
+table SetTextureCmd {
+    sel: SelectionBox;
+    texture_id: int32;
+    flags: int32;
+}
+
+table DeleteCubeCmd {
+    sel: SelectionBox;
+}
+
+table RemipCmd {
+    mip_vis: bool;
+}
+
+table EntityCmd {
+    entity_id: uint64;
+    type: int32;
+    pos: Vec3f;
+    attr1: int32;
+    attr2: int32;
+    attr3: int32;
+    attr4: int32;
+    attr5: int32;
+}
+
+table SetEnvironmentCmd {
+    sun_color: uint32;               // 0xRRGGBB packed hex (sunlight)
+    sun_scale: float32;              // Intensity multiplier (sunlightscale)
+    sun_yaw: float32;                // Direction yaw in degrees (sunlightyaw)
+    sun_pitch: float32;              // Direction pitch in degrees (sunlightpitch)
+    sky_color: uint32;               // 0xRRGGBB (skylight)
+    ambient_color: uint32;           // 0xRRGGBB (ambient)
+    skybox: string;                  // Cubemap texture prefix/path
+    fog_distance: float32;           // Fog view distance in world units
+    fog_color: uint32;               // 0xRRGGBB (fogcolour)
+}
+
+union CommandPayload {
+    EditFaceCmd,
+    SetTextureCmd,
+    DeleteCubeCmd,
+    RemipCmd,
+    EntityCmd,
+    SetEnvironmentCmd
+}
+
+table WorldCommand (fs_serializer) {
+    sequence: uint64;
+    peer_id: int32;
+    timestamp: uint32;
+    op: WorldOp;
+    payload: CommandPayload;
+}
+
+table ChunkKeyframe {
+    chunk_index: ubyte;              // 0..7
+    uncompressed_size: uint32;
+    node_count: uint32;
+    data: [ubyte];                   // Dense pre-order cube stream
+}
+
+table KeyframePackage (fs_serializer) {
+    keyframe_index: uint32;
+    format_version: uint32 = 1;
+    world_scale: int32;
+    git_commit: string;              // Git commit SHA pegging keyframe to clean repository state
+    base_snapshot_hash: [ubyte];     // 32-byte SHA-256
+    chunks: [ChunkKeyframe];
+    entities: [EntityCmd];
+    environment: SetEnvironmentCmd;  // Authoritative lighting & skybox state
+}
+
+table MapPackage (fs_serializer) {
+    format_version: uint32 = 1;
+    map_name: string;
+    author: string;
+    compression: CompressionCodec;   // Archive-wide compression (None, Zstd, Lz4)
+    base_map_hash: [ubyte];          // 32-byte SHA-256 if diff package, empty if standalone
+    
+    keyframes: [KeyframePackage];    // Intermediary snapshots taken at remip / milestones
+    deltas: [WorldCommand];          // Commands applied since the latest keyframe
+    entities: [EntityCmd];           // Active world entities
+    environment: SetEnvironmentCmd;  // Baseline map environment
+}
+
+table NetworkPacket (fs_serializer) {
+    packet_id: uint32;
+    commands: [WorldCommand];
+}
+
+root_type MapPackage;

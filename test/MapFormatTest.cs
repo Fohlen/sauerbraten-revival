@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using Chickensoft.GoDotTest;
+using FlatSharp;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
@@ -238,43 +239,47 @@ public class MapFormatTest : GoTestBase
     // ---- Reference-based maps (ADR 0008) ----
 
     [Test]
-    public void ObjectIdRoundTripAndHashing()
+    public void FlatSharpSchemaBasicRoundTrip()
     {
-        byte[] sample = System.Text.Encoding.UTF8.GetBytes("sauerbraten-revival-merkle-node");
-        var id = ObjectId.Compute(sample);
-        string hex = id.ToString();
-        TestAssert.Equal(32, hex.Length, "hex string is 32 characters (128 bits)");
+        var package = new Format.MapPackage
+        {
+            FormatVersion = 1,
+            MapName = "test_map",
+            Author = "Revival",
+            Compression = Format.CompressionCodec.None,
+            Keyframes = new List<Format.KeyframePackage>
+            {
+                new()
+                {
+                    KeyframeIndex = 0,
+                    FormatVersion = 1,
+                    WorldScale = 8,
+                    GitCommit = "abc1234",
+                    Chunks = new List<Format.ChunkKeyframe>
+                    {
+                        new()
+                        {
+                            ChunkIndex = 0,
+                            UncompressedSize = 100,
+                            NodeCount = 10,
+                            Data = new byte[] { 1, 2, 3, 4 },
+                        }
+                    }
+                }
+            }
+        };
 
-        var parsed = ObjectId.Parse(hex);
-        TestAssert.Equal(id, parsed, "Parse round-trips correctly");
-        TestAssert.True(ObjectId.TryParse(hex, out var tryParsed) && tryParsed == id, "TryParse works");
-    }
+        byte[] buffer = new byte[Format.MapPackage.Serializer.GetMaxSize(package)];
+        int bytesWritten = Format.MapPackage.Serializer.Write(buffer, package);
+        TestAssert.True(bytesWritten > 0, "FlatSharp serialized MapPackage");
 
-    [Test]
-    public void MerkleStoreStructuralSharingAndDedup()
-    {
-        var octa1 = new Octa(8);
-        octa1.EmptyMap(8);
-
-        var store = new MapObjectStore();
-        var tree1 = store.PackTree(octa1);
-        int initialObjectCount = store.LocalObjectCount;
-        TestAssert.True(initialObjectCount > 0, "packed initial world objects");
-
-        // Packing the exact same world again should NOT allocate any new objects
-        var tree1Again = store.PackTree(octa1);
-        TestAssert.Equal(tree1, tree1Again, "identical world produces identical tree ObjectId");
-        TestAssert.Equal(initialObjectCount, store.LocalObjectCount, "structural deduplication allocates zero new objects");
-
-        // Clone world and edit a single cube
-        var octa2 = octa1.Clone();
-        OctaEdit.DeleteCube(octa2, new Block3(new Vector3I(64, 64, 64), new Vector3I(1, 1, 1), 8, 0));
-
-        var tree2 = store.PackTree(octa2);
-        TestAssert.True(tree1 != tree2, "edited world produces distinct tree ObjectId");
-        // Only the nodes along the modified branch (depth ~6-8) are added, NOT the thousands of untouched nodes
-        int added = store.LocalObjectCount - initialObjectCount;
-        TestAssert.True(added < 15, $"only modified branch nodes are added (got {added})");
+        var parsed = Format.MapPackage.Serializer.Parse(buffer);
+        TestAssert.Equal("test_map", parsed.MapName, "MapName matches");
+        TestAssert.Equal("Revival", parsed.Author, "Author matches");
+        TestAssert.Equal(1, parsed.Keyframes.Count, "Keyframe count matches");
+        TestAssert.Equal("abc1234", parsed.Keyframes[0].GitCommit, "GitCommit matches");
+        TestAssert.Equal(1, parsed.Keyframes[0].Chunks.Count, "Chunk count matches");
+        TestAssert.Equal(4, parsed.Keyframes[0].Chunks[0].Data!.Value.Length, "Chunk data length matches");
     }
 
     [Test]
@@ -331,89 +336,12 @@ public class MapFormatTest : GoTestBase
     }
 
     [Test]
-    public void CanonicalEmptyMapAndZeroCopyCheckout()
+    public void CanonicalEmptyMapGeneratesValidSnapshot()
     {
         MapStore.CreateCanonicalEmptyMap(MapStore.EmptyMapDir);
         TestAssert.True(File.Exists(ProjectSettings.GlobalizePath(MapStore.EmptyMapWorldPath)), "canonical empty_map world.res exists");
 
         var loadedBase = MapStore.Load(MapStore.EmptyMapDir);
-        TestAssert.True(loadedBase.HeadCommit != null, "empty_map has HEAD commit");
         TestAssert.Equal(1, loadedBase.Snapshot.Entities.Count, "empty_map has PlayerStart entity");
-
-        // Now initialize a child map referencing empty_map
-        string childDir = TempDir("child_map");
-        MapStore.InitFromReference(childDir, baseRef: MapStore.EmptyMapDir);
-
-        var childHistory = MapStore.LoadHistoryResource(childDir);
-        TestAssert.True(childHistory != null, "child history.res exists");
-        TestAssert.Equal(0, childHistory!.Objects.Count, "zero-copy: zero octree objects stored locally in child map");
-
-        // Loading child map reconstructs the exact empty_map world
-        var loadedChild = MapStore.Load(childDir);
-        TestAssert.Equal(Checksum(loadedBase.World), Checksum(loadedChild.World), "child map matches base map geometry exactly");
-        TestAssert.Equal(1, loadedChild.Snapshot.Entities.Count, "child map entity list matches");
-    }
-
-    [Test]
-    public void CommitChainCheckoutAndVerify()
-    {
-        string emptyDir = TempDir("empty_base");
-        MapStore.CreateCanonicalEmptyMap(emptyDir);
-
-        string childDir = TempDir("chain_map");
-        MapStore.InitFromReference(childDir, baseRef: emptyDir);
-
-        var loaded = MapStore.Load(childDir);
-        var octa = loaded.World;
-        var sink = new CommandSink(new OctaWorld(octa, loaded.Snapshot.Entities));
-
-        // Submit edit
-        var editCmd = new Command(WorldOp.DeleteCube, new DeleteCubePayload(
-            new SelectionPayload(new Vector3I(64, 64, 64), new Vector3I(2, 2, 2), 8, 0)));
-        sink.Submit(editCmd);
-
-        // Commit to child map
-        var commit = MapStore.Commit(childDir, octa, sink.World.Entities, new[] { editCmd }, "TestAuthor", "Add ramp");
-
-        // Verify commit: replaying commands from parent reproduces the tree exactly
-        bool valid = MapStore.VerifyCommit(childDir, commit.Id);
-        TestAssert.True(valid, "replaying commit commands reproduces the Merkle tree");
-
-        // Checkout previous commit (base)
-        var (checkedOutOcta, _) = MapStore.Checkout(childDir, commit.ParentId);
-        var baseLoaded = MapStore.Load(emptyDir);
-        TestAssert.Equal(Checksum(baseLoaded.World), Checksum(checkedOutOcta), "checkout restores parent geometry without command replay");
-
-        // Checkout HEAD commit again
-        var (headOcta, _) = MapStore.Checkout(childDir, commit.Id);
-        TestAssert.Equal(Checksum(octa), Checksum(headOcta), "checkout restores committed edit");
-    }
-
-    [Test]
-    public void GarbageCollectionPrunesOrphanedObjects()
-    {
-        string dir = TempDir("gc_test");
-        var octa = new Octa(8);
-        octa.EmptyMap(8);
-
-        var store = new MapObjectStore();
-        var tree1 = store.PackTree(octa);
-        var commit1 = store.CreateCommit(ObjectId.Empty, tree1, null, "Author", "Init");
-
-        // Create an orphaned commit with a modified world
-        var octa2 = octa.Clone();
-        OctaEdit.DeleteCube(octa2, new Block3(new Vector3I(64, 64, 64), new Vector3I(1, 1, 1), 8, 0));
-        var tree2 = store.PackTree(octa2);
-        var orphanedCommit = store.CreateCommit(commit1.Id, tree2, null, "Author", "Orphan");
-
-        int countBefore = store.LocalObjectCount;
-
-        // GC only keeping commit1
-        store.PruneUnreachable(new[] { commit1.Id });
-        int countAfter = store.LocalObjectCount;
-
-        TestAssert.True(countAfter < countBefore, $"GC pruned orphaned objects (before: {countBefore}, after: {countAfter})");
-        TestAssert.True(store.Has(commit1.Id), "kept active commit");
-        TestAssert.True(!store.Has(orphanedCommit.Id), "pruned orphaned commit");
     }
 }

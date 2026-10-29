@@ -107,90 +107,22 @@ public static class MapStore
         public Octa World = null!;
         public WorldSnapshot Snapshot = null!;
         public List<Command> History = new();
-        public MapObjectStore Store = null!;
-        public MapCommit? HeadCommit;
     }
 
-    /// <summary>Load a map: materializes HEAD from the Merkle object store in O(nodes), or falls back to world.res snapshot.</summary>
+    /// <summary>Load a map: materializes world snapshot and replays command history.</summary>
     public static LoadedMap Load(string mapDir, IWorld? world = null)
     {
-        var historyRes = LoadHistoryResource(mapDir);
-        if (historyRes != null && !string.IsNullOrEmpty(historyRes.HeadCommitId))
-        {
-            MapObjectStore? baseStore = null;
-            ObjectId expectedBaseTreeId = ObjectId.TryParse(historyRes.ExpectedBaseTreeId, out var ebt) ? ebt : ObjectId.Empty;
-            if (!string.IsNullOrEmpty(historyRes.BaseRef))
-            {
-                var baseMap = Load(historyRes.BaseRef);
-                baseStore = baseMap.Store;
-                if (!expectedBaseTreeId.IsEmpty && baseMap.HeadCommit != null && baseMap.HeadCommit.TreeId != expectedBaseTreeId)
-                {
-                    throw new InvalidDataException(
-                        $"Base map mismatch: '{historyRes.BaseRef}' tree ID is '{baseMap.HeadCommit.TreeId}', expected '{expectedBaseTreeId}'");
-                }
-            }
-
-            var store = historyRes.ToStore(baseStore);
-            if (ObjectId.TryParse(historyRes.HeadCommitId, out var headId))
-            {
-                var commit = store.GetCommit(headId);
-                var (octa, entities) = store.UnpackTree(commit.TreeId);
-                var snap = WorldSnapshot.Capture(octa, entities);
-                return new LoadedMap
-                {
-                    World = octa,
-                    Snapshot = snap,
-                    History = historyRes.ToCommands(baseStore),
-                    Store = store,
-                    HeadCommit = commit,
-                };
-            }
-        }
-
         var snapshot = LoadWorld(mapDir);
-        var octa2 = snapshot.ToOcta();
-        var target2 = world ?? new OctaWorld(octa2, snapshot.Entities);
+        var octa = snapshot.ToOcta();
+        var target = world ?? new OctaWorld(octa, snapshot.Entities);
         var history = LoadHistory(mapDir);
-        foreach (var cmd in history) target2.Apply(cmd);
-        var store2 = new MapObjectStore();
-        ObjectId treeId = store2.PackTree(octa2, target2.Entities);
-        var headCommit = store2.CreateCommit(ObjectId.Empty, treeId, history, "System", "Loaded base world");
+        foreach (var cmd in history) target.Apply(cmd);
         return new LoadedMap
         {
-            World = octa2,
+            World = octa,
             Snapshot = snapshot,
             History = history,
-            Store = store2,
-            HeadCommit = headCommit,
         };
-    }
-
-    /// <summary>
-    /// Initialize a new map directory referencing a base map (e.g. empty_map).
-    /// Creates history.res and Level.tscn with zero copied geometry nodes.
-    /// </summary>
-    public static void InitFromReference(string mapDir, string baseRef = EmptyMapDir)
-    {
-        string dir = Globalize(mapDir);
-        Directory.CreateDirectory(dir);
-
-        var baseMap = Load(baseRef);
-        if (baseMap.HeadCommit == null)
-            throw new InvalidOperationException($"Base map at '{baseRef}' has no HEAD commit.");
-
-        var historyRes = new HistoryResource
-        {
-            BaseRef = baseRef,
-            ExpectedBaseTreeId = baseMap.HeadCommit.TreeId.ToString(),
-            HeadCommitId = baseMap.HeadCommit.Id.ToString(),
-        };
-        historyRes.CommitChain.Add(baseMap.HeadCommit.Id.ToString());
-
-        string historyPath = Path.Combine(dir, HistoryResourceName);
-        Error err = ResourceSaver.Save(historyRes, historyPath);
-        if (err != Error.Ok) throw new IOException($"Saving {HistoryResourceName} failed: {err}");
-
-        WriteLevelScene(dir);
     }
 
     /// <summary>
@@ -220,178 +152,7 @@ public static class MapStore
             }
         };
 
-        var snapshot = WorldSnapshot.Capture(octa, entities);
-        var worldRes = WorldResource.FromSnapshot(snapshot);
-        string worldPath = Path.Combine(dir, WorldResourceName);
-        Error err = ResourceSaver.Save(worldRes, worldPath);
-        if (err != Error.Ok) throw new IOException($"Saving {WorldResourceName} failed: {err}");
-
-        var store = new MapObjectStore();
-        ObjectId treeId = store.PackTree(octa, entities);
-        var commit = store.CreateCommit(ObjectId.Empty, treeId, null, "System", "Canonical empty_map base snapshot");
-
-        var historyRes = new HistoryResource
-        {
-            BaseRef = "",
-            ExpectedBaseTreeId = "",
-            HeadCommitId = commit.Id.ToString(),
-        };
-        historyRes.CommitChain.Add(commit.Id.ToString());
-        foreach (var (k, v) in store.Objects)
-            historyRes.Objects[k.ToString()] = v;
-
-        string historyPath = Path.Combine(dir, HistoryResourceName);
-        err = ResourceSaver.Save(historyRes, historyPath);
-        if (err != Error.Ok) throw new IOException($"Saving {HistoryResourceName} failed: {err}");
-
-        WriteLevelScene(dir);
-    }
-
-    /// <summary>
-    /// Commit an edit to a map directory: updates the Merkle tree, creates a new commit object,
-    /// stores delta objects into history.res, and advances HEAD.
-    /// </summary>
-    public static MapCommit Commit(string mapDir, Octa octa, IEnumerable<MapEntity>? entities,
-        IReadOnlyList<Command>? commands, string author, string message)
-    {
-        string dir = Globalize(mapDir);
-        var historyRes = LoadHistoryResource(dir);
-        MapObjectStore? baseStore = null;
-
-        if (historyRes != null && !string.IsNullOrEmpty(historyRes.BaseRef))
-        {
-            var baseMap = Load(historyRes.BaseRef);
-            baseStore = baseMap.Store;
-        }
-
-        var store = historyRes?.ToStore(baseStore) ?? new MapObjectStore { BaseStore = baseStore };
-        var entityList = entities != null ? new List<MapEntity>(entities) : new List<MapEntity>();
-        ObjectId treeId = store.PackTree(octa, entityList);
-
-        ObjectId parentId = ObjectId.Empty;
-        if (historyRes != null && ObjectId.TryParse(historyRes.HeadCommitId, out var pid))
-            parentId = pid;
-
-        var commit = store.CreateCommit(parentId, treeId, commands, author, message);
-
-        historyRes ??= new HistoryResource();
-        historyRes.HeadCommitId = commit.Id.ToString();
-        historyRes.CommitChain.Add(commit.Id.ToString());
-
-        foreach (var (k, v) in store.Objects)
-            historyRes.Objects[k.ToString()] = v;
-
-        if (commands != null)
-        {
-            foreach (var cmd in commands)
-                historyRes.Commands.Add(CommandCodec.Encode(cmd));
-        }
-
-        string historyPath = Path.Combine(dir, HistoryResourceName);
-        Error err = ResourceSaver.Save(historyRes, historyPath);
-        if (err != Error.Ok) throw new IOException($"Saving {HistoryResourceName} failed: {err}");
-
-        WriteLevelScene(dir);
-        return commit;
-    }
-
-    /// <summary>
-    /// Checkout a specific commit in the map's linear history without command replay.
-    /// </summary>
-    public static (Octa Octa, List<MapEntity> Entities) Checkout(string mapDir, ObjectId commitId)
-    {
-        string dir = Globalize(mapDir);
-        var historyRes = LoadHistoryResource(dir)
-            ?? throw new FileNotFoundException($"No {HistoryResourceName} in '{mapDir}'.");
-
-        MapObjectStore? baseStore = null;
-        if (!string.IsNullOrEmpty(historyRes.BaseRef))
-        {
-            var baseMap = Load(historyRes.BaseRef);
-            baseStore = baseMap.Store;
-        }
-
-        var store = historyRes.ToStore(baseStore);
-        var commit = store.GetCommit(commitId);
-        var (octa, entities) = store.UnpackTree(commit.TreeId);
-
-        historyRes.HeadCommitId = commitId.ToString();
-        string historyPath = Path.Combine(dir, HistoryResourceName);
-        ResourceSaver.Save(historyRes, historyPath);
-
-        return (octa, entities);
-    }
-
-    /// <summary>
-    /// Verify that replaying the commands of a commit from its parent produces
-    /// the exact Merkle tree recorded in the commit.
-    /// </summary>
-    public static bool VerifyCommit(string mapDir, ObjectId commitId)
-    {
-        string dir = Globalize(mapDir);
-        var historyRes = LoadHistoryResource(dir)
-            ?? throw new FileNotFoundException($"No {HistoryResourceName} in '{mapDir}'.");
-
-        MapObjectStore? baseStore = null;
-        if (!string.IsNullOrEmpty(historyRes.BaseRef))
-        {
-            var baseMap = Load(historyRes.BaseRef);
-            baseStore = baseMap.Store;
-        }
-
-        var store = historyRes.ToStore(baseStore);
-        var commit = store.GetCommit(commitId);
-
-        if (commit.ParentId.IsEmpty)
-        {
-            var (rootOcta, rootEnts) = store.UnpackTree(commit.TreeId);
-            ObjectId verifyTreeId = store.PackTree(rootOcta, rootEnts);
-            return verifyTreeId == commit.TreeId;
-        }
-
-        var parentCommit = store.GetCommit(commit.ParentId);
-        var (octa, entities) = store.UnpackTree(parentCommit.TreeId);
-        var world = new OctaWorld(octa, entities);
-
-        var commands = store.GetCommands(commit.CommandsId);
-        foreach (var cmd in commands) world.Apply(cmd);
-
-        ObjectId replayedTreeId = store.PackTree(world.Octa, world.Entities);
-        return replayedTreeId == commit.TreeId;
-    }
-
-    /// <summary>
-    /// Prune unreferenced objects in history.res (orphaned commits, dropped edits).
-    /// </summary>
-    public static void CollectGarbage(string mapDir)
-    {
-        string dir = Globalize(mapDir);
-        var historyRes = LoadHistoryResource(dir);
-        if (historyRes == null) return;
-
-        MapObjectStore? baseStore = null;
-        if (!string.IsNullOrEmpty(historyRes.BaseRef))
-        {
-            var baseMap = Load(historyRes.BaseRef);
-            baseStore = baseMap.Store;
-        }
-
-        var store = historyRes.ToStore(baseStore);
-        var roots = new List<ObjectId>();
-        if (ObjectId.TryParse(historyRes.HeadCommitId, out var headId)) roots.Add(headId);
-        foreach (var hex in historyRes.CommitChain)
-        {
-            if (ObjectId.TryParse(hex, out var cid)) roots.Add(cid);
-        }
-
-        store.PruneUnreachable(roots);
-
-        historyRes.Objects.Clear();
-        foreach (var (k, v) in store.Objects)
-            historyRes.Objects[k.ToString()] = v;
-
-        string historyPath = Path.Combine(dir, HistoryResourceName);
-        ResourceSaver.Save(historyRes, historyPath);
+        SaveCompacted(targetDir, octa, entities);
     }
 
     /// <summary>
