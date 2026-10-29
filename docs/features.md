@@ -65,7 +65,7 @@ Done:
 - [x] Material surfaces (water/lava/glass) — `MaterialMesher` + `MaterialTextures` (exact occlusion culling via `OctaEdit.VisibleFace`).
 - [x] Exact `visibletris` culling (`OctaVisible.VisibleTris` wired into `OctaFaceWalker`/`OctaMesher`, including partial single-triangle faces and diagonal flip; asserted against all 18,811 unmerged baked surfaces in church51 by `test/OctaMeshTest.cs`).
 - [x] `Resource`-based world save/load (reference-based Git-style format,
-      [ADR 0008](adr/0008-reference-based-maps.md)) — `WorldSnapshot`
+      [ADR 0009](adr/0009-reference-based-maps.md)) — `WorldSnapshot`
       (canonical octree + entity blob, versioned, content-hashed) wrapped in Godot
       `WorldResource`/`HistoryResource` (`BaseRef` + linear `MapCommit` chain where
       each commit's `TreeHash` is the octree + entity content hash), canonical base
@@ -293,7 +293,7 @@ order** (design detail for this roadmap item).
       `test/OctaOpsTest.cs`, `test/RemipTest.cs`. The edit binds and `delta_do`
       dispatch that drive them interactively are **done** — see the M4d item above
       (`EditorController` + `DeltaModifier`, `test/DeltaDispatchTest.cs`).
-- [x] Save/load in our reference-based format (M5, [ADR 0008](adr/0008-reference-based-maps.md)):
+- [x] Save/load in our reference-based format (M5, [ADR 0009](adr/0009-reference-based-maps.md)):
       FlatSharp `MapPackage` (`map.bin`) with chunk keyframes captured at `remip`
       boundaries pegged to `git_commit` + trailing deltas + `Level.tscn` + shipped base
       `res://resources/maps/empty_map/map.bin` + compaction + archive content hash;
@@ -301,8 +301,8 @@ order** (design detail for this roadmap item).
       `scenes/editor_scene.tscn` wired to `MapLevel` referencing `empty_map` (while
       `EmptyMap` / `scenes/empty_map.tscn` remain as the programmatic generation
       template). See
-      [ADR 0008](adr/0008-reference-based-maps.md).
-- [x] **M5 FlatSharp map format & command cleanup** ([ADR 0008](adr/0008-reference-based-maps.md)):
+      [ADR 0009](adr/0009-reference-based-maps.md).
+- [x] **M5 FlatSharp map format & command cleanup** ([ADR 0008](adr/0008-command-logic.md), [ADR 0009](adr/0009-reference-based-maps.md)):
       - Adopt FlatSharp schema (`schema.fbs`) for unified networking, replay logs, and map packages.
       - Implement keyframe checkpoints at `remip` boundaries pegged to clean `git_commit`.
       - Prune `CommandSource` across `Command.cs`, `CommandCodec.cs`, `CommandLog.cs`, and `EditorController.cs`.

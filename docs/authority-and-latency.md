@@ -19,7 +19,7 @@ for responsiveness, but the server's state is the truth.
 
 | System | Authority | Notes |
 | --- | --- | --- |
-| World edits (all sources) | **Server** | already decided (editor doc §5.5); the `Sink` validates and sequences |
+| World edits (all sources) | **Server** | the `CommandSink` validates, sequences, and broadcasts all mutations in a single total order ([ADR 0008](adr/0008-command-logic.md)) |
 | Movement / position | **Server**, with client prediction + reconciliation | the hard, latency-sensitive one |
 | Hitscan / combat | **Server** (client sends intent; server raycasts) | never trust a client-computed hit list |
 | Cosmetic / UI / particles | Client | no consequence |
@@ -169,9 +169,10 @@ causing a correction.
 - **Runtime mutations are server-run and ordered.** A crumbling wall or race-mode
   door is executed by the server and broadcast in sequence order
   (authored by the server peer) — bounded and deterministic, not a client-originated race.
-  World mutations share a single total order; no artificial `CommandSource` tag is needed.
+  World mutations share a single total order under the unified command model ([ADR 0008](adr/0008-command-logic.md));
+  no artificial `CommandSource` tag is needed.
 - **A map hash gates the session.** Clients and server agree on the map before
-  play; a mismatch refuses the match, eliminating the "client has geometry the
+  play via the canonical SHA-256 base snapshot hash ([ADR 0009](adr/0009-reference-based-maps.md)); a mismatch refuses the match, eliminating the "client has geometry the
   server doesn't" class at the session level.
 
 So the residual case is only "a scripted mid-game mutation races a player's

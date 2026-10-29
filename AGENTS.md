@@ -18,7 +18,8 @@ load time; there is **no CubeScript** and no offline converter.
 | Movement/physics fidelity | [docs/movement-physics.md](docs/movement-physics.md), [docs/adr/0003-movement-verification.md](docs/adr/0003-movement-verification.md) |
 | Character animation / MD5 models | [docs/adr/0004-character-animation.md](docs/adr/0004-character-animation.md) | MD5 skeletal models: engine model, why runtime `Skeleton3D` mapping deformed the mesh, and the baked GLB approach. |
 | Editor + command system | [docs/editor-and-commands.md](docs/editor-and-commands.md) |
-| Reference-based map format | [docs/adr/0008-reference-based-maps.md](docs/adr/0008-reference-based-maps.md) | Map format, delta packaging & wire protocol via FlatSharp: keyframe octree blobs at `remip` boundaries, delta command logs, Steam Workshop diffs, and unified ENet networking. |
+| Command system & world mutation | [docs/adr/0008-command-logic.md](docs/adr/0008-command-logic.md) | Deterministic command logic, FlatSharp schema (`schema.fbs`), `CommandSink`, total ordering, server authority, and author-attributed undo/redo. |
+| Reference-based map format | [docs/adr/0009-reference-based-maps.md](docs/adr/0009-reference-based-maps.md) | Map format, delta packaging & keyframes via FlatSharp: keyframe octree blobs at `remip` boundaries, delta command logs, Steam Workshop diffs, and unified ENet networking. |
 | Classic content (OGZ) import | [docs/adr/0006-ogz-import.md](docs/adr/0006-ogz-import.md) |
 | Rendering strategy | [ADR 0007](docs/adr/0007-world-rendering.md) |
 | Lighting (runtime) | [docs/adr/0002-radiance-hints.md](docs/adr/0002-radiance-hints.md) |
@@ -125,7 +126,7 @@ clones, and `EmptyMap` can reuse a built-once seed world (enabled via
 
 `scenes/editor_scene.tscn` loads the native reference-based map format via
 `MapLevel` (defaulting to the canonical empty map at
-`res://resources/maps/empty_map/`; see [ADR 0008](docs/adr/0008-reference-based-maps.md)).
+`res://resources/maps/empty_map/`; see [ADR 0009](docs/adr/0009-reference-based-maps.md)).
 To inspect a classic `.ogz` map (from `assets/packages/` first, then the
 reference dump), set `OgzPath` on `OgzMapViewer` (or use `scenes/player_scene.tscn`),
 which builds the runtime octree, chunks it and displays it with diffuse textures

@@ -78,9 +78,9 @@ which wins over this doc on status.
 | Original octree code | Reuse `octa.cpp`/`octa.h` **core**; port editor *algorithms*; do **not** copy `octaedit.cpp` plumbing |
 | Rendering | Per-chunk `ArrayMesh` (one surface per vslot, Godot materials); Forward+; see [ADR 0007](adr/0007-world-rendering.md) |
 | Collision & movement | Ported octree traversal (`move`/`collide`/steps) in fixed 5 ms steps, validated against the original |
-| Level format | Classic maps: shipped `.ogz`, read at load time ([ADR 0006](adr/0006-ogz-import.md)). Editor maps: reference-based ([ADR 0008](adr/0008-reference-based-maps.md)) — `Level.tscn` + base snapshot reference (`empty_map/world.res` or local `world.res`) + linear commit history (`history.res`). **No CubeScript** |
-| Editor | Runtime, in-game, Godot UI + **command system** |
-| World mutations | All are **serializable commands** (editor, game modes, network) |
+| Level format | Classic maps: shipped `.ogz`, read at load time ([ADR 0006](adr/0006-ogz-import.md)). Editor maps: reference-based ([ADR 0009](adr/0009-reference-based-maps.md)) — `Level.tscn` + `manifest.tres` + `map.bin` (FlatSharp keyframes at remip boundaries + deltas). **No CubeScript** |
+| Editor | Runtime, in-game, Godot UI + **command system** ([ADR 0008](adr/0008-command-logic.md)) |
+| World mutations | All are **deterministic commands** via unified FlatSharp schema ([ADR 0008](adr/0008-command-logic.md)) (editor, game modes, network) |
 | Config | Godot-native: `ProjectSettings`, `ConfigFile`, `Resource`, `InputMap` |
 | Networking | Steamworks; replicate movement + commands; **server-authoritative** (see [authority-and-latency.md](authority-and-latency.md)) |
 | Modding | **Resources + GDScript** over a versioned API; Workshop packs via `load_resource_pack` |
@@ -195,23 +195,19 @@ The A1 reference harness stays C++ as an offline dev tool; see
 
 ## 9. Level format
 
-The native map format is **reference-based, like Git** ([ADR 0008](adr/0008-reference-based-maps.md)
-and [editor-and-commands.md §7](editor-and-commands.md#7-map-format-reference-based-command-history-git-style)).
-A canonical empty starting map (`res://resources/maps/empty_map/`) is dumped to
-disk once; every new map starts with a zero-copy reference (`BaseRef`) to that
-base snapshot. Commits decompose the octree and entity list into **packable,
-content-addressed Merkle objects** (`OctaNode` for `Cube[8]` subtrees,
-`EntityList`, and `WorldTree`), storing only the modified octree branches in
-`history.res` while sharing unchanged subtrees by hash across commits and with
-`BaseRef`. Loading `HEAD` or checking out any historical commit (`TreeHash`)
-materializes the tree directly from the object pack without replaying commands.
+The native map format is **reference-based, using FlatSharp binary packages** ([ADR 0009](adr/0009-reference-based-maps.md)
+and [editor-and-commands.md §7](editor-and-commands.md#7-map-format-reference-based-flatsharp-packages-adr-0009)).
+A canonical empty starting map (`res://resources/maps/empty_map/`) provides the
+base snapshot. Keyframe snapshots of the octree are captured at `remip` boundaries,
+squashing intermediate micro-commands and storing dense pre-order cube streams.
+Loading materializes the tree in $O(\text{nodes})$ (< 10 ms for 200k cubes) directly
+from `map.bin` and replays only post-remip delta commands.
 
 ```
-map/
-├── Level.tscn            # refs + config: environment, game-mode settings
-├── world.res             # optional standalone/compacted snapshot (omitted for BaseRef maps)
-├── history.res           # BaseRef + HeadHash + MapCommits[] + delta Merkle MapObjectPack
-└── materials/            # material manifest
+res://resources/maps/<map_name>/
+├── Level.tscn            # Godot Scene: visual presentation (skybox, sun, fog, rules)
+├── manifest.tres         # Godot Resource: material/vslot bindings & model paths
+└── map.bin               # FlatSharp Package: header, keyframes, entities, deltas
 ```
 
 - `Level.tscn`: references the base world `Resource` (`BaseRef` or local

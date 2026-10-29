@@ -5,7 +5,7 @@ that powers it, undo/redo, runtime geometry, networking, demos, and prefabs.
 
 This document is the reasoning; the implementation status lives in
 [features.md](features.md). It complements [vision.md](vision.md)
-§7 (command system) and §9 (level format) and [ADR 0007](adr/0007-world-rendering.md)
+§7 (command system, [ADR 0008](adr/0008-command-logic.md)) and §9 (level format, [ADR 0009](adr/0009-reference-based-maps.md)) and [ADR 0007](adr/0007-world-rendering.md)
 (dirty-chunk rebuilds).
 
 > **Thesis.** In Sauerbraten every edit was a local mutation of a `cube[]`, and
@@ -54,49 +54,47 @@ This document is the reasoning; the implementation status lives in
 > "game command", only different **sources**. Only the editor *cursor*
 > (`EditCursor`) is editor-specific.
 
-### 1.1 Command
+### 1.1 Command & WorldOp (ADR 0008)
+
+World mutations are governed by the unified FlatSharp schema ([ADR 0008](adr/0008-command-logic.md)):
 
 ```csharp
-namespace SauerbratenRevival.World.Commands;
+namespace SauerbratenRevival.Format;
 
-/// Stable numeric id — part of the wire + save format. Never reorder; append only.
-public enum WorldOp : ushort
+/// FlatSharp-backed stable numeric id — part of schema.fbs and wire protocol (ADR 0008). Never reorder; append only.
+public enum WorldOp : byte
 {
-    // --- selection/structural (mirrors Cube2's EDIT_ enum where it maps) ---
-    DeleteCube = 0,            // empty the selected cubes (mpdelcube)
-    EditFace = 1,              // mpeditface: mode 0 face push/pull, 1 fill/empty, 2 corner
-    ReplaceBlock = 2,          // the universal carrier: paste/capture a region
-    // --- face / texture / material ---
-    SetFaceTexture = 10,       // edittexcube
-    ReplaceTexture = 11,       // replacetexcube (per-selection or whole world)
-    SetFaceMaterial = 12,      // mpeditmat
-    FlipCube = 13,             // mpflip (selected cubes, axis d)
-    RotateCube = 14,           // mprotate (selected cubes, axis d, direction cw)
-    // --- merge ---
-    Remip = 20,                // merge/split runs (EDIT_REMIP), deterministic (§5.4)
-    // --- entities (the same stream! §3.5, ADR 0008) ---
-    AddEntity = 30,
-    RemoveEntity = 31,
-    EditEntity = 32,
-    // --- lifecycle ---
-    Snapshot = 100,            // no-op marker; carries a full/delta world snapshot index
-    NewMap = 101,              // world.cpp emptymap: fresh world (floor + air)
+    None = 0,
+    DeleteCube = 1,            // mpdelcube
+    EditFace = 2,              // mpeditface: mode 0 face push/pull, 1 fill/empty, 2 corner
+    SetFaceTexture = 3,        // edittexcube
+    ReplaceTexture = 4,        // replacetexcube (per-selection or whole world)
+    SetFaceMaterial = 5,       // mpeditmat
+    FlipCube = 6,              // mpflip (selected cubes, axis d)
+    RotateCube = 7,            // mprotate (selected cubes, axis d, direction cw)
+    Remip = 20,                // EDIT_REMIP (merges runs, deterministic)
+    NewMap = 30,               // emptymap: fresh world
+    AddEntity = 40,            // Add dynamic map entity
+    RemoveEntity = 41,         // Remove dynamic map entity
+    EditEntity = 42,           // Modify entity attributes or transform
+    SetEnvironment = 43,       // Sun yaw/pitch/color, ambient, fog, skybox
+    ReplaceBlock = 50          // Universal block paste / undo restore
 }
 
-// CommandSource has been eliminated: authority is governed by network peer ID / session,
-// and undo/redo history is captured directly by the local EditorController rather
-// than tagging low-level command structs.
-```
-
-```csharp
-public sealed class Command
+// Single source of truth across memory, network, undo/redo, and storage (ADR 0008)
+public partial class Command
 {
-    public WorldOp Op;
-    public ulong Sequence;        // monotonic; total order in the log
-    public int AuthorPeerId;      // who issued it (attribution, not authority)
-    public ICommandPayload Payload; // op-specific, typed; encoded via FlatSharp / CommandCodec (§5)
+    public ulong Sequence { get; set; }     // monotonic sequence in the total order
+    public int PeerId { get; set; }         // author peer id (attribution & undo ownership)
+    public uint Timestamp { get; set; }
+    public WorldOp Op { get; set; }
+    public CommandPayload? Payload { get; set; }
 }
 ```
+
+CommandSource has been eliminated: authority is governed by network peer ID / session,
+and undo/redo history is captured directly by the local `EditorController` rather
+than tagging low-level command structs.
 
 **Principles**
 
@@ -441,11 +439,11 @@ plan):
 (fields walked in a fixed order) as the hash input, not raw bytes. That is robust
 under any future encoding change.
 
-**FlatBuffers via FlatSharp — adopted (ADR 0008).** Zero-copy reads directly
+**FlatBuffers via FlatSharp — adopted ([ADR 0008](adr/0008-command-logic.md) & [ADR 0009](adr/0009-reference-based-maps.md)).** Zero-copy reads directly
 from byte spans, unified networking, recorded streams, and keyframed map packages
 compiled in-process via C# NuGet (`FlatSharp.Compiler`) without requiring external
 `flatc` CLI toolchains or JSON conversion pipelines. Parity hashing hashes the
-canonical semantic keyframes and base map SHA-256 (ADR 0008). Decision 5.1b.
+canonical semantic keyframes and base map SHA-256 ([ADR 0009](adr/0009-reference-based-maps.md)). Decision 5.1b.
 
 ### 5.2 Op payloads (examples)
 
@@ -610,59 +608,41 @@ mechanically identical to a cube edit.
 
 ## 7. Map format: reference-based command history (Git-style)
 
-See [ADR 0008](adr/0008-reference-based-maps.md) for the full architectural
-decision. The native format (vision.md §9) is **hybrid: Git-tracked text history & manifest with a compiled binary geometry cache**:
+## 7. Map format: reference-based FlatSharp packages (ADR 0009)
+
+See [ADR 0009](adr/0009-reference-based-maps.md) for the full architectural
+decision. The native format (vision.md §9) cleanly separates scene presentation, engine asset links, and authoritative binary geometry:
 
 ```
-res://resources/maps/empty_map/   # canonical base map shipped on disk
-├── Level.tscn
-├── history.tres                  # base command log
-├── manifest.tres                 # material, model, sound manifest
-└── world.res                     # compiled binary snapshot
-
-map/                              # any authored map
-├── Level.tscn                    # scene: mode config, environment, refs to history/manifest
-├── manifest.tres                 # human-readable text manifest (materials, models, sounds) (Git-tracked)
-├── history.tres                  # human-readable text command log (authoritative, diffable) (Git-tracked)
-└── world.res                     # compiled binary geometry cache at HEAD (Git-ignored)
+res://resources/maps/<map_name>/
+├── Level.tscn              # Godot Scene: visual presentation (skybox, directional sun, fog, audio, rules)
+├── manifest.tres           # Godot Resource: material/vslot bindings & model paths (engine asset links)
+└── map.bin                 # FlatSharp Package: header, keyframes, entities, deltas
 ```
 
-The map is a **directory, not a single file**. That is deliberate — it matches
-Godot's external-resource idiom, it is diffable in Git, and it packages cleanly into the
-`.zip`/`.tar` archives Workshop expects (§7.4).
+The map is a **directory, not a single file**. That matches Godot's external-resource idiom, enables native engine `.uid` tracking for textures and models, and packages cleanly into Steam Workshop delta diffs ([ADR 0009](adr/0009-reference-based-maps.md)).
 
-### 7.1 Authoritative text history (`history.tres`) & compiled geometry cache (`world.res`)
+### 7.1 Authoritative FlatSharp package (`map.bin`) & asset manifest (`manifest.tres`)
 
-Rather than forcing Git to store multi-megabyte binary geometry churn on every commit,
-our format separates authoritative versioned history from the runtime load cache ([ADR 0008](adr/0008-reference-based-maps.md)):
+Rather than forcing Git to store multi-megabyte binary geometry churn on every commit or attempting to store 3D geometry in unmergeable text logs, our format adopts a unified FlatSharp binary architecture ([ADR 0009](adr/0009-reference-based-maps.md)):
 
-- **Authoritative Text History (`history.tres`)**:
-  - Encoded via `TextCodec`: readable, line-by-line diffable in Git.
-  - Carries a version tag and references the base map (`base = "res://resources/maps/empty_map"`).
-  - Every geometry or entity mutation (`EditFace`, `SetFaceTexture`, `AddEntity`) produces
-    a clean text diff in version control.
-- **Compiled Geometry Cache (`world.res`)**:
-  - Binary compacted snapshot of the octree and entities at HEAD.
-  - **Git-ignored**: Never committed to the repository, eliminating binary bloat.
-  - **Instant load**: Deserializes in $O(\text{nodes})$ directly into live `Cube` nodes without
-    command replay during normal gameplay.
-  - **Regenerated on clone/load**: If `world.res` is absent or out of date, the runtime replays
-    `history.tres` from the base map once, saves the local cache, and proceeds.
+- **Authoritative Binary Package (`map.bin`)**:
+  - Encoded via FlatSharp (`schema.fbs`): zero-copy reads directly from byte spans, backward-compatible schema evolution.
+  - Carries keyframe snapshots at `remip` boundaries (`KeyframePackage`) with dense pre-order cube streams (`ChunkKeyframe`), eliminating the need to replay unbounded history streams from genesis.
+  - Carries active delta commands (`[Command]`) applied since the latest keyframe, world entities (`[EntityCmd]`), and environment settings (`SetEnvironmentCmd`).
+  - **Instant load**: Deserializes 200,000 cubes in under 8 ms directly from `ReadOnlySpan<byte>` with zero per-node heap allocations.
+  - **Git commit pegging**: Keyframes record the generating `git_commit` SHA, detecting drift between geometry and engine asset manifests on load.
 - **Resource Manifest (`manifest.tres`)**:
-  - Human-readable Godot `.tres` text resource mapping integer vslot, model, and sound
-    indices to engine asset paths and properties. Adding a texture or model produces
-    a 1-line Git diff.
-- **Decoupled Codecs (`WireCodec` vs `TextCodec`)**:
-  - **`WireCodec`**: Network-optimized binary codec using Sauerbraten-style variable-int packing
-    (`putint`), compressing edit packets to **12–20 bytes** with zero redundant headers.
-  - **`TextCodec`**: Human-readable text format for `history.tres`.
+  - Human-readable Godot `.tres` text resource mapping integer vslot, model, and sound indices to engine asset paths and properties.
+  - Tracks Godot `.uid` dependencies cleanly, producing 1-line Git diffs when adding textures or models.
+- **Unified FlatSharp Command Pipeline ([ADR 0008](adr/0008-command-logic.md))**:
+  - Eliminates custom variable-length integer codecs (`WireCodec` / `putint`) and duplicate command representations in favor of the single FlatSharp `Command` table.
 
-`Level.tscn` holds **references** to the data, not the data itself:
+`Level.tscn` holds engine scene-tree visual nodes (`DirectionalLight3D`, `WorldEnvironment`, ambient audio, mode rules):
 
 ```
 Level.tscn
   ├─ Level : MapLevel
-  │    History  = ExtResource("history.tres")
   │    Manifest = ExtResource("manifest.tres")
 ```
 
@@ -896,7 +876,7 @@ field, content hash), Godot `WorldResource`/`HistoryResource` (with `BaseRef`,
 `WorldSnapshot.Hash()`), shipped canonical `res://resources/maps/empty_map/`,
 zero-copy reference initialization (`MapStore.InitFromReference`), commit append
 (`MapStore.Commit`), historical checkout (`MapStore.Checkout`), compaction, and
-archive content hash ([ADR 0008](adr/0008-reference-based-maps.md)).
+archive content hash ([ADR 0009](adr/0009-reference-based-maps.md)).
 Round-trip/replay/commit tests in `test/WorldSnapshotTest.cs` and
 `test/MapFormatTest.cs`; church51 reloads with an identical geometry checksum, and
 `scenes/editor_scene.tscn` loads `MapLevel` referencing `empty_map`.
@@ -1045,23 +1025,22 @@ World/Commands/
 World/OctaEdit.cs          # structural primitives + ported edit algorithms (M1)
 World/Entities/
 └── MapEntity.cs           # the stored entity: float in memory, fixed-point on disk/wire
+World/Schema/
+└── schema.fbs             # Authoritative FlatBuffers schema for commands & maps (ADR 0008, ADR 0009)
 World/Commands/
-├── Command.cs             # op + unmanaged payload structs
-├── WireCodec.cs           # low-latency variable-int binary network codec (ADR 0008)
-├── TextCodec.cs           # Git-friendly .tres text command serializer (ADR 0008)
-├── CommandSink.cs         # captures undo pre-state, applies forward, records in log
-├── CommandLog.cs          # append-only log with local undo/redo stacks
-└── IWorld.cs              # abstract octree + entities mutation target
+├── Command.cs             # FlatSharp partial class: domain factories & helpers (ADR 0008)
+├── CommandSink.cs         # captures undo pre-state, applies forward, records in log (ADR 0008)
+├── CommandLog.cs          # append-only log with local author-scoped undo/redo stacks (ADR 0008)
+└── FixedPoint.cs          # 1/16 world-unit integer quantization (DMF=16)
 World/Runtime/Formats/Save/
-├── WorldSnapshot.cs       # canonical snapshot encode/decode + content hash (M5)
-├── WorldResource.cs       # Godot Resource wrapper for cached world.res (M5)
-├── HistoryResource.cs     # Godot Resource wrapper for history.tres command log (ADR 0008)
-├── ResourceManifest.cs    # Godot Resource wrapper for manifest.tres (ADR 0008)
-├── MapStore.cs            # hybrid map load/save, cache compilation (ADR 0008)
-└── MapLevel.cs            # scene node: refs history.tres / manifest.tres + runtime projections (M5)
+├── MapStore.cs            # FlatSharp map package load/save & delta compilation (ADR 0009)
+├── KeyframePackage.cs     # High-level domain wrapper over FlatSharp keyframes (ADR 0009)
+├── ResourceManifest.cs    # Godot Resource wrapper for manifest.tres asset bindings (ADR 0009)
+├── ManifestBuilder.cs     # Manifest construction and catalogue synchronization
+└── MapLevel.cs            # Scene node: runtime projections for entities & lights (ADR 0008, 0009)
 resources/maps/empty_map/
 ├── Level.tscn             # canonical base empty map scene
-└── world.res              # canonical hollow-room base snapshot
+└── map.bin                # canonical FlatSharp base keyframe package (ADR 0009)
 World/Net/
 ├── WorldNetwork.cs        # RPC nodes, channels, authority
 └── WorldSnapshot.cs       # canonical snapshot encode/decode + hash
