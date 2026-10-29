@@ -262,6 +262,19 @@ public sealed class Octa
         AllocNodes = allocNodes;
     }
 
+    /// <summary>Loads an already-constructed root into this Octa (used by KeyframePackage).</summary>
+    public void LoadRoot(Cube[] root, int allocNodes, int? worldScale = null)
+    {
+        if (worldScale.HasValue && worldScale.Value != WorldScale)
+        {
+            WorldScale = worldScale.Value;
+            WorldSize = 1 << WorldScale;
+        }
+        WorldRoot = root;
+        AllocNodes = allocNodes;
+        TJoints.Clear();
+    }
+
     /// <summary>
     /// Deep-copy this world into a fresh <see cref="Octa"/>: the same scale,
     /// geometry, textures, materials, <see cref="Cube.Merged"/> and

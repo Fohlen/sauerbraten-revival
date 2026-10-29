@@ -41,15 +41,52 @@ public sealed class CommandSink
 
     public OctaWorld World => _world;
     public CommandLog Log => _log;
+    public IReadOnlyList<KeyframePackage> Keyframes => _keyframes;
+    public KeyframePackage? LatestKeyframe => _keyframes.Count > 0 ? _keyframes[^1] : null;
 
-    public CommandSink(OctaWorld world, int localPeerId = 0)
+    private readonly List<KeyframePackage> _keyframes = new();
+
+    public CommandSink(OctaWorld world, int localPeerId = 0, KeyframePackage? initialKeyframe = null)
     {
         _world = world;
         _log = new CommandLog(localPeerId);
+        if (initialKeyframe != null)
+        {
+            _keyframes.Add(initialKeyframe);
+        }
     }
 
     /// <summary>True if a given op needs a captured pre-state for undo.</summary>
     public static bool IsDestructive(WorldOp op) => Destructive.Contains(op);
+
+    /// <summary>
+    /// Captures a keyframe package at a remip boundary, increments milestone index,
+    /// and chains the parent hash (ADR 0008 §4).
+    /// </summary>
+    public KeyframePackage CaptureKeyframeAndSquash(string? gitCommit = null)
+    {
+        uint keyframeIndex = (uint)_keyframes.Count;
+        byte[] baseHash = _keyframes.Count > 0
+            ? KeyframePackage.ComputeHash(_keyframes[^1])
+            : Array.Empty<byte>();
+
+        var keyframe = _world.LatestKeyframe != null
+            ? _world.LatestKeyframe
+            : KeyframePackage.Capture(
+                _world.Octa,
+                _world.Entities,
+                _world.Environment,
+                keyframeIndex: keyframeIndex,
+                baseSnapshotHash: baseHash,
+                gitCommit: gitCommit);
+
+        keyframe.KeyframeIndex = keyframeIndex;
+        keyframe.BaseSnapshotHash = baseHash;
+        if (gitCommit != null) keyframe.GitCommit = gitCommit;
+
+        _keyframes.Add(keyframe);
+        return keyframe;
+    }
 
     /// <summary>
     /// Submit a locally-issued command: capture undo state, apply, record. Returns
@@ -57,6 +94,11 @@ public sealed class CommandSink
     /// </summary>
     public LogEntry Submit(Command cmd)
     {
+        if (cmd.Op == WorldOp.Remip)
+        {
+            _log.ClearDeltas();
+        }
+
         var entry = PrepareUndo(cmd);
         _world.Apply(cmd);
         var recorded = _log.Record(cmd);
@@ -65,14 +107,30 @@ public sealed class CommandSink
         recorded.RedoBlock = entry.RedoBlock;
         recorded.UndoEntity = entry.UndoEntity;
         recorded.RedoEntity = entry.RedoEntity;
+
+        if (cmd.Op == WorldOp.Remip)
+        {
+            CaptureKeyframeAndSquash();
+        }
+
         return recorded;
     }
 
     /// <summary>Apply and record a command that originated on another peer (no undo entry for us).</summary>
     public void Receive(Command cmd)
     {
+        if (cmd.Op == WorldOp.Remip)
+        {
+            _log.ClearDeltas();
+        }
+
         _world.Apply(cmd);
         _log.RecordRemote(cmd);
+
+        if (cmd.Op == WorldOp.Remip)
+        {
+            CaptureKeyframeAndSquash();
+        }
     }
 
     /// <summary>

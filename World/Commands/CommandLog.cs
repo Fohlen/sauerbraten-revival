@@ -84,6 +84,15 @@ public sealed class CommandLog
         return entry;
     }
 
+    /// <summary>
+    /// Clear active transaction deltas and undo/redo stacks when squashed at a keyframe boundary (ADR 0008).
+    /// </summary>
+    public void ClearDeltas()
+    {
+        _entries.Clear();
+        _undone.Clear();
+    }
+
     /// <summary>The most recent action of this peer: the next undo candidate (own editor commands only).</summary>
     public LogEntry? PeekUndo()
     {

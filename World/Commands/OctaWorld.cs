@@ -18,11 +18,14 @@ public sealed class OctaWorld
 {
     public Octa Octa { get; }
     public List<MapEntity> Entities { get; } = new();
+    public SetEnvironmentCmd? Environment { get; set; }
+    public KeyframePackage? LatestKeyframe { get; private set; }
 
-    public OctaWorld(Octa octa, IEnumerable<MapEntity>? entities = null)
+    public OctaWorld(Octa octa, IEnumerable<MapEntity>? entities = null, SetEnvironmentCmd? environment = null)
     {
         Octa = octa;
         if (entities != null) Entities.AddRange(entities);
+        Environment = environment;
     }
 
     public OctaEdit.CapturedBlock Capture(Block3 region, int rgrid) => OctaEdit.BlockCopy(Octa, region, rgrid);
@@ -92,7 +95,7 @@ public sealed class OctaWorld
             case WorldOp.Remip:
                 {
                     var p = payload.Item5;
-                    OctaEdit.RemipAll(Octa, p.MipVis);
+                    LatestKeyframe = OctaEdit.RemipAll(Octa, p.MipVis, Entities, Environment);
                     break;
                 }
             case WorldOp.NewMap:
@@ -125,8 +128,11 @@ public sealed class OctaWorld
                     break;
                 }
             case WorldOp.SetEnvironment:
-                // SetEnvironment is handled by MapLevel / Scene updates
-                break;
+                {
+                    var p = payload.Item9;
+                    Environment = p;
+                    break;
+                }
             default:
                 throw new NotSupportedException($"Unhandled WorldOp {cmd.Op}");
         }

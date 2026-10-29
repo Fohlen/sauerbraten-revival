@@ -1,5 +1,8 @@
+using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.Format;
 using SauerbratenRevival.World.Editor;
+using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Meshing;
 using SauerbratenRevival.World.Physics;
 
@@ -1050,8 +1053,9 @@ public static class OctaEdit
     /// octa.cpp:565 <c>mpremip</c> — remip the whole world. Runs bottom-up from each
     /// root octant. <paramref name="mipvis"/> is the user toggle that affects the
     /// collapse decision (must be replicated; see docs/editor-and-commands.md §5.4).
+    /// Invokes keyframe generation across the 8 root chunks pegged to git_commit (ADR 0008).
     /// </summary>
-    public static void RemipAll(Octa octa, bool mipvis)
+    public static Format.KeyframePackage RemipAll(Octa octa, bool mipvis, IEnumerable<MapEntity>? entities = null, SetEnvironmentCmd? env = null, string? gitCommit = null)
     {
         for (int i = 0; i < 8; i++)
         {
@@ -1060,5 +1064,6 @@ public static class OctaEdit
         }
         OctaMerges.CalcMerges(octa);
         OctaTJoints.FindTJoints(octa);
+        return KeyframePackage.Capture(octa, entities, env, gitCommit: gitCommit);
     }
 }
