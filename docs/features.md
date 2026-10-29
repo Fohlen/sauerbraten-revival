@@ -294,30 +294,20 @@ order** (design detail for this roadmap item).
       dispatch that drive them interactively are **done** — see the M4d item above
       (`EditorController` + `DeltaModifier`, `test/DeltaDispatchTest.cs`).
 - [x] Save/load in our reference-based format (M5, [ADR 0008](adr/0008-reference-based-maps.md)):
-      `WorldSnapshot` + map directory (`world.res`, `history.res` with `BaseRef` +
-      linear `MapCommit` chain + `TreeHash`, `Level.tscn`) + shipped base
-      `res://resources/maps/empty_map/` + zero-copy checkout + compaction + archive
-      hash; `F2` commit-save / `F3` load binds in `EditorController`;
+      FlatSharp `MapPackage` (`map.bin`) with chunk keyframes captured at `remip`
+      boundaries pegged to `git_commit` + trailing deltas + `Level.tscn` + shipped base
+      `res://resources/maps/empty_map/map.bin` + compaction + archive content hash;
+      `F2` save / `F3` load binds in `EditorController`;
       `scenes/editor_scene.tscn` wired to `MapLevel` referencing `empty_map` (while
       `EmptyMap` / `scenes/empty_map.tscn` remain as the programmatic generation
       template). See
-      [editor-and-commands.md](editor-and-commands.md#7-map-format-reference-based-command-history-git-style).
-- [x] Launch edit from the front-end: the menu's EDIT objective emits the
-      `coop_edit` mode; `Main` maps its `ModeFlags.Edit` onto the viewer's edit
-      entry point, so the play scene spawns the floating edit player with a live
-      `EditorController` and edit HUD (same seam as `scenes/editor_scene.tscn`).
-      Asserted by `test/EditorViewSceneTest.cs`.
-- [x] Persistent user keybinds (`user://input.cfg`) — persistence implemented
-      (`scripts/InputBindings.cs`); the rebind UI lands with M4e. See
-      [Cross-cutting: configuration](#cross-cutting-configuration).
-
-Remaining:
-
-- [ ] **M5 FlatSharp map format & command cleanup** ([ADR 0008](adr/0008-reference-based-maps.md)):
+      [ADR 0008](adr/0008-reference-based-maps.md).
+- [x] **M5 FlatSharp map format & command cleanup** ([ADR 0008](adr/0008-reference-based-maps.md)):
       - Adopt FlatSharp schema (`schema.fbs`) for unified networking, replay logs, and map packages.
       - Implement keyframe checkpoints at `remip` boundaries pegged to clean `git_commit`.
       - Prune `CommandSource` across `Command.cs`, `CommandCodec.cs`, `CommandLog.cs`, and `EditorController.cs`.
       - Delete `ObjectId.cs`, `MapObjectStore.cs`, and remove `System.IO.Hashing` dependency.
+      - Retire legacy `WorldSnapshot`, `WorldResource`, and `HistoryResource` in favor of `map.bin` FlatSharp packages.
 - [ ] **M4e GUI**: texture/material pickers, entity placement, keybinds via
       `InputMap` ([editor-and-commands.md §10](editor-and-commands.md#10-implementation-order-milestones)).
 - [ ] Texturing, blending (layers no longer ride the lightmap alpha — that

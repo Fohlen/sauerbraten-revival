@@ -78,11 +78,12 @@ public class MapSourceTest : GoTestBase
     [Test]
     public void MapLevelImplementsMapSource()
     {
+        string dir = Path.Combine(OS.GetUserDataDir(), "map_level_test_" + System.Guid.NewGuid().ToString("N"));
         var octa = new Octa(8);
-        var snapshot = WorldSnapshot.Capture(octa);
-        var resource = WorldResource.FromSnapshot(snapshot);
+        octa.EmptyMap(8);
+        MapStore.SaveCompacted(dir, octa);
 
-        var mapLevel = new MapLevel { World = resource, ChunkSize = 64 };
+        var mapLevel = new MapLevel { MapDir = dir, ChunkSize = 64 };
         IMapSource source = mapLevel;
 
         TestAssert.False(source.Built, "not built initially");
@@ -94,7 +95,7 @@ public class MapSourceTest : GoTestBase
         TestAssert.Equal(mapLevel, source.WorldNode, "world node is self");
 
         var (pos, _) = source.FindSpawn();
-        TestAssert.Equal(new Vector3(128, 128, 128), pos, "spawn point at center");
+        TestAssert.Equal(new Vector3(512, 512, 512), pos, "spawn point at center");
 
         var controller = new EditorController();
         controller.BindMapSource(source);
@@ -104,6 +105,7 @@ public class MapSourceTest : GoTestBase
 
         controller.Free();
         mapLevel.Free();
+        if (Directory.Exists(dir)) Directory.Delete(dir, true);
     }
 
     [Test]

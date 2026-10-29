@@ -14,82 +14,24 @@ using SauerbratenRevival.World.Network;
 namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
 /// <summary>
-/// Loads and saves a map in the native format (docs/editor-and-commands.md §7,
-/// vision.md §9). A map is a **directory of external resources**:
+/// Loads and saves a map in the native FlatSharp reference-based format (ADR 0008).
+/// A map directory contains:
 ///
 /// <code>
 /// map/
-/// ├── Level.tscn            # scene: mode config, environment; REFS the data below
-/// ├── world.res             # base octree snapshot (canonical, versioned)
-/// ├── history.res           # appended edit commands since world.res (optional)
-/// └── materials/            # material manifest
+/// ├── Level.tscn            # scene root: instantiates MapLevel
+/// ├── map.bin               # FlatSharp MapPackage (keyframes, trailing deltas, entities, environment)
+/// └── materials/            # material manifest (optional)
 /// </code>
-///
-/// The directory is the unit of distribution: the content hash is computed over the
-/// **directory contents** in a fixed order (the archive's contents), matching how
-/// Workshop/parity hashes the packaged archive (§7.4).
-///
-/// Editing writes to <c>user://</c> (writable at runtime); shipped maps live in
-/// <c>res://</c> (read-only once exported) (§7.4).
 /// </summary>
 public static class MapStore
 {
     public const string LevelSceneName = "Level.tscn";
     public const string MapPackageFileName = "map.bin";
-    public const string WorldResourceName = "world.res";
-    public const string HistoryResourceName = "history.res";
     public const string MaterialsDirName = "materials";
     public const string ManifestResourceName = "manifest.res";
     public const string EmptyMapDir = "res://resources/maps/empty_map";
-    public const string EmptyMapWorldPath = "res://resources/maps/empty_map/world.res";
     public const string EmptyMapPackagePath = "res://resources/maps/empty_map/map.bin";
-
-    /// <summary>Read the base world snapshot from a map directory (prefers map.bin, falls back to world.res).</summary>
-    public static WorldSnapshot LoadWorld(string mapDir)
-    {
-        string binPath = Globalize(Path.Combine(mapDir, MapPackageFileName));
-        if (File.Exists(binPath) || ResourceLoader.Exists(binPath))
-        {
-            var package = LoadMapPackageFile(binPath);
-            if (package.Keyframes != null && package.Keyframes.Count > 0)
-            {
-                var latestKeyframe = package.Keyframes[^1];
-                CheckGitCommitDrift(mapDir, latestKeyframe.GitCommit);
-
-                var octa = latestKeyframe.ToOcta();
-                var entities = new List<MapEntity>();
-                if (package.Entities != null && package.Entities.Count > 0)
-                {
-                    foreach (var e in package.Entities) entities.Add(e.ToMapEntity());
-                }
-                else if (latestKeyframe.Entities != null && latestKeyframe.Entities.Count > 0)
-                {
-                    foreach (var e in latestKeyframe.Entities) entities.Add(e.ToMapEntity());
-                }
-
-                var target = new OctaWorld(octa, entities, latestKeyframe.Environment ?? package.Environment);
-                if (package.Deltas != null && package.Deltas.Count > 0)
-                {
-                    foreach (var cmd in package.Deltas) target.Apply(cmd);
-                }
-
-                return WorldSnapshot.Capture(octa, target.Entities);
-            }
-        }
-
-        string path = Globalize(Path.Combine(mapDir, WorldResourceName));
-        if (!ResourceLoader.Exists(path) && !File.Exists(path))
-            throw new FileNotFoundException($"No {MapPackageFileName} or {WorldResourceName} in '{mapDir}'.", path);
-        var res = ResourceLoader.Load(path, "", ResourceLoader.CacheMode.Replace);
-        if (res == null) throw new InvalidDataException($"Failed to load {path}.");
-
-        // The typed cast works when Godot resolved the C# script; when it did not
-        // (headless/CLI contexts), read the exported blob property generically.
-        if (res is WorldResource typed) return typed.ToSnapshot();
-        if (res.Get("Data").VariantType == Variant.Type.PackedByteArray)
-            return WorldSnapshot.Decode(res.Get("Data").As<byte[]>());
-        throw new InvalidDataException($"{path} is not a world snapshot.");
-    }
 
     /// <summary>Check for drift between keyframe Git commit and current repository HEAD (ADR 0008 §4).</summary>
     public static void CheckGitCommitDrift(string mapDir, string? keyframeCommit)
@@ -134,122 +76,72 @@ public static class MapStore
         File.WriteAllBytes(binPath, buffer.AsSpan(0, bytesWritten).ToArray());
     }
 
-    /// <summary>Load the HistoryResource from a map directory, or null if absent.</summary>
-    public static HistoryResource? LoadHistoryResource(string mapDir)
-    {
-        string path = Globalize(Path.Combine(mapDir, HistoryResourceName));
-        if (!ResourceLoader.Exists(path) && !File.Exists(path)) return null;
-        var res = ResourceLoader.Load(path, "", ResourceLoader.CacheMode.Replace);
-        if (res == null) return null;
-        if (res is HistoryResource typed) return typed;
-
-        // Fall back to untyped dictionary reflection (headless/CLI contexts).
-        var historyRes = new HistoryResource();
-        var baseRef = res.Get("BaseRef");
-        if (baseRef.VariantType == Variant.Type.String) historyRes.BaseRef = baseRef.AsString();
-        var expectedBaseTreeId = res.Get("ExpectedBaseTreeId");
-        if (expectedBaseTreeId.VariantType == Variant.Type.String) historyRes.ExpectedBaseTreeId = expectedBaseTreeId.AsString();
-        var headCommitId = res.Get("HeadCommitId");
-        if (headCommitId.VariantType == Variant.Type.String) historyRes.HeadCommitId = headCommitId.AsString();
-        var commitChain = res.Get("CommitChain");
-        if (commitChain.VariantType == Variant.Type.Array)
-            foreach (var item in commitChain.As<Godot.Collections.Array>()) historyRes.CommitChain.Add(item.AsString());
-        var objects = res.Get("Objects");
-        if (objects.VariantType == Variant.Type.Dictionary)
-        {
-            var dict = objects.As<Godot.Collections.Dictionary>();
-            foreach (var key in dict.Keys)
-                historyRes.Objects[key.AsString()] = dict[key].As<byte[]>();
-        }
-        var commands = res.Get("Commands");
-        if (commands.VariantType == Variant.Type.Array)
-            foreach (var blob in commands.As<Godot.Collections.Array>())
-                historyRes.Commands.Add(blob.As<byte[]>());
-
-        return historyRes;
-    }
-
-    /// <summary>Read the command history from a map directory (prefers map.bin deltas, falls back to history.res).</summary>
+    /// <summary>Read the command history from a map directory.</summary>
     public static List<Command> LoadHistory(string mapDir)
     {
-        string binPath = Globalize(Path.Combine(mapDir, MapPackageFileName));
-        if (File.Exists(binPath) || ResourceLoader.Exists(binPath))
-        {
-            var package = LoadMapPackageFile(binPath);
-            if (package.Deltas != null)
-                return package.Deltas.ToList();
-        }
-
-        var historyRes = LoadHistoryResource(mapDir);
-        if (historyRes != null) return historyRes.ToCommands();
-        return new List<Command>();
+        var package = LoadMapPackage(mapDir);
+        return package?.Deltas?.ToList() ?? new List<Command>();
     }
 
     /// <summary>
-    /// Result of loading a map's data: a live octree plus the session command log
-    /// needed to reach the saved state. Applying <see cref="History"/> to
-    /// <see cref="World"/> reproduces the map.
+    /// Result of loading a map's data: an octree, entity list, trailing deltas, and the source FlatSharp MapPackage.
     /// </summary>
     public sealed class LoadedMap
     {
-        public Octa World = null!;
-        public WorldSnapshot Snapshot = null!;
-        public List<Command> History = new();
-        public MapPackage? Package;
+        public Octa World { get; init; } = null!;
+        public List<MapEntity> Entities { get; init; } = new();
+        public List<Command> History { get; init; } = new();
+        public MapPackage? Package { get; init; }
     }
 
-    /// <summary>Load a map: materializes latest keyframe from map.bin (or world.res) and replays trailing deltas.</summary>
+    /// <summary>Read the world from a map directory via map.bin.</summary>
+    public static OctaWorld LoadWorld(string mapDir)
+    {
+        var loaded = Load(mapDir);
+        return new OctaWorld(loaded.World, loaded.Entities, loaded.Package?.Environment);
+    }
+
+    /// <summary>Load a map: materializes latest keyframe from map.bin and replays trailing deltas.</summary>
     public static LoadedMap Load(string mapDir, OctaWorld? world = null)
     {
         string binPath = Globalize(Path.Combine(mapDir, MapPackageFileName));
-        if (File.Exists(binPath) || ResourceLoader.Exists(binPath))
+        if (!File.Exists(binPath) && !ResourceLoader.Exists(binPath))
+            throw new FileNotFoundException($"No {MapPackageFileName} in '{mapDir}'.", binPath);
+
+        var package = LoadMapPackageFile(binPath);
+        if (package.Keyframes == null || package.Keyframes.Count == 0)
+            throw new InvalidDataException($"MapPackage in '{mapDir}' contains no keyframes.");
+
+        var latestKeyframe = package.Keyframes[^1];
+        CheckGitCommitDrift(mapDir, latestKeyframe.GitCommit);
+
+        var octa = latestKeyframe.ToOcta();
+        var entities = new List<MapEntity>();
+        if (package.Entities != null && package.Entities.Count > 0)
         {
-            var package = LoadMapPackageFile(binPath);
-            if (package.Keyframes != null && package.Keyframes.Count > 0)
-            {
-                var latestKeyframe = package.Keyframes[^1];
-                CheckGitCommitDrift(mapDir, latestKeyframe.GitCommit);
-
-                var octa = latestKeyframe.ToOcta();
-                var entities = new List<MapEntity>();
-                if (package.Entities != null && package.Entities.Count > 0)
-                {
-                    foreach (var e in package.Entities) entities.Add(e.ToMapEntity());
-                }
-                else if (latestKeyframe.Entities != null && latestKeyframe.Entities.Count > 0)
-                {
-                    foreach (var e in latestKeyframe.Entities) entities.Add(e.ToMapEntity());
-                }
-
-                var target = world ?? new OctaWorld(octa, entities, latestKeyframe.Environment ?? package.Environment);
-                var deltas = package.Deltas != null ? package.Deltas.ToList() : new List<Command>();
-                foreach (var cmd in deltas) target.Apply(cmd);
-
-                return new LoadedMap
-                {
-                    World = octa,
-                    Snapshot = WorldSnapshot.Capture(octa, target.Entities),
-                    History = deltas,
-                    Package = package,
-                };
-            }
+            foreach (var e in package.Entities) entities.Add(e.ToMapEntity());
+        }
+        else if (latestKeyframe.Entities != null && latestKeyframe.Entities.Count > 0)
+        {
+            foreach (var e in latestKeyframe.Entities) entities.Add(e.ToMapEntity());
         }
 
-        var snapshot = LoadWorld(mapDir);
-        var fallbackOcta = snapshot.ToOcta();
-        var fallbackTarget = world ?? new OctaWorld(fallbackOcta, snapshot.Entities);
-        var history = LoadHistory(mapDir);
-        foreach (var cmd in history) fallbackTarget.Apply(cmd);
+        var env = latestKeyframe.Environment ?? package.Environment;
+        var target = world ?? new OctaWorld(octa, entities, env);
+        var deltas = package.Deltas != null ? package.Deltas.ToList() : new List<Command>();
+        foreach (var cmd in deltas) target.Apply(cmd);
+
         return new LoadedMap
         {
-            World = fallbackOcta,
-            Snapshot = snapshot,
-            History = history,
+            World = octa,
+            Entities = target.Entities,
+            History = deltas,
+            Package = package,
         };
     }
 
     /// <summary>
-    /// Generate and dump the canonical empty_map base snapshot to disk (res://resources/maps/empty_map/).
+    /// Generate and dump the canonical empty_map base package to disk (res://resources/maps/empty_map/).
     /// </summary>
     public static void CreateCanonicalEmptyMap(string targetDir = EmptyMapDir)
     {
@@ -279,48 +171,31 @@ public static class MapStore
     }
 
     /// <summary>
-    /// Write a map directory: a fresh <c>world.res</c> snapshot and an (optional)
-    /// <c>history.res</c>. When <paramref name="compact"/> is true the world is
-    /// snapshotted as-is and no history is written — the compaction path (§7.3).
-    /// When false, the caller's history is written alongside the snapshot.
-    ///
-    /// When <paramref name="manifest"/> is supplied it is written to
-    /// <c>materials/manifest.res</c>, making the directory self-describing; a null
-    /// manifest (editor maps with no imported resources) leaves the dir empty.
+    /// Write a map directory: writes an authoritative map.bin package and Level.tscn.
+    /// When compact is true, no deltas are written.
     /// </summary>
-    public static void Save(string mapDir, WorldSnapshot snapshot, IReadOnlyList<Command>? history,
-        bool compact = true, ManifestData? manifest = null)
+    public static void Save(
+        string mapDir,
+        Octa octa,
+        IEnumerable<MapEntity>? entities = null,
+        IReadOnlyList<Command>? history = null,
+        bool compact = true,
+        ManifestData? manifest = null,
+        SetEnvironmentCmd? environment = null)
     {
         string dir = Globalize(mapDir);
         Directory.CreateDirectory(dir);
         Directory.CreateDirectory(Path.Combine(dir, MaterialsDirName));
 
-        var worldRes = WorldResource.FromSnapshot(snapshot);
-        Error err = ResourceSaver.Save(worldRes, Path.Combine(dir, WorldResourceName));
-        if (err != Error.Ok) throw new IOException($"Saving {WorldResourceName} failed: {err}");
-
         if (manifest != null)
         {
             var manifestRes = ResourceManifest.FromData(manifest);
-            err = ResourceSaver.Save(manifestRes, Path.Combine(dir, MaterialsDirName, ManifestResourceName));
+            Error err = ResourceSaver.Save(manifestRes, Path.Combine(dir, MaterialsDirName, ManifestResourceName));
             if (err != Error.Ok) throw new IOException($"Saving {ManifestResourceName} failed: {err}");
         }
 
-        string historyPath = Path.Combine(dir, HistoryResourceName);
-        if (compact || history == null || history.Count == 0)
-        {
-            // Compaction: the snapshot is authoritative; drop any stale history.
-            if (File.Exists(historyPath)) File.Delete(historyPath);
-        }
-        else
-        {
-            var historyRes = HistoryResource.FromCommands(history);
-            err = ResourceSaver.Save(historyRes, historyPath);
-            if (err != Error.Ok) throw new IOException($"Saving {HistoryResourceName} failed: {err}");
-        }
-
-        // Compile and write authoritative map.bin package (ADR 0008 §5)
-        var keyframe = KeyframePackage.Capture(snapshot.ToOcta(), snapshot.Entities);
+        var entityList = entities != null ? entities.ToList() : new List<MapEntity>();
+        var keyframe = KeyframePackage.Capture(octa, entityList, environment);
         var package = new MapPackage
         {
             FormatVersion = 1,
@@ -329,7 +204,8 @@ public static class MapStore
             Compression = CompressionCodec.None,
             Keyframes = new List<KeyframePackage> { keyframe },
             Deltas = history != null && !compact ? history.ToList() : new List<Command>(),
-            Entities = snapshot.Entities.Select(e => e.ToEntityCmd()).ToList(),
+            Entities = entityList.Select(e => e.ToEntityCmd()).ToList(),
+            Environment = environment,
         };
         SaveMapPackage(mapDir, package);
 
@@ -337,9 +213,13 @@ public static class MapStore
     }
 
     /// <summary>Convenience: snapshot a live octree and save it, compacted.</summary>
-    public static void SaveCompacted(string mapDir, Octa octa, IEnumerable<MapEntity>? entities = null,
-        ManifestData? manifest = null) =>
-        Save(mapDir, WorldSnapshot.Capture(octa, entities), history: null, compact: true, manifest: manifest);
+    public static void SaveCompacted(
+        string mapDir,
+        Octa octa,
+        IEnumerable<MapEntity>? entities = null,
+        ManifestData? manifest = null,
+        SetEnvironmentCmd? environment = null) =>
+        Save(mapDir, octa, entities, history: null, compact: true, manifest: manifest, environment: environment);
 
     /// <summary>Load the resource manifest from a map directory, or null if the map has none.</summary>
     public static ManifestData? LoadManifest(string mapDir)
@@ -358,26 +238,51 @@ public static class MapStore
     }
 
     /// <summary>
-    /// Content hash of a map directory — the unit of Workshop distribution and
-    /// multiplayer parity (vision.md §12). It hashes the **semantic content**
-    /// (the decoded snapshot and command history), not the raw <c>.res</c> framing:
-    /// Godot embeds resource paths/uids in the framing, so raw bytes differ across
-    /// save locations even for identical worlds (docs §5.1 parity caveat). This is
-    /// stable under any re-save producing the same logical content.
+    /// Content hash of a map directory — hashes keyframes, deltas, entities, and materials.
     /// </summary>
     public static string ContentHash(string mapDir)
     {
         string dir = Globalize(mapDir);
         using var sha = SHA256.Create();
 
-        // World snapshot: its canonical content hash covers the octree + entities.
-        var snapshot = LoadWorld(mapDir);
-        Mix(sha, snapshot.Hash());
+        var package = LoadMapPackage(mapDir);
+        if (package != null)
+        {
+            if (package.Keyframes != null)
+            {
+                foreach (var kf in package.Keyframes)
+                {
+                    Mix(sha, KeyframePackage.ComputeHash(kf));
+                }
+            }
+            if (package.Deltas != null)
+            {
+                foreach (var cmd in package.Deltas)
+                {
+                    Mix(sha, cmd.Sequence, NetMessage.Encode(cmd));
+                }
+            }
+            if (package.Entities != null)
+            {
+                foreach (var e in package.Entities)
+                {
+                    Mix(sha, e.EntityId);
+                    Mix(sha, (ulong)e.Type);
+                    if (e.Pos != null)
+                    {
+                        Mix(sha, (ulong)e.Pos.X);
+                        Mix(sha, (ulong)e.Pos.Y);
+                        Mix(sha, (ulong)e.Pos.Z);
+                    }
+                    Mix(sha, (ulong)e.Attr1);
+                    Mix(sha, (ulong)e.Attr2);
+                    Mix(sha, (ulong)e.Attr3);
+                    Mix(sha, (ulong)e.Attr4);
+                    Mix(sha, (ulong)e.Attr5);
+                }
+            }
+        }
 
-        // Command history, in order (base + tail fully determine the session world).
-        foreach (var cmd in LoadHistory(mapDir)) Mix(sha, cmd.Sequence, NetMessage.Encode(cmd));
-
-        // Material manifest files, sorted, so a manifest change also changes the hash.
         string materials = Path.Combine(dir, MaterialsDirName);
         if (Directory.Exists(materials))
         {
@@ -400,6 +305,13 @@ public static class MapStore
         sha.TransformBlock(bytes, 0, bytes.Length, null, 0);
     }
 
+    private static void Mix(SHA256 sha, byte[] data)
+    {
+        var len = BitConverter.GetBytes(data.Length);
+        sha.TransformBlock(len, 0, len.Length, null, 0);
+        sha.TransformBlock(data, 0, data.Length, null, 0);
+    }
+
     private static void Mix(SHA256 sha, ulong sequence, byte[] command)
     {
         Mix(sha, sequence);
@@ -417,59 +329,23 @@ public static class MapStore
         sha.TransformBlock(content, 0, content.Length, null, 0);
     }
 
-    // ---- Level.tscn (references, not data) ----
+    // ---- Level.tscn ----
 
-    /// <summary>Scene script resource path; the scene only holds data references (§7.1).</summary>
     private const string LevelScript = "res://World/Runtime/Formats/Save/MapLevel.cs";
 
-    /// <summary>
-    /// Write (or rewrite) <c>Level.tscn</c>. It holds only scene-level concerns and
-    /// external references to <c>world.res</c>/<c>history.res</c>; editing geometry
-    /// never changes it (§7.1). Emitted as text so it is diffable and reviewable (§7.3).
-    /// </summary>
     public static void WriteLevelScene(string dir)
     {
-        string worldPath = File.Exists(Path.Combine(dir, WorldResourceName)) ? WorldResourceName : "";
-        string historyPath = File.Exists(Path.Combine(dir, HistoryResourceName)) ? HistoryResourceName : "";
-        string text = BuildLevelSceneText(worldPath, historyPath);
+        string text = BuildLevelSceneText();
         File.WriteAllText(Path.Combine(dir, LevelSceneName), text);
     }
 
-    /// <summary>Build the <c>Level.tscn</c> text. Kept internal so tests can assert it byte-for-byte.</summary>
-    public static string BuildLevelSceneText(string? worldPath, string? historyPath)
+    public static string BuildLevelSceneText()
     {
-        bool hasWorld = !string.IsNullOrEmpty(worldPath);
-        bool hasHistory = !string.IsNullOrEmpty(historyPath);
-        int steps = 1 + (hasWorld ? 1 : 0) + (hasHistory ? 1 : 0);
-        var sb = new System.Text.StringBuilder();
-        sb.Append("[gd_scene load_steps=").Append(steps).Append(" format=3]\n\n");
-        sb.Append("[ext_resource type=\"Script\" path=\"").Append(LevelScript).Append("\" id=\"1_level\"]\n");
-        int nextId = 2;
-        int worldId = 0, historyId = 0;
-        if (hasWorld)
-        {
-            worldId = nextId++;
-            sb.Append("[ext_resource type=\"Resource\" path=\"").Append(PathForExtRef(worldPath!)).Append("\" id=\"").Append(worldId).Append("_world\"]\n");
-        }
-        if (hasHistory)
-        {
-            historyId = nextId++;
-            sb.Append("[ext_resource type=\"Resource\" path=\"").Append(PathForExtRef(historyPath!)).Append("\" id=\"").Append(historyId).Append("_history\"]\n");
-        }
-        sb.Append("\n[node name=\"Level\" type=\"Node3D\"]\n");
-        sb.Append("script = ExtResource(\"1_level\")\n");
-        if (hasWorld)
-            sb.Append("World = ExtResource(\"").Append(worldId).Append("_world\")\n");
-        if (hasHistory)
-            sb.Append("History = ExtResource(\"").Append(historyId).Append("_history\")\n");
-        return sb.ToString();
+        return "[gd_scene load_steps=1 format=3]\n\n" +
+               $"[ext_resource type=\"Script\" path=\"{LevelScript}\" id=\"1_level\"]\n\n" +
+               "[node name=\"Level\" type=\"Node3D\"]\n" +
+               "script = ExtResource(\"1_level\")\n";
     }
-
-    // The scene references the data by a path **relative to itself** (the archive is
-    // relocatable between res://maps/<id>/ and user://maps/<id>/; a res:// path would
-    // pin it to a fixed location). Godot resolves a path with no scheme against the
-    // scene file.
-    private static string PathForExtRef(string name) => name.Replace('\\', '/');
 
     private static string Globalize(string path) =>
         path.StartsWith("res://") || path.StartsWith("user://") ? ProjectSettings.GlobalizePath(path) : path;

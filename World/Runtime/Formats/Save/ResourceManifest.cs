@@ -18,7 +18,7 @@ namespace SauerbratenRevival.World.Runtime.Formats.Save;
 /// original engine's load order, so we bake the resolved paths in once (see
 /// docs/adr/0006-ogz-import.md).
 ///
-/// Like <see cref="WorldResource"/>, the Resource is a **thin byte holder**: the
+/// The Resource is a **thin byte holder**: the
 /// payload is a canonical <see cref="ManifestData.Encode"/> blob, so it is
 /// byte-stable, version-independent of Godot's Resource framing, and the builder /
 /// round-trip are testable headless.
@@ -41,7 +41,7 @@ public partial class ResourceManifest : Resource
         return res;
     }
 
-    /// <summary>Attach this class's own script (see <see cref="WorldResource.AttachScript"/> for why).</summary>
+    /// <summary>Attach this class's own script so ResourceSaver writes an ext_resource reference.</summary>
     private static void AttachScript(Resource res)
     {
         var script = GD.Load<Script>(ScriptPath);

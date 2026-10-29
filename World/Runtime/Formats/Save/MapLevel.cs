@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Godot;
+using SauerbratenRevival.Format;
 using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Effects;
@@ -23,14 +24,13 @@ using SimClock = SauerbratenRevival.World.Runtime.SimClock;
 namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
 /// <summary>
-/// Scene-level root for a native-format map (docs/editor-and-commands.md §7.1). It
-/// holds only references to the data (<c>world.res</c>, <c>history.res</c>) — the
-/// octree and command history live outside the scene, so editing geometry never
-/// rewrites <c>Level.tscn</c>.
+/// Scene-level root for a native-format map (docs/editor-and-commands.md §7.1, ADR 0008).
+/// Holds external references to the directory containing <c>map.bin</c>. The octree and command
+/// deltas live in <c>map.bin</c>, so editing geometry never rewrites <c>Level.tscn</c>.
 ///
-/// On <c>_Ready</c> it materializes the octree from <see cref="World"/> and replays
-/// <see cref="History"/> through the command sink, then meshes it. Entities are
-/// runtime projections rebuilt from the snapshot's entity list (§7.2).
+/// On <c>_Ready</c> it materializes the octree from <c>map.bin</c> and replays trailing
+/// deltas through the command sink, then meshes it. Entities are runtime projections
+/// rebuilt from the package's entity list (§7.2).
 ///
 /// The octree is Sauerbraten Z-up; like <see cref="Ogz.MapWorld"/> this node rotates
 /// −90° about X so it sits in Godot Y-up space.
@@ -38,12 +38,6 @@ namespace SauerbratenRevival.World.Runtime.Formats.Save;
 [GlobalClass]
 public partial class MapLevel : Node3D, IGameWorld
 {
-    /// <summary>External reference to the base octree snapshot (<c>world.res</c>).</summary>
-    [Export] public WorldResource? World { get; set; }
-
-    /// <summary>External reference to the command history (<c>history.res</c>); may be null.</summary>
-    [Export] public HistoryResource? History { get; set; }
-
     /// <summary>Chunk size for the mesher.</summary>
     [Export] public int ChunkSize { get; set; } = 512;
 
@@ -113,8 +107,8 @@ public partial class MapLevel : Node3D, IGameWorld
     public WorldChunkRenderer? Renderer { get; set; }
     public Lighting.RadianceVolume? Radiance { get; set; }
 
-    /// <summary>The loaded snapshot (octree + entities).</summary>
-    public WorldSnapshot? Snapshot { get; private set; }
+    /// <summary>The loaded FlatSharp MapPackage.</summary>
+    public MapPackage? Package { get; private set; }
 
     /// <summary>
     /// Root of the reference dump's <c>packages/</c> tree, used to resolve the
@@ -123,19 +117,21 @@ public partial class MapLevel : Node3D, IGameWorld
     /// </summary>
     [Export] public string ReferenceRoot { get; set; } = "";
 
-    /// <summary>The map directory (os or res:// path) the manifest is loaded from.</summary>
+    /// <summary>The map directory (os or res:// path) the manifest and map.bin are loaded from.</summary>
     [Export] public string MapDir { get; set; } = "";
 
-    /// <summary>Entities loaded from the snapshot (view of the command log; §7.2).</summary>
-    public IReadOnlyList<MapEntity> Entities => Snapshot?.Entities ?? (IReadOnlyList<MapEntity>)System.Array.Empty<MapEntity>();
+    /// <summary>Backing list of entities loaded from map.bin.</summary>
+    public List<MapEntity> EntitiesList { get; } = new();
+
+    /// <summary>Entities loaded from the map package (view of the command log; §7.2).</summary>
+    public IReadOnlyList<MapEntity> Entities => EntitiesList;
 
     public override void _Ready() => Build();
 
-    /// <summary>Materialize the octree and history, then mesh. Idempotent.</summary>
+    /// <summary>Materialize the octree and deltas from map.bin, then mesh. Idempotent.</summary>
     public void Build()
     {
         if (Octa != null) return;
-        if (World == null && History == null && string.IsNullOrEmpty(MapDir)) return;
 
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
         Scale = new Vector3(-1, 1, 1);
@@ -149,39 +145,17 @@ public partial class MapLevel : Node3D, IGameWorld
         if (!string.IsNullOrEmpty(effectiveMapDir))
         {
             string binPath = Path.Combine(ProjectSettings.GlobalizePath(effectiveMapDir), MapStore.MapPackageFileName);
-            if (File.Exists(binPath))
+            if (File.Exists(binPath) || ResourceLoader.Exists(binPath))
             {
                 var loaded = MapStore.Load(effectiveMapDir);
                 Octa = loaded.World;
-                Snapshot = loaded.Snapshot;
+                EntitiesList.Clear();
+                EntitiesList.AddRange(loaded.Entities);
+                Package = loaded.Package;
                 Physics = new OctaPhysics(loaded.World);
                 if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
-                Sink = new CommandSink(new OctaWorld(loaded.World, loaded.Snapshot.Entities));
+                Sink = new CommandSink(new OctaWorld(loaded.World, EntitiesList, loaded.Package?.Environment));
             }
-        }
-
-        if (Octa == null && !string.IsNullOrEmpty(MapDir) && World == null && History == null)
-        {
-            var loaded = MapStore.Load(MapDir);
-            Octa = loaded.World;
-            Snapshot = loaded.Snapshot;
-            Physics = new OctaPhysics(loaded.World);
-            if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
-            Sink = new CommandSink(new OctaWorld(loaded.World, loaded.Snapshot.Entities));
-        }
-
-        if (Octa == null && World != null)
-        {
-            Snapshot = World.ToSnapshot();
-            var octa = Snapshot.ToOcta();
-            Octa = octa;
-            Physics = new OctaPhysics(octa);
-            if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
-            Sink = new CommandSink(new OctaWorld(octa, Snapshot.Entities));
-
-            // Replay the saved history tail on top of the base snapshot (§4 strategy 2).
-            if (History != null && History.Commands.Count > 0)
-                foreach (var cmd in History.ToCommands()) Sink.Receive(cmd);
         }
 
         if (Octa == null) return;
@@ -198,11 +172,9 @@ public partial class MapLevel : Node3D, IGameWorld
         // Resolve the manifest (if any) into a material set so the map renders
         // textured; editor maps without an imported manifest mesh untextured.
         MaterialSet? materials = null;
-        string mapDir = !string.IsNullOrEmpty(MapDir) ? MapDir
-            : World?.ResourcePath is { Length: > 0 } p ? Path.GetDirectoryName(p) ?? "" : "";
-        if (mapDir.Length > 0)
+        if (!string.IsNullOrEmpty(effectiveMapDir))
         {
-            var manifest = MapStore.LoadManifest(mapDir);
+            var manifest = MapStore.LoadManifest(effectiveMapDir);
             if (manifest != null)
             {
                 var textures = BuildTextureSource();

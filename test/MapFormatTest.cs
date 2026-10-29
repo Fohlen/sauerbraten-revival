@@ -82,10 +82,9 @@ public class MapFormatTest : GoTestBase
         MapStore.SaveCompacted(dir, octa);
 
         string abs = ProjectSettings.GlobalizePath(dir);
-        TestAssert.True(File.Exists(Path.Combine(abs, MapStore.WorldResourceName)), "world.res written");
+        TestAssert.True(File.Exists(Path.Combine(abs, MapStore.MapPackageFileName)), "map.bin written");
         TestAssert.True(File.Exists(Path.Combine(abs, MapStore.LevelSceneName)), "Level.tscn written");
         TestAssert.True(Directory.Exists(Path.Combine(abs, MapStore.MaterialsDirName)), "materials/ written");
-        TestAssert.True(!File.Exists(Path.Combine(abs, MapStore.HistoryResourceName)), "compact drops history");
     }
 
     [Test]
@@ -107,10 +106,9 @@ public class MapFormatTest : GoTestBase
         // Save the base BEFORE the edits, then the edits as history.
         var baseOcta = new Octa(8);
         baseOcta.EmptyMap(8);
-        var baseSnap = WorldSnapshot.Capture(baseOcta);
 
         var edited = EditedWorld(out var history);
-        MapStore.Save(dir, baseSnap, history, compact: false);
+        MapStore.Save(dir, baseOcta, entities: null, history: history, compact: false);
         ulong expected = ContentDigest(edited);
 
         var loaded = MapStore.Load(dir);
@@ -125,15 +123,15 @@ public class MapFormatTest : GoTestBase
 
         var edited = EditedWorld(out var history);
         // First write a non-compacted save with history...
-        MapStore.Save(dir, WorldSnapshot.Capture(new Octa(8)), history, compact: false);
-        TestAssert.True(File.Exists(Path.Combine(ProjectSettings.GlobalizePath(dir), MapStore.HistoryResourceName)),
-            "history present");
+        MapStore.Save(dir, new Octa(8), entities: null, history: history, compact: false);
+        var loadedFirst = MapStore.Load(dir);
+        TestAssert.Equal(history.Count, loadedFirst.History.Count, "history present");
 
         // ...then compact: history must be gone and the world must be the new base.
         MapStore.SaveCompacted(dir, edited);
-        TestAssert.True(!File.Exists(Path.Combine(ProjectSettings.GlobalizePath(dir), MapStore.HistoryResourceName)),
-            "history truncated by compaction");
-        TestAssert.Equal(Checksum(edited), Checksum(MapStore.Load(dir).World), "compacted base is current");
+        var loadedCompacted = MapStore.Load(dir);
+        TestAssert.Equal(0, loadedCompacted.History.Count, "history truncated by compaction");
+        TestAssert.Equal(Checksum(edited), Checksum(loadedCompacted.World), "compacted base is current");
     }
 
     [Test]
@@ -160,12 +158,9 @@ public class MapFormatTest : GoTestBase
     [Test]
     public void LevelSceneReferencesDataAndNeverInlinesIt()
     {
-        string withHistory = MapStore.BuildLevelSceneText("world.res", "history.res");
-        TestAssert.True(withHistory.Contains("path=\"world.res\""), "world.res referenced externally");
-        TestAssert.True(withHistory.Contains("path=\"history.res\""), "history.res referenced externally");
-
-        string noHistory = MapStore.BuildLevelSceneText("world.res", "");
-        TestAssert.True(!noHistory.Contains("history.res"), "no history reference when absent");
+        string text = MapStore.BuildLevelSceneText();
+        TestAssert.True(text.Contains("MapLevel.cs"), "MapLevel script referenced");
+        TestAssert.True(!text.Contains("octree"), "no octree data inlined");
     }
 
     [Test]
@@ -176,7 +171,7 @@ public class MapFormatTest : GoTestBase
         var threw = false;
         try { MapStore.LoadWorld(dir); }
         catch (FileNotFoundException) { threw = true; }
-        TestAssert.True(threw, "loading a map without world.res fails loudly");
+        TestAssert.True(threw, "loading a map without map.bin fails loudly");
     }
 
     // ---- scene path (MapLevel) ----
@@ -188,18 +183,16 @@ public class MapFormatTest : GoTestBase
         var octa = EditedWorld(out _);
         MapStore.SaveCompacted(dir, octa);
 
-        string abs = ProjectSettings.GlobalizePath(dir);
         var level = new MapLevel
         {
-            World = ResourceLoader.Load<WorldResource>(Path.Combine(abs, MapStore.WorldResourceName),
-                "", ResourceLoader.CacheMode.Replace),
+            MapDir = dir,
             ChunkSize = 64,
         };
         // MapLevel._Ready builds the world; call Build directly so no tree is needed.
         level.Build();
 
         TestAssert.True(level.Octa != null, "MapLevel produced an octree");
-        TestAssert.Equal(octa.WorldSize, level.Octa!.WorldSize, "worldsize from world.res");
+        TestAssert.Equal(octa.WorldSize, level.Octa!.WorldSize, "worldsize from map.bin");
         TestAssert.True(level.Renderer != null, "MapLevel meshed the world");
         level.Free();
     }
@@ -219,11 +212,9 @@ public class MapFormatTest : GoTestBase
         };
         MapStore.SaveCompacted(dir, octa, entities);
 
-        string abs = ProjectSettings.GlobalizePath(dir);
         var level = new MapLevel
         {
-            World = ResourceLoader.Load<WorldResource>(Path.Combine(abs, MapStore.WorldResourceName),
-                "", ResourceLoader.CacheMode.Replace),
+            MapDir = dir,
             ChunkSize = 64,
         };
         level.Build();
@@ -341,10 +332,10 @@ public class MapFormatTest : GoTestBase
     public void CanonicalEmptyMapGeneratesValidSnapshot()
     {
         MapStore.CreateCanonicalEmptyMap(MapStore.EmptyMapDir);
-        TestAssert.True(File.Exists(ProjectSettings.GlobalizePath(MapStore.EmptyMapWorldPath)), "canonical empty_map world.res exists");
+        TestAssert.True(File.Exists(ProjectSettings.GlobalizePath(MapStore.EmptyMapPackagePath)), "canonical empty_map map.bin exists");
 
         var loadedBase = MapStore.Load(MapStore.EmptyMapDir);
-        TestAssert.Equal(1, loadedBase.Snapshot.Entities.Count, "empty_map has PlayerStart entity");
+        TestAssert.Equal(1, loadedBase.Entities.Count, "empty_map has PlayerStart entity");
     }
 
     [Test]
@@ -535,16 +526,16 @@ public class MapFormatTest : GoTestBase
         };
 
         var trailingCmd = Command.CreateSetTexture(sel, 7, -1);
-        MapStore.Save(dir, WorldSnapshot.Capture(octa, entities), history: new[] { trailingCmd }, compact: false);
+        MapStore.Save(dir, octa, entities, history: new[] { trailingCmd }, compact: false);
 
         string binPath = Path.Combine(ProjectSettings.GlobalizePath(dir), MapStore.MapPackageFileName);
         TestAssert.True(File.Exists(binPath), "map.bin was written to disk");
 
         // Load via LoadWorld
-        var snapshot = MapStore.LoadWorld(dir);
-        TestAssert.Equal(10, snapshot.Scale, "scale matches");
-        TestAssert.Equal(1, snapshot.Entities.Count, "entities loaded");
-        TestAssert.Equal(100UL, snapshot.Entities[0].Id, "entity ID matches");
+        var loadedWorld = MapStore.LoadWorld(dir);
+        TestAssert.Equal(10, loadedWorld.Octa.WorldScale, "scale matches");
+        TestAssert.Equal(1, loadedWorld.Entities.Count, "entities loaded");
+        TestAssert.Equal(100UL, loadedWorld.Entities[0].Id, "entity ID matches");
 
         // Load via Load (replays trailing deltas)
         var loaded = MapStore.Load(dir);
@@ -566,6 +557,6 @@ public class MapFormatTest : GoTestBase
 
         var loaded = MapStore.Load(dir);
         TestAssert.Equal(10, loaded.World.WorldScale, "empty map scale is 10");
-        TestAssert.Equal(1, loaded.Snapshot.Entities.Count, "has playerstart entity");
+        TestAssert.Equal(1, loaded.Entities.Count, "has playerstart entity");
     }
 }

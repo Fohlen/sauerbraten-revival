@@ -28,6 +28,9 @@ tools/ogztool/out/
 # imported legacy sounds
 assets/
 
+# saved maps
+*.bin
+
 # octree ground-truth probe binary
 tools/octaprobe/octaprobe
 
