@@ -4,6 +4,7 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RootNamespace>SauerbratenRevival</RootNamespace>
     <Nullable>enable</Nullable>
+    <RollForward>Major</RollForward>
     <!-- Test sources are excluded from exported/release builds. -->
     <DefaultItemExcludes Condition="'$(Configuration)' == 'ExportRelease'">$(DefaultItemExcludes);test/**/*</DefaultItemExcludes>
   </PropertyGroup>

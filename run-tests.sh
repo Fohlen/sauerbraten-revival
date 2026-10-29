@@ -6,7 +6,6 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-export DOTNET_ROLL_FORWARD="${DOTNET_ROLL_FORWARD:-Major}"
 GODOT="${GODOT:-/Applications/Godot_mono.app/Contents/MacOS/Godot}"
 
 if [ ! -x "$GODOT" ]; then
