@@ -518,4 +518,54 @@ public class MapFormatTest : GoTestBase
         TestAssert.True(System.Linq.Enumerable.SequenceEqual(expectedBaseHash, sink.LatestKeyframe.BaseSnapshotHash!.Value.ToArray()), "base snapshot hash chains correctly");
         TestAssert.Equal(1, sink.Log.Entries.Count, "pre-remip deltas squashed again; only latest remip remains");
     }
+
+    [Test]
+    public void MapStoreSavesAndLoadsMapBinFast()
+    {
+        string dir = TempDir("map_bin_fast");
+        var octa = new Octa(10);
+        octa.EmptyMap(10);
+
+        var sel = new Selection(new Vector3I(64, 64, 64), new Vector3I(2, 2, 2), 8, 0);
+        OctaEdit.DeleteCube(octa, sel.ToBlock());
+
+        var entities = new List<MapEntity>
+        {
+            new() { Id = 100, Type = EntityType.PlayerStart, Position = new Vector3(64, 64, 70), Attr1 = 180 }
+        };
+
+        var trailingCmd = Command.CreateSetTexture(sel, 7, -1);
+        MapStore.Save(dir, WorldSnapshot.Capture(octa, entities), history: new[] { trailingCmd }, compact: false);
+
+        string binPath = Path.Combine(ProjectSettings.GlobalizePath(dir), MapStore.MapPackageFileName);
+        TestAssert.True(File.Exists(binPath), "map.bin was written to disk");
+
+        // Load via LoadWorld
+        var snapshot = MapStore.LoadWorld(dir);
+        TestAssert.Equal(10, snapshot.Scale, "scale matches");
+        TestAssert.Equal(1, snapshot.Entities.Count, "entities loaded");
+        TestAssert.Equal(100UL, snapshot.Entities[0].Id, "entity ID matches");
+
+        // Load via Load (replays trailing deltas)
+        var loaded = MapStore.Load(dir);
+        TestAssert.Equal(10, loaded.World.WorldScale, "loaded world scale matches");
+        TestAssert.Equal(1, loaded.History.Count, "trailing deltas loaded");
+        TestAssert.Equal(WorldOp.SetFaceTexture, loaded.History[0].Op, "trailing op is SetFaceTexture");
+        TestAssert.True(loaded.Package != null, "loaded Package is non-null");
+        TestAssert.Equal(1, loaded.Package!.Keyframes.Count, "package has keyframe");
+    }
+
+    [Test]
+    public void CanonicalEmptyMapCreatesMapBin()
+    {
+        string dir = TempDir("empty_map_bin");
+        MapStore.CreateCanonicalEmptyMap(dir);
+
+        string binPath = Path.Combine(ProjectSettings.GlobalizePath(dir), MapStore.MapPackageFileName);
+        TestAssert.True(File.Exists(binPath), "canonical empty map creates map.bin");
+
+        var loaded = MapStore.Load(dir);
+        TestAssert.Equal(10, loaded.World.WorldScale, "empty map scale is 10");
+        TestAssert.Equal(1, loaded.Snapshot.Entities.Count, "has playerstart entity");
+    }
 }

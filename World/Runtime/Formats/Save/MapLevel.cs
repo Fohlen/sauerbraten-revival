@@ -140,7 +140,27 @@ public partial class MapLevel : Node3D, IGameWorld
         RotationDegrees = new Vector3(-90, 0, 0); // Z-up -> Y-up
         Scale = new Vector3(-1, 1, 1);
 
-        if (!string.IsNullOrEmpty(MapDir) && World == null && History == null)
+        string effectiveMapDir = !string.IsNullOrEmpty(MapDir) ? MapDir : "";
+        if (string.IsNullOrEmpty(effectiveMapDir) && !string.IsNullOrEmpty(SceneFilePath))
+        {
+            effectiveMapDir = SceneFilePath.GetBaseDir();
+        }
+
+        if (!string.IsNullOrEmpty(effectiveMapDir))
+        {
+            string binPath = Path.Combine(ProjectSettings.GlobalizePath(effectiveMapDir), MapStore.MapPackageFileName);
+            if (File.Exists(binPath))
+            {
+                var loaded = MapStore.Load(effectiveMapDir);
+                Octa = loaded.World;
+                Snapshot = loaded.Snapshot;
+                Physics = new OctaPhysics(loaded.World);
+                if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
+                Sink = new CommandSink(new OctaWorld(loaded.World, loaded.Snapshot.Entities));
+            }
+        }
+
+        if (Octa == null && !string.IsNullOrEmpty(MapDir) && World == null && History == null)
         {
             var loaded = MapStore.Load(MapDir);
             Octa = loaded.World;

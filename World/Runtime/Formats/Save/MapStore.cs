@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
+using FlatSharp;
 using Godot;
+using SauerbratenRevival.Format;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Entities;
@@ -32,19 +35,51 @@ namespace SauerbratenRevival.World.Runtime.Formats.Save;
 public static class MapStore
 {
     public const string LevelSceneName = "Level.tscn";
+    public const string MapPackageFileName = "map.bin";
     public const string WorldResourceName = "world.res";
     public const string HistoryResourceName = "history.res";
     public const string MaterialsDirName = "materials";
     public const string ManifestResourceName = "manifest.res";
     public const string EmptyMapDir = "res://resources/maps/empty_map";
     public const string EmptyMapWorldPath = "res://resources/maps/empty_map/world.res";
+    public const string EmptyMapPackagePath = "res://resources/maps/empty_map/map.bin";
 
-    /// <summary>Read the base world snapshot from a map directory.</summary>
+    /// <summary>Read the base world snapshot from a map directory (prefers map.bin, falls back to world.res).</summary>
     public static WorldSnapshot LoadWorld(string mapDir)
     {
+        string binPath = Globalize(Path.Combine(mapDir, MapPackageFileName));
+        if (File.Exists(binPath) || ResourceLoader.Exists(binPath))
+        {
+            var package = LoadMapPackageFile(binPath);
+            if (package.Keyframes != null && package.Keyframes.Count > 0)
+            {
+                var latestKeyframe = package.Keyframes[^1];
+                CheckGitCommitDrift(mapDir, latestKeyframe.GitCommit);
+
+                var octa = latestKeyframe.ToOcta();
+                var entities = new List<MapEntity>();
+                if (package.Entities != null && package.Entities.Count > 0)
+                {
+                    foreach (var e in package.Entities) entities.Add(e.ToMapEntity());
+                }
+                else if (latestKeyframe.Entities != null && latestKeyframe.Entities.Count > 0)
+                {
+                    foreach (var e in latestKeyframe.Entities) entities.Add(e.ToMapEntity());
+                }
+
+                var target = new OctaWorld(octa, entities, latestKeyframe.Environment ?? package.Environment);
+                if (package.Deltas != null && package.Deltas.Count > 0)
+                {
+                    foreach (var cmd in package.Deltas) target.Apply(cmd);
+                }
+
+                return WorldSnapshot.Capture(octa, target.Entities);
+            }
+        }
+
         string path = Globalize(Path.Combine(mapDir, WorldResourceName));
         if (!ResourceLoader.Exists(path) && !File.Exists(path))
-            throw new FileNotFoundException($"No {WorldResourceName} in '{mapDir}'.", path);
+            throw new FileNotFoundException($"No {MapPackageFileName} or {WorldResourceName} in '{mapDir}'.", path);
         var res = ResourceLoader.Load(path, "", ResourceLoader.CacheMode.Replace);
         if (res == null) throw new InvalidDataException($"Failed to load {path}.");
 
@@ -54,6 +89,49 @@ public static class MapStore
         if (res.Get("Data").VariantType == Variant.Type.PackedByteArray)
             return WorldSnapshot.Decode(res.Get("Data").As<byte[]>());
         throw new InvalidDataException($"{path} is not a world snapshot.");
+    }
+
+    /// <summary>Check for drift between keyframe Git commit and current repository HEAD (ADR 0008 §4).</summary>
+    public static void CheckGitCommitDrift(string mapDir, string? keyframeCommit)
+    {
+        if (string.IsNullOrEmpty(keyframeCommit)) return;
+        string headCommit = GitCommitResolver.GetHeadCommit();
+        if (string.IsNullOrEmpty(headCommit)) return;
+
+        if (!string.Equals(headCommit, keyframeCommit, StringComparison.OrdinalIgnoreCase))
+        {
+            GD.PushWarning($"[MapStore] Keyframe git commit '{keyframeCommit}' differs from current HEAD '{headCommit}' for map '{mapDir}'.");
+        }
+    }
+
+    /// <summary>Load a FlatSharp MapPackage from a binary file path.</summary>
+    public static MapPackage LoadMapPackageFile(string path)
+    {
+        string abs = Globalize(path);
+        if (!File.Exists(abs))
+            throw new FileNotFoundException($"Map package not found: {path}", abs);
+
+        byte[] bytes = File.ReadAllBytes(abs);
+        return MapPackage.Serializer.Parse(bytes);
+    }
+
+    /// <summary>Load the MapPackage from a map directory, or null if map.bin is absent.</summary>
+    public static MapPackage? LoadMapPackage(string mapDir)
+    {
+        string binPath = Globalize(Path.Combine(mapDir, MapPackageFileName));
+        if (!File.Exists(binPath)) return null;
+        return LoadMapPackageFile(binPath);
+    }
+
+    /// <summary>Serialize and save a MapPackage to map.bin in a map directory.</summary>
+    public static void SaveMapPackage(string mapDir, MapPackage package)
+    {
+        string dir = Globalize(mapDir);
+        Directory.CreateDirectory(dir);
+        string binPath = Path.Combine(dir, MapPackageFileName);
+        byte[] buffer = new byte[MapPackage.Serializer.GetMaxSize(package)];
+        int bytesWritten = MapPackage.Serializer.Write(buffer, package);
+        File.WriteAllBytes(binPath, buffer.AsSpan(0, bytesWritten).ToArray());
     }
 
     /// <summary>Load the HistoryResource from a map directory, or null if absent.</summary>
@@ -91,9 +169,17 @@ public static class MapStore
         return historyRes;
     }
 
-    /// <summary>Read the command history from a map directory (empty if the file is absent).</summary>
+    /// <summary>Read the command history from a map directory (prefers map.bin deltas, falls back to history.res).</summary>
     public static List<Command> LoadHistory(string mapDir)
     {
+        string binPath = Globalize(Path.Combine(mapDir, MapPackageFileName));
+        if (File.Exists(binPath) || ResourceLoader.Exists(binPath))
+        {
+            var package = LoadMapPackageFile(binPath);
+            if (package.Deltas != null)
+                return package.Deltas.ToList();
+        }
+
         var historyRes = LoadHistoryResource(mapDir);
         if (historyRes != null) return historyRes.ToCommands();
         return new List<Command>();
@@ -109,19 +195,54 @@ public static class MapStore
         public Octa World = null!;
         public WorldSnapshot Snapshot = null!;
         public List<Command> History = new();
+        public MapPackage? Package;
     }
 
-    /// <summary>Load a map: materializes world snapshot and replays command history.</summary>
+    /// <summary>Load a map: materializes latest keyframe from map.bin (or world.res) and replays trailing deltas.</summary>
     public static LoadedMap Load(string mapDir, OctaWorld? world = null)
     {
+        string binPath = Globalize(Path.Combine(mapDir, MapPackageFileName));
+        if (File.Exists(binPath) || ResourceLoader.Exists(binPath))
+        {
+            var package = LoadMapPackageFile(binPath);
+            if (package.Keyframes != null && package.Keyframes.Count > 0)
+            {
+                var latestKeyframe = package.Keyframes[^1];
+                CheckGitCommitDrift(mapDir, latestKeyframe.GitCommit);
+
+                var octa = latestKeyframe.ToOcta();
+                var entities = new List<MapEntity>();
+                if (package.Entities != null && package.Entities.Count > 0)
+                {
+                    foreach (var e in package.Entities) entities.Add(e.ToMapEntity());
+                }
+                else if (latestKeyframe.Entities != null && latestKeyframe.Entities.Count > 0)
+                {
+                    foreach (var e in latestKeyframe.Entities) entities.Add(e.ToMapEntity());
+                }
+
+                var target = world ?? new OctaWorld(octa, entities, latestKeyframe.Environment ?? package.Environment);
+                var deltas = package.Deltas != null ? package.Deltas.ToList() : new List<Command>();
+                foreach (var cmd in deltas) target.Apply(cmd);
+
+                return new LoadedMap
+                {
+                    World = octa,
+                    Snapshot = WorldSnapshot.Capture(octa, target.Entities),
+                    History = deltas,
+                    Package = package,
+                };
+            }
+        }
+
         var snapshot = LoadWorld(mapDir);
-        var octa = snapshot.ToOcta();
-        var target = world ?? new OctaWorld(octa, snapshot.Entities);
+        var fallbackOcta = snapshot.ToOcta();
+        var fallbackTarget = world ?? new OctaWorld(fallbackOcta, snapshot.Entities);
         var history = LoadHistory(mapDir);
-        foreach (var cmd in history) target.Apply(cmd);
+        foreach (var cmd in history) fallbackTarget.Apply(cmd);
         return new LoadedMap
         {
-            World = octa,
+            World = fallbackOcta,
             Snapshot = snapshot,
             History = history,
         };
@@ -197,6 +318,20 @@ public static class MapStore
             err = ResourceSaver.Save(historyRes, historyPath);
             if (err != Error.Ok) throw new IOException($"Saving {HistoryResourceName} failed: {err}");
         }
+
+        // Compile and write authoritative map.bin package (ADR 0008 §5)
+        var keyframe = KeyframePackage.Capture(snapshot.ToOcta(), snapshot.Entities);
+        var package = new MapPackage
+        {
+            FormatVersion = 1,
+            MapName = Path.GetFileName(dir.TrimEnd('/', '\\')),
+            Author = "Revival",
+            Compression = CompressionCodec.None,
+            Keyframes = new List<KeyframePackage> { keyframe },
+            Deltas = history != null && !compact ? history.ToList() : new List<Command>(),
+            Entities = snapshot.Entities.Select(e => e.ToEntityCmd()).ToList(),
+        };
+        SaveMapPackage(mapDir, package);
 
         WriteLevelScene(dir);
     }
