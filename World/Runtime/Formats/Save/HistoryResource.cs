@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Network;
 
 namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
@@ -38,7 +39,7 @@ public partial class HistoryResource : Resource
     public static HistoryResource FromCommands(IEnumerable<Command> commands)
     {
         var res = new HistoryResource();
-        foreach (var c in commands) res.Commands.Add(CommandCodec.Encode(c));
+        foreach (var c in commands) res.Commands.Add(NetMessage.Encode(c));
         AttachScript(res);
         return res;
     }
@@ -49,7 +50,7 @@ public partial class HistoryResource : Resource
         if (Commands.Count > 0)
         {
             var list = new List<Command>(Commands.Count);
-            foreach (var blob in Commands) list.Add(CommandCodec.Decode(blob));
+            foreach (var blob in Commands) list.Add(NetMessage.Decode(blob));
             return list;
         }
 

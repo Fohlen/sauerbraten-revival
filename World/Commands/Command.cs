@@ -8,7 +8,7 @@ namespace SauerbratenRevival.World.Commands;
 /// gives it a total order in the log, and the author identifies who issued it
 /// (attribution, not authority — docs/editor-and-commands.md §1.1).
 ///
-/// Payloads are lightweight value-type structs blitted via MemoryMarshal (<see cref="CommandCodec"/>),
+/// Payloads are lightweight value-type structs encoded via FlatSharp (<see cref="Network.NetMessage"/>),
 /// so save/demo/network share a single zero-allocation encoding.
 /// </summary>
 public sealed class Command

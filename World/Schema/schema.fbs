@@ -89,13 +89,31 @@ table SetEnvironmentCmd {
     fog_color: uint32;               // 0xRRGGBB (fogcolour)
 }
 
+table SetMaterialCmd {
+    sel: SelectionBox;
+    material_id: int32;
+    filter: int32;
+}
+
+table NewMapCmd {
+    scale: int32;
+}
+
+table ReplaceBlockCmd {
+    sel: SelectionBox;
+    data: [ubyte];
+}
+
 union CommandPayload {
     EditFaceCmd,
     SetTextureCmd,
     DeleteCubeCmd,
     RemipCmd,
     EntityCmd,
-    SetEnvironmentCmd
+    SetEnvironmentCmd,
+    SetMaterialCmd,
+    NewMapCmd,
+    ReplaceBlockCmd
 }
 
 table WorldCommand (fs_serializer) {

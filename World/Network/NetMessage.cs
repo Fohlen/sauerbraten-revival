@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using FlatSharp;
 using Godot;
 using SauerbratenRevival.Format;
@@ -10,7 +11,7 @@ namespace SauerbratenRevival.World.Network;
 /// <summary>
 /// Network message packaging and translation between in-engine <see cref="Command"/>
 /// objects and FlatSharp FlatBuffers types (<see cref="WorldCommand"/>, <see cref="NetworkPacket"/>)
-/// for zero-copy live ENet networking and streaming logs (ADR 0008).
+/// for zero-copy live ENet networking, map package deltas, and streaming logs (ADR 0008).
 /// </summary>
 public static class NetMessage
 {
@@ -137,8 +138,26 @@ public static class NetMessage
                     Flags = st.Orient,
                 };
                 break;
+            case SetFaceMaterialPayload sm:
+                fbCmd.Payload = new SetMaterialCmd
+                {
+                    Sel = ToSelectionBox(sm.Selection),
+                    MaterialId = sm.MaterialId,
+                    Filter = sm.Filter,
+                };
+                break;
             case RemipPayload rp:
                 fbCmd.Payload = new RemipCmd { MipVis = rp.MipVis };
+                break;
+            case NewMapPayload nmp:
+                fbCmd.Payload = new NewMapCmd { Scale = nmp.Scale };
+                break;
+            case ReplaceBlockPayload rbp:
+                fbCmd.Payload = new ReplaceBlockCmd
+                {
+                    Sel = ToSelectionBox(rbp.Target),
+                    Data = rbp.Block != null ? SerializeBlock(rbp.Block) : Array.Empty<byte>(),
+                };
                 break;
             case EntityPayload ep:
                 fbCmd.Payload = ToEntityCmd(ep);
@@ -185,6 +204,11 @@ public static class NetMessage
                 CommandPayload.ItemKind.RemipCmd => new RemipPayload(p.Item4.MipVis),
                 CommandPayload.ItemKind.EntityCmd => ToEntityPayload(p.Item5),
                 CommandPayload.ItemKind.SetEnvironmentCmd => ToSetEnvironmentPayload(p.Item6),
+                CommandPayload.ItemKind.SetMaterialCmd => new SetFaceMaterialPayload(ToSelectionPayload(p.Item7.Sel), p.Item7.MaterialId, p.Item7.Filter),
+                CommandPayload.ItemKind.NewMapCmd => new NewMapPayload(p.Item8.Scale),
+                CommandPayload.ItemKind.ReplaceBlockCmd => new ReplaceBlockPayload(
+                    ToSelectionPayload(p.Item9.Sel),
+                    p.Item9.Data.HasValue && p.Item9.Data.Value.Length > 0 ? DeserializeBlock(p.Item9.Data.Value.Span) : null),
                 _ => EmptyPayload.Instance,
             };
         }
@@ -194,6 +218,23 @@ public static class NetMessage
             Sequence = fbCmd.Sequence,
         };
     }
+
+    /// <summary>Encode a single <see cref="Command"/> into a binary FlatSharp buffer.</summary>
+    public static byte[] Encode(Command cmd, uint timestamp = 0)
+    {
+        var fbCmd = cmd.ToFlatCommand(timestamp);
+        byte[] buffer = new byte[WorldCommand.Serializer.GetMaxSize(fbCmd)];
+        int bytesWritten = WorldCommand.Serializer.Write(buffer, fbCmd);
+        if (bytesWritten < buffer.Length)
+            Array.Resize(ref buffer, bytesWritten);
+        return buffer;
+    }
+
+    /// <summary>Decode a binary FlatSharp buffer into an in-engine <see cref="Command"/>.</summary>
+    public static Command Decode(byte[] data) => WorldCommand.Serializer.Parse(data).ToCommand();
+
+    /// <summary>Decode a binary FlatSharp buffer span into an in-engine <see cref="Command"/>.</summary>
+    public static Command Decode(ReadOnlySpan<byte> data) => WorldCommand.Serializer.Parse(data.ToArray()).ToCommand();
 
     /// <summary>Pack commands into a serialized byte buffer representing a <see cref="NetworkPacket"/>.</summary>
     public static byte[] Pack(uint packetId, IEnumerable<Command> commands, uint timestamp = 0)
@@ -228,5 +269,75 @@ public static class NetMessage
                 result.Add(fbCmd.ToCommand());
         }
         return result;
+    }
+
+    public static byte[] SerializeBlock(OctaEdit.CapturedBlock block)
+    {
+        using var ms = new MemoryStream();
+        using var w = new BinaryWriter(ms);
+        var d = block.Descriptor;
+        w.Write(d.O.X); w.Write(d.O.Y); w.Write(d.O.Z);
+        w.Write(d.S.X); w.Write(d.S.Y); w.Write(d.S.Z);
+        w.Write(d.Grid);
+        w.Write(d.Orient);
+        w.Write(block.Cubes.Length);
+        foreach (var c in block.Cubes) WriteCube(w, c);
+        return ms.ToArray();
+    }
+
+    public static OctaEdit.CapturedBlock DeserializeBlock(ReadOnlySpan<byte> bytes)
+    {
+        using var ms = new MemoryStream(bytes.ToArray(), writable: false);
+        using var r = new BinaryReader(ms);
+        var o = new Vector3I(r.ReadInt32(), r.ReadInt32(), r.ReadInt32());
+        var s = new Vector3I(r.ReadInt32(), r.ReadInt32(), r.ReadInt32());
+        int grid = r.ReadInt32();
+        int orient = r.ReadInt32();
+        int count = r.ReadInt32();
+        var cubes = new Cube[count];
+        for (int k = 0; k < count; k++) cubes[k] = ReadCube(r);
+        return new OctaEdit.CapturedBlock
+        {
+            Descriptor = new Block3(o, s, grid, orient),
+            Cubes = cubes,
+        };
+    }
+
+    private static void WriteCube(BinaryWriter w, Cube c)
+    {
+        w.Write(c.Faces[0]);
+        w.Write(c.Faces[1]);
+        w.Write(c.Faces[2]);
+        for (int i = 0; i < 6; i++) w.Write(c.Texture[i]);
+        w.Write(c.Material);
+        w.Write(c.Merged);
+        w.Write(c.Visible);
+        if (c.Children == null)
+        {
+            w.Write(false);
+        }
+        else
+        {
+            w.Write(true);
+            for (int i = 0; i < 8; i++) WriteCube(w, c.Children[i]);
+        }
+    }
+
+    private static Cube ReadCube(BinaryReader r)
+    {
+        var c = new Cube();
+        c.Faces[0] = r.ReadUInt32();
+        c.Faces[1] = r.ReadUInt32();
+        c.Faces[2] = r.ReadUInt32();
+        for (int i = 0; i < 6; i++) c.Texture[i] = r.ReadUInt16();
+        c.Material = r.ReadUInt16();
+        c.Merged = r.ReadByte();
+        c.Visible = r.ReadByte();
+        if (r.ReadBoolean())
+        {
+            c.Children = new Cube[8];
+            for (int i = 0; i < 8; i++) c.Children[i] = ReadCube(r);
+        }
+        return c;
     }
 }

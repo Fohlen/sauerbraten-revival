@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using Godot;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Network;
 
 namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
@@ -238,7 +239,7 @@ public static class MapStore
         Mix(sha, snapshot.Hash());
 
         // Command history, in order (base + tail fully determine the session world).
-        foreach (var cmd in LoadHistory(mapDir)) Mix(sha, cmd.Sequence, CommandCodec.Encode(cmd));
+        foreach (var cmd in LoadHistory(mapDir)) Mix(sha, cmd.Sequence, NetMessage.Encode(cmd));
 
         // Material manifest files, sorted, so a manifest change also changes the hash.
         string materials = Path.Combine(dir, MaterialsDirName);
