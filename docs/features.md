@@ -295,7 +295,7 @@ order** (design detail for this roadmap item).
       (`EditorController` + `DeltaModifier`, `test/DeltaDispatchTest.cs`).
 - [x] Save/load in our reference-based format (M5, [ADR 0009](adr/0009-reference-based-maps.md)):
       FlatSharp `MapPackage` (`map.bin`) with chunk keyframes captured at `remip`
-      boundaries pegged to `git_commit` + trailing deltas + `Level.tscn` + shipped base
+      boundaries pegged to `git_commit` + trailing deltas + shipped base
       `res://resources/maps/empty_map/map.bin` + compaction + archive content hash;
       `F2` save / `F3` load binds in `EditorController`;
       `scenes/empty_map.tscn` wired to `MapLevel` referencing `empty_map` (while

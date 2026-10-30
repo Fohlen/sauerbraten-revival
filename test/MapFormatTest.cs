@@ -76,7 +76,7 @@ public class MapFormatTest : GoTestBase
     }
 
     [Test]
-    public void SaveCompactedWritesWorldAndLevel()
+    public void SaveCompactedWritesWorldAndPackage()
     {
         string dir = TempDir("compact");
         var octa = EditedWorld(out _);
@@ -84,7 +84,6 @@ public class MapFormatTest : GoTestBase
 
         string abs = ProjectSettings.GlobalizePath(dir);
         TestAssert.True(File.Exists(Path.Combine(abs, MapStore.MapPackageFileName)), "map.bin written");
-        TestAssert.True(File.Exists(Path.Combine(abs, MapStore.LevelSceneName)), "Level.tscn written");
         TestAssert.True(Directory.Exists(Path.Combine(abs, MapStore.MaterialsDirName)), "materials/ written");
     }
 

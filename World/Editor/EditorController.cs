@@ -610,7 +610,7 @@ public partial class EditorController : Node3D
         if (Octa == null) return;
         var entities = Sink?.World.Entities;
         // The environment is command state (ADR 0009 §6): persist whatever the sink
-        // currently holds, not a scene-authored Level.tscn value.
+        // currently holds.
         MapStore.SaveCompacted(MapDir, Octa, entities, environment: Sink?.Environment);
         GD.Print($"[editor] saved '{MapDir}' (hash {MapStore.ContentHash(MapDir)})");
     }

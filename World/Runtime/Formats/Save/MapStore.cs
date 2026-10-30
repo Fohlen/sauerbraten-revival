@@ -19,7 +19,6 @@ namespace SauerbratenRevival.World.Runtime.Formats.Save;
 ///
 /// <code>
 /// map/
-/// ├── Level.tscn            # scene root: instantiates MapLevel
 /// ├── map.bin               # FlatSharp MapPackage (keyframes, trailing deltas, entities, environment)
 /// └── materials/            # material manifest (optional)
 /// </code>
@@ -181,13 +180,12 @@ public static class MapStore
         };
 
         // The canonical map ships a visible sun/sky so an empty world is lit the
-        // moment it loads (ADR 0009 §6: the environment is command state, not
-        // Level.tscn data).
+        // moment it loads (ADR 0009 §6: the environment is command state).
         SaveCompacted(targetDir, octa, entities, environment: Lighting.MapEnvironment.CreateDefault());
     }
 
     /// <summary>
-    /// Write a map directory: writes an authoritative map.bin package and Level.tscn.
+    /// Write a map directory: writes an authoritative map.bin package.
     /// When compact is true, no deltas are written.
     /// </summary>
     public static void Save(
@@ -224,8 +222,6 @@ public static class MapStore
             Environment = environment,
         };
         SaveMapPackage(mapDir, package);
-
-        WriteLevelScene(dir);
     }
 
     /// <summary>Convenience: snapshot a live octree and save it, compacted.</summary>

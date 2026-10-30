@@ -10,8 +10,8 @@ namespace SauerbratenRevival.World.Lighting;
 ///
 /// The command is the single source of truth for sun, sky, ambient and fog. It is
 /// persisted in <c>KeyframePackage.environment</c>, replayed from trailing
-/// <c>WorldOp.SetEnvironment</c> deltas, and streamed to peers — a
-/// <c>Level.tscn</c> is never synced. To render it, this helper maps the command
+/// <c>WorldOp.SetEnvironment</c> deltas, and streamed to peers — no
+/// scene file is synced. To render it, this helper maps the command
 /// onto two Godot nodes owned by the map node:
 ///
 /// <list type="bullet">

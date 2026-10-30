@@ -78,7 +78,7 @@ which wins over this doc on status.
 | Original octree code | Reuse `octa.cpp`/`octa.h` **core**; port editor *algorithms*; do **not** copy `octaedit.cpp` plumbing |
 | Rendering | Per-chunk `ArrayMesh` (one surface per vslot, Godot materials); Forward+; see [ADR 0007](adr/0007-world-rendering.md) |
 | Collision & movement | Ported octree traversal (`move`/`collide`/steps) in fixed 5 ms steps, validated against the original |
-| Level format | Classic maps: shipped `.ogz`, read at load time ([ADR 0006](adr/0006-ogz-import.md)). Editor maps: reference-based ([ADR 0009](adr/0009-reference-based-maps.md)) — `Level.tscn` + `manifest.tres` + `map.bin` (FlatSharp keyframes at remip boundaries + deltas). **No CubeScript** |
+| Level format | Classic maps: shipped `.ogz`, read at load time ([ADR 0006](adr/0006-ogz-import.md)). Editor maps: reference-based ([ADR 0009](adr/0009-reference-based-maps.md)) — `manifest.tres` + `map.bin` (FlatSharp keyframes at remip boundaries + deltas). **No CubeScript** |
 | Editor | Runtime, in-game, Godot UI + **command system** ([ADR 0008](adr/0008-command-logic.md)) |
 | World mutations | All are **deterministic commands** via unified FlatSharp schema ([ADR 0008](adr/0008-command-logic.md)) (editor, game modes, network) |
 | Config | Godot-native: `ProjectSettings`, `ConfigFile`, `Resource`, `InputMap` |
@@ -205,15 +205,11 @@ from `map.bin` and replays only post-remip delta commands.
 
 ```
 res://resources/maps/<map_name>/
-├── Level.tscn            # Godot Scene: visual presentation (skybox, sun, fog, rules)
 ├── manifest.tres         # Godot Resource: material/vslot bindings & model paths
 └── map.bin               # FlatSharp Package: header, keyframes, entities, deltas
 ```
 
-- `Level.tscn`: references the base world `Resource` (`BaseRef` or local
-  `world.res`), `history.res`, and material manifest as **external resources**
-  (by path); holds game-mode settings and environment. Editing geometry/entities
-  never inlines scene data.
+- `map.bin`: authoritative binary package holding keyframes, entities, environment, and deltas; materialized dynamically by `MapLevel` without requiring any scene file in the map directory.
 - **Base reference / World blob (`world.res` / `BaseRef`)**: a Godot binary
   `Resource` (`WorldResource`). Fresh and incremental maps reference
   `res://resources/maps/empty_map/world.res` (zero-copy) and store only their
@@ -228,7 +224,7 @@ res://resources/maps/<map_name>/
   `RemoveEntity` / `EditEntity` commands in `history.res` (using deterministic
   1/16th-unit fixed-point positions), hashed into every commit's `TreeHash`, and
   materialized at load as **runtime projections** (`Node.Owner == null`), never
-  serialized into `Level.tscn`.
+  serialized into scene files.
 - **Material manifest**: face/material index → `ShaderMaterial`. No texture-name
   resolution from scripts.
 

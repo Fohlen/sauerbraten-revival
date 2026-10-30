@@ -35,16 +35,15 @@ We adopt **[FlatSharp](https://github.com/jamescourtney/FlatSharp)** (high-perfo
 
 ## 1. Map Package Directory Layout
 
-Authored maps keep the scene root thin: world state lives in the FlatSharp package, not in scene nodes.
+A map is self-contained in its directory: there is no `Level.tscn` scene file. All world state (octree, entities, sun, sky, ambient, fog) lives in the FlatSharp binary package and is materialized dynamically by `MapLevel` at runtime (§6):
 
 ```
 res://resources/maps/<map_name>/
-├── Level.tscn              # Godot Scene: thin root that instantiates MapLevel (no world state)
 └── map.bin                 # FlatSharp Package: header, keyframes, entities, environment, deltas
 ```
 
-1. **`Level.tscn`**: A thin scene root that instantiates `MapLevel`. It deliberately holds **no authoritative world state** — no octree, entities, spawn points, audio, lights, sun, sky, fog, or material manifest. All of that is package/command state in `map.bin` (keyframes, entities, `SetEnvironmentCmd`, deltas) and is materialized at runtime by `MapLevel` (§6). Keeping it out of the scene is what lets streamed/networked edits change the world without syncing scene files between peers.
-2. **`map.bin`**: Authoritative FlatSharp binary container containing base keyframes, entities, environment, and pending delta commands. Unmergeable text command logs (`history.tres`) are eliminated.
+1. **`map.bin`**: Authoritative FlatSharp binary container containing base keyframes, entities, environment (`SetEnvironmentCmd`), and pending delta commands. Unmergeable text command logs (`history.tres`) and redundant stub scene files (`Level.tscn`) are eliminated.
+2. **Dynamic Materialization (`MapLevel`)**: Game modes and viewers instantiate `MapLevel` directly (e.g. in `scenes/empty_map.tscn`), pointing `MapDir` at the package directory. Keeping scene files completely out of the map format is what lets streamed/networked edits change the world without syncing scene files between peers.
 
 ---
 
@@ -158,11 +157,11 @@ To maintain full synchronization across network peers, disk storage, and the GPU
 
 1. **Entity Lights (`ET_LIGHT` & `ET_SPOTLIGHT`)**:
    - Persisted in `KeyframePackage.entities` and streamed via `WorldOp.AddEntity` / `EditEntity`.
-   - On map load, `MapLevel` materializes engine `OmniLight3D` / `SpotLight3D` nodes under a `Lights` parent with `Node.Owner = null`. As established in [editor-and-commands.md §7.2](../editor-and-commands.md#72-entities-are-command-versioned-runtime-projections-not-scene-data), **they are never serialized into `Level.tscn`**.
+   - On map load, `MapLevel` materializes engine `OmniLight3D` / `SpotLight3D` nodes under a `Lights` parent with `Node.Owner = null`. As established in [editor-and-commands.md §7.2](../editor-and-commands.md#72-entities-are-command-versioned-runtime-projections-not-scene-data), they are runtime projections, completely independent of scene files.
    - Legacy OGZ worlds (`MapWorld`'s radiance-shader materials) bypass Godot dynamic lights (`render_mode ambient_light_disabled`) and are illuminated via GPU Radiance Hints ([ADR 0002](0002-radiance-hints.md)), updated incrementally (~2 ms) when lights change. Native `MapLevel` maps currently shade their manifest's `StandardMaterial3D` and are lit directly by the projected entity lights and the environment sun.
 2. **Global Sun & Environment Settings (`SetEnvironmentCmd`)**:
-   - Persisted in `KeyframePackage.environment`, replayed from trailing `WorldOp.SetEnvironment` deltas, and streamed to peers. This command — not `Level.tscn` — is the single source of truth for sun, sky, ambient and fog.
-   - `MapLevel` projects it onto runtime-owned `DirectionalLight3D` / `WorldEnvironment` nodes (again `Node.Owner = null`, never serialized into `Level.tscn`) and updates them whenever the command changes, including during coop edit sessions.
+   - Persisted in `KeyframePackage.environment`, replayed from trailing `WorldOp.SetEnvironment` deltas, and streamed to peers. This command is the single source of truth for sun, sky, ambient and fog.
+   - `MapLevel` projects it onto runtime-owned `DirectionalLight3D` / `WorldEnvironment` nodes (again `Node.Owner = null`) and updates them whenever the command changes, including during coop edit sessions.
    - Updates `RadianceVolume` sun shadow rays across all clients in real time.
 
 ---
@@ -175,7 +174,7 @@ To maintain full synchronization across network peers, disk storage, and the GPU
 * **Rapid Deserialization**: Chunk keyframes load in $O(\text{nodes})$ (< 10 ms for 200,000 cubes) directly from byte spans without heap allocations.
 * **Compact File Sizes**: Median maps remain under 1 MB compressed; workshop diff packages remain under 100 KB.
 * **Drift Detection**: Keyframes pegged to Git commit SHAs detect mismatches against modified asset manifests immediately.
-* **Clean Clean-up**: Custom Merkle DAG (`System.IO.Hashing`, `ObjectId.cs`, `MapObjectStore.cs`) and text command logs (`history.tres`) are completely removed. Standard SHA-256 handles parity verification.
+* **Clean Clean-up**: Custom Merkle DAG (`System.IO.Hashing`, `ObjectId.cs`, `MapObjectStore.cs`), text command logs (`history.tres`), and stub scene files (`Level.tscn`) are completely removed. Standard SHA-256 handles parity verification.
 
 ### Trade-offs
 * **Binary Git Artifacts**: Canonical `map.bin` files are binary. However, because they store compact keyframes and squashed deltas, repository impact is minimal compared to unmergeable multi-megabyte `.tres` logs.

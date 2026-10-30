@@ -18,8 +18,8 @@ namespace SauerbratenRevival.World.Entities;
 /// (docs/editor-and-commands.md §11.7). <see cref="Hash"/> mixes exactly the values
 /// <see cref="Write"/> stores, so a live world and its reloaded snapshot hash alike.
 ///
-/// Entities are a *view* of the command log, not scene data: <c>Level.tscn</c> never
-/// stores them, and hand-editing is editor/command-path only (§3.5, §7.2).
+/// Entities are a *view* of the command log, not scene data: maps never
+/// serialize them into scene files, and hand-editing is editor/command-path only (§3.5, §7.2).
 /// </summary>
 public sealed class MapEntity
 {

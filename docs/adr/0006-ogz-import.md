@@ -61,8 +61,7 @@ load time.
    checkout never touches it (and never triggers an OS permission prompt, e.g.
    macOS Downloads access).
 5. **The native map directory stays the editor's save format.** New maps created
-   in the in-game editor are saved as `world.res` + `history.res` + `Level.tscn`
-   ([editor-and-commands.md §7](../editor-and-commands.md#7-map-format-versioned-command-history)).
+   in the in-game editor are saved as `map.bin` ([ADR 0009](0009-reference-based-maps.md)).
    It is not used to bake classic maps.
 
 ### What "import" means now

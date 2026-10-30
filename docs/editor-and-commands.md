@@ -615,7 +615,6 @@ decision. The native format (vision.md §9) cleanly separates scene presentation
 
 ```
 res://resources/maps/<map_name>/
-├── Level.tscn              # Godot Scene: visual presentation (skybox, directional sun, fog, audio, rules)
 ├── manifest.tres           # Godot Resource: material/vslot bindings & model paths (engine asset links)
 └── map.bin                 # FlatSharp Package: header, keyframes, entities, deltas
 ```
@@ -638,16 +637,7 @@ Rather than forcing Git to store multi-megabyte binary geometry churn on every c
 - **Unified FlatSharp Command Pipeline ([ADR 0008](adr/0008-command-logic.md))**:
   - Eliminates custom variable-length integer codecs (`WireCodec` / `putint`) and duplicate command representations in favor of the single FlatSharp `Command` table.
 
-`Level.tscn` holds engine scene-tree visual nodes (`DirectionalLight3D`, `WorldEnvironment`, ambient audio, mode rules):
-
-```
-Level.tscn
-  ├─ Level : MapLevel
-  │    Manifest = ExtResource("manifest.tres")
-```
-
-Godot scenes store external resources by path and only inline them if the path is
-cleared. **`Level.tscn` never inlines geometry or entities**.
+`MapLevel` dynamically materializes geometry, entities, sun, sky, ambient, fog, and lights at runtime from `map.bin` without requiring any scene file in the package.
 
 ### 7.2 Entities are command-versioned runtime projections, not scene data
 
@@ -664,8 +654,8 @@ chunks: `MapLevel` builds chunks and entities as **views** of the command-versio
 world state.
 
 Consequence: **hand-editing entities happens through the editor/command path,
-never the Godot inspector.** `Level.tscn` holds only scene-level concerns
-(environment, mode config, editor camera). This is the price of unified
+never the Godot inspector.** All entities, environment settings, and geometry
+are versioned in `map.bin`. This is the price of unified
 replication and versioning, and it is worth it — the same command stream that
 places an entity is what replicates, undoes, versions, and saves it.
 
@@ -708,17 +698,15 @@ Godot has three storage tiers, and the editor uses two of them:
 **Hashing & distributing:** the hash is computed over the map **archive**, not
 over individual files. Workshop (and our parity checks in vision.md §12)
 expects `.zip`/`.tar`, so the content hash is the archive hash — one value that
-covers `Level.tscn` + `world.res` + `history.res` + `materials/` together. This
+covers `map.bin` + `materials/` together. This
 is why the directory layout above is safe: the unit of distribution, hashing, and
 parity **is** the archive.
 
 ```
 map archive (map.zip / map.tar)
-├── Level.tscn
-├── world.res
-├── history.res
+├── map.bin
 └── materials/
-    └── ...
+    └── manifest.tres
 ```
 
 ---
@@ -906,7 +894,7 @@ the visible editor. M5+M6 are the multipliers. M8 is the differentiator.
    frame? Trade memory vs rollback latency. Suggest: ring of 32 snapshots,
    promote-to-full when a block edit exceeds a size threshold.
 2. ~~**Entity authority detail**~~ — **decided (§7.2):** entities are runtime
-   projections (`Owner == null`), never serialized into `Level.tscn`. Hand-editing
+   projections (`Owner == null`), never serialized into scene files. Hand-editing
    entities is editor/command-path only.
 3. ~~**Text vs binary history log**~~ — **decided: binary.** The command
   history is a binary blob (`.res`/custom). A text sidecar may be *generated*
@@ -1040,7 +1028,6 @@ World/Runtime/Formats/Save/
 ├── ManifestBuilder.cs     # Manifest construction and catalogue synchronization
 └── MapLevel.cs            # Scene node: runtime projections for entities & lights (ADR 0008, 0009)
 resources/maps/empty_map/
-├── Level.tscn             # canonical base empty map scene
 └── map.bin                # canonical FlatSharp base keyframe package (ADR 0009)
 World/Net/
 ├── WorldNetwork.cs        # RPC nodes, channels, authority
@@ -1071,7 +1058,7 @@ World/Meshing/
   channel; snapshots handle late join and rollback.
 - **Versioned maps are command histories** — diffable, replayable, and the same
   bytes as demos.
-- **The map is a directory of external resources**, referenced by `Level.tscn`;
+- **The map is a directory containing `map.bin`**, loaded by `MapLevel`;
   entities are runtime projections, not scene data. The unit of distribution,
   hashing, and multiplayer parity is the **archive** (`.zip`/`.tar`) — which is
   exactly what Workshop wants.

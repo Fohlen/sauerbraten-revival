@@ -24,9 +24,9 @@ using SimClock = SauerbratenRevival.World.Runtime.SimClock;
 namespace SauerbratenRevival.World.Runtime.Formats.Save;
 
 /// <summary>
-/// Scene-level root for a native-format map (docs/editor-and-commands.md §7.1, ADR 0008).
-/// Holds external references to the directory containing <c>map.bin</c>. The octree and command
-/// deltas live in <c>map.bin</c>, so editing geometry never rewrites <c>Level.tscn</c>.
+/// Scene-level root for a native-format map (docs/editor-and-commands.md §7.1, ADR 0008, ADR 0009).
+/// Holds external references to the directory containing <c>map.bin</c>. The octree, entities, environment,
+/// and command deltas live entirely in <c>map.bin</c>, so no scene file is needed in the map package.
 ///
 /// On <c>_Ready</c> it materializes the octree from <c>map.bin</c> and replays trailing
 /// deltas through the command sink, then meshes it. Entities are runtime projections
