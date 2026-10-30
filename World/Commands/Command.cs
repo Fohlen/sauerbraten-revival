@@ -42,6 +42,23 @@ public partial class Command
         _ => null
     };
 
+    /// <summary>
+    /// Try to get the world-space bounding box and margin (grid size) of the geometry
+    /// region affected by this command, using <see cref="Selection"/>.
+    /// </summary>
+    public bool TryGetAffectedRegion(out Aabb aabb, out float margin)
+    {
+        margin = 0f;
+        aabb = default;
+        var sel = Selection;
+        if (sel == null || sel.Size == null || (sel.Size.X == 0 && sel.Size.Y == 0 && sel.Size.Z == 0))
+            return false;
+
+        margin = sel.Grid;
+        aabb = sel.ToAabb();
+        return true;
+    }
+
     public override string ToString() => $"{Op}#{Sequence}(peer {PeerId})";
 
     public static Command CreateDeleteCube(Selection sel, int author = 0) => new()
@@ -173,6 +190,10 @@ public partial class SelectionBox
         new Vector3I(Size?.X ?? 0, Size?.Y ?? 0, Size?.Z ?? 0),
         Grid,
         Orient);
+
+    public Aabb ToAabb() => new(
+        new Vector3(Origin?.X ?? 0, Origin?.Y ?? 0, Origin?.Z ?? 0),
+        new Vector3((Size?.X ?? 0) * Grid, (Size?.Y ?? 0) * Grid, (Size?.Z ?? 0) * Grid));
 }
 
 public static class CommandFormatExtensions

@@ -676,9 +676,7 @@ public partial class EditorController : Node3D
     /// <summary>Re-mesh the region an edit touched (expanded by one grid cell).</summary>
     private void InvalidateRegion(Selection sel)
     {
-        var o = new Vector3(sel.O.X, sel.O.Y, sel.O.Z);
-        var size = new Vector3(sel.S.X * sel.Grid, sel.S.Y * sel.Grid, sel.S.Z * sel.Grid);
-        var aabb = new Aabb(o, size);
+        var aabb = sel.ToAabb();
         Renderer?.MarkDirty(aabb, margin: sel.Grid);
         // If Radiance is set directly and not wired through Renderer.Radiance, mark it dirty directly:
         if (Renderer?.Radiance == null)

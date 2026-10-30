@@ -50,6 +50,11 @@ public sealed class Selection
         Orient = orient;
     }
 
+    /// <summary>Convert selection to Sauerbraten world-space bounding box.</summary>
+    public Aabb ToAabb() => new(
+        new Vector3(O.X, O.Y, O.Z),
+        new Vector3(S.X * Grid, S.Y * Grid, S.Z * Grid));
+
     /// <summary>iengine.h: <c>selinfo::size()</c> — total grid cells in the selection.</summary>
     public int Size() => S.X * S.Y * S.Z;
 

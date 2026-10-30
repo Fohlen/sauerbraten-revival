@@ -327,7 +327,7 @@ public partial class MapLevel : Node3D, IGameWorld
             case WorldOp.SetFaceTexture:
             case WorldOp.ReplaceTexture:
             case WorldOp.SetFaceMaterial:
-                if (TryGetGeometryRegion(cmd, out var aabb, out float margin))
+                if (cmd.TryGetAffectedRegion(out var aabb, out float margin))
                 {
                     OnGeometryChanged(aabb, margin);
                 }
@@ -362,54 +362,6 @@ public partial class MapLevel : Node3D, IGameWorld
             var directLights = DirectLightSource.CollectFromEntities(Entities);
             Radiance.Bake(Octa, config, directLights, catalogue: null, textureSource: _textures);
         }
-    }
-
-    private static bool TryGetGeometryRegion(Command cmd, out Aabb aabb, out float margin)
-    {
-        margin = 0f;
-        aabb = default;
-        if (!cmd.Payload.HasValue) return false;
-        var p = cmd.Payload.Value;
-
-        Editor.Selection? sel = null;
-        switch (cmd.Op)
-        {
-            case WorldOp.DeleteCube:
-                sel = p.Item4.Sel?.ToSelection();
-                break;
-            case WorldOp.EditFace:
-                sel = p.Item1.Sel?.ToSelection();
-                break;
-            case WorldOp.ReplaceBlock:
-                sel = p.Item12.Sel?.ToSelection();
-                break;
-            case WorldOp.FlipCube:
-                sel = p.Item6.Sel?.ToSelection();
-                break;
-            case WorldOp.RotateCube:
-                sel = p.Item7.Sel?.ToSelection();
-                break;
-            case WorldOp.SetFaceTexture:
-                sel = p.Item2.Sel?.ToSelection();
-                break;
-            case WorldOp.ReplaceTexture:
-                sel = p.Item3.Sel?.ToSelection();
-                break;
-            case WorldOp.SetFaceMaterial:
-                sel = p.Item10.Sel?.ToSelection();
-                break;
-        }
-
-        if (sel != null)
-        {
-            margin = sel.Grid;
-            aabb = new Aabb(
-                new Vector3(sel.O.X, sel.O.Y, sel.O.Z),
-                new Vector3(sel.S.X * sel.Grid, sel.S.Y * sel.Grid, sel.S.Z * sel.Grid));
-            return true;
-        }
-
-        return false;
     }
 
     // The command sink is replaced wholesale on LoadMap; track both identities so a
