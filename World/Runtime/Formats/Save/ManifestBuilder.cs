@@ -1,3 +1,5 @@
+using Godot;
+using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;
 
 namespace SauerbratenRevival.World.Runtime.Formats.Save;
@@ -104,6 +106,72 @@ public static class ManifestBuilder
             };
             for (int dim = 0; dim < 3; dim++) uv[dim] = MaterialBuilder.CalcTexGen(vs, dim, texSize);
             set.Add(m.Index, material, uv);
+        }
+        return set;
+    }
+
+    /// <summary>
+    /// Rebuild a <see cref="MaterialSet"/> from a manifest where surfaces sample
+    /// the baked <see cref="RadianceVolume"/> via the radiance hints shader
+    /// (docs/adr/0002-radiance-hints.md).
+    /// </summary>
+    public static MaterialSet ToRadianceMaterialSet(
+        ManifestData data,
+        ITextureSource textures,
+        RadianceVolume volume,
+        MapConfig? config = null)
+    {
+        var set = new MaterialSet();
+        config ??= MapEnvironment.ToConfig(MapEnvironment.CreateDefault());
+        Color skyTint = RadianceVolume.DecodeColor(config.SkyboxColour);
+        Color ambientColor = RadianceVolume.DecodeColor(config.Ambient);
+        bool useRadiance = volume.Settings.Mode == LightingQualityMode.RadianceHints;
+
+        foreach (var m in data.Materials)
+        {
+            var albedo = m.DiffusePath.Length > 0 ? textures.Get(m.DiffusePath) : null;
+            var normal = m.NormalPath.Length > 0 ? textures.Get(m.NormalPath) : null;
+            var glow = m.GlowPath.Length > 0 ? textures.Get(m.GlowPath) : null;
+            var texSize = m.DiffusePath.Length > 0 ? textures.Size(m.DiffusePath) : new Vector2I(64, 64);
+            var tint = new Color(m.ColorR, m.ColorG, m.ColorB);
+            var glowColor = new Color(m.GlowR, m.GlowG, m.GlowB);
+
+            bool isEnvmap = m.Shader.Contains("env");
+
+            var material = MaterialBuilder.BuildRadianceMaterial(
+                albedo: albedo,
+                tint: tint,
+                normal: normal,
+                glow: glow,
+                glowColor: glowColor,
+                radianceTex: volume.Texture,
+                gridOrigin: volume.Grid.Origin,
+                gridExtent: volume.Grid.Extent,
+                skyTint: skyTint,
+                ambientColor: ambientColor,
+                useRadiance: useRadiance,
+                radianceAmbTex: volume.AmbientTexture,
+                useEnvmap: isEnvmap);
+
+            var uv = new TexGen[3];
+            var vs = new CatalogueVSlot
+            {
+                Index = m.Index,
+                Slot = m.Slot,
+                Scale = m.Scale,
+                Rotation = m.Rotation,
+                OffsetX = m.OffsetX,
+                OffsetY = m.OffsetY,
+                Color = new Vector3(m.ColorR, m.ColorG, m.ColorB),
+                Glow = new Vector3(m.GlowR, m.GlowG, m.GlowB),
+                AlphaFront = m.AlphaFront,
+                AlphaBack = m.AlphaBack,
+            };
+            for (int dim = 0; dim < 3; dim++) uv[dim] = MaterialBuilder.CalcTexGen(vs, dim, texSize);
+            set.Add(m.Index, material, uv);
+
+            set.SetAlphaMaterial(m.Index, AlphaMaterial.Create(
+                albedo, normal, glow, tint, glowColor, m.AlphaFront, m.AlphaBack));
         }
         return set;
     }

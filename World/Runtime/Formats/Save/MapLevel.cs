@@ -115,6 +115,15 @@ public partial class MapLevel : Node3D, IGameWorld
     public WorldChunkRenderer? Renderer { get; set; }
     public Lighting.RadianceVolume? Radiance { get; set; }
 
+    /// <summary>
+    /// When true, bakes a radiance hints volume for the map during <see cref="Build"/>
+    /// and uses it for surface shading (docs/adr/0002-radiance-hints.md).
+    /// </summary>
+    [Export] public bool BakeRadiance { get; set; }
+
+    /// <summary>Optional quality settings overriding default radiance hints volume quality.</summary>
+    public Lighting.LightingSettings? RadianceSettings { get; set; }
+
     /// <summary>The loaded FlatSharp MapPackage.</summary>
     public MapPackage? Package { get; private set; }
 
@@ -132,7 +141,7 @@ public partial class MapLevel : Node3D, IGameWorld
     public List<MapEntity> EntitiesList { get; } = new();
 
     /// <summary>Entities loaded from the map package (view of the command log; §7.2).</summary>
-    public IReadOnlyList<MapEntity> Entities => EntitiesList;
+    public IReadOnlyList<MapEntity> Entities => Sink != null ? Sink.Entities : EntitiesList;
 
     public override void _Ready() => Build();
 
@@ -171,14 +180,16 @@ public partial class MapLevel : Node3D, IGameWorld
 
         if (Octa == null) return;
 
-        Renderer = new WorldChunkRenderer
+        if (_textures == null) _textures = BuildTextureSource();
+
+        if (BakeRadiance)
         {
-            Name = "WorldMesh",
-            ChunkSize = ChunkSize,
-            BudgetPerFrame = 4,
-            Radiance = Radiance,
-        };
-        AddChild(Renderer);
+            var config = MapEnvironment.ToConfig(Sink?.Environment);
+            var directLights = DirectLightSource.CollectFromEntities(Entities);
+            var volume = RadianceVolume.CreateForOcta(Octa, RadianceSettings);
+            volume.Bake(Octa, config, directLights, catalogue: null, textureSource: _textures);
+            Radiance = volume;
+        }
 
         // Resolve the manifest (if any) into a material set so the map renders
         // textured; editor maps without an imported manifest mesh untextured.
@@ -188,18 +199,50 @@ public partial class MapLevel : Node3D, IGameWorld
             var manifest = MapStore.LoadManifest(effectiveMapDir);
             if (manifest != null)
             {
-                var textures = BuildTextureSource();
-                _textures = textures;
-                materials = ManifestBuilder.ToMaterialSet(manifest, textures);
+                if (Radiance != null)
+                {
+                    var config = MapEnvironment.ToConfig(Sink?.Environment);
+                    materials = ManifestBuilder.ToRadianceMaterialSet(manifest, _textures, Radiance, config);
+                }
+                else
+                {
+                    materials = ManifestBuilder.ToMaterialSet(manifest, _textures);
+                }
             }
         }
+
+        Material? fallback = null;
+        if (materials == null && Radiance != null)
+        {
+            var config = MapEnvironment.ToConfig(Sink?.Environment);
+            fallback = MaterialBuilder.BuildRadianceMaterial(
+                albedo: null,
+                tint: Colors.White,
+                radianceTex: Radiance.Texture,
+                gridOrigin: Radiance.Grid.Origin,
+                gridExtent: Radiance.Grid.Extent,
+                skyTint: RadianceVolume.DecodeColor(config.SkyboxColour),
+                ambientColor: RadianceVolume.DecodeColor(config.Ambient),
+                useRadiance: Radiance.Settings.Mode == LightingQualityMode.RadianceHints,
+                radianceAmbTex: Radiance.AmbientTexture);
+        }
+
+        Renderer = new WorldChunkRenderer
+        {
+            Name = "WorldMesh",
+            ChunkSize = ChunkSize,
+            BudgetPerFrame = 4,
+            Radiance = Radiance,
+            FallbackMaterial = fallback,
+        };
+        AddChild(Renderer);
         Renderer.Setup(Octa, materials);
 
         // Converted mapmodels (assimp), imported by Godot as Resources.
         var modelCatalog = ModelCatalog.LoadFromProject();
         Models = modelCatalog;
 
-        AddChild(LightBuilder.Build(Entities));
+        SyncLights();
         var envMaps = EnvMapBuilder.Build(Entities);
         EnvMaps = envMaps;
         AddChild(envMaps);
@@ -242,7 +285,11 @@ public partial class MapLevel : Node3D, IGameWorld
     private CommandSink? _environmentSink;
     private SetEnvironmentCmd? _appliedEnvironment;
 
-    public override void _Process(double delta) => SyncEnvironment();
+    public override void _Process(double delta)
+    {
+        SyncEnvironment();
+        SyncLights();
+    }
 
     /// <summary>
     /// Materialize the current <see cref="CommandSink.Environment"/> onto this map's
@@ -256,6 +303,69 @@ public partial class MapLevel : Node3D, IGameWorld
         _environmentSink = Sink;
         _appliedEnvironment = Sink.Environment;
         Lighting.MapEnvironment.Apply(this, Sink.Environment, _textures);
+
+        if (Radiance != null && Octa != null)
+        {
+            var config = MapEnvironment.ToConfig(Sink.Environment);
+            var directLights = DirectLightSource.CollectFromEntities(Entities);
+            Radiance.Bake(Octa, config, directLights, catalogue: null, textureSource: _textures);
+        }
+    }
+
+    private CommandSink? _lightsSink;
+    private int _appliedLightHash;
+    private bool _lightsApplied;
+
+    /// <summary>
+    /// Materialize entity lights onto this map's scene nodes under a "Lights" child,
+    /// and keep direct lights on the radiance volume in sync (ADR 0009 §6).
+    /// </summary>
+    public void SyncLights()
+    {
+        int currentHash = ComputeLightHash(Entities);
+        if (_lightsApplied && ReferenceEquals(Sink, _lightsSink) && currentHash == _appliedLightHash)
+            return;
+
+        _lightsSink = Sink;
+        _appliedLightHash = currentHash;
+        _lightsApplied = true;
+
+        LightBuilder.Apply(this, Entities);
+
+        if (Radiance != null)
+        {
+            var directLights = DirectLightSource.CollectFromEntities(Entities);
+            Radiance.UpdateLights(directLights);
+        }
+    }
+
+    private static int ComputeLightHash(IReadOnlyList<MapEntity> entities)
+    {
+        var hash = new System.HashCode();
+        foreach (var e in entities)
+        {
+            if (e.Type == EntityType.Light || e.Type == EntityType.SpotLight)
+            {
+                hash.Add(e.Id);
+                hash.Add(e.Type);
+                hash.Add(e.Position);
+                hash.Add(e.Attr1);
+                hash.Add(e.Attr2);
+                hash.Add(e.Attr3);
+                hash.Add(e.Attr4);
+                hash.Add(e.Attr5);
+            }
+        }
+        return hash.ToHashCode();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Radiance?.Dispose();
+        }
+        base.Dispose(disposing);
     }
 
     /// <summary>Finds a player spawn point in Sauerbraten coordinates.</summary>

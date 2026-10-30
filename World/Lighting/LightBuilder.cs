@@ -20,11 +20,44 @@ public static class LightBuilder
     /// <summary>Used when the light has no attenuation radius (attr1 == 0).</summary>
     public const float InfiniteRange = 4096.0f;
 
+    /// <summary>Direct-child name of the lights node the map node owns/updates.</summary>
+    public const string LightsNodeName = "Lights";
+
     public static Node3D Build(OgzMap map) => Build(map.Entities);
 
     public static Node3D Build(IReadOnlyList<MapEntity> entities)
     {
-        var root = new Node3D { Name = "Lights" };
+        var root = new Node3D { Name = LightsNodeName };
+        Populate(root, entities);
+        return root;
+    }
+
+    /// <summary>
+    /// Materializes entity lights under the direct-child <c>Lights</c> node on
+    /// <paramref name="host"/> (in Sauerbraten Z-up local space). Rebuilds the lights
+    /// whenever the entity list changes; idempotent.
+    /// </summary>
+    public static Node3D Apply(Node3D host, IReadOnlyList<MapEntity> entities)
+    {
+        var root = host.GetNodeOrNull<Node3D>(LightsNodeName);
+        if (root == null)
+        {
+            root = new Node3D { Name = LightsNodeName };
+            host.AddChild(root);
+        }
+
+        foreach (Node child in root.GetChildren())
+        {
+            root.RemoveChild(child);
+            child.QueueFree();
+        }
+
+        Populate(root, entities);
+        return root;
+    }
+
+    private static void Populate(Node3D root, IReadOnlyList<MapEntity> entities)
+    {
         var spotlightForLight = SpotlightAttachments.ByLightIndex(entities);
 
         foreach (var (i, e) in entities.OfType(EntityType.Light))
@@ -62,8 +95,6 @@ public static class LightBuilder
                 });
             }
         }
-
-        return root;
     }
 
     private static Color LightColor(MapEntity e)
