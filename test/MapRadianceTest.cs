@@ -3,6 +3,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
+using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;
@@ -103,7 +104,7 @@ public class MapRadianceTest : GoTestBase
         TestAssert.True(lightsRoot != null, "Lights node exists");
         TestAssert.Equal(1, lightsRoot!.GetChildCount(), "initial 1 light child");
 
-        // Submit adding a second light entity
+        // Submit adding a second light entity; command dispatch updates lights automatically
         var light2 = new MapEntity
         {
             Id = 2,
@@ -116,16 +117,94 @@ public class MapRadianceTest : GoTestBase
         };
         level.Sink!.Submit(Command.CreateAddEntity(light2));
 
-        // Re-sync lights
-        level.SyncLights();
+        TestAssert.Equal(2, lightsRoot.GetChildCount(), "updated to 2 light children immediately after entity add command");
 
-        TestAssert.Equal(2, lightsRoot.GetChildCount(), "updated to 2 light children after entity add");
+        // Re-sync lights is idempotent
+        level.SyncLights();
+        TestAssert.Equal(2, lightsRoot.GetChildCount(), "remains 2 light children after idempotent SyncLights");
 
         // Submit removing the first light entity
         level.Sink.Submit(Command.CreateRemoveEntity(light1.Id));
-        level.SyncLights();
+        TestAssert.Equal(1, lightsRoot.GetChildCount(), "updated to 1 light child immediately after entity removal command");
 
-        TestAssert.Equal(1, lightsRoot.GetChildCount(), "updated to 1 light child after entity removal");
+        level.SyncLights();
+        TestAssert.Equal(1, lightsRoot.GetChildCount(), "remains 1 light child after idempotent SyncLights");
+
+        level.Free();
+    }
+
+    [Test]
+    public void MapLevelDoesNotRecomputeLightsDuringPhysicsProcess()
+    {
+        string dir = System.IO.Path.Combine(OS.GetUserDataDir(), "map_phys_lights_" + System.Guid.NewGuid().ToString("N"));
+        var octa = new Octa(8);
+        octa.EmptyMap(8);
+
+        var light = new MapEntity
+        {
+            Id = 1,
+            Type = EntityType.Light,
+            Position = new Vector3(64, 64, 64),
+            Attr1 = 100,
+            Attr2 = 255,
+            Attr3 = 255,
+            Attr4 = 255,
+        };
+        MapStore.SaveCompacted(dir, octa, new List<MapEntity> { light }, environment: MapEnvironment.CreateDefault());
+
+        var level = new MapLevel
+        {
+            MapDir = dir,
+            ChunkSize = 64,
+            BakeRadiance = true,
+            RadianceSettings = new LightingSettings { Resolution = 8, SkyRays = 4 },
+        };
+        level.Build();
+
+        var lightsRoot = level.GetNodeOrNull<Node3D>(LightBuilder.LightsNodeName);
+        TestAssert.True(lightsRoot != null, "Lights node exists");
+        TestAssert.Equal(1, lightsRoot!.GetChildCount(), "initial 1 light child");
+
+        var lightNodeBefore = lightsRoot.GetChild(0);
+
+        // Run physics process steps - lights must not be re-applied or reconstructed
+        for (int i = 0; i < 10; i++)
+        {
+            level._PhysicsProcess(0.005);
+        }
+
+        TestAssert.Equal(1, lightsRoot.GetChildCount(), "light child count unchanged");
+        TestAssert.True(ReferenceEquals(lightNodeBefore, lightsRoot.GetChild(0)), "light node was not re-created during physics process");
+
+        level.Free();
+    }
+
+    [Test]
+    public void MapLevelMarksRendererDirtyWhenGeometryChanges()
+    {
+        string dir = System.IO.Path.Combine(OS.GetUserDataDir(), "map_geom_lights_" + System.Guid.NewGuid().ToString("N"));
+        var octa = new Octa(8);
+        octa.EmptyMap(8);
+
+        MapStore.SaveCompacted(dir, octa, environment: MapEnvironment.CreateDefault());
+
+        var level = new MapLevel
+        {
+            MapDir = dir,
+            ChunkSize = 64,
+            BakeRadiance = true,
+            RadianceSettings = new LightingSettings { Resolution = 8, SkyRays = 4 },
+        };
+        level.Build();
+
+        level.Renderer!.FlushDirty();
+        TestAssert.Equal(0, level.Renderer.PendingCount, "renderer flushed clean");
+
+        // Submit a geometry mutation command
+        var sel = new Selection(new Vector3I(0, 0, 0), new Vector3I(1, 1, 1), grid: 8);
+        level.Sink!.Submit(Command.CreateEditFace(sel, dir: 0, mode: 0));
+
+        TestAssert.True(level.Renderer.PendingCount > 0, "geometry mutation command marked chunk dirty");
 
         level.Free();
     }

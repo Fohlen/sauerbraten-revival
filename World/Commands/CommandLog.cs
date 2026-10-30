@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using SauerbratenRevival.World.Editor;
 
@@ -52,6 +53,12 @@ public sealed class CommandLog
     /// <summary>The issuing peer (0 = local single-player).</summary>
     public int LocalPeerId { get; }
 
+    /// <summary>
+    /// Fired whenever a command is applied and logged (forward, undo, redo, or remote).
+    /// Observers (e.g. MapLevel) use this to react to live world, light, and env mutations.
+    /// </summary>
+    public event Action<Command>? CommandApplied;
+
     /// <summary>All applied entries, in order.</summary>
     public IReadOnlyList<LogEntry> Entries => _entries;
 
@@ -81,6 +88,7 @@ public sealed class CommandLog
         var entry = new LogEntry { Command = cmd };
         _entries.Add(entry);
         _undone.Clear(); // a new edit invalidates redo
+        CommandApplied?.Invoke(cmd);
         return entry;
     }
 
@@ -151,6 +159,13 @@ public sealed class CommandLog
     {
         var entry = new LogEntry { Command = cmd };
         _entries.Add(entry);
+        CommandApplied?.Invoke(cmd);
         return entry;
+    }
+
+    /// <summary>Notify observers of a reverted or re-applied command from undo/redo.</summary>
+    public void NotifyReverted(Command cmd)
+    {
+        CommandApplied?.Invoke(cmd);
     }
 }

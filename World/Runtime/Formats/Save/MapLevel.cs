@@ -109,9 +109,34 @@ public partial class MapLevel : Node3D, IGameWorld
     }
 
     private Materials.ITextureSource? _textures;
+    private bool _isBuilt;
 
     public Octa? Octa { get; set; }
-    public CommandSink? Sink { get; set; }
+
+    private CommandSink? _sink;
+    public CommandSink? Sink
+    {
+        get => _sink;
+        set
+        {
+            if (ReferenceEquals(_sink, value)) return;
+            if (_sink != null)
+            {
+                _sink.CommandApplied -= OnCommandApplied;
+            }
+            _sink = value;
+            if (_sink != null)
+            {
+                _sink.CommandApplied += OnCommandApplied;
+                if (_isBuilt)
+                {
+                    SyncEnvironment();
+                    SyncLights();
+                }
+            }
+        }
+    }
+
     public WorldChunkRenderer? Renderer { get; set; }
     public Lighting.RadianceVolume? Radiance { get; set; }
 
@@ -242,7 +267,7 @@ public partial class MapLevel : Node3D, IGameWorld
         var modelCatalog = ModelCatalog.LoadFromProject();
         Models = modelCatalog;
 
-        SyncLights();
+        ApplyLightsInitial();
         var envMaps = EnvMapBuilder.Build(Entities);
         EnvMaps = envMaps;
         AddChild(envMaps);
@@ -267,7 +292,8 @@ public partial class MapLevel : Node3D, IGameWorld
             if (child is Editor.EditorController ec)
                 ec.BindMapSource(this);
 
-        SyncEnvironment();
+        ApplyEnvironmentInitial();
+        _isBuilt = true;
 
         GD.Print($"[maplevel] worldsize={Octa.WorldSize} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount} entities={Entities.Count}");
     }
@@ -279,16 +305,124 @@ public partial class MapLevel : Node3D, IGameWorld
         _simulation.Step(this, delta);
     }
 
+    private void OnCommandApplied(Command cmd)
+    {
+        switch (cmd.Op)
+        {
+            case WorldOp.AddEntity:
+            case WorldOp.RemoveEntity:
+            case WorldOp.EditEntity:
+                SyncLights();
+                break;
+
+            case WorldOp.SetEnvironment:
+                SyncEnvironment();
+                break;
+
+            case WorldOp.DeleteCube:
+            case WorldOp.EditFace:
+            case WorldOp.ReplaceBlock:
+            case WorldOp.FlipCube:
+            case WorldOp.RotateCube:
+            case WorldOp.SetFaceTexture:
+            case WorldOp.ReplaceTexture:
+            case WorldOp.SetFaceMaterial:
+                if (TryGetGeometryRegion(cmd, out var aabb, out float margin))
+                {
+                    OnGeometryChanged(aabb, margin);
+                }
+                else
+                {
+                    OnFullWorldGeometryChanged();
+                }
+                break;
+
+            case WorldOp.Remip:
+            case WorldOp.NewMap:
+                OnFullWorldGeometryChanged();
+                break;
+        }
+    }
+
+    private void OnGeometryChanged(Aabb aabb, float margin)
+    {
+        Renderer?.MarkDirty(aabb, margin);
+        if (Renderer?.Radiance == null && Radiance != null)
+        {
+            Radiance.MarkDirty(aabb, margin);
+        }
+    }
+
+    private void OnFullWorldGeometryChanged()
+    {
+        Renderer?.ReSetup();
+        if (Radiance != null && Octa != null)
+        {
+            var config = MapEnvironment.ToConfig(Sink?.Environment);
+            var directLights = DirectLightSource.CollectFromEntities(Entities);
+            Radiance.Bake(Octa, config, directLights, catalogue: null, textureSource: _textures);
+        }
+    }
+
+    private static bool TryGetGeometryRegion(Command cmd, out Aabb aabb, out float margin)
+    {
+        margin = 0f;
+        aabb = default;
+        if (!cmd.Payload.HasValue) return false;
+        var p = cmd.Payload.Value;
+
+        Editor.Selection? sel = null;
+        switch (cmd.Op)
+        {
+            case WorldOp.DeleteCube:
+                sel = p.Item4.Sel?.ToSelection();
+                break;
+            case WorldOp.EditFace:
+                sel = p.Item1.Sel?.ToSelection();
+                break;
+            case WorldOp.ReplaceBlock:
+                sel = p.Item12.Sel?.ToSelection();
+                break;
+            case WorldOp.FlipCube:
+                sel = p.Item6.Sel?.ToSelection();
+                break;
+            case WorldOp.RotateCube:
+                sel = p.Item7.Sel?.ToSelection();
+                break;
+            case WorldOp.SetFaceTexture:
+                sel = p.Item2.Sel?.ToSelection();
+                break;
+            case WorldOp.ReplaceTexture:
+                sel = p.Item3.Sel?.ToSelection();
+                break;
+            case WorldOp.SetFaceMaterial:
+                sel = p.Item10.Sel?.ToSelection();
+                break;
+        }
+
+        if (sel != null)
+        {
+            margin = sel.Grid;
+            aabb = new Aabb(
+                new Vector3(sel.O.X, sel.O.Y, sel.O.Z),
+                new Vector3(sel.S.X * sel.Grid, sel.S.Y * sel.Grid, sel.S.Z * sel.Grid));
+            return true;
+        }
+
+        return false;
+    }
+
     // The command sink is replaced wholesale on LoadMap; track both identities so a
     // new sink (or a new environment command on the same sink) re-applies the scene
     // nodes. Reference comparison is enough: commands are immutable payloads.
     private CommandSink? _environmentSink;
     private SetEnvironmentCmd? _appliedEnvironment;
 
-    public override void _Process(double delta)
+    private void ApplyEnvironmentInitial()
     {
-        SyncEnvironment();
-        SyncLights();
+        _environmentSink = Sink;
+        _appliedEnvironment = Sink?.Environment;
+        Lighting.MapEnvironment.Apply(this, Sink?.Environment, _textures);
     }
 
     /// <summary>
@@ -315,6 +449,14 @@ public partial class MapLevel : Node3D, IGameWorld
     private CommandSink? _lightsSink;
     private int _appliedLightHash;
     private bool _lightsApplied;
+
+    private void ApplyLightsInitial()
+    {
+        _lightsSink = Sink;
+        _appliedLightHash = ComputeLightHash(Entities);
+        _lightsApplied = true;
+        LightBuilder.Apply(this, Entities);
+    }
 
     /// <summary>
     /// Materialize entity lights onto this map's scene nodes under a "Lights" child,
@@ -363,6 +505,11 @@ public partial class MapLevel : Node3D, IGameWorld
     {
         if (disposing)
         {
+            if (_sink != null)
+            {
+                _sink.CommandApplied -= OnCommandApplied;
+                _sink = null;
+            }
             Radiance?.Dispose();
         }
         base.Dispose(disposing);

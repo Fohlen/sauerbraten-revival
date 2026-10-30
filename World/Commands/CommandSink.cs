@@ -43,6 +43,16 @@ public sealed class CommandSink
     public SetEnvironmentCmd? Environment { get; set; }
     public KeyframePackage? LatestKeyframe { get; private set; }
 
+    /// <summary>
+    /// Fired whenever a command is applied and logged (forward, undo, redo, or remote).
+    /// Unified with <see cref="CommandLog.CommandApplied"/>.
+    /// </summary>
+    public event Action<Command>? CommandApplied
+    {
+        add => _log.CommandApplied += value;
+        remove => _log.CommandApplied -= value;
+    }
+
     /// <summary>Self-reference for backwards compatibility.</summary>
     public CommandSink World => this;
 
@@ -266,33 +276,39 @@ public sealed class CommandSink
         var entry = _log.PeekUndo();
         if (entry == null) return null;
 
+        Command? revertedCmd = null;
         if (entry.UndoBlock != null)
         {
-            var restore = Command.CreateReplaceBlock(
+            revertedCmd = Command.CreateReplaceBlock(
                 entry.UndoRegion.ToSelection(),
                 NetMessage.SerializeBlock(entry.UndoBlock),
                 _log.LocalPeerId);
-            Apply(restore);
+            Apply(revertedCmd);
         }
         else if (entry.Command.Op == WorldOp.AddEntity && entry.Command.Payload.HasValue)
         {
             var p = entry.Command.Payload.Value.Item8;
-            var revert = Command.CreateRemoveEntity(p.EntityId, _log.LocalPeerId);
-            Apply(revert);
+            revertedCmd = Command.CreateRemoveEntity(p.EntityId, _log.LocalPeerId);
+            Apply(revertedCmd);
         }
         else if (entry.Command.Op == WorldOp.RemoveEntity && entry.UndoEntity != null)
         {
-            var restore = Command.CreateAddEntity(entry.UndoEntity, _log.LocalPeerId);
-            Apply(restore);
+            revertedCmd = Command.CreateAddEntity(entry.UndoEntity, _log.LocalPeerId);
+            Apply(revertedCmd);
         }
         else if (entry.Command.Op == WorldOp.EditEntity && entry.UndoEntity != null)
         {
-            var restore = Command.CreateEditEntity(entry.UndoEntity, _log.LocalPeerId);
-            Apply(restore);
+            revertedCmd = Command.CreateEditEntity(entry.UndoEntity, _log.LocalPeerId);
+            Apply(revertedCmd);
         }
         else if (entry.Command.Op == WorldOp.Remip)
         {
             // Derivation-only op: no pre-state to restore.
+        }
+
+        if (revertedCmd != null)
+        {
+            _log.NotifyReverted(revertedCmd);
         }
 
         return _log.PopForUndo();
