@@ -1,7 +1,6 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" uid="uid://bc0icyqafgcea" path="res://World/Runtime/Formats/Ogz/OgzMapViewer.cs" id="1_viewer"]
-[ext_resource type="Script" path="res://World/Runtime/Formats/Save/MapLevel.cs" id="2_maplevel"]
 [ext_resource type="Script" uid="uid://cy7a1q10fkfa7" path="res://World/Game/Players/MapPlayer.cs" id="3_player"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
@@ -20,7 +19,7 @@ height = 15.0
 
 [node name="EditorScene" type="Node3D"]
 script = ExtResource("1_viewer")
-OgzPath = ""
+OgzPath = "base/church51.ogz"
 FrameCamera = false
 SpawnPlayer = true
 EditMode = true
@@ -28,11 +27,6 @@ PlayerModelIndex = 0
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_env")
-
-[node name="MapLevel" type="Node3D" parent="."]
-script = ExtResource("2_maplevel")
-MapDir = "res://resources/maps/empty_map"
-ChunkSize = 128
 
 [node name="Player" type="Node3D" parent="."]
 script = ExtResource("3_player")

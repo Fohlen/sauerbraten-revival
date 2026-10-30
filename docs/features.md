@@ -298,9 +298,9 @@ order** (design detail for this roadmap item).
       boundaries pegged to `git_commit` + trailing deltas + `Level.tscn` + shipped base
       `res://resources/maps/empty_map/map.bin` + compaction + archive content hash;
       `F2` save / `F3` load binds in `EditorController`;
-      `scenes/editor_scene.tscn` wired to `MapLevel` referencing `empty_map` (while
-      `EmptyMap` / `scenes/empty_map.tscn` remain as the programmatic generation
-      template). See
+      `scenes/empty_map.tscn` wired to `MapLevel` referencing `empty_map` (while
+      `scenes/editor_scene.tscn` remains the classic OGZ dev viewer on `church51`, and
+      `EmptyMap` / the programmatic generation API remain the test seed). See
       [ADR 0009](adr/0009-reference-based-maps.md).
 - [x] **M5 FlatSharp map format & command cleanup** ([ADR 0008](adr/0008-command-logic.md), [ADR 0009](adr/0009-reference-based-maps.md)):
       - Adopt FlatSharp schema (`schema.fbs`) for unified networking, replay logs, and map packages.

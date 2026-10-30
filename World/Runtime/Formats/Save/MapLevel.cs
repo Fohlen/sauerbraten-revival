@@ -34,7 +34,15 @@ namespace SauerbratenRevival.World.Runtime.Formats.Save;
 ///
 /// The octree is Sauerbraten Z-up; like <see cref="Ogz.MapWorld"/> this node rotates
 /// −90° about X so it sits in Godot Y-up space.
+///
+/// It is a <c>[Tool]</c> script for the same reason as <see cref="Editor.EmptyMap"/> and
+/// <see cref="Ogz.MapWorld"/>: the editor viewport must build <em>this</em> node. A
+/// non-tool script is never instantiated in the editor, so a parent
+/// <see cref="Ogz.OgzMapViewer"/> would not see it as an <see cref="Runtime.IMapSource"/>,
+/// fall back to its own default OGZ map, and the preview would disagree with the
+/// map the scene actually loads at runtime.
 /// </summary>
+[Tool]
 [GlobalClass]
 public partial class MapLevel : Node3D, IGameWorld
 {

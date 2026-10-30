@@ -124,16 +124,18 @@ clones, and `EmptyMap` can reuse a built-once seed world (enabled via
 
 ## Inspecting a map (dev viewer)
 
-`scenes/editor_scene.tscn` loads the native reference-based map format via
-`MapLevel` (defaulting to the canonical empty map at
-`res://resources/maps/empty_map/`; see [ADR 0009](docs/adr/0009-reference-based-maps.md)).
-To inspect a classic `.ogz` map (from `assets/packages/` first, then the
+`scenes/editor_scene.tscn` is the classic dev viewer/editor: it builds
+`base/church51.ogz` through `OgzMapViewer`/`MapWorld` and shows it with diffuse
+textures, entity lights and the cubemap skybox. `scenes/empty_map.tscn` loads the
+native reference-based format via `MapLevel`, referencing the canonical empty map
+at `res://resources/maps/empty_map/` (see [ADR 0009](docs/adr/0009-reference-based-maps.md)).
+To inspect another classic `.ogz` map (from `assets/packages/` first, then the
 reference dump), set `OgzPath` on `OgzMapViewer` (or use `scenes/player_scene.tscn`),
 which builds the runtime octree, chunks it and displays it with diffuse textures
 resolved from the committed catalogue (`metadata-catalogue/<map>.json`) plus the
-cubemap skybox. Both are `[Tool]` scenes, so they also build in the editor
-viewport; see [ADR 0006](docs/adr/0006-ogz-import.md). (`scenes/empty_map.tscn`
-and `EmptyMap.cs` remain as the programmatic octree generation example.)
+cubemap skybox. All of these are `[Tool]` scenes, so they also build in the editor
+viewport; see [ADR 0006](docs/adr/0006-ogz-import.md). (`EmptyMap.cs` remains as the
+programmatic octree generation example used by tests.)
 
 Import original content once (both outputs git-ignored, both Godot Resources):
 

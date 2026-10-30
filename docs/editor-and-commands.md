@@ -879,7 +879,8 @@ zero-copy reference initialization (`MapStore.InitFromReference`), commit append
 archive content hash ([ADR 0009](adr/0009-reference-based-maps.md)).
 Round-trip/replay/commit tests in `test/WorldSnapshotTest.cs` and
 `test/MapFormatTest.cs`; church51 reloads with an identical geometry checksum, and
-`scenes/editor_scene.tscn` loads `MapLevel` referencing `empty_map`.
+`scenes/empty_map.tscn` loads `MapLevel` referencing the canonical `empty_map`
+(`scenes/editor_scene.tscn` stays the OGZ dev viewer on church51).
 
 **M6 — Networking.** `WorldNetwork` RPC nodes, channels, authority, sequence,
 snapshot transfer, late join. Headless multi-client tests. *Unblocks coop edit.*

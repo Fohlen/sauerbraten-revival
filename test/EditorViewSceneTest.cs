@@ -1,10 +1,12 @@
 using Chickensoft.GoDotTest;
 using Godot;
 using System.Linq;
+using System.Reflection;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
+using SauerbratenRevival.World.Runtime.Formats.Save;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Runtime;
 using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
@@ -110,6 +112,8 @@ public class EditorViewSceneTest : GoTestBase
         TestScene.AddChild(root);
 
         TestAssert.True(root.MapSource != null, "map source initialized");
+        TestAssert.True(root.MapSource is MapWorld, "editor scene uses the OGZ dev viewer");
+        TestAssert.Equal("base/church51.ogz", ((MapWorld)root.MapSource!).OgzPath, "editor scene loads church51");
         TestAssert.True(root.MapSource!.Built, "map source built");
 
         MapPlayer? player = null;
@@ -127,6 +131,21 @@ public class EditorViewSceneTest : GoTestBase
         TestAssert.Equal(root.MapSource.Sink, editor.Sink, "editor controller bound to map sink");
 
         root.QueueFree();
+    }
+
+    /// <summary>
+    /// <see cref="MapLevel"/> must be a <c>[Tool]</c> script. Otherwise the editor never
+    /// instantiates it, <see cref="OgzMapViewer"/> (which is a tool) does not see an
+    /// <see cref="IMapSource"/> child and silently builds its own default OGZ map — so the
+    /// viewport preview (e.g. church51) disagreed with the map the scene loads at runtime
+    /// (the scene's <c>MapLevel</c>, e.g. empty_map).
+    /// </summary>
+    [Test]
+    public void MapLevelIsAToolScriptSoThePreviewBuildsTheSceneMap()
+    {
+        TestAssert.True(
+            typeof(MapLevel).GetCustomAttribute<ToolAttribute>() != null,
+            "MapLevel must be [Tool] so the editor preview builds the scene's map, not the viewer's OGZ fallback");
     }
 
     /// <summary>
@@ -181,7 +200,8 @@ public class EditorViewSceneTest : GoTestBase
         TestScene.AddChild(root);
 
         TestAssert.True(root.MapSource != null, "map source initialized");
-        TestAssert.True(root.MapSource is EmptyMap, "map source is EmptyMap");
+        TestAssert.True(root.MapSource is MapLevel, "empty_map scene uses the native map format");
+        TestAssert.Equal("res://resources/maps/empty_map", ((MapLevel)root.MapSource!).MapDir, "empty_map scene loads the canonical package");
         TestAssert.True(root.MapSource!.Built, "empty map built");
 
         MapPlayer? player = null;
