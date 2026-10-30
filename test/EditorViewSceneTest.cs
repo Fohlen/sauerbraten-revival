@@ -5,6 +5,7 @@ using System.Reflection;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Runtime.Formats.Save;
 using SauerbratenRevival.World.Physics;
@@ -216,6 +217,11 @@ public class EditorViewSceneTest : GoTestBase
         TestAssert.True(player!.EditMode, "player is in edit mode");
         TestAssert.True(editor != null, "editor controller attached under empty map");
         TestAssert.Equal(root.MapSource.Octa, editor!.Octa, "editor controller bound to empty map octa");
+
+        // ADR 0009 §6: the package's SetEnvironmentCmd is projected into runtime nodes.
+        var sun = root.MapSource.WorldNode.GetNodeOrNull<DirectionalLight3D>(MapEnvironment.SunNodeName);
+        TestAssert.True(sun != null, "empty_map materializes its environment sun");
+        TestAssert.True(sun!.Visible, "canonical empty_map has sunlight");
 
         root.QueueFree();
     }

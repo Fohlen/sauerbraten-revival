@@ -92,6 +92,17 @@ public static class MapStore
         public List<MapEntity> Entities { get; init; } = new();
         public List<Command> History { get; init; } = new();
         public MapPackage? Package { get; init; }
+
+        /// <summary>
+        /// The environment after replaying the package's trailing deltas — the
+        /// latest keyframe's environment, overridden by any streamed
+        /// <see cref="WorldOp.SetEnvironment"/> command. This, not
+        /// <see cref="MapPackage.Environment"/>, is the authoritative value.
+        /// </summary>
+        public SetEnvironmentCmd? Environment { get; init; }
+
+        /// <summary>Latest keyframe captured by a replayed <see cref="WorldOp.Remip"/> delta, if any.</summary>
+        public KeyframePackage? LatestKeyframe { get; init; }
     }
 
     /// <summary>Read the world from a map directory via map.bin.</summary>
@@ -137,6 +148,8 @@ public static class MapStore
             Entities = targetSink.Entities,
             History = deltas,
             Package = package,
+            Environment = targetSink.Environment,
+            LatestKeyframe = targetSink.LatestKeyframe,
         };
     }
 
@@ -167,7 +180,10 @@ public static class MapStore
             }
         };
 
-        SaveCompacted(targetDir, octa, entities);
+        // The canonical map ships a visible sun/sky so an empty world is lit the
+        // moment it loads (ADR 0009 §6: the environment is command state, not
+        // Level.tscn data).
+        SaveCompacted(targetDir, octa, entities, environment: Lighting.MapEnvironment.CreateDefault());
     }
 
     /// <summary>

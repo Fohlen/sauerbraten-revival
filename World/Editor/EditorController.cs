@@ -609,7 +609,9 @@ public partial class EditorController : Node3D
     {
         if (Octa == null) return;
         var entities = Sink?.World.Entities;
-        MapStore.SaveCompacted(MapDir, Octa, entities);
+        // The environment is command state (ADR 0009 §6): persist whatever the sink
+        // currently holds, not a scene-authored Level.tscn value.
+        MapStore.SaveCompacted(MapDir, Octa, entities, environment: Sink?.Environment);
         GD.Print($"[editor] saved '{MapDir}' (hash {MapStore.ContentHash(MapDir)})");
     }
 
@@ -623,7 +625,7 @@ public partial class EditorController : Node3D
         if (!DirAccess.DirExistsAbsolute(ProjectSettings.GlobalizePath(MapDir))) return;
         var loaded = MapStore.Load(MapDir);
         Octa = loaded.World;
-        Sink = new CommandSink(loaded.World, loaded.Entities, loaded.Package?.Environment);
+        Sink = new CommandSink(loaded.World, loaded.Entities, loaded.Environment, initialKeyframe: loaded.LatestKeyframe);
 
         // The renderer was built for the old octree: rebuild it against the loaded one.
         Renderer?.Setup(loaded.World, materials: null);

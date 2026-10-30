@@ -8,6 +8,7 @@ using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Runtime.Formats.Save;
 
@@ -335,6 +336,68 @@ public class MapFormatTest : GoTestBase
 
         var loadedBase = MapStore.Load(MapStore.EmptyMapDir);
         TestAssert.Equal(1, loadedBase.Entities.Count, "empty_map has PlayerStart entity");
+        TestAssert.True(loadedBase.Environment != null, "empty_map ships an environment command");
+        TestAssert.Equal(MapEnvironment.DefaultSunColor, loadedBase.Environment!.SunColor, "empty_map has a sun");
+    }
+
+    /// <summary>
+    /// ADR 0009 §6: the environment is command state. The latest keyframe's
+    /// \`SetEnvironmentCmd\` is the baseline and any trailing \`WorldOp.SetEnvironment\`
+    /// delta overrides it; \`MapLevel\` must consume the resolved value (not the
+    /// package's baseline copy).
+    /// </summary>
+    [Test]
+    public void LoadResolvesEnvironmentFromKeyframeAndDeltas()
+    {
+        string dir = TempDir("env");
+        var octa = new Octa(8);
+        octa.EmptyMap(8);
+
+        var keyframeEnv = new SetEnvironmentCmd
+        {
+            SunColor = 0x111111,
+            SunScale = 1f,
+            SunYaw = 90f,
+            SunPitch = 30f,
+            AmbientColor = 0x101010,
+        };
+        var streamedEnv = new SetEnvironmentCmd
+        {
+            SunColor = 0x222222,
+            SunScale = 2f,
+            SunYaw = 180f,
+            SunPitch = 60f,
+            AmbientColor = 0x202020,
+            Skybox = "sky/noon",
+        };
+        var history = new List<Command> { Command.CreateSetEnvironment(streamedEnv) };
+
+        MapStore.Save(dir, octa, entities: null, history: history, compact: false, environment: keyframeEnv);
+
+        var loaded = MapStore.Load(dir);
+        TestAssert.True(loaded.Environment != null, "environment resolved");
+        TestAssert.Equal(0x222222u, loaded.Environment!.SunColor, "trailing SetEnvironment delta overrides the keyframe");
+        TestAssert.Equal(2f, loaded.Environment.SunScale, "overridden sun scale is preserved");
+        TestAssert.Equal("sky/noon", loaded.Environment.Skybox, "overridden skybox is preserved");
+
+        // The keyframe copy is authoritative when the package-level baseline is absent.
+        string keyframeOnlyDir = TempDir("env-keyframe-only");
+        var keyframe = KeyframePackage.Capture(octa, env: keyframeEnv, gitCommit: "test_git_commit_sha");
+        var package = new MapPackage
+        {
+            FormatVersion = 1,
+            MapName = "env-keyframe-only",
+            Author = "Revival",
+            Compression = CompressionCodec.None,
+            Keyframes = new List<KeyframePackage> { keyframe },
+            Deltas = new List<Command>(),
+            Entities = new List<EntityCmd>(),
+        };
+        MapStore.SaveMapPackage(keyframeOnlyDir, package);
+
+        var loadedKeyframeOnly = MapStore.Load(keyframeOnlyDir);
+        TestAssert.True(loadedKeyframeOnly.Environment != null, "keyframe environment found");
+        TestAssert.Equal(0x111111u, loadedKeyframeOnly.Environment!.SunColor, "keyframe environment used when the package baseline is null");
     }
 
     [Test]

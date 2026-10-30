@@ -35,18 +35,16 @@ We adopt **[FlatSharp](https://github.com/jamescourtney/FlatSharp)** (high-perfo
 
 ## 1. Map Package Directory Layout
 
-Authored maps use a clean directory structure separating engine scene presentation from FlatSharp binary data:
+Authored maps keep the scene root thin: world state lives in the FlatSharp package, not in scene nodes.
 
 ```
 res://resources/maps/<map_name>/
-├── Level.tscn              # Godot Scene: visual presentation (skybox, directional sun, fog, audio, rules)
-├── manifest.tres           # Godot Resource: engine asset bindings (vslots, materials, models)
-└── map.bin                 # FlatSharp Package: header, keyframes, entities, deltas
+├── Level.tscn              # Godot Scene: thin root that instantiates MapLevel (no world state)
+└── map.bin                 # FlatSharp Package: header, keyframes, entities, environment, deltas
 ```
 
-1. **`Level.tscn`**: Static Godot scene containing engine nodes (`WorldEnvironment`, `DirectionalLight3D`, audio streams, spawn points).
-2. **`manifest.tres`**: Text `.tres` resource mapping integer vslots, material shaders, and model paths to engine assets, enabling Godot's native `.uid` tracking and clean 1-line asset diffs.
-3. **`map.bin`**: Authoritative FlatSharp binary container containing base keyframes, entities, and pending delta commands. Unmergeable text command logs (`history.tres`) are eliminated.
+1. **`Level.tscn`**: A thin scene root that instantiates `MapLevel`. It deliberately holds **no authoritative world state** — no octree, entities, spawn points, audio, lights, sun, sky, fog, or material manifest. All of that is package/command state in `map.bin` (keyframes, entities, `SetEnvironmentCmd`, deltas) and is materialized at runtime by `MapLevel` (§6). Keeping it out of the scene is what lets streamed/networked edits change the world without syncing scene files between peers.
+2. **`map.bin`**: Authoritative FlatSharp binary container containing base keyframes, entities, environment, and pending delta commands. Unmergeable text command logs (`history.tres`) are eliminated.
 
 ---
 
@@ -161,10 +159,10 @@ To maintain full synchronization across network peers, disk storage, and the GPU
 1. **Entity Lights (`ET_LIGHT` & `ET_SPOTLIGHT`)**:
    - Persisted in `KeyframePackage.entities` and streamed via `WorldOp.AddEntity` / `EditEntity`.
    - On map load, `MapLevel` materializes engine `OmniLight3D` / `SpotLight3D` nodes under a `Lights` parent with `Node.Owner = null`. As established in [editor-and-commands.md §7.2](../editor-and-commands.md#72-entities-are-command-versioned-runtime-projections-not-scene-data), **they are never serialized into `Level.tscn`**.
-   - World surfaces bypass Godot dynamic lights (`render_mode ambient_light_disabled`) and are illuminated via GPU Radiance Hints ([ADR 0002](0002-radiance-hints.md)), updated incrementally (~2 ms) when lights change.
+   - Legacy OGZ worlds (`MapWorld`'s radiance-shader materials) bypass Godot dynamic lights (`render_mode ambient_light_disabled`) and are illuminated via GPU Radiance Hints ([ADR 0002](0002-radiance-hints.md)), updated incrementally (~2 ms) when lights change. Native `MapLevel` maps currently shade their manifest's `StandardMaterial3D` and are lit directly by the projected entity lights and the environment sun.
 2. **Global Sun & Environment Settings (`SetEnvironmentCmd`)**:
-   - Persisted in `KeyframePackage.environment` and streamed via `WorldOp.SetEnvironment`.
-   - Modifies scene `DirectionalLight3D` rotation/energy and `WorldEnvironment` sky/fog parameters dynamically during coop edit sessions.
+   - Persisted in `KeyframePackage.environment`, replayed from trailing `WorldOp.SetEnvironment` deltas, and streamed to peers. This command — not `Level.tscn` — is the single source of truth for sun, sky, ambient and fog.
+   - `MapLevel` projects it onto runtime-owned `DirectionalLight3D` / `WorldEnvironment` nodes (again `Node.Owner = null`, never serialized into `Level.tscn`) and updates them whenever the command changes, including during coop edit sessions.
    - Updates `RadianceVolume` sun shadow rays across all clients in real time.
 
 ---

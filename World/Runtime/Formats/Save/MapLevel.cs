@@ -162,7 +162,10 @@ public partial class MapLevel : Node3D, IGameWorld
                 Package = loaded.Package;
                 Physics = new OctaPhysics(loaded.World);
                 if (_clock.NowMillis == 0) _clock.Set((int)Time.GetTicksMsec());
-                Sink = new CommandSink(loaded.World, EntitiesList, loaded.Package?.Environment);
+                // Use the environment resolved from the keyframe + trailing deltas
+                // (MapStore.Load), not the package's baseline copy: a streamed
+                // SetEnvironment command is the authoritative value (ADR 0009 §6).
+                Sink = new CommandSink(loaded.World, EntitiesList, loaded.Environment, initialKeyframe: loaded.LatestKeyframe);
             }
         }
 
@@ -221,6 +224,8 @@ public partial class MapLevel : Node3D, IGameWorld
             if (child is Editor.EditorController ec)
                 ec.BindMapSource(this);
 
+        SyncEnvironment();
+
         GD.Print($"[maplevel] worldsize={Octa.WorldSize} chunks={Renderer.ChunkCount} tris={Renderer.TriangleCount} entities={Entities.Count}");
     }
 
@@ -229,6 +234,28 @@ public partial class MapLevel : Node3D, IGameWorld
     public override void _PhysicsProcess(double delta)
     {
         _simulation.Step(this, delta);
+    }
+
+    // The command sink is replaced wholesale on LoadMap; track both identities so a
+    // new sink (or a new environment command on the same sink) re-applies the scene
+    // nodes. Reference comparison is enough: commands are immutable payloads.
+    private CommandSink? _environmentSink;
+    private SetEnvironmentCmd? _appliedEnvironment;
+
+    public override void _Process(double delta) => SyncEnvironment();
+
+    /// <summary>
+    /// Materialize the current <see cref="CommandSink.Environment"/> onto this map's
+    /// scene nodes (sun, sky, ambient, fog), per ADR 0009 §6.
+    /// </summary>
+    public void SyncEnvironment()
+    {
+        if (Sink == null) return;
+        if (ReferenceEquals(Sink, _environmentSink) && ReferenceEquals(Sink.Environment, _appliedEnvironment)) return;
+
+        _environmentSink = Sink;
+        _appliedEnvironment = Sink.Environment;
+        Lighting.MapEnvironment.Apply(this, Sink.Environment, _textures);
     }
 
     /// <summary>Finds a player spawn point in Sauerbraten coordinates.</summary>
