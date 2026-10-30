@@ -213,11 +213,140 @@ public static class GameAudio
         /* 69 */ new("ctf/flagfail", 200, Array.Empty<SoundSlot>()),
     };
 
+    /// <summary>Built-in default sounds table (alias for <see cref="HardcodedSounds"/>).</summary>
+    public static readonly SoundConfig[] Defaults = HardcodedSounds;
+
+    /// <summary>Path to the core sounds catalog resource.</summary>
+    public const string CoreCatalogPath = "res://resources/audio/core_sounds.tres";
+
+    /// <summary>Directory scanned for modded sound overrides.</summary>
+    public const string ModOverrideDir = "res://resources/audio/overrides";
+
+    /// <summary>Directory scanned for user-specific sound overrides.</summary>
+    public const string UserOverrideDir = "user://audio/overrides";
+
+    private static SoundConfig[]? _all;
+
+    /// <summary>
+    /// The active sounds table: one <see cref="SoundConfig"/> per sound index.
+    /// Loaded from <see cref="CoreCatalogPath"/> and overlay directories; falls back to
+    /// <see cref="Defaults"/>. Once loaded/reloaded, hot-path lookup is O(1) direct array indexing.
+    /// </summary>
+    public static SoundConfig[] All => _all ??= Load();
+
+    /// <summary>The total number of currently configured sounds.</summary>
+    public static int Count => All.Length;
+
+    /// <summary>
+    /// Replace the active sounds table (for tests or mod hot-swaps).
+    /// </summary>
+    public static void Override(SoundConfig[] sounds) => _all = sounds;
+
+    /// <summary>
+    /// Reload the sounds table from the core catalog and any override directories.
+    /// </summary>
+    public static void Reload(
+        string catalogPath = CoreCatalogPath,
+        string? modDir = ModOverrideDir,
+        string? userDir = UserOverrideDir)
+    {
+        _all = Load(catalogPath, modDir, userDir);
+    }
+
+    /// <summary>
+    /// Load the sounds table:
+    /// 1. Shipped core catalog (<paramref name="catalogPath"/>), falling back to <see cref="Defaults"/>
+    /// 2. Mod overrides from <paramref name="modDir"/>
+    /// 3. User overrides from <paramref name="userDir"/>
+    /// </summary>
+    public static SoundConfig[] Load(
+        string catalogPath = CoreCatalogPath,
+        string? modDir = ModOverrideDir,
+        string? userDir = UserOverrideDir)
+    {
+        var list = new List<SoundConfig>(Defaults);
+
+        if (ResourceLoader.Exists(catalogPath))
+        {
+            if (ResourceLoader.Load(catalogPath) is SoundCatalogResource catalog)
+            {
+                foreach (var def in catalog.Sounds)
+                {
+                    int idx = (int)def.Id;
+                    if (idx >= 0)
+                    {
+                        while (list.Count <= idx)
+                            list.Add(new SoundConfig("", 100, Array.Empty<SoundSlot>()));
+                        list[idx] = def.ToSoundConfig();
+                    }
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(modDir) && DirAccess.DirExistsAbsolute(modDir))
+            ApplyOverridesFromDir(list, modDir);
+
+        if (!string.IsNullOrEmpty(userDir) && DirAccess.DirExistsAbsolute(userDir))
+            ApplyOverridesFromDir(list, userDir);
+
+        return list.ToArray();
+    }
+
+    private static void ApplyOverridesFromDir(List<SoundConfig> list, string dir)
+    {
+        using var da = DirAccess.Open(dir);
+        if (da == null) return;
+
+        da.ListDirBegin();
+        string fileName = da.GetNext();
+        while (!string.IsNullOrEmpty(fileName))
+        {
+            if (!da.CurrentIsDir() && fileName.EndsWith(".tres", StringComparison.OrdinalIgnoreCase))
+            {
+                string fullPath = $"{dir.TrimEnd('/')}/{fileName}";
+                if (ResourceLoader.Load(fullPath) is Resource res)
+                {
+                    if (res is SoundDefinition def)
+                    {
+                        ApplyDefinition(list, def, fileName);
+                    }
+                    else if (res is SoundCatalogResource cat)
+                    {
+                        foreach (var catDef in cat.Sounds)
+                            ApplyDefinition(list, catDef, "");
+                    }
+                }
+            }
+            fileName = da.GetNext();
+        }
+    }
+
+    private static void ApplyDefinition(List<SoundConfig> list, SoundDefinition def, string fileName)
+    {
+        int idx = (int)def.Id;
+        if (idx < 0)
+        {
+            string name = !string.IsNullOrEmpty(def.Name)
+                ? def.Name
+                : System.IO.Path.GetFileNameWithoutExtension(fileName);
+            if (Enum.TryParse<GameSound>(name, ignoreCase: true, out var parsed))
+                idx = (int)parsed;
+        }
+
+        if (idx >= 0)
+        {
+            while (list.Count <= idx)
+                list.Add(new SoundConfig("", 100, Array.Empty<SoundSlot>()));
+            list[idx] = def.ToSoundConfig();
+        }
+    }
+
     public static SoundConfig? GetConfig(GameSound sound)
     {
         int index = (int)sound;
-        if (index < 0 || index >= HardcodedSounds.Length) return null;
-        return HardcodedSounds[index];
+        var table = All;
+        if ((uint)index >= (uint)table.Length) return null;
+        return table[index];
     }
 
     /// <summary>

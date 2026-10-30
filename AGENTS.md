@@ -26,6 +26,7 @@ load time; there is **no CubeScript** and no offline converter.
 | Networking model | [docs/authority-and-latency.md](docs/authority-and-latency.md) |
 | Toolchain requirements | [docs/dependencies.md](docs/dependencies.md) |
 | Weapon decals | [docs/adr/0005-decals.md](docs/adr/0005-decals.md) | Bullet decals on world geometry: unshaded world shader, alpha transparency, and quad mesh pool. |
+| Resource-based modding | [docs/adr/0010-resource-modding.md](docs/adr/0010-resource-modding.md) | Resource-based modding architecture, 3-tier override cascade, and pre-baked flat lookup tables for zero-alloc hot paths. |
 | Known divergences to preserve | [docs/known-bugs.md](docs/known-bugs.md) |
 
 If a design doc disagrees with `features.md` about ordering, timing or status,

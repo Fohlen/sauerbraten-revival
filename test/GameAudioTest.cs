@@ -17,6 +17,67 @@ public class GameAudioTest : TestClass
     {
         // Engine sounds.cfg registers 70 hardcoded sounds (0 to 69)
         TestAssert.Equal(70, GameAudio.HardcodedSounds.Length, "HardcodedSounds table must have exactly 70 entries");
+        TestAssert.Equal(70, GameAudio.Defaults.Length, "Defaults table must have exactly 70 entries");
+        TestAssert.Equal(70, GameAudio.All.Length, "All active table must have at least 70 entries");
+    }
+
+    [Test]
+    public void CoreSoundsCatalogMatchesDefaults()
+    {
+        string path = GameAudio.CoreCatalogPath;
+        if (!ResourceLoader.Exists(path))
+        {
+            var catalog = SoundCatalogResource.CreateFromDefaults(GameAudio.Defaults);
+            var err = ResourceSaver.Save(catalog, path);
+            TestAssert.Equal(Error.Ok, err, "core_sounds.tres saved successfully");
+        }
+
+        var loaded = ResourceLoader.Load(path) as SoundCatalogResource;
+        TestAssert.True(loaded != null, "core_sounds.tres loads as SoundCatalogResource");
+        TestAssert.Equal(GameAudio.Defaults.Length, loaded!.Sounds.Count, "core sounds count matches defaults");
+
+        for (int i = 0; i < GameAudio.Defaults.Length; i++)
+        {
+            var def = loaded.Sounds[i];
+            var expected = GameAudio.Defaults[i];
+            TestAssert.Equal((GameSound)i, def.Id, $"Sound {i} id matches");
+            TestAssert.Equal(expected.Primary.Path, def.Path, $"Sound {i} path matches");
+            TestAssert.Equal(expected.Primary.Volume, def.Volume, $"Sound {i} volume matches");
+            TestAssert.Equal(expected.Alts.Length, def.Alts.Count, $"Sound {i} alts count matches");
+            for (int a = 0; a < expected.Alts.Length; a++)
+            {
+                TestAssert.Equal(expected.Alts[a].Path, def.Alts[a].Path, $"Sound {i} alt {a} path matches");
+                TestAssert.Equal(expected.Alts[a].Volume, def.Alts[a].Volume, $"Sound {i} alt {a} volume matches");
+            }
+        }
+    }
+
+    [Test]
+    public void OverridesTakePrecedence()
+    {
+        string tempDir = "user://test_audio_overrides";
+        DirAccess.MakeDirAbsolute(tempDir);
+        try
+        {
+            var def = new SoundDefinition(GameSound.Jump, "jump", "custom/jump_sound", 150);
+            string overridePath = $"{tempDir}/jump.tres";
+            var err = ResourceSaver.Save(def, overridePath);
+            TestAssert.Equal(Error.Ok, err, "override saved");
+
+            var loaded = GameAudio.Load(GameAudio.CoreCatalogPath, modDir: tempDir, userDir: null);
+            var jumpConfig = loaded[(int)GameSound.Jump];
+            TestAssert.Equal("custom/jump_sound", jumpConfig.Primary.Path, "mod override replaces path");
+            TestAssert.Equal(150, jumpConfig.Primary.Volume, "mod override replaces volume");
+
+            // Other sounds untouched
+            TestAssert.Equal(GameAudio.Defaults[(int)GameSound.Land].Primary.Path, loaded[(int)GameSound.Land].Primary.Path, "other sounds remain defaults");
+        }
+        finally
+        {
+            if (Godot.FileAccess.FileExists($"{tempDir}/jump.tres"))
+                DirAccess.RemoveAbsolute($"{tempDir}/jump.tres");
+            DirAccess.RemoveAbsolute(tempDir);
+        }
     }
 
     [Test]
