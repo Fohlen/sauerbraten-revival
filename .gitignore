@@ -28,8 +28,9 @@ tools/ogztool/out/
 # imported legacy sounds
 assets/
 
-# saved maps
+# saved maps (the shipped canonical empty_map package is tracked: ADR 0009)
 *.bin
+!resources/maps/empty_map/map.bin
 
 # octree ground-truth probe binary
 tools/octaprobe/octaprobe
