@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_l2qhy")
+Id = 0
 Sound = 3
 AttackDelay = 250
 Damage = 50

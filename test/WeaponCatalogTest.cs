@@ -149,4 +149,164 @@ public class WeaponCatalogTest : GoTestBase
             TestAssert.Equal(expected[i], WeaponCatalog.Vwep((Gun)i)!, $"vwep {i}");
         TestAssert.True(WeaponCatalog.Vwep(Gun.Fireball) == null, "pseudo-guns have no vwep");
     }
+
+    [Test]
+    public void ModOverridesTakePrecedence()
+    {
+        string tempDir = "user://test_weapon_mod_overrides";
+        DirAccess.MakeDirAbsolute(tempDir);
+        try
+        {
+            var customRifle = new WeaponInfo
+            {
+                Id = Gun.Rifle,
+                Name = "rifle",
+                Damage = 500,
+                AttackDelay = 250,
+            };
+            string overridePath = $"{tempDir}/rifle.tres";
+            var err = ResourceSaver.Save(customRifle, overridePath);
+            TestAssert.Equal(Error.Ok, err, "override saved");
+
+            var loaded = WeaponCatalog.Load(WeaponCatalog.ResourceDir, modDir: tempDir, userDir: null);
+            var rifle = loaded[(int)Gun.Rifle];
+            TestAssert.Equal(500, rifle.Damage, "mod override updates damage");
+            TestAssert.Equal(250, rifle.AttackDelay, "mod override updates delay");
+
+            // Other weapons remain unaffected
+            TestAssert.Equal(WeaponCatalog.Defaults[(int)Gun.Shotgun].Damage, loaded[(int)Gun.Shotgun].Damage, "other weapons remain defaults");
+        }
+        finally
+        {
+            if (Godot.FileAccess.FileExists($"{tempDir}/rifle.tres"))
+                DirAccess.RemoveAbsolute($"{tempDir}/rifle.tres");
+            DirAccess.RemoveAbsolute(tempDir);
+        }
+    }
+
+    [Test]
+    public void UserOverridesTakePrecedenceOverModOverrides()
+    {
+        string modDir = "user://test_weapon_tier2_mod";
+        string userDir = "user://test_weapon_tier3_user";
+        DirAccess.MakeDirAbsolute(modDir);
+        DirAccess.MakeDirAbsolute(userDir);
+        try
+        {
+            // Tier 2: mod override sets damage to 300
+            var modRifle = new WeaponInfo { Id = Gun.Rifle, Name = "rifle", Damage = 300 };
+            ResourceSaver.Save(modRifle, $"{modDir}/rifle.tres");
+
+            // Tier 3: user override sets damage to 999
+            var userRifle = new WeaponInfo { Id = Gun.Rifle, Name = "rifle", Damage = 999 };
+            ResourceSaver.Save(userRifle, $"{userDir}/rifle.tres");
+
+            var loaded = WeaponCatalog.Load(WeaponCatalog.ResourceDir, modDir: modDir, userDir: userDir);
+            TestAssert.Equal(999, loaded[(int)Gun.Rifle].Damage, "Tier 3 user override wins over Tier 2 mod override");
+        }
+        finally
+        {
+            if (Godot.FileAccess.FileExists($"{modDir}/rifle.tres")) DirAccess.RemoveAbsolute($"{modDir}/rifle.tres");
+            if (Godot.FileAccess.FileExists($"{userDir}/rifle.tres")) DirAccess.RemoveAbsolute($"{userDir}/rifle.tres");
+            DirAccess.RemoveAbsolute(modDir);
+            DirAccess.RemoveAbsolute(userDir);
+        }
+    }
+
+    [Test]
+    public void CatalogResourceCanBeLoadedInOverrideDir()
+    {
+        string tempDir = "user://test_weapon_catalog_override";
+        DirAccess.MakeDirAbsolute(tempDir);
+        try
+        {
+            var catalog = new WeaponCatalogResource();
+            catalog.Weapons.Add(new WeaponInfo { Id = Gun.Pistol, Name = "pistol", Damage = 88 });
+            catalog.Weapons.Add(new WeaponInfo { Id = Gun.Chaingun, Name = "chaingun", Damage = 66 });
+
+            string catalogPath = $"{tempDir}/pack.tres";
+            var err = ResourceSaver.Save(catalog, catalogPath);
+            TestAssert.Equal(Error.Ok, err, "catalog saved");
+
+            var loaded = WeaponCatalog.Load(WeaponCatalog.ResourceDir, modDir: tempDir, userDir: null);
+            TestAssert.Equal(88, loaded[(int)Gun.Pistol].Damage, "catalog pistol override applied");
+            TestAssert.Equal(66, loaded[(int)Gun.Chaingun].Damage, "catalog chaingun override applied");
+        }
+        finally
+        {
+            if (Godot.FileAccess.FileExists($"{tempDir}/pack.tres"))
+                DirAccess.RemoveAbsolute($"{tempDir}/pack.tres");
+            DirAccess.RemoveAbsolute(tempDir);
+        }
+    }
+
+    [Test]
+    public void ReloadHotSwapsCatalogue()
+    {
+        string tempDir = "user://test_weapon_reload";
+        DirAccess.MakeDirAbsolute(tempDir);
+        try
+        {
+            var customShotgun = new WeaponInfo { Id = Gun.Shotgun, Name = "shotgun", Damage = 99 };
+            ResourceSaver.Save(customShotgun, $"{tempDir}/shotgun.tres");
+
+            WeaponCatalog.Reload(WeaponCatalog.ResourceDir, modDir: tempDir, userDir: null);
+            TestAssert.Equal(99, WeaponCatalog.Get(Gun.Shotgun).Damage, "Reload hotswapped active catalogue");
+        }
+        finally
+        {
+            // Restore default catalogue state
+            WeaponCatalog.Reload(WeaponCatalog.ResourceDir, modDir: null, userDir: null);
+            TestAssert.Equal(WeaponCatalog.Defaults[(int)Gun.Shotgun].Damage, WeaponCatalog.Get(Gun.Shotgun).Damage, "defaults restored");
+
+            if (Godot.FileAccess.FileExists($"{tempDir}/shotgun.tres"))
+                DirAccess.RemoveAbsolute($"{tempDir}/shotgun.tres");
+            DirAccess.RemoveAbsolute(tempDir);
+        }
+    }
+
+    [Test]
+    public void ResolvesIdFromNameOrFilenameWhenIdOmitted()
+    {
+        string tempDir = "user://test_weapon_name_resolve";
+        DirAccess.MakeDirAbsolute(tempDir);
+        try
+        {
+            // Id omitted (defaults to Gun.None), but Name is "chaingun"
+            var unnamedId = new WeaponInfo { Id = Gun.None, Name = "chaingun", Damage = 77 };
+            ResourceSaver.Save(unnamedId, $"{tempDir}/any_filename.tres");
+
+            // Both Id and Name omitted, but filename is "rifle.tres"
+            var noIdOrName = new WeaponInfo { Id = Gun.None, Name = "", Damage = 333 };
+            ResourceSaver.Save(noIdOrName, $"{tempDir}/rifle.tres");
+
+            var loaded = WeaponCatalog.Load(WeaponCatalog.ResourceDir, modDir: tempDir, userDir: null);
+            TestAssert.Equal(77, loaded[(int)Gun.Chaingun].Damage, "resolved chaingun via Name");
+            TestAssert.Equal(Gun.Chaingun, loaded[(int)Gun.Chaingun].Id, "assigned Gun.Chaingun Id");
+            TestAssert.Equal(333, loaded[(int)Gun.Rifle].Damage, "resolved rifle via filename");
+            TestAssert.Equal(Gun.Rifle, loaded[(int)Gun.Rifle].Id, "assigned Gun.Rifle Id");
+        }
+        finally
+        {
+            if (Godot.FileAccess.FileExists($"{tempDir}/any_filename.tres")) DirAccess.RemoveAbsolute($"{tempDir}/any_filename.tres");
+            if (Godot.FileAccess.FileExists($"{tempDir}/rifle.tres")) DirAccess.RemoveAbsolute($"{tempDir}/rifle.tres");
+            DirAccess.RemoveAbsolute(tempDir);
+        }
+    }
+
+    private sealed class SubclassedWeaponCatalog : SauerbratenRevival.World.Content.ResourceCatalogBase<WeaponInfo, WeaponInfo, Gun>
+    {
+        public override WeaponInfo[] Defaults => WeaponCatalog.Defaults;
+        public override string BasePath => WeaponCatalog.ResourceDir;
+        protected override WeaponInfo Convert(WeaponInfo res) => res;
+        protected override WeaponInfo CreateEmpty() => new();
+    }
+
+    [Test]
+    public void ResourceCatalogBaseInheritanceWorks()
+    {
+        var catalogInstance = new SubclassedWeaponCatalog();
+        TestAssert.Equal(WeaponCatalog.Defaults.Length, catalogInstance.All.Length, "inherits active table");
+        TestAssert.Equal("shotgun", catalogInstance.All[(int)Gun.Shotgun].Name, "inherits shotgun name");
+    }
 }

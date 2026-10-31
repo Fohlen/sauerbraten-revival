@@ -1,5 +1,6 @@
 using Godot;
 using SauerbratenRevival.World.Audio;
+using SauerbratenRevival.World.Content;
 
 namespace SauerbratenRevival.World.Weapons;
 
@@ -34,6 +35,12 @@ public static class WeaponCatalog
 
     /// <summary>Directory holding the authored per-gun <c>.tres</c> files (one per <see cref="Defaults"/> row).</summary>
     public const string ResourceDir = "res://resources/weapons";
+
+    /// <summary>Directory scanned for modded weapon overrides.</summary>
+    public const string ModOverrideDir = "res://resources/weapons/overrides";
+
+    /// <summary>Directory scanned for user-specific weapon overrides.</summary>
+    public const string UserOverrideDir = "user://weapons/overrides";
 
     /// <summary>
     /// Built-in defaults: the ported <c>guns[]</c> rows, in engine order (index =
@@ -79,21 +86,34 @@ public static class WeaponCatalog
     public static void Override(WeaponInfo[] weapons) => _all = weapons;
 
     /// <summary>
+    /// Reload the active weapon catalogue from the base directory and any override directories.
+    /// </summary>
+    public static void Reload(
+        string dir = ResourceDir,
+        string? modDir = ModOverrideDir,
+        string? userDir = UserOverrideDir)
+    {
+        _all = Load(dir, modDir, userDir);
+    }
+
+    /// <summary>
     /// Load one <c>&lt;name&gt;.tres</c> per row from <paramref name="dir"/>, falling back
     /// to <see cref="Defaults"/> for any file that is missing or does not deserialize to
-    /// a <see cref="WeaponInfo"/>. Pure function of the filesystem, so a mod can point at
-    /// its own directory.
+    /// a <see cref="WeaponInfo"/>. Follows the ADR 0010 3-tier cascade across core base,
+    /// mod overrides (<paramref name="modDir"/>), and user overrides (<paramref name="userDir"/>).
     /// </summary>
-    public static WeaponInfo[] Load(string dir = ResourceDir)
+    public static WeaponInfo[] Load(
+        string dir = ResourceDir,
+        string? modDir = ModOverrideDir,
+        string? userDir = UserOverrideDir)
     {
-        var result = new WeaponInfo[Defaults.Length];
-        for (int i = 0; i < Defaults.Length; i++)
-        {
-            string path = $"{dir.TrimEnd('/')}/{Defaults[i].Name}.tres";
-            var loaded = ResourceLoader.Exists(path) ? ResourceLoader.Load(path) as WeaponInfo : null;
-            result[i] = loaded ?? Defaults[i];
-        }
-        return result;
+        return ResourceCascade.LoadCascade<WeaponInfo, WeaponInfo, Gun>(
+            Defaults,
+            dir,
+            modDir,
+            userDir,
+            def => def,
+            () => new WeaponInfo());
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using Godot;
 using SauerbratenRevival.World.Audio;
+using SauerbratenRevival.World.Content;
 
 namespace SauerbratenRevival.World.Weapons;
 
@@ -21,10 +22,10 @@ namespace SauerbratenRevival.World.Weapons;
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class WeaponInfo : Resource
+public partial class WeaponInfo : Resource, IResourceDefinition<Gun>
 {
-    /// <summary>Engine <c>GUN_*</c> id (also the index into <see cref="WeaponCatalog.All"/>).</summary>
-    [Export] public Gun Id { get; set; }
+    /// <summary>Engine <c>GUN_*</c> id (also the index into <see cref="WeaponCatalog.All"/>), or <see cref="Gun.None"/>.</summary>
+    [Export] public Gun Id { get; set; } = Gun.None;
 
     /// <summary>Sound played on attack (engine <c>S_*</c>), or <see cref="GameSound.None"/>.</summary>
     [Export] public GameSound Sound { get; set; }

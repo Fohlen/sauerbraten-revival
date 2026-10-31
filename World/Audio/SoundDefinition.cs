@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Content;
 
 namespace SauerbratenRevival.World.Audio;
 
@@ -8,7 +9,7 @@ namespace SauerbratenRevival.World.Audio;
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class SoundDefinition : Resource
+public partial class SoundDefinition : Resource, IResourceDefinition<GameSound>
 {
     /// <summary>Corresponding classic <see cref="GameSound"/> ID, or <see cref="GameSound.None"/> if custom/mod sound.</summary>
     [Export] public GameSound Id { get; set; } = GameSound.None;

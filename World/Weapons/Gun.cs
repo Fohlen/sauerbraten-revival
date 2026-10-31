@@ -8,6 +8,7 @@ namespace SauerbratenRevival.World.Weapons;
 /// </summary>
 public enum Gun
 {
+    None = -1,
     Fist = 0,
     Shotgun,
     Chaingun,

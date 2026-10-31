@@ -264,81 +264,13 @@ public static class GameAudio
         string? modDir = ModOverrideDir,
         string? userDir = UserOverrideDir)
     {
-        var list = new List<SoundConfig>(Defaults);
-
-        if (ResourceLoader.Exists(catalogPath))
-        {
-            if (ResourceLoader.Load(catalogPath) is SoundCatalogResource catalog)
-            {
-                foreach (var def in catalog.Sounds)
-                {
-                    int idx = (int)def.Id;
-                    if (idx >= 0)
-                    {
-                        while (list.Count <= idx)
-                            list.Add(new SoundConfig("", 100, Array.Empty<SoundSlot>()));
-                        list[idx] = def.ToSoundConfig();
-                    }
-                }
-            }
-        }
-
-        if (!string.IsNullOrEmpty(modDir) && DirAccess.DirExistsAbsolute(modDir))
-            ApplyOverridesFromDir(list, modDir);
-
-        if (!string.IsNullOrEmpty(userDir) && DirAccess.DirExistsAbsolute(userDir))
-            ApplyOverridesFromDir(list, userDir);
-
-        return list.ToArray();
-    }
-
-    private static void ApplyOverridesFromDir(List<SoundConfig> list, string dir)
-    {
-        using var da = DirAccess.Open(dir);
-        if (da == null) return;
-
-        da.ListDirBegin();
-        string fileName = da.GetNext();
-        while (!string.IsNullOrEmpty(fileName))
-        {
-            if (!da.CurrentIsDir() && fileName.EndsWith(".tres", StringComparison.OrdinalIgnoreCase))
-            {
-                string fullPath = $"{dir.TrimEnd('/')}/{fileName}";
-                if (ResourceLoader.Load(fullPath) is Resource res)
-                {
-                    if (res is SoundDefinition def)
-                    {
-                        ApplyDefinition(list, def, fileName);
-                    }
-                    else if (res is SoundCatalogResource cat)
-                    {
-                        foreach (var catDef in cat.Sounds)
-                            ApplyDefinition(list, catDef, "");
-                    }
-                }
-            }
-            fileName = da.GetNext();
-        }
-    }
-
-    private static void ApplyDefinition(List<SoundConfig> list, SoundDefinition def, string fileName)
-    {
-        int idx = (int)def.Id;
-        if (idx < 0)
-        {
-            string name = !string.IsNullOrEmpty(def.Name)
-                ? def.Name
-                : System.IO.Path.GetFileNameWithoutExtension(fileName);
-            if (Enum.TryParse<GameSound>(name, ignoreCase: true, out var parsed))
-                idx = (int)parsed;
-        }
-
-        if (idx >= 0)
-        {
-            while (list.Count <= idx)
-                list.Add(new SoundConfig("", 100, Array.Empty<SoundSlot>()));
-            list[idx] = def.ToSoundConfig();
-        }
+        return ResourceCascade.LoadCascade<SoundConfig, SoundDefinition, GameSound>(
+            Defaults,
+            catalogPath,
+            modDir,
+            userDir,
+            def => def.ToSoundConfig(),
+            () => new SoundConfig("", 100, Array.Empty<SoundSlot>()));
     }
 
     public static SoundConfig? GetConfig(GameSound sound)

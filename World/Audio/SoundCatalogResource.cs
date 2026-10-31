@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Content;
 
 namespace SauerbratenRevival.World.Audio;
 
@@ -7,9 +9,11 @@ namespace SauerbratenRevival.World.Audio;
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class SoundCatalogResource : Resource
+public partial class SoundCatalogResource : Resource, IResourceCatalog<SoundDefinition>
 {
     [Export] public Godot.Collections.Array<SoundDefinition> Sounds { get; set; } = new();
+
+    public IEnumerable<SoundDefinition> Definitions => Sounds;
 
     public static SoundCatalogResource CreateFromDefaults(SoundConfig[] defaults)
     {
