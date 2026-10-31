@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="CrosshairInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Hud/CrosshairInfo.cs" id="1_ch"]
+
+[resource]
+script = ExtResource("1_ch")
+Id = 2
+Name = "hit"
+Path = "crosshairs/default_hit.png"

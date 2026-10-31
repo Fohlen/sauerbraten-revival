@@ -15,9 +15,9 @@ namespace SauerbratenRevival.World.Hud;
 /// </summary>
 public sealed class CrosshairRenderer
 {
-    public const int CrosshairDefault = 0;
-    public const int CrosshairTeammate = 1;
-    public const int CrosshairHit = 2;
+    public const int CrosshairDefault = (int)CrosshairType.Default;
+    public const int CrosshairTeammate = (int)CrosshairType.Teammate;
+    public const int CrosshairHit = (int)CrosshairType.Hit;
 
     public const string DefaultPath = "crosshairs/default.png";
     public const string TeammatePath = "crosshairs/default_teammate.png";
@@ -38,15 +38,74 @@ public sealed class CrosshairRenderer
     /// <summary>Original engine <c>hitcrosshair</c> duration in ms (fps.cpp VARP, default 425).</summary>
     public int HitCrosshairDuration { get; set; } = 425;
 
-    public Texture2D? TexDefault { get; set; }
-    public Texture2D? TexTeammate { get; set; }
-    public Texture2D? TexHit { get; set; }
+    private Texture2D?[]? _textures;
 
+    public Texture2D? TexDefault
+    {
+        get => GetTexture(CrosshairDefault);
+        set => SetTexture(CrosshairDefault, value);
+    }
+
+    public Texture2D? TexTeammate
+    {
+        get => GetTexture(CrosshairTeammate);
+        set => SetTexture(CrosshairTeammate, value);
+    }
+
+    public Texture2D? TexHit
+    {
+        get => GetTexture(CrosshairHit);
+        set => SetTexture(CrosshairHit, value);
+    }
+
+    /// <summary>Sets texture for a specific crosshair slot.</summary>
+    public void SetTexture(int index, Texture2D? texture)
+    {
+        EnsureTextureCapacity(index + 1);
+        _textures![index] = texture;
+    }
+
+    private void EnsureTextureCapacity(int count)
+    {
+        int target = Math.Max(count, CrosshairCatalog.Count);
+        if (_textures == null)
+        {
+            _textures = new Texture2D?[target];
+        }
+        else if (_textures.Length < count)
+        {
+            Array.Resize(ref _textures, target);
+        }
+    }
+
+    /// <summary>
+    /// Loads crosshair textures using the active <see cref="CrosshairCatalog"/> definitions
+    /// and project texture source.
+    /// </summary>
     public void LoadTextures(ITextureSource textures)
     {
-        TexDefault = textures.Get(DefaultPath);
-        TexTeammate = textures.Get(TeammatePath);
-        TexHit = textures.Get(HitPath);
+        var catalog = CrosshairCatalog.All;
+        EnsureTextureCapacity(catalog.Length);
+        for (int i = 0; i < catalog.Length; i++)
+        {
+            var def = catalog[i];
+            if (def.Texture != null)
+            {
+                _textures![i] = def.Texture;
+            }
+            else if (!string.IsNullOrEmpty(def.Path))
+            {
+                _textures![i] = textures.Get(def.Path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Loads a specific crosshair into slot <paramref name="index"/> (ports <c>loadcrosshair</c> in rendergl.cpp:2086).
+    /// </summary>
+    public void LoadCrosshair(string path, int index, ITextureSource textures)
+    {
+        SetTexture(index, textures.Get(path));
     }
 
     /// <summary>
@@ -110,12 +169,21 @@ public sealed class CrosshairRenderer
     }
 
     /// <summary>Gets the loaded texture for the given crosshair index.</summary>
-    public Texture2D? GetTexture(int index) => index switch
+    public Texture2D? GetTexture(int index)
     {
-        CrosshairHit => TexHit ?? TexDefault,
-        CrosshairTeammate => TexTeammate ?? TexDefault,
-        _ => TexDefault
-    };
+        if (_textures != null && index >= 0 && index < _textures.Length && _textures[index] != null)
+        {
+            return _textures[index];
+        }
+
+        // Engine fallback: if requested slot texture is missing, fall back to default crosshair (slot 0)
+        if (_textures != null && _textures.Length > 0 && _textures[0] != null)
+        {
+            return _textures[0];
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Computes pixel size matching engine formula <c>chsize = crosshairsize * w / 900.0f</c> (rendergl.cpp:2151).

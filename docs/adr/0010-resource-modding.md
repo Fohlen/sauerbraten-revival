@@ -3,7 +3,7 @@
 ## Status
 
 **Proposed / Accepted**  
-Extends the modding model defined in [vision.md §12](../vision.md#12-modding--workshop) and formalizes the unified resource catalogue pattern established across [WeaponCatalog](../../World/Weapons/WeaponCatalog.cs), [GameModeCatalog](../../World/Game/GameModeCatalog.cs), and [GameAudio](../../World/Audio/GameAudio.cs).
+Extends the modding model defined in [vision.md §12](../vision.md#12-modding--workshop) and formalizes the unified resource catalogue pattern established across [WeaponCatalog](../../World/Weapons/WeaponCatalog.cs), [GameModeCatalog](../../World/Game/GameModeCatalog.cs), [GameAudio](../../World/Audio/GameAudio.cs), [PlayerModelCatalog](../../World/Models/PlayerModelCatalog.cs), [ItemCatalog](../../World/Game/Items/ItemCatalog.cs), and [CrosshairCatalog](../../World/Hud/CrosshairCatalog.cs).
 
 ---
 
@@ -116,6 +116,15 @@ The exact same architectural pattern is applied uniformly across the engine:
   public static ItemInfo GetByEntityType(int entityType) => All[entityType - FirstItemType];
   ```
 
+### F. Crosshairs (`World/Hud/CrosshairCatalog.cs`, `CrosshairInfo.cs`)
+- **Resource**: `CrosshairInfo : Resource` (e.g. `default.tres`, `teammate.tres`, `hit.tres`).
+- **Core Catalog**: `res://resources/crosshairs/<name>.tres` (3 classic crosshairs).
+- **Overrides**: Mod directories overlaying crosshairs (`res://resources/crosshairs/overrides/`, `user://crosshairs/overrides/`).
+- **Hot Path**:
+  ```csharp
+  public static CrosshairInfo Get(CrosshairType id) => All[(int)id];
+  ```
+
 ---
 
 ## 2. Dynamic and Mod-Added Entries
@@ -140,5 +149,5 @@ For mod-added assets that extend beyond the built-in enum counts:
 
 ## 4. Verification and Ground Truth
 
-1. **Fidelity Unit Tests**: Tests in `test/GameAudioTest.cs`, `test/WeaponCatalogTest.cs`, `test/PlayerModelCatalogTest.cs`, and `test/ItemCatalogTest.cs` assert that the deserialized `.tres` definitions match the SVN r6889 reference tables with zero deviation.
+1. **Fidelity Unit Tests**: Tests in `test/GameAudioTest.cs`, `test/WeaponCatalogTest.cs`, `test/PlayerModelCatalogTest.cs`, `test/ItemCatalogTest.cs`, and `test/CrosshairCatalogTest.cs` assert that the deserialized `.tres` definitions match the SVN r6889 reference tables with zero deviation.
 2. **Fallback Resilience**: In headless testing environments or corrupted installations, the catalogues fall back cleanly to `Defaults` without crashing the game engine.
