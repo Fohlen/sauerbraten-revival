@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.Format;
 using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game.Ctf;
@@ -591,6 +592,17 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// </summary>
     public void PrePhysicsStep()
     {
+        if (InputSource != null)
+        {
+            int tick = LastMillis / Phys.PhysFrameTime;
+            var update = InputSource.GetUpdate(tick, this);
+            if (update != null)
+            {
+                ApplyUpdate(update);
+                return;
+            }
+        }
+
         // Mouse: the whole frame's accumulated delta is applied once, before stepping
         // (rendergl.cpp mousemove). Every step this frame then sees the same yaw/pitch.
         ApplyMouse();
@@ -619,6 +631,69 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
         // Toggle the detached third-person camera (engine `thirdperson`, rendergl.cpp).
         if (Input.IsActionJustPressed("third_person")) ToggleThirdPerson();
+
+        OnUpdateCaptured?.Invoke(CaptureUpdate());
+    }
+
+    /// <summary>
+    /// When set, replaces hardware input reading with recorded updates (e.g. for demo playback).
+    /// </summary>
+    public Demo.IPlayerInputSource? InputSource { get; set; }
+
+    /// <summary>
+    /// Optional callback or recorder invoked every physics tick with the captured player update.
+    /// </summary>
+    public Action<PlayerUpdateCmd>? OnUpdateCaptured { get; set; }
+
+    /// <summary>
+    /// Captures the current movement, combat, and kinematic state as a <see cref="PlayerUpdateCmd"/>.
+    /// </summary>
+    public PlayerUpdateCmd CaptureUpdate(int? tick = null)
+    {
+        return new PlayerUpdateCmd
+        {
+            Tick = tick ?? (LastMillis / Phys.PhysFrameTime),
+            Move = Entity.Move,
+            Strafe = Entity.Strafe,
+            Jumping = Entity.Jumping,
+            Yaw = Entity.Yaw,
+            Pitch = Pitch,
+            Attacking = Combat.Attacking,
+            SelectedGun = Combat.GunSelect,
+            Pos = new Vec3f { X = Entity.O.X, Y = Entity.O.Y, Z = Entity.O.Z },
+            Vel = new Vec3f { X = Entity.Vel.X, Y = Entity.Vel.Y, Z = Entity.Vel.Z },
+            PhysState = (byte)Entity.PhysState,
+            LifeSequence = Combat.LifeSequence,
+        };
+    }
+
+    /// <summary>Kills the player immediately via suicide (/suicide command or falling out of world).</summary>
+    public void Suicide(int? nowMillis = null)
+    {
+        if (Entity.Dead) return;
+        Die(nowMillis);
+    }
+
+    /// <summary>
+    /// Applies a player update command directly to movement and combat state.
+    /// </summary>
+    public void ApplyUpdate(PlayerUpdateCmd update)
+    {
+        Entity.Move = update.Move;
+        Entity.Strafe = update.Strafe;
+        Entity.Jumping = update.Jumping;
+        Entity.Yaw = update.Yaw;
+        Pitch = update.Pitch;
+        if (Combat.GunSelect != update.SelectedGun && Guns.IsPlayerSelectable(update.SelectedGun))
+        {
+            SelectWeapon((Gun)update.SelectedGun);
+        }
+        bool wasAttacking = Combat.Attacking;
+        Combat.Attacking = update.Attacking;
+        if (!wasAttacking && update.Attacking && IsAlive)
+        {
+            TryAttack();
+        }
     }
 
     /// <summary>

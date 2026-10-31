@@ -188,6 +188,15 @@ public sealed class CommandSink
                     Environment = p;
                     break;
                 }
+            case WorldOp.PlayerUpdate:
+            case WorldOp.PlayerSpawn:
+            case WorldOp.PlayerDeath:
+            case WorldOp.PlayerTeleport:
+            case WorldOp.PlayerJumpPad:
+                {
+                    // Player updates and lifecycle commands are transient/replay inputs, not octree mutations.
+                    break;
+                }
             default:
                 throw new NotSupportedException($"Unhandled WorldOp {cmd.Op}");
         }

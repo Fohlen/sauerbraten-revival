@@ -17,7 +17,12 @@ enum WorldOp : ubyte {
     RemoveEntity = 41,
     EditEntity = 42,
     SetEnvironment = 43,
-    ReplaceBlock = 50
+    ReplaceBlock = 50,
+    PlayerUpdate = 60,
+    PlayerSpawn = 61,
+    PlayerDeath = 62,
+    PlayerTeleport = 63,
+    PlayerJumpPad = 64
 }
 
 enum CompressionCodec : ubyte {
@@ -120,6 +125,52 @@ table ReplaceBlockCmd {
     data: [ubyte];
 }
 
+table PlayerUpdateCmd (fs_serializer) {
+    tick: int32;
+    move: int32;
+    strafe: int32;
+    jumping: bool;
+    yaw: float32;
+    pitch: float32;
+    attacking: bool;
+    selected_gun: int32;
+    
+    // Authoritative kinematic state (for reconciliation, verification, and drift checks)
+    pos: Vec3f;
+    vel: Vec3f;
+    phys_state: ubyte;
+    life_sequence: int32;
+}
+
+table PlayerSpawnCmd {
+    pos: Vec3f;
+    yaw: float32;
+    life_sequence: int32;
+    selected_gun: int32;
+    health: int32 = 100;
+    armour: int32 = 0;
+}
+
+table PlayerDeathCmd {
+    victim_peer_id: int32;
+    killer_peer_id: int32;
+    gun: int32;
+    is_suicide: bool;
+    death_pos: Vec3f;
+    impulse: Vec3f;
+}
+
+table PlayerTeleportCmd {
+    teleport_id: int32;
+    dest_pos: Vec3f;
+    dest_yaw: float32;
+}
+
+table PlayerJumpPadCmd {
+    pad_id: int32;
+    impulse: Vec3f;
+}
+
 union CommandPayload {
     EditFaceCmd,
     SetTextureCmd,
@@ -132,7 +183,12 @@ union CommandPayload {
     SetEnvironmentCmd,
     SetMaterialCmd,
     NewMapCmd,
-    ReplaceBlockCmd
+    ReplaceBlockCmd,
+    PlayerUpdateCmd,
+    PlayerSpawnCmd,
+    PlayerDeathCmd,
+    PlayerTeleportCmd,
+    PlayerJumpPadCmd
 }
 
 table Command (fs_serializer) {
@@ -176,6 +232,15 @@ table MapPackage (fs_serializer) {
 
 table NetworkPacket (fs_serializer) {
     packet_id: uint32;
+    commands: [Command];
+}
+
+table DemoPackage (fs_serializer) {
+    format_version: uint32 = 1;
+    map_name: string;
+    game_mode: string;
+    initial_spawn_pos: Vec3f;
+    initial_spawn_yaw: float32;
     commands: [Command];
 }
 

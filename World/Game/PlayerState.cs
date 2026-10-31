@@ -64,6 +64,9 @@ public partial class PlayerState : RefCounted
     public ArmourType ArmourType = ArmourType.Blue;
     public int QuadMillis;
 
+    /// <summary>Authoritative spawn sequence counter (engine <c>lifesequence</c> in fpsgame/game.h:373).</summary>
+    public int LifeSequence;
+
     private int _gunSelect;
     /// <summary>Currently selected gun id (engine <c>gunselect</c>, a <see cref="Gun"/> value).</summary>
     public int GunSelect
@@ -257,6 +260,7 @@ public partial class PlayerState : RefCounted
     /// </summary>
     private void RespawnInternal()
     {
+        LifeSequence++;
         MaxHealth = DefaultMaxHealth;
         _health = MaxHealth;
         _armour = 0;

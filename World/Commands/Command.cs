@@ -1,5 +1,11 @@
 global using Command = SauerbratenRevival.Format.Command;
 global using WorldOp = SauerbratenRevival.Format.WorldOp;
+global using PlayerUpdateCmd = SauerbratenRevival.Format.PlayerUpdateCmd;
+global using PlayerSpawnCmd = SauerbratenRevival.Format.PlayerSpawnCmd;
+global using PlayerDeathCmd = SauerbratenRevival.Format.PlayerDeathCmd;
+global using PlayerTeleportCmd = SauerbratenRevival.Format.PlayerTeleportCmd;
+global using PlayerJumpPadCmd = SauerbratenRevival.Format.PlayerJumpPadCmd;
+global using DemoPackage = SauerbratenRevival.Format.DemoPackage;
 
 using System;
 using Godot;
@@ -41,6 +47,12 @@ public partial class Command
         CommandPayload.ItemKind.ReplaceBlockCmd => Payload.Value.Item12.Sel,
         _ => null
     };
+
+    public PlayerUpdateCmd? PlayerUpdate => Payload?.Kind == CommandPayload.ItemKind.PlayerUpdateCmd ? Payload.Value.Item13 : null;
+    public PlayerSpawnCmd? PlayerSpawn => Payload?.Kind == CommandPayload.ItemKind.PlayerSpawnCmd ? Payload.Value.Item14 : null;
+    public PlayerDeathCmd? PlayerDeath => Payload?.Kind == CommandPayload.ItemKind.PlayerDeathCmd ? Payload.Value.Item15 : null;
+    public PlayerTeleportCmd? PlayerTeleport => Payload?.Kind == CommandPayload.ItemKind.PlayerTeleportCmd ? Payload.Value.Item16 : null;
+    public PlayerJumpPadCmd? PlayerJumpPad => Payload?.Kind == CommandPayload.ItemKind.PlayerJumpPadCmd ? Payload.Value.Item17 : null;
 
     /// <summary>
     /// Try to get the world-space bounding box and margin (grid size) of the geometry
@@ -163,6 +175,107 @@ public partial class Command
         Op = WorldOp.SetEnvironment,
         PeerId = author,
         Payload = new(env)
+    };
+
+    public static Command CreatePlayerUpdate(
+        int tick,
+        int move,
+        int strafe,
+        bool jumping,
+        float yaw,
+        float pitch,
+        bool attacking,
+        int selectedGun,
+        Vector3? pos = null,
+        Vector3? vel = null,
+        byte physState = 0,
+        int lifeSequence = 0,
+        int author = 0) => new()
+        {
+            Op = WorldOp.PlayerUpdate,
+            PeerId = author,
+            Payload = new(new PlayerUpdateCmd
+            {
+                Tick = tick,
+                Move = move,
+                Strafe = strafe,
+                Jumping = jumping,
+                Yaw = yaw,
+                Pitch = pitch,
+                Attacking = attacking,
+                SelectedGun = selectedGun,
+                Pos = pos.HasValue ? new Vec3f { X = pos.Value.X, Y = pos.Value.Y, Z = pos.Value.Z } : null,
+                Vel = vel.HasValue ? new Vec3f { X = vel.Value.X, Y = vel.Value.Y, Z = vel.Value.Z } : null,
+                PhysState = physState,
+                LifeSequence = lifeSequence
+            })
+        };
+
+    public static Command CreatePlayerUpdate(PlayerUpdateCmd update, int author = 0) => new()
+    {
+        Op = WorldOp.PlayerUpdate,
+        PeerId = author,
+        Payload = new(update)
+    };
+
+    public static Command CreatePlayerSpawn(Vector3 pos, float yaw, int lifeSequence = 0, int gun = 0, int health = 100, int armour = 0, int author = 0) => new()
+    {
+        Op = WorldOp.PlayerSpawn,
+        PeerId = author,
+        Payload = new(new PlayerSpawnCmd
+        {
+            Pos = new Vec3f { X = pos.X, Y = pos.Y, Z = pos.Z },
+            Yaw = yaw,
+            LifeSequence = lifeSequence,
+            SelectedGun = gun,
+            Health = health,
+            Armour = armour
+        })
+    };
+
+    public static Command CreatePlayerDeath(
+        int victimPeerId,
+        int killerPeerId = -1,
+        int gun = -1,
+        bool isSuicide = false,
+        Vector3 deathPos = default,
+        Vector3 impulse = default,
+        int author = 0) => new()
+        {
+            Op = WorldOp.PlayerDeath,
+            PeerId = author,
+            Payload = new(new PlayerDeathCmd
+            {
+                VictimPeerId = victimPeerId,
+                KillerPeerId = killerPeerId,
+                Gun = gun,
+                IsSuicide = isSuicide,
+                DeathPos = new Vec3f { X = deathPos.X, Y = deathPos.Y, Z = deathPos.Z },
+                Impulse = new Vec3f { X = impulse.X, Y = impulse.Y, Z = impulse.Z }
+            })
+        };
+
+    public static Command CreatePlayerTeleport(int teleportId, Vector3 destPos, float destYaw, int author = 0) => new()
+    {
+        Op = WorldOp.PlayerTeleport,
+        PeerId = author,
+        Payload = new(new PlayerTeleportCmd
+        {
+            TeleportId = teleportId,
+            DestPos = new Vec3f { X = destPos.X, Y = destPos.Y, Z = destPos.Z },
+            DestYaw = destYaw
+        })
+    };
+
+    public static Command CreatePlayerJumpPad(int padId, Vector3 impulse, int author = 0) => new()
+    {
+        Op = WorldOp.PlayerJumpPad,
+        PeerId = author,
+        Payload = new(new PlayerJumpPadCmd
+        {
+            PadId = padId,
+            Impulse = new Vec3f { X = impulse.X, Y = impulse.Y, Z = impulse.Z }
+        })
     };
 }
 
