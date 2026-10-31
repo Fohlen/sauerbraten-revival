@@ -310,4 +310,91 @@ public class DemoTest : GoTestBase
         playerA.Free();
         playerB.Free();
     }
+
+    [Test]
+    public void MultiplayerDemo_RecordingAndPlayback()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+
+        var player0 = new MapPlayer { PlayerId = 0 };
+        player0.Setup(octa, new Vector3(3000, 946, 3040), 0f);
+
+        var player1 = new MapPlayer { PlayerId = 1 };
+        player1.Setup(octa, new Vector3(3050, 946, 3040), 180f);
+
+        var recorder = new DemoRecorder();
+        recorder.Start(mapName: "church51", gameMode: "ffa");
+
+        // Attach both players to the same recorder
+        recorder.Attach(player0);
+        recorder.Attach(player1);
+
+        // Record 10 steps of concurrent multi-player movement
+        for (int i = 0; i < 10; i++)
+        {
+            player0.Entity.Move = 1;
+            player0.Entity.Yaw = i * 10f;
+
+            player1.Entity.Strafe = 1;
+            player1.Entity.Jumping = (i == 4 || i == 5);
+            player1.GunSelect = (i >= 5) ? (int)Gun.RocketLauncher : (int)Gun.Shotgun;
+
+            recorder.RecordPlayer(player0, i);
+            recorder.RecordPlayer(player1, i);
+
+            player0.Advance(Phys.PhysFrameTime / 1000.0);
+            player1.Advance(Phys.PhysFrameTime / 1000.0);
+        }
+
+        // Record a combat event: player 0 kills player 1
+        recorder.RecordDeath(victimPeerId: 1, killerPeerId: 0, gun: (int)Gun.Rifle);
+
+        var demo = recorder.Stop();
+        TestAssert.Equal(21, demo.TotalCommands, "20 player updates + 1 death command");
+
+        // Save & reload from disk (*.fbs)
+        string demoPath = "user://test_multiplayer_roundtrip.fbs";
+        DemoPackage.Save(demoPath, demo);
+        var loadedDemo = DemoPackage.Load(demoPath);
+
+        // Set up two fresh playback players
+        var replay0 = new MapPlayer { PlayerId = 0 };
+        replay0.Setup(octa, new Vector3(3000, 946, 3040), 0f);
+
+        var replay1 = new MapPlayer { PlayerId = 1 };
+        replay1.Setup(octa, new Vector3(3050, 946, 3040), 180f);
+
+        var replayer = new DemoReplayer(loadedDemo);
+        replayer.RegisterPlayer(replay0);
+        replayer.RegisterPlayer(replay1);
+
+        // Step simulation for both players concurrently
+        for (int i = 0; i < 10; i++)
+        {
+            replay0.PrePhysicsStep();
+            replay1.PrePhysicsStep();
+
+            TestAssert.Equal(1, replay0.Entity.Move, $"Step {i}: Player0 Move");
+            TestAssert.Near(i * 10f, replay0.Entity.Yaw, 1e-3f, $"Step {i}: Player0 Yaw");
+
+            TestAssert.Equal(1, replay1.Entity.Strafe, $"Step {i}: Player1 Strafe");
+            TestAssert.Equal(i == 4 || i == 5, replay1.Entity.Jumping, $"Step {i}: Player1 Jumping");
+            TestAssert.Equal(i >= 5 ? (int)Gun.RocketLauncher : (int)Gun.Shotgun, replay1.GunSelect, $"Step {i}: Player1 Gun");
+
+            replay0.Advance(Phys.PhysFrameTime / 1000.0);
+            replay1.Advance(Phys.PhysFrameTime / 1000.0);
+        }
+
+        // Process death event
+        replayer.GetUpdate(10, replay1);
+        TestAssert.True(replay1.Entity.Dead, "Player 1 is dead after death event in multiplayer demo");
+
+        player0.Free();
+        player1.Free();
+        replay0.Free();
+        replay1.Free();
+
+        string globalPath = ProjectSettings.GlobalizePath(demoPath);
+        if (File.Exists(globalPath)) File.Delete(globalPath);
+    }
 }

@@ -1,33 +1,49 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.Format;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Game.Players;
+using SauerbratenRevival.World.Runtime;
 
 namespace SauerbratenRevival.World.Demo;
 
 /// <summary>
-/// Replays a unified stream of <see cref="Command"/>s from a <see cref="DemoPackage"/> onto a player and world.
+/// Replays a unified stream of <see cref="Command"/>s from a <see cref="DemoPackage"/>
+/// across one or multiple players concurrently.
 /// Implements <see cref="IPlayerInputSource"/> to feed inputs directly into <see cref="MapPlayer.PrePhysicsStep"/>.
 /// </summary>
 public class DemoReplayer : IPlayerInputSource
 {
-    private MapPlayer? _attachedPlayer;
+    private readonly Dictionary<int, MapPlayer> _players = new();
+    private readonly Dictionary<int, Queue<Command>> _peerQueues = new();
+    private readonly Queue<Command> _globalQueue = new();
     private CommandSink? _commandSink;
 
     public DemoPackage Demo { get; }
-    public int CurrentIndex { get; private set; }
-    public bool IsFinished => Demo.Commands == null || CurrentIndex >= Demo.Commands.Count;
     public int TotalCommands => Demo.Commands?.Count ?? 0;
 
-    /// <summary>Fired when playback reaches the end of the recorded command stream.</summary>
+    /// <summary>Fired when playback reaches the end of all recorded commands across all players.</summary>
     public event Action? PlaybackFinished;
+
+    public bool IsFinished
+    {
+        get
+        {
+            if (_globalQueue.Count > 0) return false;
+            foreach (var (_, q) in _peerQueues)
+            {
+                if (q.Count > 0) return false;
+            }
+            return true;
+        }
+    }
 
     public DemoReplayer(DemoPackage demo, CommandSink? commandSink = null)
     {
         Demo = demo;
         _commandSink = commandSink;
-        CurrentIndex = 0;
+        Reset();
     }
 
     /// <summary>Loads and initializes a replayer from a demo file on disk (*.fbs or *.bin).</summary>
@@ -35,75 +51,168 @@ public class DemoReplayer : IPlayerInputSource
         new(DemoPackage.Load(path), commandSink);
 
     /// <summary>
-    /// Attaches this replayer as the input source for the given player.
+    /// Registers a player to receive its recorded updates by <see cref="MapPlayer.PlayerId"/>.
     /// </summary>
-    public void Attach(MapPlayer player)
+    public void RegisterPlayer(MapPlayer player)
     {
-        if (ReferenceEquals(_attachedPlayer, player)) return;
-        Detach();
-        _attachedPlayer = player;
-        _attachedPlayer.InputSource = this;
+        _players[player.PlayerId] = player;
+        player.InputSource = this;
     }
 
     /// <summary>
-    /// Detaches this replayer from the player.
+    /// Attaches as the input source for all active players in a world.
     /// </summary>
-    public void Detach()
+    public void AttachWorld(IGameWorld world)
     {
-        if (_attachedPlayer != null)
+        for (int i = 0; i < world.Players.Count; i++)
         {
-            if (ReferenceEquals(_attachedPlayer.InputSource, this))
-            {
-                _attachedPlayer.InputSource = null;
-            }
-            _attachedPlayer = null;
+            RegisterPlayer(world.Players[i]);
         }
     }
 
-    /// <summary>Resets the playback position to the start.</summary>
-    public void Reset()
+    /// <summary>
+    /// Attaches a single player (shortcut for RegisterPlayer).
+    /// </summary>
+    public void Attach(MapPlayer player) => RegisterPlayer(player);
+
+    /// <summary>
+    /// Detaches a specific player.
+    /// </summary>
+    public void Detach(MapPlayer player)
     {
-        CurrentIndex = 0;
+        if (_players.Remove(player.PlayerId, out var p))
+        {
+            if (ReferenceEquals(p.InputSource, this))
+            {
+                p.InputSource = null;
+            }
+        }
     }
 
     /// <summary>
-    /// Fetches the next player update. Called per 5 ms physics step by <see cref="MapPlayer.PrePhysicsStep"/>.
-    /// Dispatches any interleaved lifecycle or world commands encountered before the next update.
+    /// Detaches all registered players.
+    /// </summary>
+    public void DetachAll()
+    {
+        foreach (var (_, p) in _players)
+        {
+            if (ReferenceEquals(p.InputSource, this))
+            {
+                p.InputSource = null;
+            }
+        }
+        _players.Clear();
+    }
+
+    /// <summary>Resets playback position to the beginning for all players.</summary>
+    public void Reset()
+    {
+        _peerQueues.Clear();
+        _globalQueue.Clear();
+
+        if (Demo.Commands == null) return;
+
+        for (int i = 0; i < Demo.Commands.Count; i++)
+        {
+            var cmd = Demo.Commands[i];
+
+            // Direct player commands to their target peer queue
+            int targetPeer = cmd.PeerId;
+            if (cmd.Op == WorldOp.PlayerDeath && cmd.PlayerDeath != null)
+            {
+                targetPeer = cmd.PlayerDeath.VictimPeerId;
+            }
+
+            if (IsPlayerOp(cmd.Op))
+            {
+                if (!_peerQueues.TryGetValue(targetPeer, out var q))
+                {
+                    q = new Queue<Command>();
+                    _peerQueues[targetPeer] = q;
+                }
+                q.Enqueue(cmd);
+            }
+            else
+            {
+                _globalQueue.Enqueue(cmd);
+            }
+        }
+    }
+
+    private static bool IsPlayerOp(WorldOp op) => op switch
+    {
+        WorldOp.PlayerUpdate => true,
+        WorldOp.PlayerSpawn => true,
+        WorldOp.PlayerDeath => true,
+        WorldOp.PlayerTeleport => true,
+        WorldOp.PlayerJumpPad => true,
+        _ => false
+    };
+
+    /// <summary>
+    /// Fetches the next player update for the specific player.
+    /// Dispatches any interleaved lifecycle commands (spawns, deaths, teleports) before returning the update.
     /// </summary>
     public PlayerUpdateCmd? GetUpdate(int tick, MapPlayer player)
     {
-        if (Demo.Commands == null || Demo.Commands.Count == 0) return null;
+        // Drain any pending global/world commands
+        DrainGlobalQueue();
 
-        while (CurrentIndex < Demo.Commands.Count)
+        int peerId = player.PlayerId;
+        if (!_peerQueues.TryGetValue(peerId, out var q))
         {
-            var cmd = Demo.Commands[CurrentIndex++];
+            CheckFinished();
+            return null;
+        }
+
+        while (q.Count > 0)
+        {
+            var cmd = q.Dequeue();
+
             if (cmd.Op == WorldOp.PlayerUpdate && cmd.PlayerUpdate != null)
             {
-                if (CurrentIndex >= Demo.Commands.Count)
-                {
-                    PlaybackFinished?.Invoke();
-                }
+                CheckFinished();
                 return cmd.PlayerUpdate;
             }
 
-            // Dispatch non-update commands (spawn, death, teleport, jump pad, or world edits)
+            // Dispatch lifecycle commands (spawn, death, teleport, jump pad)
             DispatchCommand(cmd, player);
-
-            if (CurrentIndex >= Demo.Commands.Count)
-            {
-                PlaybackFinished?.Invoke();
-            }
         }
 
+        CheckFinished();
         return null;
+    }
+
+    private void DrainGlobalQueue()
+    {
+        while (_globalQueue.Count > 0)
+        {
+            var cmd = _globalQueue.Dequeue();
+            _commandSink?.Apply(cmd);
+        }
+    }
+
+    private void CheckFinished()
+    {
+        if (IsFinished)
+        {
+            PlaybackFinished?.Invoke();
+        }
     }
 
     /// <summary>
     /// Dispatches an individual command to player or world state.
     /// </summary>
-    public void DispatchCommand(Command cmd, MapPlayer? player = null)
+    public void DispatchCommand(Command cmd, MapPlayer? defaultPlayer = null)
     {
-        var targetPlayer = player ?? _attachedPlayer;
+        int peerId = cmd.PeerId;
+        if (cmd.Op == WorldOp.PlayerDeath && cmd.PlayerDeath != null)
+        {
+            peerId = cmd.PlayerDeath.VictimPeerId;
+        }
+
+        _players.TryGetValue(peerId, out var targetPlayer);
+        targetPlayer ??= defaultPlayer;
 
         switch (cmd.Op)
         {
@@ -162,7 +271,6 @@ public class DemoReplayer : IPlayerInputSource
                 }
             default:
                 {
-                    // Pass octree / entity / environment commands to the live CommandSink if present
                     _commandSink?.Apply(cmd);
                     break;
                 }
@@ -170,22 +278,7 @@ public class DemoReplayer : IPlayerInputSource
     }
 
     /// <summary>
-    /// Explicitly steps the player with the next command from the demo.
-    /// </summary>
-    public bool Step(MapPlayer player, int? tick = null)
-    {
-        int t = tick ?? (player.LastMillis / Physics.Phys.PhysFrameTime);
-        var update = GetUpdate(t, player);
-        if (update != null)
-        {
-            player.ApplyUpdate(update);
-            return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Spawns or places the player at the demo's recorded initial position and orientation.
+    /// Spawns or places a player at the demo's recorded initial position and orientation.
     /// </summary>
     public void ApplyInitialPlacement(MapPlayer player)
     {

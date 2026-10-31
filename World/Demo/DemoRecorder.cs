@@ -3,17 +3,19 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.Format;
 using SauerbratenRevival.World.Game.Players;
+using SauerbratenRevival.World.Runtime;
 
 namespace SauerbratenRevival.World.Demo;
 
 /// <summary>
-/// Records player updates, lifecycle events, and world mutations during gameplay or simulation into a <see cref="DemoPackage"/>.
-/// Every event is captured as a unified <see cref="Command"/> in the package.
+/// Records player updates, lifecycle events, and world mutations for one or multiple players
+/// into a <see cref="DemoPackage"/>. Every event is captured as a unified <see cref="Command"/>.
 /// </summary>
 public class DemoRecorder
 {
     private readonly List<Command> _commands = new();
-    private MapPlayer? _attachedPlayer;
+    private readonly Dictionary<int, MapPlayer> _attachedPlayers = new();
+    private readonly Dictionary<int, Action<PlayerUpdateCmd>> _captureCallbacks = new();
 
     public bool IsRecording { get; private set; }
     public string MapName { get; set; } = string.Empty;
@@ -22,6 +24,7 @@ public class DemoRecorder
     public float InitialSpawnYaw { get; set; }
 
     public IReadOnlyList<Command> Commands => _commands;
+    public IReadOnlyCollection<MapPlayer> AttachedPlayers => _attachedPlayers.Values;
 
     public void Start(string mapName = "", string gameMode = "", Vector3 initialSpawnPos = default, float initialSpawnYaw = 0f)
     {
@@ -35,31 +38,68 @@ public class DemoRecorder
 
     /// <summary>
     /// Attaches to a player, capturing its updates automatically every physics tick.
+    /// Tagged with the player's <see cref="MapPlayer.PlayerId"/> (PeerId).
     /// </summary>
     public void Attach(MapPlayer player)
     {
-        if (ReferenceEquals(_attachedPlayer, player)) return;
-        Detach();
-        _attachedPlayer = player;
-        _attachedPlayer.OnUpdateCaptured += RecordPlayerUpdate;
+        if (_attachedPlayers.ContainsKey(player.PlayerId)) return;
+
+        Action<PlayerUpdateCmd> callback = update => RecordUpdate(update, player.PlayerId);
+        _attachedPlayers[player.PlayerId] = player;
+        _captureCallbacks[player.PlayerId] = callback;
+        player.OnUpdateCaptured += callback;
     }
 
     /// <summary>
-    /// Detaches from the currently attached player.
+    /// Attaches multiple players to record their actions concurrently.
     /// </summary>
-    public void Detach()
+    public void Attach(IEnumerable<MapPlayer> players)
     {
-        if (_attachedPlayer != null)
+        foreach (var p in players)
         {
-            _attachedPlayer.OnUpdateCaptured -= RecordPlayerUpdate;
-            _attachedPlayer = null;
+            Attach(p);
         }
     }
 
-    private void RecordPlayerUpdate(PlayerUpdateCmd update)
+    /// <summary>
+    /// Attaches all players currently active in the world.
+    /// </summary>
+    public void AttachWorld(IGameWorld world)
     {
-        if (!IsRecording) return;
-        _commands.Add(Command.CreatePlayerUpdate(update, _attachedPlayer?.PlayerId ?? 0));
+        for (int i = 0; i < world.Players.Count; i++)
+        {
+            Attach(world.Players[i]);
+        }
+    }
+
+    /// <summary>
+    /// Detaches from a specific player.
+    /// </summary>
+    public void Detach(MapPlayer player)
+    {
+        if (_attachedPlayers.Remove(player.PlayerId, out var p))
+        {
+            if (_captureCallbacks.Remove(player.PlayerId, out var cb))
+            {
+                p.OnUpdateCaptured -= cb;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Detaches from all currently attached players.
+    /// </summary>
+    public void DetachAll()
+    {
+        foreach (var (id, p) in _attachedPlayers)
+        {
+            if (_captureCallbacks.TryGetValue(id, out var cb))
+            {
+                p.OnUpdateCaptured -= cb;
+            }
+        }
+        _attachedPlayers.Clear();
+        _captureCallbacks.Clear();
     }
 
     /// <summary>
@@ -138,7 +178,7 @@ public class DemoRecorder
     public DemoPackage Stop()
     {
         IsRecording = false;
-        Detach();
+        DetachAll();
         return ToPackage();
     }
 
