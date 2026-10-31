@@ -494,7 +494,7 @@ public partial class MainMenu : CanvasLayer
     private void RefreshMapList(GameModeInfo? mode)
     {
         MapList? list = MapListCatalog.ForMode(mode);
-        string listId = list?.Id ?? "";
+        string listId = list != null ? (list.Id != MapListId.None ? list.Id.ToString().ToLowerInvariant() : list.Name) : "";
         bool changed = listId != _mapListId;
         _mapListId = listId;
 

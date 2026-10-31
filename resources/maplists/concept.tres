@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_concept")
-Id = "concept"
+Id = 4
 Name = "concept"
 Maps = PackedStringArray(
 	"firstevermap",

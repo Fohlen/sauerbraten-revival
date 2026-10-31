@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_dm")
-Id = "dm"
+Id = 0
 Name = "ffa"
 Maps = PackedStringArray(
 	"aard3c",

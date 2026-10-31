@@ -1,4 +1,5 @@
 using Godot;
+using SauerbratenRevival.World.Content;
 
 namespace SauerbratenRevival.World.Game;
 
@@ -9,16 +10,18 @@ namespace SauerbratenRevival.World.Game;
 /// <see cref="MapListCatalog.ForMode"/>), so the front-end map picker does the
 /// same.
 ///
-/// Authored as a Godot <see cref="Resource"/> (one <c>.tres</c> per list under
-/// <see cref="MapListCatalog.ResourceDir"/>), like <see cref="GameModeInfo"/>, so
-/// a mod can add or replace a list without code.
+/// Follows ADR 0010:
+/// - Core catalog: <c>res://resources/maplists/&lt;name&gt;.tres</c>
+/// - Mod overrides: <c>res://resources/maplists/overrides/</c>
+/// - User overrides: <c>user://maplists/overrides/</c>
+/// - Hot-path lookup: O(1) direct integer indexing via <see cref="MapListCatalog.All"/> or <see cref="MapListCatalog.Get(MapListId)"/>.
 /// </summary>
 [Tool]
 [GlobalClass]
-public partial class MapList : Resource
+public partial class MapList : Resource, IResourceDefinition<MapListId>
 {
-    /// <summary>Stable, filename-safe key (e.g. <c>ctf</c>); also the <c>.tres</c> file stem.</summary>
-    [Export] public string Id { get; set; } = "";
+    /// <summary>Map list enum ID (<see cref="MapListId"/>).</summary>
+    [Export] public MapListId Id { get; set; } = MapListId.None;
 
     /// <summary>Human-readable name (matches the engine's GUI tab, e.g. "ffa", "capture", "ctf").</summary>
     [Export] public string Name { get; set; } = "";
@@ -26,5 +29,16 @@ public partial class MapList : Resource
     /// <summary>Map names without package or extension (e.g. <c>metl3</c>), in engine list order.</summary>
     [Export] public string[] Maps { get; set; } = System.Array.Empty<string>();
 
-    public override string ToString() => string.IsNullOrEmpty(Id) ? base.ToString() : $"{Id} ({Maps.Length} maps)";
+    public MapList() { }
+
+    public MapList(MapListId id, string name, string[] maps)
+    {
+        Id = id;
+        Name = name;
+        Maps = maps;
+    }
+
+    public override string ToString() => string.IsNullOrEmpty(Name)
+        ? (Id != MapListId.None ? $"{Id} ({Maps.Length} maps)" : base.ToString())
+        : $"{Name} ({Maps.Length} maps)";
 }

@@ -32,5 +32,4 @@ through `ContentRoots`, and `<name>.jpg` supplies the menu thumbnail.
 The engine offers all four pools as tabs for the DM/TDM/edit family; our
 single left/right picker starts from the deathmatch pool.
 
-These are normal `Resource`s, editable in the inspector and replaceable by a mod
-pack that mounts its own list into `res://resources/maplists`.
+These are typed Godot `Resource`s following [ADR 0010](../../docs/adr/0010-resource-modding.md), editable in the inspector, supported by a 3-tier cascade (`res://resources/maplists/`, `res://resources/maplists/overrides/`, `user://maplists/overrides/`), and backed by zero-failure C# defaults in `MapListCatalog.Defaults`.

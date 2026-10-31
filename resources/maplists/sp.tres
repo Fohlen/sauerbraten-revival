@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_sp")
-Id = "sp"
+Id = 3
 Name = "single player"
 Maps = PackedStringArray(
 	"crnsp1",

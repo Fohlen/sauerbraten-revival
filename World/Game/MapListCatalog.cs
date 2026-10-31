@@ -1,67 +1,85 @@
 using System;
 using System.Collections.Generic;
-using Godot;
+using SauerbratenRevival.World.Content;
 
 namespace SauerbratenRevival.World.Game;
 
 /// <summary>
-/// The active classic-map lists, loaded from the <c>.tres</c> files under
-/// <see cref="ResourceDir"/>. These are the engine's own <c>MapList_*</c> sets
-/// from <c>data/lists.cfg</c> (SVN r6889), imported verbatim so the front-end
-/// offers the same per-mode map pools.
+/// The engine's curated classic-map pools (SVN r6889 <c>data/lists.cfg</c>).
 ///
-/// Mirrors <see cref="GameModeCatalog"/>: data-first content, editable in the
-/// inspector and extendable by a mod pack mounting its own list into the
-/// directory, with a lookup seam (<see cref="Override"/>) for tests.
+/// Follows ADR 0010:
+/// - Core catalog: <c>res://resources/maplists/&lt;name&gt;.tres</c>
+/// - Mod overrides: <c>res://resources/maplists/overrides/</c>
+/// - User overrides: <c>user://maplists/overrides/</c>
+/// - Hot-path lookup: O(1) direct integer indexing via <see cref="All"/> or <see cref="Get(MapListId)"/>.
 /// </summary>
 public static class MapListCatalog
 {
-    /// <summary>Directory scanned for authored map-list <c>.tres</c> files.</summary>
+    /// <summary>Number of standard engine map lists (dm, capture, ctf, sp, concept, rpg).</summary>
+    public const int Count = 6;
+
+    /// <summary>Directory holding authored per-list <c>.tres</c> files.</summary>
     public const string ResourceDir = "res://resources/maplists";
+
+    /// <summary>Directory scanned for modded map list overrides.</summary>
+    public const string ModOverrideDir = "res://resources/maplists/overrides";
+
+    /// <summary>Directory scanned for user-specific map list overrides.</summary>
+    public const string UserOverrideDir = "user://maplists/overrides";
+
+    /// <summary>
+    /// Built-in defaults defining the 6 canonical engine map list slots.
+    /// Used as zero-failure fallback when a <c>.tres</c> is absent.
+    /// Full map pools are authored in resource files under <see cref="ResourceDir"/>.
+    /// </summary>
+    public static readonly MapList[] Defaults =
+    {
+        new() { Id = MapListId.Dm, Name = "ffa" },
+        new() { Id = MapListId.Capture, Name = "capture" },
+        new() { Id = MapListId.Ctf, Name = "ctf" },
+        new() { Id = MapListId.Sp, Name = "single player" },
+        new() { Id = MapListId.Concept, Name = "concept" },
+        new() { Id = MapListId.Rpg, Name = "rpg" },
+    };
 
     private static MapList[]? _all;
 
     /// <summary>
-    /// The active catalog, loaded from <see cref="ResourceDir"/>. Cached after
-    /// first access; use <see cref="Override"/> to replace it (mods/tests).
+    /// Active map lists array. Loaded once from <see cref="ResourceDir"/> and overlay directories;
+    /// falls back to <see cref="Defaults"/>. Once loaded/reloaded, hot-path lookup is O(1) direct indexing.
     /// </summary>
     public static MapList[] All => _all ??= Load();
 
-    /// <summary>Load every list in <paramref name="dir"/> (ordered by filename for determinism).</summary>
-    public static MapList[] Load(string dir = ResourceDir)
-    {
-        var lists = new List<MapList>();
-        using var dirAccess = DirAccess.Open(dir);
-        if (dirAccess == null) return Array.Empty<MapList>();
+    /// <summary>Lookup by typed <see cref="MapListId"/>.</summary>
+    public static MapList Get(MapListId id) => Get((int)id);
 
-        string[] files = dirAccess.GetFiles();
-        Array.Sort(files, StringComparer.Ordinal);
-        foreach (string file in files)
-        {
-            // Exported PCKs replace each authored `foo.tres` with a
-            // `foo.tres.remap` sidecar, and DirAccess lists only the sidecar.
-            // Strip it so Load follows the remap to the packed resource.
-            string resource = file.EndsWith(".remap", StringComparison.OrdinalIgnoreCase)
-                ? file[..^".remap".Length]
-                : file;
-            if (!resource.EndsWith(".tres", StringComparison.OrdinalIgnoreCase)) continue;
-            var loaded = ResourceLoader.Load($"{dir.TrimEnd('/')}/{resource}") as MapList;
-            if (loaded == null || string.IsNullOrEmpty(loaded.Id)) continue;
-            lists.Add(loaded);
-        }
-        return lists.ToArray();
-    }
+    /// <summary>Clamped lookup matching engine slot indexing.</summary>
+    public static MapList Get(int index) => All[Math.Clamp(index, 0, All.Length - 1)];
+
+    /// <summary>Lookup map list by index, or null if out of range.</summary>
+    public static MapList? TryGet(int index) => index >= 0 && index < All.Length ? All[index] : null;
+
+    /// <summary>Lookup map list by typed <see cref="MapListId"/>, or null if out of range.</summary>
+    public static MapList? TryGet(MapListId id) => TryGet((int)id);
 
     /// <summary>Look a list up by its stable id or display name (case-insensitive), or null.</summary>
     public static MapList? TryGet(string? id)
     {
         if (string.IsNullOrWhiteSpace(id)) return null;
+
+        if (Enum.TryParse<MapListId>(id, ignoreCase: true, out var parsed) && parsed != MapListId.None)
+        {
+            var res = TryGet(parsed);
+            if (res != null) return res;
+        }
+
         foreach (var list in All)
         {
-            if (string.Equals(list.Id, id, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(list.Name, id, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(list.Name, id, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(list.Id.ToString(), id, StringComparison.OrdinalIgnoreCase))
                 return list;
         }
+
         return null;
     }
 
@@ -69,8 +87,39 @@ public static class MapListCatalog
     public static MapList Get(string id)
         => TryGet(id) ?? throw new KeyNotFoundException($"unknown map list '{id}'");
 
-    /// <summary>Replace the cached catalog (test/mod seam).</summary>
+    /// <summary>Replace active map list catalogue (test/mod seam).</summary>
     public static void Override(MapList[] lists) => _all = lists;
+
+    /// <summary>
+    /// Reload active map list definitions from base directory and any override directories.
+    /// </summary>
+    public static void Reload(
+        string dir = ResourceDir,
+        string? modDir = ModOverrideDir,
+        string? userDir = UserOverrideDir)
+    {
+        _all = Load(dir, modDir, userDir);
+    }
+
+    /// <summary>
+    /// Load map list definitions following the ADR 0010 3-tier cascade:
+    /// 1. Core base directory (<paramref name="dir"/>), falling back to <see cref="Defaults"/>
+    /// 2. Mod overrides (<paramref name="modDir"/>)
+    /// 3. User overrides (<paramref name="userDir"/>)
+    /// </summary>
+    public static MapList[] Load(
+        string dir = ResourceDir,
+        string? modDir = ModOverrideDir,
+        string? userDir = UserOverrideDir)
+    {
+        return ResourceCascade.LoadCascade<MapList, MapList, MapListId>(
+            Defaults,
+            dir,
+            modDir,
+            userDir,
+            def => def,
+            () => new MapList());
+    }
 
     /// <summary>Map lists whose modes the engine's maps GUI feeds from the capture pool.</summary>
     private static readonly HashSet<string> CaptureListModes = new(StringComparer.OrdinalIgnoreCase)
@@ -83,18 +132,17 @@ public static class MapListCatalog
     /// maps GUI (<c>data/menus/_utility.cfg</c> <c>ML__SetupMode</c> →
     /// <c>ML_ModeMaps</c>): CTF/protect/collect use the CTF pool, capture and hold
     /// use the capture pool, and free-for-all/teamplay/edit use the deathmatch
-    /// pool. (The engine additionally offers all pools as tabs for those modes;
-    /// with a single left/right picker we start from the deathmatch pool.)
+    /// pool.
     /// </summary>
     public static MapList? ForMode(GameModeInfo? mode)
     {
-        if (mode == null) return TryGet("dm");
+        if (mode == null) return TryGet(MapListId.Dm);
 
         // Hold is an M_CTF mode in the engine, but its maps GUI uses the capture
         // list (ML_ModeType 4 -> ML_ModeMaps 1), so check it before the Ctf flag.
-        if (CaptureListModes.Contains(mode.Id)) return TryGet("capture");
-        if (mode.Has(ModeFlags.Capture) || mode.Has(ModeFlags.Hold)) return TryGet("capture");
-        if (mode.Has(ModeFlags.Ctf)) return TryGet("ctf");
-        return TryGet("dm");
+        if (CaptureListModes.Contains(mode.Id)) return TryGet(MapListId.Capture);
+        if (mode.Has(ModeFlags.Capture) || mode.Has(ModeFlags.Hold)) return TryGet(MapListId.Capture);
+        if (mode.Has(ModeFlags.Ctf)) return TryGet(MapListId.Ctf);
+        return TryGet(MapListId.Dm);
     }
 }

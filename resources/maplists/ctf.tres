@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_ctf")
-Id = "ctf"
+Id = 2
 Name = "ctf"
 Maps = PackedStringArray(
 	"aastha",
