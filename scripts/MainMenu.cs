@@ -528,7 +528,9 @@ public partial class MainMenu : CanvasLayer
 
     private void RefreshModel()
     {
-        _modelValue.Text = ModelNames[_modelIndex];
+        _modelValue.Text = _modelIndex >= 0 && _modelIndex < ModelNames.Length
+            ? ModelNames[_modelIndex]
+            : (Playermodels.TryGet(_modelIndex)?.Name.ToUpperInvariant() ?? $"MODEL {_modelIndex}");
     }
 
     private void RefreshTeam()

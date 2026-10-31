@@ -97,9 +97,14 @@ The exact same architectural pattern is applied uniformly across the engine:
 - **Core Catalog**: `res://resources/gamemodes/<id>.tres` (20 standard modes).
 - **Overrides**: Custom community modes with custom rules, mode flags, and script attachments.
 
-### D. Player Models & Cosmetics (Future Implementation)
-- **Resource**: `PlayerModelInfo : Resource` specifying glb meshes, animation map bindings, and team skin variants.
-- **Hot Path**: `ModelCatalog.Get(PlayerModelId id) => _models[(int)id]`.
+### D. Player Models & Cosmetics (`World/Models/PlayerModelCatalog.cs`, `PlayerModelInfo.cs`)
+- **Resource**: `PlayerModelInfo : Resource` (e.g. `mrfixit.tres`, `snoutx10k.tres`).
+- **Core Catalog**: `res://resources/playermodels/<name>.tres` (5 classic player models).
+- **Overrides**: Mod directories overlaying skins, meshes, hudguns, or attachments (`res://resources/playermodels/overrides/`, `user://playermodels/overrides/`).
+- **Hot Path**:
+  ```csharp
+  public static PlayerModelInfo Get(PlayerModelId id) => All[(int)id];
+  ```
 
 ---
 
@@ -125,5 +130,5 @@ For mod-added assets that extend beyond the built-in enum counts:
 
 ## 4. Verification and Ground Truth
 
-1. **Fidelity Unit Tests**: Tests in `test/GameAudioTest.cs` and `test/WeaponCatalogTest.cs` assert that the deserialized `.tres` definitions match the SVN r6889 reference tables with zero deviation.
+1. **Fidelity Unit Tests**: Tests in `test/GameAudioTest.cs`, `test/WeaponCatalogTest.cs`, and `test/PlayerModelCatalogTest.cs` assert that the deserialized `.tres` definitions match the SVN r6889 reference tables with zero deviation.
 2. **Fallback Resilience**: In headless testing environments or corrupted installations, the catalogues fall back cleanly to `Defaults` without crashing the game engine.

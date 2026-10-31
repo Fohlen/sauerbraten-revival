@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="PlayerModelInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Models/PlayerModelInfo.cs" id="1_pm"]
+
+[resource]
+script = ExtResource("1_pm")
+Id = 3
+Name = "inky"
+Ffa = "inky"
+BlueTeam = "inky/blue"
+RedTeam = "inky/red"
+Hudguns = "inky/hudguns"
+Quad = "inky/quad"
+Armour = PackedStringArray("inky/armor/blue", "inky/armor/green", "inky/armor/yellow")
+FfaIcon = "inky"
+BlueIcon = "inky_blue"
+RedIcon = "inky_red"
+Ragdoll = true

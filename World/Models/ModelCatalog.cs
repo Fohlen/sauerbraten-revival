@@ -113,6 +113,11 @@ public sealed class ModelCatalog : IModelCatalog
     public ModelInfo? Get(string name) => Models.GetValueOrDefault(name);
 
     /// <summary>
+    /// Hot-path player model lookup by <see cref="PlayerModelId"/> (ADR 0010).
+    /// </summary>
+    public static PlayerModelInfo Get(PlayerModelId id) => PlayerModelCatalog.Get(id);
+
+    /// <summary>
     /// Load the manifest from the project's imported model tree (see
     /// <see cref="ContentRoots.ProjectDir"/>) — the normal runtime path.
     /// </summary>

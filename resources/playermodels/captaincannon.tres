@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="PlayerModelInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Models/PlayerModelInfo.cs" id="1_pm"]
+
+[resource]
+script = ExtResource("1_pm")
+Id = 4
+Name = "captaincannon"
+Ffa = "captaincannon"
+BlueTeam = "captaincannon/blue"
+RedTeam = "captaincannon/red"
+Hudguns = "captaincannon/hudguns"
+Quad = "captaincannon/quad"
+Armour = PackedStringArray("captaincannon/armor/blue", "captaincannon/armor/green", "captaincannon/armor/yellow")
+FfaIcon = "captaincannon"
+BlueIcon = "captaincannon_blue"
+RedIcon = "captaincannon_red"
+Ragdoll = true
