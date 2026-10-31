@@ -60,26 +60,26 @@ public sealed class WorldSimulation
                 world.Players[i].Step(Phys.PhysFrameTime);
             }
 
-            // 4. Update active projectiles (weapon.cpp:523 updateprojectiles).
-            UpdateProjectiles(world, Phys.PhysFrameTime);
-
-            // 5. Update active bouncers (weapon.cpp:231 updatebouncers).
-            UpdateBouncers(world, Phys.PhysFrameTime);
-
-            // 6. Update game mode flag rules with synchronized simulation clock.
+            // 4. Update game mode flag rules with synchronized simulation clock.
             if (world.Flags != null && world.Mode != null && world.Mode.Has(Game.ModeFlags.Ctf))
             {
                 world.Flags.Update(nowMillis);
             }
 
-            // 7. Update item respawns with synchronized simulation clock.
+            // 5. Update item respawns with synchronized simulation clock.
             world.Items?.UpdateRespawns(Phys.PhysFrameTime);
 
-            // 8. Post physics step for players (attack cooldowns).
+            // 6. Post physics step for players (attack cooldowns).
             for (int i = 0; i < world.Players.Count; i++)
             {
                 world.Players[i].PostPhysicsStep();
             }
+
+            // 7. Update active projectiles (weapon.cpp:523 updateprojectiles).
+            UpdateProjectiles(world, Phys.PhysFrameTime);
+
+            // 8. Update active bouncers (weapon.cpp:231 updatebouncers).
+            UpdateBouncers(world, Phys.PhysFrameTime);
         }
 
         // Post-substep visual sync for bouncers.

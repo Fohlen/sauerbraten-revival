@@ -940,7 +940,14 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                     lifeTime: weapon.Ttl > 0 ? weapon.Ttl : 1500);
 
                 GetParent()?.AddChild(grenade);
-                ActiveGrenades.Add(grenade);
+                if (GetParent() is IGameWorld gw)
+                {
+                    gw.RegisterBouncer(grenade);
+                }
+                else
+                {
+                    _standaloneGrenades.Add(grenade);
+                }
             }
         }
 

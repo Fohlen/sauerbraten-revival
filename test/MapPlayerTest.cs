@@ -453,6 +453,102 @@ public class MapPlayerTest : GoTestBase
     }
 
     [Test]
+    public void TryAttackGrenadeLauncherInGameWorldRegistersOnce()
+    {
+        var world = new MapWorld { OgzPath = "base/church51.ogz", ComputeVisuals = false };
+        world.Build();
+
+        var shooter = MakePlayer(world.Octa!, new Vector3(3000, 946, 3040), yaw: 0f);
+        world.AddChild(shooter);
+        world.RegisterPlayer(shooter);
+        shooter.SelectWeapon(Gun.GrenadeLauncher);
+        shooter.Combat.Ammo[(int)Gun.GrenadeLauncher] = 5;
+
+        bool fired = shooter.TryAttack(nowMillis: 1000);
+        TestAssert.True(fired, "grenade attack succeeded in world");
+        TestAssert.Equal(1, world.ActiveBouncers.Count, "grenade registered exactly once in world.ActiveBouncers");
+        TestAssert.Equal(1, shooter.ActiveGrenades.Count, "one active grenade tracked by shooter");
+
+        world.Free();
+    }
+
+    [Test]
+    public void GrenadeFuseLastsFullLifetimeInWorldSimulation()
+    {
+        var world = new MapWorld { OgzPath = "base/church51.ogz", ComputeVisuals = false };
+        world.Build();
+
+        var (spawnPos, yaw) = ((IMapSource)world).FindSpawn();
+        var shooter = MakePlayer(world.Octa!, spawnPos, yaw: yaw);
+        world.AddChild(shooter);
+        world.RegisterPlayer(shooter);
+        shooter.SelectWeapon(Gun.GrenadeLauncher);
+        shooter.Combat.Ammo[(int)Gun.GrenadeLauncher] = 5;
+
+        bool fired = shooter.TryAttack(nowMillis: 1000);
+        TestAssert.True(fired, "grenade attack succeeded");
+        TestAssert.Equal(1, world.ActiveBouncers.Count, "one grenade active");
+
+        var grenade = world.ActiveBouncers[0];
+
+        // Advance 150 substeps (750 ms). In the buggy implementation, fuse (1500 ms) expired here at 2x rate.
+        for (int i = 0; i < 150; i++)
+        {
+            world._PhysicsProcess(0.005);
+        }
+
+        TestAssert.False(grenade.Exploded, "grenade has not exploded after 750 ms");
+        TestAssert.True(grenade.LifeTime > 650 && grenade.LifeTime <= 755,
+            $"grenade lifetime correctly decremented ~750 ms (LifeTime={grenade.LifeTime})");
+        TestAssert.Equal(1, world.ActiveBouncers.Count, "grenade still active in world after 750 ms");
+
+        // Advance another 160 substeps (800 ms, total 1550 ms) -> fuse expires
+        for (int i = 0; i < 160; i++)
+        {
+            world._PhysicsProcess(0.005);
+            if (world.ActiveBouncers.Count == 0) break;
+        }
+
+        TestAssert.Equal(0, world.ActiveBouncers.Count, "grenade detonated upon 1500 ms fuse expiration");
+
+        world.Free();
+    }
+
+    [Test]
+    public void FiringGrenadeWhileRunningForwardDoesNotExplodeImmediately()
+    {
+        var world = new MapWorld { OgzPath = "base/church51.ogz", ComputeVisuals = false };
+        world.Build();
+
+        var (spawnPos, yaw) = ((IMapSource)world).FindSpawn();
+        var shooter = MakePlayer(world.Octa!, spawnPos, yaw: yaw);
+        world.AddChild(shooter);
+        world.RegisterPlayer(shooter);
+        shooter.SelectWeapon(Gun.GrenadeLauncher);
+        shooter.Combat.Ammo[(int)Gun.GrenadeLauncher] = 5;
+        shooter.Combat.Health = 100;
+
+        // Player is running forward
+        shooter.Entity.Move = 1;
+        shooter.SetView(yaw, 0f);
+
+        bool fired = shooter.TryAttack(nowMillis: 1000);
+        TestAssert.True(fired, "grenade attack succeeded");
+        TestAssert.Equal(1, world.ActiveBouncers.Count, "one grenade active");
+
+        // Step for 100 ms (20 substeps)
+        for (int i = 0; i < 20; i++)
+        {
+            world._PhysicsProcess(0.005);
+        }
+
+        TestAssert.Equal(1, world.ActiveBouncers.Count, "grenade is still active and flying ahead of player");
+        TestAssert.Equal(100, shooter.Combat.Health, "shooter took no damage from own forward grenade launch");
+
+        world.Free();
+    }
+
+    [Test]
     public void FiringConsumesAmmoAndEmptyGunCannotFire()
     {
         var octa = TestData.ReadMap().ToOcta();

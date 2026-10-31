@@ -157,7 +157,7 @@ public sealed class OctaPhysics
         {
             foreach (var o in CheckDynentCache(x, y))
             {
-                if (ReferenceEquals(o, d) || Reject(d.O, o.O, d.Radius + o.Radius)) continue;
+                if (ReferenceEquals(o, d) || o.Type == Phys.EntBounce || Reject(d.O, o.O, d.Radius + o.Radius)) continue;
                 if (PlCollide1(d, dir, o))
                 {
                     CollidePlayer = o;
