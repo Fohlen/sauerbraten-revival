@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ItemInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Game/Items/ItemInfo.cs" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+Id = 0
+Name = "shells"
+ShortName = "SG"
+Add = 10
+Max = 30
+Sound = 9
+VoiceSound = -1
+Info = 1
+Model = "ammo/shells"
+PickupRadius = 12.0
+DelaySpawn = false
+BaseSpawnTime = 4
+ScalesWithPlayers = true
+Icon = 5

@@ -36,6 +36,7 @@ public static class ItemBuilder
                 ItemType = e.Type,
                 ItemIndex = i,
                 ItemName = EntityType.Name(e.Type),
+                PickupRadius = ItemCatalog.TryGetByEntityType(e.Type)?.PickupRadius ?? 12.0f,
                 GlbPath = info?.GlbPath,
                 GlbOsPath = info?.GlbOsPath,
                 ModelScale = info?.Scale ?? 1.0f,
@@ -50,19 +51,9 @@ public static class ItemBuilder
     }
 
     /// <summary>fpsgame/entities.cpp <c>entmdlname</c> for the item types.</summary>
-    public static string? ModelName(byte type) => type switch
+    public static string? ModelName(byte type)
     {
-        EntityType.Shells => "ammo/shells",
-        EntityType.Bullets => "ammo/bullets",
-        EntityType.Rockets => "ammo/rockets",
-        EntityType.RifleRounds => "ammo/rrounds",
-        EntityType.Grenades => "ammo/grenades",
-        EntityType.Cartridges => "ammo/cartridges",
-        EntityType.Health => "health",
-        EntityType.HealthBoost => "boost",
-        EntityType.GreenArmour => "armor/green",
-        EntityType.YellowArmour => "armor/yellow",
-        EntityType.QuadDamage => "quad",
-        _ => null,
-    };
+        string? model = ItemCatalog.TryGetByEntityType(type)?.Model;
+        return string.IsNullOrEmpty(model) ? null : model;
+    }
 }

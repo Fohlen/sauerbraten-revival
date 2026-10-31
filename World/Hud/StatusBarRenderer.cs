@@ -213,7 +213,7 @@ public static class StatusBarRenderer
             {
                 float offset = initialOffset + (i - numSkippedGuns) * stepSize;
                 Vector2 center = offsetDir * offset + origin;
-                ItemStat stat = ItemStats.ForGun(gun);
+                ItemInfo stat = ItemCatalog.ForGun(gun);
                 Color color = GetAmmoBarColor(ammo, stat.Add);
                 float alpha = ammo > 0 ? 1.0f : 0.5f; // alpha = p->ammo[gun] ? 0xFF : 0x7F
                 items.Add(new AmmoBarItem(gun, ammo, center, color, alpha));

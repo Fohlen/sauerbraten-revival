@@ -106,6 +106,16 @@ The exact same architectural pattern is applied uniformly across the engine:
   public static PlayerModelInfo Get(PlayerModelId id) => All[(int)id];
   ```
 
+### E. Pickup Items (`World/Game/Items/ItemCatalog.cs`, `ItemInfo.cs`)
+- **Resource**: `ItemInfo : Resource` (e.g. `shells.tres`, `health.tres`, `quaddamage.tres`).
+- **Core Catalog**: `res://resources/items/<name>.tres` (11 classic pickup items).
+- **Overrides**: Mod directories overlaying item stats, models, or respawn delays (`res://resources/items/overrides/`, `user://items/overrides/`).
+- **Hot Path**:
+  ```csharp
+  public static ItemInfo Get(ItemType type) => All[(int)type];
+  public static ItemInfo GetByEntityType(int entityType) => All[entityType - FirstItemType];
+  ```
+
 ---
 
 ## 2. Dynamic and Mod-Added Entries
@@ -130,5 +140,5 @@ For mod-added assets that extend beyond the built-in enum counts:
 
 ## 4. Verification and Ground Truth
 
-1. **Fidelity Unit Tests**: Tests in `test/GameAudioTest.cs`, `test/WeaponCatalogTest.cs`, and `test/PlayerModelCatalogTest.cs` assert that the deserialized `.tres` definitions match the SVN r6889 reference tables with zero deviation.
+1. **Fidelity Unit Tests**: Tests in `test/GameAudioTest.cs`, `test/WeaponCatalogTest.cs`, `test/PlayerModelCatalogTest.cs`, and `test/ItemCatalogTest.cs` assert that the deserialized `.tres` definitions match the SVN r6889 reference tables with zero deviation.
 2. **Fallback Resilience**: In headless testing environments or corrupted installations, the catalogues fall back cleanly to `Defaults` without crashing the game engine.

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ItemInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Game/Items/ItemInfo.cs" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+Id = 9
+Name = "yellowarmour"
+ShortName = "YA"
+Add = 200
+Max = 200
+Sound = 11
+VoiceSound = -1
+Info = 2
+Model = "armor/yellow"
+PickupRadius = 12.0
+DelaySpawn = true
+BaseSpawnTime = 30
+ScalesWithPlayers = false
+Icon = 2

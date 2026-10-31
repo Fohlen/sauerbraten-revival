@@ -20,6 +20,9 @@ public partial class Item : Models.ModelInstance
     [Export] public int SpawnTime { get; set; }
     [Export] public float PickupRadius { get; set; } = 12.0f;
 
+    /// <summary>Typed item enum identifier.</summary>
+    public ItemType Type => ItemCatalog.FromEntityType(ItemType);
+
     public override void _Ready()
     {
         base._Ready();

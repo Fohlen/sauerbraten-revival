@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ItemInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Game/Items/ItemInfo.cs" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+Id = 7
+Name = "healthboost"
+ShortName = "MH"
+Add = 100
+Max = 200
+Sound = 10
+VoiceSound = 55
+Info = 50
+Model = "boost"
+PickupRadius = 12.0
+DelaySpawn = true
+BaseSpawnTime = 60
+ScalesWithPlayers = false
+Icon = 3

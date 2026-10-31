@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ItemInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Game/Items/ItemInfo.cs" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+Id = 10
+Name = "quaddamage"
+ShortName = "Q"
+Add = 20000
+Max = 30000
+Sound = 12
+VoiceSound = 57
+Info = -1
+Model = "quad"
+PickupRadius = 12.0
+DelaySpawn = true
+BaseSpawnTime = 70
+ScalesWithPlayers = false
+Icon = 11

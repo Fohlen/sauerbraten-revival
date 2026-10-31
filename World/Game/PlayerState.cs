@@ -136,14 +136,14 @@ public partial class PlayerState : RefCounted
     /// <summary>Engine <c>baseammo(gun, k=2, scale=1)</c>: <c>itemstats[gun-GUN_SG].add*k/scale</c>.</summary>
     public void BaseAmmo(int gun, int k = 2, int scale = 1)
     {
-        ItemStat stat = ItemStats.ForGun((Gun)gun);
+        ItemInfo stat = ItemCatalog.ForGun((Gun)gun);
         Ammo[gun] = (stat.Add * k) / scale;
     }
 
     /// <summary>Engine <c>addammo(gun, k=1, scale=1)</c>: add, clamped to <c>itemstats[].max</c>.</summary>
     public void AddAmmo(int gun, int k = 1, int scale = 1)
     {
-        ItemStat stat = ItemStats.ForGun((Gun)gun);
+        ItemInfo stat = ItemCatalog.ForGun((Gun)gun);
         Ammo[gun] = Math.Min(Ammo[gun] + (stat.Add * k) / scale, stat.Max);
     }
 
@@ -154,8 +154,8 @@ public partial class PlayerState : RefCounted
     /// <summary>Engine <c>hasmaxammo(type)</c> (fpsgame/game.h:390).</summary>
     public bool HasMaxAmmo(int type)
     {
-        if (type < ItemStats.FirstItemType || type >= ItemStats.FirstItemType + ItemStats.Count) return false;
-        ItemStat isStat = ItemStats.Get(type);
+        if (type < ItemCatalog.FirstItemType || type >= ItemCatalog.FirstItemType + ItemCatalog.Count) return false;
+        ItemInfo isStat = ItemCatalog.GetByEntityType(type);
         if (isStat.Info < 0) return false;
         return Ammo[isStat.Info] >= isStat.Max;
     }
@@ -166,8 +166,8 @@ public partial class PlayerState : RefCounted
     /// </summary>
     public bool CanPickup(int type)
     {
-        if (type < ItemStats.FirstItemType || type >= ItemStats.FirstItemType + ItemStats.Count) return false;
-        ItemStat stat = ItemStats.Get(type);
+        if (type < ItemCatalog.FirstItemType || type >= ItemCatalog.FirstItemType + ItemCatalog.Count) return false;
+        ItemInfo stat = ItemCatalog.GetByEntityType(type);
         switch (type)
         {
             case EntityType.HealthBoost:
@@ -193,8 +193,8 @@ public partial class PlayerState : RefCounted
     /// </summary>
     public void Pickup(int type)
     {
-        if (type < ItemStats.FirstItemType || type >= ItemStats.FirstItemType + ItemStats.Count) return;
-        ItemStat stat = ItemStats.Get(type);
+        if (type < ItemCatalog.FirstItemType || type >= ItemCatalog.FirstItemType + ItemCatalog.Count) return;
+        ItemInfo stat = ItemCatalog.GetByEntityType(type);
         switch (type)
         {
             case EntityType.HealthBoost:

@@ -52,33 +52,15 @@ public partial class ItemManager : Node3D
     /// Engine <c>server::delayspawn(type)</c> (fpsgame/server.cpp:880). Armour, boost and quad
     /// are delayed on initial spawn in multiplayer / standard modes.
     /// </summary>
-    public static bool DelaySpawn(int type) => type switch
-    {
-        EntityType.GreenArmour or EntityType.YellowArmour or
-        EntityType.HealthBoost or EntityType.QuadDamage => true,
-        _ => false,
-    };
+    public static bool DelaySpawn(int type) =>
+        ItemCatalog.TryGetByEntityType(type)?.DelaySpawn ?? false;
 
     /// <summary>
     /// Engine <c>server::spawntime(type)</c> (fpsgame/server.cpp:857). Respawn delay in ms,
     /// scaling with player count for ammo and health.
     /// </summary>
-    public static int SpawnTime(int type, int numPlayers = 1)
-    {
-        int np = numPlayers < 3 ? 4 : (numPlayers > 4 ? 2 : 3);
-        int sec = type switch
-        {
-            EntityType.Shells or EntityType.Bullets or EntityType.Rockets or
-            EntityType.RifleRounds or EntityType.Grenades or EntityType.Cartridges => np * 4,
-            EntityType.Health => np * 5,
-            EntityType.GreenArmour => 20,
-            EntityType.YellowArmour => 30,
-            EntityType.HealthBoost => 60,
-            EntityType.QuadDamage => 70,
-            _ => 0,
-        };
-        return sec * 1000;
-    }
+    public static int SpawnTime(int type, int numPlayers = 1) =>
+        ItemCatalog.TryGetByEntityType(type)?.CalculateSpawnTime(numPlayers) ?? 0;
 
     /// <summary>
     /// Engine <c>server::canspawnitem(type)</c> (fpsgame/server.cpp:855). Checks whether an item
@@ -225,16 +207,12 @@ public partial class ItemManager : Node3D
                     player.Pickup(item.ItemType);
 
                     // Audio effects matching fpsgame/entities.cpp:184-198
-                    ItemStat stat = ItemStats.Get(item.ItemType);
+                    ItemInfo stat = ItemCatalog.GetByEntityType(item.ItemType);
                     player.PlaySound(stat.Sound);
 
-                    if (item.ItemType == EntityType.HealthBoost)
+                    if (stat.VoiceSound != GameSound.None)
                     {
-                        player.PlaySound(GameSound.VBoost);
-                    }
-                    else if (item.ItemType == EntityType.QuadDamage)
-                    {
-                        player.PlaySound(GameSound.VQuad);
+                        player.PlaySound(stat.VoiceSound);
                     }
 
                     ItemPickedUp?.Invoke(player, item);

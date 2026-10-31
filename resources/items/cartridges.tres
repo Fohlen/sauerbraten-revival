@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ItemInfo" format=3]
+
+[ext_resource type="Script" path="res://World/Game/Items/ItemInfo.cs" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+Id = 5
+Name = "cartridges"
+ShortName = "PI"
+Add = 30
+Max = 120
+Sound = 9
+VoiceSound = -1
+Info = 6
+Model = "ammo/cartridges"
+PickupRadius = 12.0
+DelaySpawn = false
+BaseSpawnTime = 4
+ScalesWithPlayers = true
+Icon = 10
