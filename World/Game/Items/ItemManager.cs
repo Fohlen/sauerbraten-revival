@@ -165,6 +165,7 @@ public partial class ItemManager : Node3D
     /// </summary>
     public void UpdateVisual(int lastMillis)
     {
+        if (ProcessMode == ProcessModeEnum.Disabled) return;
         foreach (var item in _items)
         {
             item.UpdateVisual(lastMillis);

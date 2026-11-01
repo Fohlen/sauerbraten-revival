@@ -69,6 +69,7 @@ public partial class FlagNode : Models.ModelInstance
     /// </summary>
     public void UpdateVisual(FlagState flag, GameModeInfo mode, int lastMillis, int localPlayerTeam, Vector3? cameraPos = null, Func<int, (Vector3 pos, float yaw, float aboveEye)>? getOwnerInfo = null)
     {
+        if (ProcessMode == ProcessModeEnum.Disabled) return;
         bool isHold = mode.Has(ModeFlags.Hold);
 
         // Invisible / unrendered check matching ctf.h:665

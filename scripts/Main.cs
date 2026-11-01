@@ -77,6 +77,13 @@ public partial class Main : Node
         GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
         InputBindings.Load().Apply();
 
+        var ablation = Tracing.AblationProbe.AttachIfConfigured(this);
+        if (ablation is { IsIdleMenuRequested: true })
+        {
+            ShowMenu();
+            return;
+        }
+
         string[] userArgs = OS.GetCmdlineUserArgs();
         if (userArgs.Length > 0 && (userArgs[0] is "info" or "convert" or "dump" or "dmoreader" or "demo"))
         {
