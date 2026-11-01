@@ -239,7 +239,6 @@ public class MapFormatTest : GoTestBase
             FormatVersion = 1,
             MapName = "test_map",
             Author = "Revival",
-            Compression = Format.CompressionCodec.None,
             Keyframes = new List<Format.KeyframePackage>
             {
                 new()
@@ -387,7 +386,6 @@ public class MapFormatTest : GoTestBase
             FormatVersion = 1,
             MapName = "env-keyframe-only",
             Author = "Revival",
-            Compression = CompressionCodec.None,
             Keyframes = new List<KeyframePackage> { keyframe },
             Deltas = new List<Command>(),
             Entities = new List<EntityCmd>(),

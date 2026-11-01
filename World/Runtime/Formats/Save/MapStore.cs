@@ -215,7 +215,6 @@ public static class MapStore
             FormatVersion = 1,
             MapName = Path.GetFileName(dir.TrimEnd('/', '\\')),
             Author = "Revival",
-            Compression = CompressionCodec.None,
             Keyframes = new List<KeyframePackage> { keyframe },
             Deltas = history != null && !compact ? history.ToList() : new List<Command>(),
             Entities = entityList.Select(e => e.ToEntityCmd()).ToList(),

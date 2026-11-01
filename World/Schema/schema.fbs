@@ -25,12 +25,6 @@ enum WorldOp : ubyte {
     PlayerJumpPad = 64
 }
 
-enum CompressionCodec : ubyte {
-    None = 0,
-    Zstd = 1,
-    Lz4 = 2
-}
-
 struct Vec3i {
     x: int32;
     y: int32;
@@ -221,7 +215,6 @@ table MapPackage (fs_serializer) {
     format_version: uint32 = 1;
     map_name: string;
     author: string;
-    compression: CompressionCodec;   // Archive-wide compression (None, Zstd, Lz4)
     base_map_hash: [ubyte];          // 32-byte SHA-256 if diff package, empty if standalone
     
     keyframes: [KeyframePackage];    // Intermediary snapshots taken at remip / milestones
