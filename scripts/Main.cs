@@ -69,10 +69,11 @@ public partial class Main : Node
         GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
         InputBindings.Load().Apply();
 
-        string? demoArg = DemoPackage.ParseDemoArg(OS.GetCmdlineUserArgs()) ?? DemoPackage.ParseDemoArg(OS.GetCmdlineArgs());
-        if (!string.IsNullOrEmpty(demoArg))
+        string[] rawArgs = OS.GetCmdlineUserArgs().Length > 0 ? OS.GetCmdlineUserArgs() : OS.GetCmdlineArgs();
+        var cli = SauerbratenRevival.World.Demo.DemoCommandLine.Parse(rawArgs);
+        if (!string.IsNullOrEmpty(cli.DemoPath))
         {
-            string? resolved = DemoPackage.ResolveDemoPath(demoArg);
+            string? resolved = SauerbratenRevival.World.Content.ContentRoots.TryResolveDemo(cli.DemoPath);
             if (resolved != null)
             {
                 try
@@ -83,13 +84,32 @@ public partial class Main : Node
                 }
                 catch (Exception ex)
                 {
-                    GD.PushError($"[main] Failed to load demo '{demoArg}' (resolved '{resolved}'): {ex.Message}");
+                    GD.PushError($"[main] Failed to load demo '{cli.DemoPath}' (resolved '{resolved}'): {ex.Message}");
                 }
             }
             else
             {
-                GD.PushError($"[main] Could not find demo '{demoArg}' (searched '{DemoPackage.DefaultDemoDir}' and filesystem)");
+                GD.PushError($"[main] Could not find demo '{cli.DemoPath}' (searched ContentRoots and filesystem)");
             }
+        }
+        else if (cli.Record || !string.IsNullOrEmpty(cli.Map) || !string.IsNullOrEmpty(cli.Mode))
+        {
+            string map = !string.IsNullOrWhiteSpace(cli.Map) ? cli.Map : "base/church51.ogz";
+            string mode = "ffa";
+            if (!string.IsNullOrWhiteSpace(cli.Mode))
+            {
+                var modeInfo = GameModeCatalog.TryGet(cli.Mode);
+                if (modeInfo != null)
+                {
+                    mode = modeInfo.Id;
+                }
+                else
+                {
+                    GD.PushWarning($"[main] Unknown game mode '{cli.Mode}', falling back to '{mode}'");
+                }
+            }
+            StartMatch(map, mode, team: 1, playerModel: -1, playerName: "unnamed");
+            return;
         }
 
         ShowMenu();
@@ -152,11 +172,11 @@ public partial class Main : Node
             // spawn floating with a live EditorController instead of a match player.
             viewer.EditMode = GameModeCatalog.TryGet(mode)?.Has(ModeFlags.Edit) ?? false;
 
-            string? recordArg = DemoPackage.ParseRecordDemoArg(OS.GetCmdlineUserArgs()) ?? DemoPackage.ParseRecordDemoArg(OS.GetCmdlineArgs());
-            if (recordArg != null)
+            var cli = SauerbratenRevival.World.Demo.DemoCommandLine.Parse(OS.GetCmdlineUserArgs().Length > 0 ? OS.GetCmdlineUserArgs() : OS.GetCmdlineArgs());
+            if (cli.Record)
             {
                 viewer.AutoRecordDemo = true;
-                viewer.AutoRecordDemoPath = recordArg;
+                viewer.AutoRecordDemoPath = cli.RecordPath ?? "";
             }
         }
         // Set before the viewer's _Ready runs (on AddChild), so spawn/visuals use it.

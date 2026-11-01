@@ -103,10 +103,11 @@ public partial class OgzMapViewer : Node3D
 
         if (!Engine.IsEditorHint() && DemoToPlay == null)
         {
-            string? demoArg = DemoPackage.ParseDemoArg(OS.GetCmdlineUserArgs()) ?? DemoPackage.ParseDemoArg(OS.GetCmdlineArgs());
-            if (!string.IsNullOrEmpty(demoArg))
+            string[] rawArgs = OS.GetCmdlineUserArgs().Length > 0 ? OS.GetCmdlineUserArgs() : OS.GetCmdlineArgs();
+            var cli = SauerbratenRevival.World.Demo.DemoCommandLine.Parse(rawArgs);
+            if (!string.IsNullOrEmpty(cli.DemoPath))
             {
-                string? resolved = DemoPackage.ResolveDemoPath(demoArg);
+                string? resolved = SauerbratenRevival.World.Content.ContentRoots.TryResolveDemo(cli.DemoPath);
                 if (resolved != null)
                 {
                     try
@@ -124,19 +125,29 @@ public partial class OgzMapViewer : Node3D
                     }
                     catch (Exception ex)
                     {
-                        GD.PushError($"[viewer] Failed to load demo '{demoArg}': {ex.Message}");
+                        GD.PushError($"[viewer] Failed to load demo '{cli.DemoPath}': {ex.Message}");
                     }
                 }
             }
-        }
 
-        if (!Engine.IsEditorHint() && !AutoRecordDemo && DemoToPlay == null)
-        {
-            string? recordArg = DemoPackage.ParseRecordDemoArg(OS.GetCmdlineUserArgs()) ?? DemoPackage.ParseRecordDemoArg(OS.GetCmdlineArgs());
-            if (recordArg != null)
+            if (!string.IsNullOrWhiteSpace(cli.Map))
+            {
+                OgzPath = cli.Map;
+            }
+            if (!string.IsNullOrWhiteSpace(cli.Mode))
+            {
+                var cliModeInfo = GameModeCatalog.TryGet(cli.Mode);
+                GameMode = cliModeInfo?.Id ?? cli.Mode;
+                if (cliModeInfo != null && cliModeInfo.Has(ModeFlags.Edit))
+                {
+                    EditMode = true;
+                }
+            }
+
+            if (!AutoRecordDemo && cli.Record)
             {
                 AutoRecordDemo = true;
-                AutoRecordDemoPath = recordArg;
+                AutoRecordDemoPath = cli.RecordPath ?? "";
             }
         }
 

@@ -104,7 +104,7 @@ public partial class DemoPackage
     public static DemoPackage Decode(byte[] bytes) => Serializer.Parse(bytes);
 
     /// <summary>Default directory where demos are stored (<c>user://demos</c>), matching Sauerbraten's demo/ folder.</summary>
-    public const string DefaultDemoDir = "user://demos";
+    public static string DefaultDemoDir => SauerbratenRevival.World.Content.ContentRoots.ProjectDir(SauerbratenRevival.World.Content.ContentKind.Demo);
 
     /// <summary>
     /// Generates a demo file path in user://demos/ using Sauerbraten's timestamp naming schema:
@@ -120,86 +120,18 @@ public partial class DemoPackage
     }
 
     /// <summary>
-    /// Resolves a demo path or file name.
-    /// Searches direct path, res://, user://, and user://demos/ with or without extension.
+    /// Resolves a demo path or file name through <see cref="SauerbratenRevival.World.Content.ContentRoots"/>.
+    /// Searches direct path, user://demos/, res://assets/demos/, and the reference dump.
     /// </summary>
-    public static string? ResolveDemoPath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-
-        // 1. Direct path or Godot URI (res:// or user://)
-        string global = ProjectSettings.GlobalizePath(path);
-        if (File.Exists(global))
-            return path;
-
-        // 2. Direct path with .fbs extension
-        if (!path.EndsWith(".fbs", StringComparison.OrdinalIgnoreCase) && !path.EndsWith(".dmo", StringComparison.OrdinalIgnoreCase))
-        {
-            string withExt = $"{path}.fbs";
-            if (File.Exists(ProjectSettings.GlobalizePath(withExt)))
-                return withExt;
-        }
-
-        // 3. Inside DefaultDemoDir (user://demos/)
-        string inDemoDir = $"{DefaultDemoDir}/{path}";
-        if (File.Exists(ProjectSettings.GlobalizePath(inDemoDir)))
-            return inDemoDir;
-
-        // 4. Inside DefaultDemoDir with .fbs extension
-        if (!path.EndsWith(".fbs", StringComparison.OrdinalIgnoreCase) && !path.EndsWith(".dmo", StringComparison.OrdinalIgnoreCase))
-        {
-            string inDemoDirWithExt = $"{DefaultDemoDir}/{path}.fbs";
-            if (File.Exists(ProjectSettings.GlobalizePath(inDemoDirWithExt)))
-                return inDemoDirWithExt;
-        }
-
-        return null;
-    }
+    public static string? ResolveDemoPath(string path) =>
+        SauerbratenRevival.World.Content.ContentRoots.TryResolveDemo(path);
 
     /// <summary>
-    /// Extracts a demo playback path from command line arguments (e.g. --play-demo=path, --demo=path, -d path).
+    /// Resolves a demo path through <see cref="SauerbratenRevival.World.Content.ContentRoots"/>, falling back
+    /// to the canonical user://demos/ path if absent.
     /// </summary>
-    public static string? ParseDemoArg(string[]? args)
-    {
-        if (args == null) return null;
-        for (int i = 0; i < args.Length; i++)
-        {
-            string arg = args[i];
-            if (arg.StartsWith("--play-demo=", StringComparison.OrdinalIgnoreCase))
-                return arg.Substring("--play-demo=".Length).Trim('"');
-            if (arg.StartsWith("--demo=", StringComparison.OrdinalIgnoreCase))
-                return arg.Substring("--demo=".Length).Trim('"');
-            if (arg.Equals("--play-demo", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("--demo", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-d", StringComparison.OrdinalIgnoreCase))
-            {
-                if (i + 1 < args.Length && !args[i + 1].StartsWith("-"))
-                    return args[i + 1].Trim('"');
-            }
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Extracts a demo recording flag or path from command line arguments (e.g. --record-demo or --record-demo=path).
-    /// </summary>
-    public static string? ParseRecordDemoArg(string[]? args)
-    {
-        if (args == null) return null;
-        for (int i = 0; i < args.Length; i++)
-        {
-            string arg = args[i];
-            if (arg.StartsWith("--record-demo=", StringComparison.OrdinalIgnoreCase))
-                return arg.Substring("--record-demo=".Length).Trim('"');
-            if (arg.Equals("--record-demo", StringComparison.OrdinalIgnoreCase))
-            {
-                if (i + 1 < args.Length && !args[i + 1].StartsWith("-"))
-                    return args[i + 1].Trim('"');
-                return ""; // flag without path
-            }
-        }
-        return null;
-    }
+    public static string Resolve(string path) =>
+        SauerbratenRevival.World.Content.ContentRoots.ResolveDemo(path);
 
     /// <summary>
     /// Saves the demo package to disk at the given path (*.fbs or *.bin).

@@ -417,33 +417,57 @@ public class DemoTest : GoTestBase
         TestAssert.True(mapPath.EndsWith(".fbs"), $"Path ends with .fbs: '{mapPath}'");
 
         // 3. With custom extension
-        string dmoPath = DemoPackage.GenerateDemoPath("ot", "dmo");
-        TestAssert.True(dmoPath.EndsWith(".dmo"), $"Path has custom extension: '{dmoPath}'");
+        string binPath = DemoPackage.GenerateDemoPath("ot", "bin");
+        TestAssert.True(binPath.EndsWith(".bin"), $"Path has custom extension: '{binPath}'");
     }
 
     [Test]
     public void CommandLineArgs_ParsesDemoAndRecordFlags()
     {
-        // --play-demo=path
-        TestAssert.Equal("demo1.fbs", DemoPackage.ParseDemoArg(new[] { "--play-demo=demo1.fbs" }), "Parse --play-demo=path");
-        TestAssert.Equal("demo2.fbs", DemoPackage.ParseDemoArg(new[] { "--play-demo", "demo2.fbs" }), "Parse --play-demo path");
+        // 1. --demo with = and space
+        var args1 = DemoCommandLine.Parse(new[] { "--demo=demo1.fbs" });
+        TestAssert.Equal("demo1.fbs", args1.DemoPath, "Parse --demo=path");
+        TestAssert.True(!args1.Record, "Record is false");
 
-        // --demo=path and -d
-        TestAssert.Equal("demo3.fbs", DemoPackage.ParseDemoArg(new[] { "--demo=demo3.fbs" }), "Parse --demo=path");
-        TestAssert.Equal("demo4.fbs", DemoPackage.ParseDemoArg(new[] { "--demo", "demo4.fbs" }), "Parse --demo path");
-        TestAssert.Equal("demo5.fbs", DemoPackage.ParseDemoArg(new[] { "-d", "demo5.fbs" }), "Parse -d path");
+        var args2 = DemoCommandLine.Parse(new[] { "--demo", "demo2.fbs" });
+        TestAssert.Equal("demo2.fbs", args2.DemoPath, "Parse --demo path");
 
-        // Quoted arguments
-        TestAssert.Equal("user://demos/quoted.fbs", DemoPackage.ParseDemoArg(new[] { "--play-demo=\"user://demos/quoted.fbs\"" }), "Parse quoted arg");
+        // 2. --record flag without path
+        var argsRecord1 = DemoCommandLine.Parse(new[] { "--record" });
+        TestAssert.True(argsRecord1.Record, "Parse --record flag");
+        TestAssert.True(string.IsNullOrEmpty(argsRecord1.RecordPath), "RecordPath is empty or null when no path provided");
 
-        // Absent or other args
-        TestAssert.True(DemoPackage.ParseDemoArg(new[] { "--other", "arg" }) == null, "Returns null when absent");
+        // 3. --record with custom path
+        var argsRecord2 = DemoCommandLine.Parse(new[] { "--record=test_record.fbs" });
+        TestAssert.True(argsRecord2.Record, "Parse --record=path");
+        TestAssert.Equal("test_record.fbs", argsRecord2.RecordPath, "RecordPath matches");
 
-        // --record-demo
-        TestAssert.Equal("", DemoPackage.ParseRecordDemoArg(new[] { "--record-demo" }), "Parse --record-demo flag");
-        TestAssert.Equal("test_record.fbs", DemoPackage.ParseRecordDemoArg(new[] { "--record-demo=test_record.fbs" }), "Parse --record-demo=path");
-        TestAssert.Equal("test_record2.fbs", DemoPackage.ParseRecordDemoArg(new[] { "--record-demo", "test_record2.fbs" }), "Parse --record-demo path");
-        TestAssert.True(DemoPackage.ParseRecordDemoArg(new[] { "--play-demo=foo" }) == null, "Returns null when record flag absent");
+        var argsRecord3 = DemoCommandLine.Parse(new[] { "--record", "test_record2.fbs" });
+        TestAssert.True(argsRecord3.Record, "Parse --record path");
+        TestAssert.Equal("test_record2.fbs", argsRecord3.RecordPath, "RecordPath matches");
+
+        // 4. Combined with other arguments (e.g. --headless, --path .)
+        var argsCombined = DemoCommandLine.Parse(new[] { "--headless", "--path", ".", "--demo", "match.fbs" });
+        TestAssert.Equal("match.fbs", argsCombined.DemoPath, "Parses --demo amidst other engine arguments");
+
+        // 5. --map and --mode options (with = and space)
+        var argsMapMode1 = DemoCommandLine.Parse(new[] { "--record", "--map=church51", "--mode=ctf" });
+        TestAssert.True(argsMapMode1.Record, "Parse --record with map and mode");
+        TestAssert.Equal("church51", argsMapMode1.Map, "Parse --map=value");
+        TestAssert.Equal("ctf", argsMapMode1.Mode, "Parse --mode=value");
+
+        var argsMapMode2 = DemoCommandLine.Parse(new[] { "--record", "myrec.fbs", "--map", "base/church51.ogz", "--mode", "effic_ctf" });
+        TestAssert.True(argsMapMode2.Record, "Parse --record path with map and mode");
+        TestAssert.Equal("myrec.fbs", argsMapMode2.RecordPath, "Parse --record path");
+        TestAssert.Equal("base/church51.ogz", argsMapMode2.Map, "Parse --map value");
+        TestAssert.Equal("effic_ctf", argsMapMode2.Mode, "Parse --mode value");
+
+        // 6. Empty or absent
+        var argsNone = DemoCommandLine.Parse(new[] { "--other", "arg" });
+        TestAssert.True(argsNone.DemoPath == null, "DemoPath is null when absent");
+        TestAssert.True(!argsNone.Record, "Record is false when absent");
+        TestAssert.True(argsNone.Map == null, "Map is null when absent");
+        TestAssert.True(argsNone.Mode == null, "Mode is null when absent");
     }
 
     [Test]

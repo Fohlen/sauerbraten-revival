@@ -192,6 +192,20 @@ public class ContentRootsTest : GoTestBase
     /// cleared, restoring both afterwards. The dump root is never a real location
     /// here: the resolver only assembles paths, it does not read them.
     /// </summary>
+    [Test]
+    public void NormalizeDemoAppendsExtension()
+    {
+        TestAssert.Equal("test_demo.fbs", ContentRoots.NormalizeDemo("test_demo"), "bare name gets .fbs");
+        TestAssert.Equal("test_demo.fbs", ContentRoots.NormalizeDemo("test_demo.fbs"), "preserves .fbs");
+        TestAssert.Equal("test_demo.fbs", ContentRoots.NormalizeDemo("/test_demo"), "trims leading slash");
+    }
+
+    [Test]
+    public void DemoProjectDirIsUserDemos()
+    {
+        TestAssert.Equal("user://demos", ContentRoots.ProjectDir(ContentKind.Demo), "Demo kind project dir is user://demos");
+    }
+
     private static void WithDump(string? root, System.Action body)
     {
         string? originalEnv = System.Environment.GetEnvironmentVariable("SAUER_REF");

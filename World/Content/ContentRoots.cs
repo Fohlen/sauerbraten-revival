@@ -23,6 +23,9 @@ public enum ContentKind
 
     /// <summary>Converted glTF models and their manifest (<c>assets/models</c> / <c>packages</c>).</summary>
     Model,
+
+    /// <summary>Replayable demo files (*.fbs, stored in <c>user://demos</c> / <c>demo</c>).</summary>
+    Demo,
 }
 
 /// <summary>
@@ -104,6 +107,7 @@ public static class ContentRoots
         ContentKind.Texture => $"{ProjectRoot}/textures",
         ContentKind.Sound => $"{ProjectRoot}/sounds",
         ContentKind.Model => $"{ProjectRoot}/models",
+        ContentKind.Demo => "user://demos",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 
@@ -120,6 +124,8 @@ public static class ContentRoots
     /// <summary>The reference-dump tree a kind resolves against (an OS path), or null when no dump is configured.</summary>
     public static string? ReferenceTree(ContentKind kind)
     {
+        if (kind == ContentKind.Demo)
+            return ReferenceRoot is { } root ? Path.Combine(root, "demo") : null;
         if (ReferencePackages is not { } packages) return null;
         string sub = ReferenceDir(kind);
         return sub.Length == 0 ? packages : Path.Combine(packages, sub);
@@ -205,6 +211,98 @@ public static class ContentRoots
         if (!map.Contains('/')) map = "base/" + map;
         return map;
     }
+
+    /// <summary>
+    /// Normalise a bare name or relative path to a demo filename:
+    /// forward slashes, no leading slash, and a <c>.fbs</c> extension if missing.
+    /// </summary>
+    public static string NormalizeDemo(string demo)
+    {
+        demo = demo.SimplifyPath().TrimStart('/');
+        if (!demo.EndsWith(".fbs", StringComparison.OrdinalIgnoreCase))
+        {
+            demo += ".fbs";
+        }
+        return demo;
+    }
+
+    /// <summary>
+    /// Try to resolve a demo file to an openable path. Checks:
+    /// 1. Direct path / URI (if absolute or res:// or user://)
+    /// 2. user://demos/ (<see cref="ContentKind.Demo"/> project directory)
+    /// 3. res://assets/demos/
+    /// 4. Reference dump ($SAUER_REF/demo/)
+    /// 5. Current working directory / relative path
+    /// Tries the specified name, plus .fbs variant if extension is omitted.
+    /// </summary>
+    public static string? TryResolveDemo(string demo)
+    {
+        if (string.IsNullOrWhiteSpace(demo)) return null;
+
+        demo = demo.Trim();
+
+        // 1. Direct path (absolute, res://, user://)
+        if (demo.IsAbsolutePath() || demo.StartsWith("res://", StringComparison.OrdinalIgnoreCase) || demo.StartsWith("user://", StringComparison.OrdinalIgnoreCase))
+        {
+            if (File.Exists(ProjectSettings.GlobalizePath(demo))) return demo;
+            if (!demo.EndsWith(".fbs", StringComparison.OrdinalIgnoreCase))
+            {
+                if (File.Exists(ProjectSettings.GlobalizePath($"{demo}.fbs"))) return $"{demo}.fbs";
+            }
+            return null;
+        }
+
+        // Relative name variants
+        var nameVariants = new List<string> { demo };
+        if (!demo.EndsWith(".fbs", StringComparison.OrdinalIgnoreCase))
+        {
+            nameVariants.Add($"{demo}.fbs");
+        }
+
+        // 2. user://demos/ (ContentKind.Demo project dir)
+        string userDemoDir = ProjectDir(ContentKind.Demo);
+        foreach (var variant in nameVariants)
+        {
+            string candidate = $"{userDemoDir}/{variant}";
+            if (File.Exists(ProjectSettings.GlobalizePath(candidate)))
+                return candidate;
+        }
+
+        // 3. res://assets/demos/
+        foreach (var variant in nameVariants)
+        {
+            string candidate = $"{ProjectRoot}/demos/{variant}";
+            if (File.Exists(ProjectSettings.GlobalizePath(candidate)))
+                return candidate;
+        }
+
+        // 4. Reference dump ($SAUER_REF/demo/)
+        if (ReferenceTree(ContentKind.Demo) is { } dumpDemoDir && Directory.Exists(dumpDemoDir))
+        {
+            foreach (var variant in nameVariants)
+            {
+                string candidate = Path.Combine(dumpDemoDir, variant);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+        }
+
+        // 5. Current directory / direct relative
+        foreach (var variant in nameVariants)
+        {
+            if (File.Exists(ProjectSettings.GlobalizePath(variant)))
+                return variant;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves a demo file, returning the first matching existing file or falling back
+    /// to the canonical <c>user://demos/&lt;name&gt;.fbs</c> path.
+    /// </summary>
+    public static string ResolveDemo(string demo) =>
+        TryResolveDemo(demo) ?? $"{ProjectDir(ContentKind.Demo)}/{NormalizeDemo(demo)}";
 
     /// <summary>
     /// A file exists if it is a raw file (<c>FileAccess</c>) or an imported Godot
