@@ -268,26 +268,7 @@ public static class ContentRoots
                 return candidate;
         }
 
-        // 3. res://assets/demos/
-        foreach (var variant in nameVariants)
-        {
-            string candidate = $"{ProjectRoot}/demos/{variant}";
-            if (File.Exists(ProjectSettings.GlobalizePath(candidate)))
-                return candidate;
-        }
-
-        // 4. Reference dump ($SAUER_REF/demo/)
-        if (ReferenceTree(ContentKind.Demo) is { } dumpDemoDir && Directory.Exists(dumpDemoDir))
-        {
-            foreach (var variant in nameVariants)
-            {
-                string candidate = Path.Combine(dumpDemoDir, variant);
-                if (File.Exists(candidate))
-                    return candidate;
-            }
-        }
-
-        // 5. Current directory / direct relative
+        // 3. Current directory / direct relative
         foreach (var variant in nameVariants)
         {
             if (File.Exists(ProjectSettings.GlobalizePath(variant)))
