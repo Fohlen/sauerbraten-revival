@@ -213,8 +213,8 @@ public class DemoTest : GoTestBase
         var replayer = new DemoReplayer(demo);
         replayer.Attach(replayPlayer);
 
-        bool finishedFired = false;
-        replayer.PlaybackFinished += () => finishedFired = true;
+        int finishedFiredCount = 0;
+        replayer.PlaybackFinished += () => finishedFiredCount++;
 
         for (int i = 0; i < 5; i++)
         {
@@ -227,7 +227,12 @@ public class DemoTest : GoTestBase
         // Step past the death command
         replayer.GetUpdate(5, replayPlayer);
         TestAssert.True(replayPlayer.Entity.Dead, "Replay player is now dead after suicide command");
-        TestAssert.True(finishedFired, "PlaybackFinished event fired");
+        TestAssert.Equal(1, finishedFiredCount, "PlaybackFinished event fired exactly once");
+
+        // Subsequent steps should not fire PlaybackFinished again
+        replayer.GetUpdate(6, replayPlayer);
+        replayer.GetUpdate(7, replayPlayer);
+        TestAssert.Equal(1, finishedFiredCount, "PlaybackFinished does not spam on subsequent ticks");
 
         player.Free();
         replayPlayer.Free();

@@ -279,10 +279,13 @@ public partial class OgzMapViewer : Node3D
             {
                 ActiveReplayer.AttachWorld(gameWorld);
             }
-            ActiveReplayer.PlaybackFinished += () =>
-            {
-                GD.Print($"[demo] playback finished ({DemoToPlay.DurationSeconds:F1}s, {DemoToPlay.TotalTicks} ticks)");
-            };
+            ActiveReplayer.Connect(
+                Demo.DemoReplayer.SignalName.PlaybackFinished,
+                Callable.From(() =>
+                {
+                    GD.Print($"[demo] playback finished ({DemoToPlay.DurationSeconds:F1}s, {DemoToPlay.TotalTicks} ticks)");
+                }),
+                (uint)ConnectFlags.OneShot);
             GD.Print($"[viewer] demo playback active ({DemoToPlay.TotalTicks} ticks, {DemoToPlay.TotalCommands} commands)");
         }
         else if (AutoRecordDemo)

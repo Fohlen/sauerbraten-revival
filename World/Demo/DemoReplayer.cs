@@ -13,18 +13,20 @@ namespace SauerbratenRevival.World.Demo;
 /// across one or multiple players concurrently.
 /// Implements <see cref="IPlayerInputSource"/> to feed inputs directly into <see cref="MapPlayer.PrePhysicsStep"/>.
 /// </summary>
-public class DemoReplayer : IPlayerInputSource
+[GlobalClass]
+public partial class DemoReplayer : RefCounted, IPlayerInputSource
 {
+    [Signal]
+    public delegate void PlaybackFinishedEventHandler();
+
     private readonly Dictionary<int, MapPlayer> _players = new();
     private readonly Dictionary<int, Queue<Command>> _peerQueues = new();
     private readonly Queue<Command> _globalQueue = new();
     private CommandSink? _commandSink;
+    private bool _playbackFinishedFired;
 
     public DemoPackage Demo { get; }
     public int TotalCommands => Demo.Commands?.Count ?? 0;
-
-    /// <summary>Fired when playback reaches the end of all recorded commands across all players.</summary>
-    public event Action? PlaybackFinished;
 
     public bool IsFinished
     {
@@ -107,6 +109,7 @@ public class DemoReplayer : IPlayerInputSource
     /// <summary>Resets playback position to the beginning for all players.</summary>
     public void Reset()
     {
+        _playbackFinishedFired = false;
         _peerQueues.Clear();
         _globalQueue.Clear();
 
@@ -194,9 +197,10 @@ public class DemoReplayer : IPlayerInputSource
 
     private void CheckFinished()
     {
-        if (IsFinished)
+        if (!_playbackFinishedFired && IsFinished)
         {
-            PlaybackFinished?.Invoke();
+            _playbackFinishedFired = true;
+            EmitSignal(SignalName.PlaybackFinished);
         }
     }
 
