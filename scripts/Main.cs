@@ -108,7 +108,7 @@ public partial class Main : Node
                     GD.PushWarning($"[main] Unknown game mode '{cli.Mode}', falling back to '{mode}'");
                 }
             }
-            StartMatch(map, mode, team: 1, playerModel: -1, playerName: "unnamed");
+            StartMatch(map, mode, team: 1, playerModel: 0, playerName: "unnamed");
             return;
         }
 
