@@ -200,9 +200,8 @@ public class DemoTest : GoTestBase
             player.Advance(Phys.PhysFrameTime / 1000.0);
         }
 
-        // Record suicide
+        // Record suicide via player.Suicide() - automatically captured via player.Died hook in Attach()
         player.Suicide();
-        recorder.RecordDeath(player.PlayerId, isSuicide: true);
 
         var demo = recorder.Stop();
         TestAssert.Equal(7, demo.TotalCommands, "7 total commands captured");
@@ -396,5 +395,187 @@ public class DemoTest : GoTestBase
 
         string globalPath = ProjectSettings.GlobalizePath(demoPath);
         if (File.Exists(globalPath)) File.Delete(globalPath);
+    }
+
+    [Test]
+    public void GenerateDemoPath_FollowsSauerbratenTimestampSchema()
+    {
+        // 1. Without map name (exact Sauerbraten format: YYYY-MM-DD_HH.mm.ss.fbs)
+        string defaultPath = DemoPackage.GenerateDemoPath();
+        TestAssert.True(defaultPath.StartsWith("user://demos/"), $"Path starts with user://demos/: '{defaultPath}'");
+        TestAssert.True(defaultPath.EndsWith(".fbs"), $"Path ends with .fbs: '{defaultPath}'");
+
+        string fileName = Path.GetFileNameWithoutExtension(defaultPath);
+        // Format is yyyy-MM-dd_HH.mm.ss (length 19: 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2)
+        TestAssert.Equal(19, fileName.Length, $"Timestamp filename has length 19 (YYYY-MM-DD_HH.mm.ss): '{fileName}'");
+        TestAssert.True(DateTime.TryParseExact(fileName, "yyyy-MM-dd_HH.mm.ss", null, System.Globalization.DateTimeStyles.None, out _),
+            $"Filename '{fileName}' parses as valid Sauerbraten timestamp");
+
+        // 2. With map name prefix
+        string mapPath = DemoPackage.GenerateDemoPath("base/church51.ogz");
+        TestAssert.True(mapPath.StartsWith("user://demos/church51_"), $"Path has map prefix: '{mapPath}'");
+        TestAssert.True(mapPath.EndsWith(".fbs"), $"Path ends with .fbs: '{mapPath}'");
+
+        // 3. With custom extension
+        string dmoPath = DemoPackage.GenerateDemoPath("ot", "dmo");
+        TestAssert.True(dmoPath.EndsWith(".dmo"), $"Path has custom extension: '{dmoPath}'");
+    }
+
+    [Test]
+    public void CommandLineArgs_ParsesDemoAndRecordFlags()
+    {
+        // --play-demo=path
+        TestAssert.Equal("demo1.fbs", DemoPackage.ParseDemoArg(new[] { "--play-demo=demo1.fbs" }), "Parse --play-demo=path");
+        TestAssert.Equal("demo2.fbs", DemoPackage.ParseDemoArg(new[] { "--play-demo", "demo2.fbs" }), "Parse --play-demo path");
+
+        // --demo=path and -d
+        TestAssert.Equal("demo3.fbs", DemoPackage.ParseDemoArg(new[] { "--demo=demo3.fbs" }), "Parse --demo=path");
+        TestAssert.Equal("demo4.fbs", DemoPackage.ParseDemoArg(new[] { "--demo", "demo4.fbs" }), "Parse --demo path");
+        TestAssert.Equal("demo5.fbs", DemoPackage.ParseDemoArg(new[] { "-d", "demo5.fbs" }), "Parse -d path");
+
+        // Quoted arguments
+        TestAssert.Equal("user://demos/quoted.fbs", DemoPackage.ParseDemoArg(new[] { "--play-demo=\"user://demos/quoted.fbs\"" }), "Parse quoted arg");
+
+        // Absent or other args
+        TestAssert.True(DemoPackage.ParseDemoArg(new[] { "--other", "arg" }) == null, "Returns null when absent");
+
+        // --record-demo
+        TestAssert.Equal("", DemoPackage.ParseRecordDemoArg(new[] { "--record-demo" }), "Parse --record-demo flag");
+        TestAssert.Equal("test_record.fbs", DemoPackage.ParseRecordDemoArg(new[] { "--record-demo=test_record.fbs" }), "Parse --record-demo=path");
+        TestAssert.Equal("test_record2.fbs", DemoPackage.ParseRecordDemoArg(new[] { "--record-demo", "test_record2.fbs" }), "Parse --record-demo path");
+        TestAssert.True(DemoPackage.ParseRecordDemoArg(new[] { "--play-demo=foo" }) == null, "Returns null when record flag absent");
+    }
+
+    [Test]
+    public void ResolveDemoPath_ResolvesFilesystemAndUserDemos()
+    {
+        string tempDemoPath = DemoPackage.GenerateDemoPath("test_resolve");
+        var pkg = new DemoPackage { MapName = "test_map", GameMode = "ffa" };
+        DemoPackage.Save(tempDemoPath, pkg);
+
+        try
+        {
+            // 1. Direct path
+            string? resolvedDirect = DemoPackage.ResolveDemoPath(tempDemoPath);
+            TestAssert.True(resolvedDirect != null, $"Resolved direct path '{tempDemoPath}'");
+
+            // 2. Bare filename with extension
+            string fileName = Path.GetFileName(tempDemoPath);
+            string? resolvedName = DemoPackage.ResolveDemoPath(fileName);
+            TestAssert.True(resolvedName != null, $"Resolved filename '{fileName}' from user://demos/");
+
+            // 3. Bare filename without .fbs extension
+            string baseName = Path.GetFileNameWithoutExtension(tempDemoPath);
+            string? resolvedBase = DemoPackage.ResolveDemoPath(baseName);
+            TestAssert.True(resolvedBase != null, $"Resolved bare name without extension '{baseName}'");
+
+            // 4. Non-existent file
+            string? resolvedMissing = DemoPackage.ResolveDemoPath("non_existent_file_xyz_123");
+            TestAssert.True(resolvedMissing == null, "Non-existent demo resolves to null");
+
+            // 5. Load through auto-resolved path
+            var loaded = DemoPackage.Load(baseName);
+            TestAssert.Equal("test_map", loaded.MapName, "DemoPackage.Load auto-resolves bare name");
+        }
+        finally
+        {
+            string global = ProjectSettings.GlobalizePath(tempDemoPath);
+            if (File.Exists(global)) File.Delete(global);
+        }
+    }
+
+    [Test]
+    public void MapPlayer_ToggleDemoRecording_SavesDemoPackage()
+    {
+        var octa = TestData.ReadMap().ToOcta();
+        var player = new MapPlayer();
+        player.Setup(octa, new Vector3(3000, 946, 3040), 90f);
+
+        string tempPath = DemoPackage.GenerateDemoPath("test_toggle");
+        bool toggledActive = false;
+        string? toggledPath = null;
+        player.DemoRecordingToggled += (active, path) =>
+        {
+            toggledActive = active;
+            toggledPath = path;
+        };
+
+        try
+        {
+            // Start recording via toggle
+            player.ToggleDemoRecording(tempPath);
+            TestAssert.True(player.IsRecordingDemo, "Player is recording demo");
+            TestAssert.True(toggledActive, "DemoRecordingToggled fired with active=true");
+            TestAssert.Equal(tempPath, toggledPath, "DemoRecordingToggled passed path");
+
+            // Capture 5 ticks of movement
+            for (int i = 0; i < 5; i++)
+            {
+                player.Entity.Move = 1;
+                player.PrePhysicsStep();
+                player.Advance(Phys.PhysFrameTime / 1000.0);
+            }
+
+            // Stop recording via toggle
+            player.ToggleDemoRecording();
+            TestAssert.True(!player.IsRecordingDemo, "Player stopped recording demo");
+            TestAssert.True(!toggledActive, "DemoRecordingToggled fired with active=false");
+
+            // Verify demo was saved and is readable
+            var loaded = DemoPackage.Load(tempPath);
+            TestAssert.True(loaded.TotalTicks >= 5, $"Loaded demo has at least 5 ticks: {loaded.TotalTicks}");
+            TestAssert.Near(3000f, loaded.InitialSpawnPos?.X ?? 0f, 1f, "Recorded initial spawn position");
+            TestAssert.Near(90f, loaded.InitialSpawnYaw, 1e-3f, "Recorded initial spawn yaw");
+        }
+        finally
+        {
+            player.Free();
+            string global = ProjectSettings.GlobalizePath(tempPath);
+            if (File.Exists(global)) File.Delete(global);
+        }
+    }
+
+    [Test]
+    public void OgzMapViewer_PlaysDemoWithInitialPlacementAndReplayer()
+    {
+        var demo = new DemoPackage
+        {
+            FormatVersion = 1,
+            MapName = "church51",
+            GameMode = "ffa",
+            InitialSpawnPos = new Vec3f { X = 3123, Y = 945, Z = 3050 },
+            InitialSpawnYaw = 135f,
+            Commands = new List<Command>
+            {
+                Command.CreatePlayerUpdate(tick: 0, move: 1, strafe: 0, jumping: false, yaw: 135f, pitch: 0f, attacking: false, selectedGun: 0)
+            }
+        };
+
+        var viewer = new SauerbratenRevival.World.Runtime.Formats.Ogz.OgzMapViewer
+        {
+            OgzPath = "base/church51.ogz",
+            SpawnPlayer = true,
+            FrameCamera = false,
+            DemoToPlay = demo
+        };
+
+        var player = new MapPlayer { Name = "Player" };
+        viewer.AddChild(player);
+
+        TestScene.AddChild(viewer);
+
+        try
+        {
+            TestAssert.True(viewer.ActiveReplayer != null, "Viewer initialized ActiveReplayer from DemoToPlay");
+            TestAssert.True(ReferenceEquals(player.InputSource, viewer.ActiveReplayer), "Player InputSource bound to viewer ActiveReplayer");
+            TestAssert.Near(3123f, player.Entity.O.X, 1e-3f, "Player placed at demo InitialSpawnPos X");
+            TestAssert.Near(945f, player.Entity.O.Y, 1e-3f, "Player placed at demo InitialSpawnPos Y");
+            TestAssert.Near(3050f, player.Entity.O.Z, 1e-3f, "Player placed at demo InitialSpawnPos Z");
+            TestAssert.Near(135f, player.Entity.Yaw, 1e-3f, "Player oriented at demo InitialSpawnYaw");
+        }
+        finally
+        {
+            viewer.QueueFree();
+        }
     }
 }

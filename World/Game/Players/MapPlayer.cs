@@ -511,6 +511,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     public override void _ExitTree()
     {
+        if (IsRecordingDemo)
+        {
+            StopDemoRecording();
+        }
         _phys?.DynEnts.Remove(Entity);
         if (GetParent() is IGameWorld mw)
         {
@@ -560,6 +564,13 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         }
         else if (@event is InputEventKey { Pressed: true } key && !key.Echo)
         {
+            if (key.Keycode == Key.F8 || (InputMap.HasAction("toggle_record_demo") && @event.IsActionPressed("toggle_record_demo")))
+            {
+                ToggleDemoRecording();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
             if (Floating)
             {
                 // In edit / spectator mode, numeric weapon slots are bypassed so editor tools take input.
@@ -594,6 +605,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     {
         if (InputSource != null)
         {
+            _mouseDelta = Vector2.Zero;
             int tick = LastMillis / Phys.PhysFrameTime;
             var update = InputSource.GetUpdate(tick, this);
             if (update != null)
@@ -644,6 +656,109 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// Optional callback or recorder invoked every physics tick with the captured player update.
     /// </summary>
     public Action<PlayerUpdateCmd>? OnUpdateCaptured { get; set; }
+
+    private Demo.DemoRecorder? _activeRecorder;
+    private string? _activeRecordingPath;
+
+    /// <summary>True while this player is actively recording a demo.</summary>
+    public bool IsRecordingDemo => _activeRecorder?.IsRecording ?? false;
+
+    /// <summary>Fired when demo recording starts or stops. Passes (isRecording, filePath).</summary>
+    public event Action<bool, string>? DemoRecordingToggled;
+
+    /// <summary>
+    /// Starts recording player movements, lifecycle events, and world mutations to a demo file.
+    /// </summary>
+    public void StartDemoRecording(string? customPath = null)
+    {
+        if (_activeRecorder != null && _activeRecorder.IsRecording)
+        {
+            GD.Print("[demo] Already recording a demo.");
+            return;
+        }
+
+        _activeRecorder = new Demo.DemoRecorder();
+
+        string mapName = "";
+        string gameMode = "ffa";
+        IGameWorld? gameWorld = GetParent() as IGameWorld;
+        if (gameWorld is Runtime.Formats.Ogz.MapWorld mw)
+        {
+            mapName = mw.OgzPath;
+            gameMode = mw.Mode?.Id ?? "ffa";
+        }
+        else if (GetParent()?.GetParent() is Runtime.Formats.Ogz.OgzMapViewer viewer)
+        {
+            mapName = viewer.OgzPath;
+            gameMode = viewer.GameMode;
+        }
+
+        _activeRecorder.Start(mapName, gameMode, Entity.O, Entity.Yaw);
+
+        if (gameWorld != null)
+        {
+            _activeRecorder.AttachWorld(gameWorld);
+            if (gameWorld.Sink != null)
+            {
+                _activeRecorder.AttachSink(gameWorld.Sink);
+            }
+        }
+        else
+        {
+            _activeRecorder.Attach(this);
+        }
+
+        string path = !string.IsNullOrWhiteSpace(customPath)
+            ? customPath!
+            : DemoPackage.GenerateDemoPath(mapName);
+
+        _activeRecordingPath = path;
+        GD.Print($"[demo] Started recording demo to '{_activeRecordingPath}' (map='{mapName}', mode='{gameMode}')");
+        DemoRecordingToggled?.Invoke(true, _activeRecordingPath);
+    }
+
+    /// <summary>
+    /// Stops the active demo recording and saves it to disk in <see cref="DemoPackage.DefaultDemoDir"/>.
+    /// </summary>
+    public DemoPackage? StopDemoRecording()
+    {
+        if (_activeRecorder == null || !_activeRecorder.IsRecording)
+        {
+            GD.Print("[demo] No demo recording in progress.");
+            return null;
+        }
+
+        string path = _activeRecordingPath ?? DemoPackage.GenerateDemoPath();
+        DemoPackage package = _activeRecorder.Stop();
+        _activeRecorder = null;
+        _activeRecordingPath = null;
+
+        DemoPackage.Save(path, package);
+        GD.Print($"[demo] Saved demo to '{path}' ({package.DurationSeconds:F1}s, {package.TotalTicks} ticks, {package.TotalCommands} commands)");
+        DemoRecordingToggled?.Invoke(false, path);
+        return package;
+    }
+
+    /// <summary>
+    /// Toggles demo recording on or off.
+    /// </summary>
+    public void ToggleDemoRecording(string? customPath = null)
+    {
+        if (InputSource != null)
+        {
+            GD.Print("[demo] Cannot record while demo playback is active.");
+            return;
+        }
+
+        if (IsRecordingDemo)
+        {
+            StopDemoRecording();
+        }
+        else
+        {
+            StartDemoRecording(customPath);
+        }
+    }
 
     /// <summary>
     /// Captures the current movement, combat, and kinematic state as a <see cref="PlayerUpdateCmd"/>.

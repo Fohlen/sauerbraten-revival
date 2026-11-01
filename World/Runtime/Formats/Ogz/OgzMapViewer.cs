@@ -1,3 +1,4 @@
+using System;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
@@ -51,6 +52,18 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Active game mode identifier (e.g. "ffa", "ctf", "effic_ctf", "insta_ctf").</summary>
     [Export] public string GameMode { get; set; } = "ffa";
 
+    /// <summary>Pre-loaded demo package to play back through the local player and world.</summary>
+    public DemoPackage? DemoToPlay { get; set; }
+
+    /// <summary>Active demo replayer driving playback, if any.</summary>
+    public Demo.DemoReplayer? ActiveReplayer { get; private set; }
+
+    /// <summary>When true, automatically begins recording a demo on player spawn.</summary>
+    [Export] public bool AutoRecordDemo { get; set; } = false;
+
+    /// <summary>Custom path for auto-recording demo. Empty uses default user://demos/ naming schema.</summary>
+    [Export] public string AutoRecordDemoPath { get; set; } = "";
+
     /// <summary>
     /// Show edit-mode blue entity markers and facing arrows. When false (e.g. in
     /// player/game scenes), all <see cref="EntityMarker"/> nodes are hidden.
@@ -87,6 +100,45 @@ public partial class OgzMapViewer : Node3D
     {
         if (_built) return;
         _built = true;
+
+        if (!Engine.IsEditorHint() && DemoToPlay == null)
+        {
+            string? demoArg = DemoPackage.ParseDemoArg(OS.GetCmdlineUserArgs()) ?? DemoPackage.ParseDemoArg(OS.GetCmdlineArgs());
+            if (!string.IsNullOrEmpty(demoArg))
+            {
+                string? resolved = DemoPackage.ResolveDemoPath(demoArg);
+                if (resolved != null)
+                {
+                    try
+                    {
+                        DemoToPlay = DemoPackage.Load(resolved);
+                        if (!string.IsNullOrWhiteSpace(DemoToPlay.MapName))
+                        {
+                            OgzPath = DemoToPlay.MapName;
+                        }
+                        if (!string.IsNullOrWhiteSpace(DemoToPlay.GameMode))
+                        {
+                            GameMode = DemoToPlay.GameMode;
+                        }
+                        EditMode = false;
+                    }
+                    catch (Exception ex)
+                    {
+                        GD.PushError($"[viewer] Failed to load demo '{demoArg}': {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        if (!Engine.IsEditorHint() && !AutoRecordDemo && DemoToPlay == null)
+        {
+            string? recordArg = DemoPackage.ParseRecordDemoArg(OS.GetCmdlineUserArgs()) ?? DemoPackage.ParseRecordDemoArg(OS.GetCmdlineArgs());
+            if (recordArg != null)
+            {
+                AutoRecordDemo = true;
+                AutoRecordDemoPath = recordArg;
+            }
+        }
 
         UserSettings userSettings = UserSettings.Load();
         // The game mode only applies to an actual play session; the edit viewer
@@ -206,6 +258,26 @@ public partial class OgzMapViewer : Node3D
         if (editor != null) editor.Hud = hud;
 
         GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw} (edit={isEdit})");
+
+        if (DemoToPlay != null)
+        {
+            ActiveReplayer = new Demo.DemoReplayer(DemoToPlay, mapSource.Sink);
+            ActiveReplayer.ApplyInitialPlacement(player);
+            ActiveReplayer.Attach(player);
+            if (mapSource is IGameWorld gameWorld)
+            {
+                ActiveReplayer.AttachWorld(gameWorld);
+            }
+            ActiveReplayer.PlaybackFinished += () =>
+            {
+                GD.Print($"[demo] playback finished ({DemoToPlay.DurationSeconds:F1}s, {DemoToPlay.TotalTicks} ticks)");
+            };
+            GD.Print($"[viewer] demo playback active ({DemoToPlay.TotalTicks} ticks, {DemoToPlay.TotalCommands} commands)");
+        }
+        else if (AutoRecordDemo)
+        {
+            player.StartDemoRecording(string.IsNullOrWhiteSpace(AutoRecordDemoPath) ? null : AutoRecordDemoPath);
+        }
     }
 
     /// <summary>

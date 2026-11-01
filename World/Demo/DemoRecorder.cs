@@ -15,7 +15,8 @@ public class DemoRecorder
 {
     private readonly List<Command> _commands = new();
     private readonly Dictionary<int, MapPlayer> _attachedPlayers = new();
-    private readonly Dictionary<int, Action<PlayerUpdateCmd>> _captureCallbacks = new();
+    private readonly Dictionary<int, (Action<PlayerUpdateCmd> UpdateCb, MapPlayer.DiedEventHandler DiedCb, MapPlayer.RespawnedEventHandler RespawnedCb)> _callbacks = new();
+    private Commands.CommandSink? _attachedSink;
 
     public bool IsRecording { get; private set; }
     public string MapName { get; set; } = string.Empty;
@@ -37,17 +38,30 @@ public class DemoRecorder
     }
 
     /// <summary>
-    /// Attaches to a player, capturing its updates automatically every physics tick.
+    /// Attaches to a player, capturing its updates automatically every physics tick
+    /// and hooking its spawn/death lifecycle events.
     /// Tagged with the player's <see cref="MapPlayer.PlayerId"/> (PeerId).
     /// </summary>
     public void Attach(MapPlayer player)
     {
         if (_attachedPlayers.ContainsKey(player.PlayerId)) return;
 
-        Action<PlayerUpdateCmd> callback = update => RecordUpdate(update, player.PlayerId);
+        Action<PlayerUpdateCmd> updateCb = update => RecordUpdate(update, player.PlayerId);
+        MapPlayer.DiedEventHandler diedCb = () =>
+        {
+            RecordDeath(player.PlayerId, killerPeerId: -1, gun: -1, isSuicide: true, deathPos: player.Entity.O, impulse: Vector3.Zero, author: player.PlayerId);
+        };
+        MapPlayer.RespawnedEventHandler respawnedCb = () =>
+        {
+            RecordSpawn(player.Entity.O, player.Entity.Yaw, lifeSequence: player.Combat.LifeSequence, gun: player.Combat.GunSelect, health: player.Health, armour: player.Combat.Armour, author: player.PlayerId);
+        };
+
         _attachedPlayers[player.PlayerId] = player;
-        _captureCallbacks[player.PlayerId] = callback;
-        player.OnUpdateCaptured += callback;
+        _callbacks[player.PlayerId] = (updateCb, diedCb, respawnedCb);
+
+        player.OnUpdateCaptured += updateCb;
+        player.Died += diedCb;
+        player.Respawned += respawnedCb;
     }
 
     /// <summary>
@@ -73,33 +87,61 @@ public class DemoRecorder
     }
 
     /// <summary>
+    /// Hooks a <see cref="Commands.CommandSink"/> to record live world geometry edits and entity mutations.
+    /// </summary>
+    public void AttachSink(Commands.CommandSink sink)
+    {
+        if (ReferenceEquals(_attachedSink, sink)) return;
+        DetachSink();
+        _attachedSink = sink;
+        sink.CommandApplied += RecordCommand;
+    }
+
+    /// <summary>
+    /// Detaches the currently hooked command sink.
+    /// </summary>
+    public void DetachSink()
+    {
+        if (_attachedSink != null)
+        {
+            _attachedSink.CommandApplied -= RecordCommand;
+            _attachedSink = null;
+        }
+    }
+
+    /// <summary>
     /// Detaches from a specific player.
     /// </summary>
     public void Detach(MapPlayer player)
     {
         if (_attachedPlayers.Remove(player.PlayerId, out var p))
         {
-            if (_captureCallbacks.Remove(player.PlayerId, out var cb))
+            if (_callbacks.Remove(player.PlayerId, out var cbs))
             {
-                p.OnUpdateCaptured -= cb;
+                p.OnUpdateCaptured -= cbs.UpdateCb;
+                p.Died -= cbs.DiedCb;
+                p.Respawned -= cbs.RespawnedCb;
             }
         }
     }
 
     /// <summary>
-    /// Detaches from all currently attached players.
+    /// Detaches from all currently attached players and sinks.
     /// </summary>
     public void DetachAll()
     {
         foreach (var (id, p) in _attachedPlayers)
         {
-            if (_captureCallbacks.TryGetValue(id, out var cb))
+            if (_callbacks.TryGetValue(id, out var cbs))
             {
-                p.OnUpdateCaptured -= cb;
+                p.OnUpdateCaptured -= cbs.UpdateCb;
+                p.Died -= cbs.DiedCb;
+                p.Respawned -= cbs.RespawnedCb;
             }
         }
         _attachedPlayers.Clear();
-        _captureCallbacks.Clear();
+        _callbacks.Clear();
+        DetachSink();
     }
 
     /// <summary>

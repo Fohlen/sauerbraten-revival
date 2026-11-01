@@ -1,3 +1,4 @@
+using System;
 using Godot;
 using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Game;
@@ -67,7 +68,60 @@ public partial class Main : Node
         ScreenSettings.Apply(settings);
         GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
         InputBindings.Load().Apply();
+
+        string? demoArg = DemoPackage.ParseDemoArg(OS.GetCmdlineUserArgs()) ?? DemoPackage.ParseDemoArg(OS.GetCmdlineArgs());
+        if (!string.IsNullOrEmpty(demoArg))
+        {
+            string? resolved = DemoPackage.ResolveDemoPath(demoArg);
+            if (resolved != null)
+            {
+                try
+                {
+                    var demo = DemoPackage.Load(resolved);
+                    PlayDemo(demo, resolved);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    GD.PushError($"[main] Failed to load demo '{demoArg}' (resolved '{resolved}'): {ex.Message}");
+                }
+            }
+            else
+            {
+                GD.PushError($"[main] Could not find demo '{demoArg}' (searched '{DemoPackage.DefaultDemoDir}' and filesystem)");
+            }
+        }
+
         ShowMenu();
+    }
+
+    /// <summary>
+    /// Play back a recorded demo package directly through the play scene.
+    /// </summary>
+    private void PlayDemo(DemoPackage demo, string demoPath)
+    {
+        EndMatch();
+
+        var packed = GD.Load<PackedScene>("res://scenes/player_scene.tscn");
+        if (packed == null)
+        {
+            GD.PushError("[main] could not load res://scenes/player_scene.tscn");
+            return;
+        }
+
+        Node game = packed.Instantiate();
+        if (game is OgzMapViewer viewer)
+        {
+            viewer.OgzPath = string.IsNullOrWhiteSpace(demo.MapName) ? "base/church51.ogz" : demo.MapName;
+            viewer.GameMode = string.IsNullOrWhiteSpace(demo.GameMode) ? "ffa" : demo.GameMode;
+            viewer.EditMode = false;
+            viewer.DemoToPlay = demo;
+        }
+
+        _gameHost.AddChild(game);
+        _game = game;
+        GD.Print($"[main] demo playback started: demo='{demoPath}' map='{demo.MapName}' mode='{demo.GameMode}' ({demo.TotalTicks} ticks, {demo.DurationSeconds:F1}s)");
+        ResumeGame();
     }
 
     /// <summary>
@@ -97,6 +151,13 @@ public partial class Main : Node
             // the same one scenes/editor_scene.tscn uses through its EditMode export:
             // spawn floating with a live EditorController instead of a match player.
             viewer.EditMode = GameModeCatalog.TryGet(mode)?.Has(ModeFlags.Edit) ?? false;
+
+            string? recordArg = DemoPackage.ParseRecordDemoArg(OS.GetCmdlineUserArgs()) ?? DemoPackage.ParseRecordDemoArg(OS.GetCmdlineArgs());
+            if (recordArg != null)
+            {
+                viewer.AutoRecordDemo = true;
+                viewer.AutoRecordDemoPath = recordArg;
+            }
         }
         // Set before the viewer's _Ready runs (on AddChild), so spawn/visuals use it.
         if (game.GetNodeOrNull<MapPlayer>("Player") is { } player) player.Team = team;
