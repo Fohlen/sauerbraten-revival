@@ -308,6 +308,8 @@ public partial class MapWorld : Node3D, IGameWorld
         Lighting.RadianceVolume? radiance = null;
         if (ComputeVisuals && catalogue != null)
         {
+            Radiance?.Dispose();
+            Radiance = null;
             var volume = Lighting.RadianceVolume.CreateForOcta(octa, RadianceSettings);
             var directLights = Lighting.DirectLightSource.CollectFromMap(map);
             volume.Bake(octa, catalogue.Config, directLights, catalogue, textures);
@@ -499,4 +501,28 @@ public partial class MapWorld : Node3D, IGameWorld
     }
 
     private static string ResolvePath(string ogzPath) => ContentRoots.ResolveMap(ogzPath);
+
+    public override void _Notification(int what)
+    {
+        base._Notification(what);
+        if (what == NotificationPredelete || what == NotificationExitTree || what == Window.NotificationWMCloseRequest)
+        {
+            Cleanup();
+        }
+    }
+
+    private void Cleanup()
+    {
+        Radiance?.Dispose();
+        Radiance = null;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Cleanup();
+        }
+        base.Dispose(disposing);
+    }
 }

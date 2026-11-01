@@ -54,7 +54,11 @@ public partial class Main : Node
         _menu = GetNode<MainMenu>("MainMenu");
         _menu.StartMatch += StartMatch;
         _menu.ResumeRequested += ResumeGame;
-        _menu.QuitRequested += () => GetTree().Quit();
+        _menu.QuitRequested += () =>
+        {
+            EndMatch();
+            GetTree().Quit();
+        };
 
         // Deferred: the tree is busy adding children during _Ready.
         CallDeferred(nameof(StartGame));
@@ -228,6 +232,15 @@ public partial class Main : Node
         }
 
         GetViewport().SetInputAsHandled();
+    }
+
+    public override void _Notification(int what)
+    {
+        base._Notification(what);
+        if (what == Window.NotificationWMCloseRequest)
+        {
+            EndMatch();
+        }
     }
 
 #if DEBUG

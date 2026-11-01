@@ -377,4 +377,24 @@ public partial class OgzMapViewer : Node3D
         editorCamera.LookAt(_frameTarget, Vector3.Up);
     }
 #endif
+
+    public override void _Notification(int what)
+    {
+        base._Notification(what);
+        if (what == NotificationPredelete || what == Window.NotificationWMCloseRequest)
+        {
+            World?.Dispose();
+            World = null;
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            World?.Dispose();
+            World = null;
+        }
+        base.Dispose(disposing);
+    }
 }

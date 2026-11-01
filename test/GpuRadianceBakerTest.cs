@@ -324,4 +324,63 @@ public class GpuRadianceBakerTest : GoTestBase
         TestAssert.True(Mathf.Abs(updatedFarProbe.Amb - initialFarProbe.Amb) < 1e-3f,
             $"Untouched far probe ambient should be preserved: before={initialFarProbe.Amb}, after={updatedFarProbe.Amb}");
     }
+
+    [Test]
+    public void GpuRadianceBaker_Dispose_IsIdempotentAndSafe()
+    {
+        RenderingDevice? rd = RenderingServer.GetRenderingDevice();
+        bool ownsLocalRd = false;
+        if (rd == null)
+        {
+            rd = RenderingServer.CreateLocalRenderingDevice();
+            ownsLocalRd = rd != null;
+        }
+
+        try
+        {
+            var baker = new GpuRadianceBaker(rd);
+            baker.Dispose();
+            // Second dispose should be a no-op, not throw or double-free RIDs
+            baker.Dispose();
+            TestAssert.False(baker.IsGpuAvailable, "Baker is not available after Dispose");
+            TestAssert.True(baker.OutputTextureRd == null, "OutputTextureRd is cleared after Dispose");
+        }
+        finally
+        {
+            if (ownsLocalRd && rd != null)
+                rd.Free();
+        }
+    }
+
+    [Test]
+    public void RadianceVolume_Dispose_ClearsTexturesAndGpuBaker()
+    {
+        var bounds = new Aabb(Vector3.Zero, new Vector3(1024f, 1024f, 1024f));
+        var grid = RadianceGrid.FromSauerBounds(bounds, resolution: 8, marginCells: 0);
+        var volume = new RadianceVolume(grid, LightingSettings.StaticAmbient);
+
+        volume.Dispose();
+        // Calling Dispose again should be safe and idempotent
+        volume.Dispose();
+
+        TestAssert.True(volume.Texture == null, "Texture cleared after Dispose");
+        TestAssert.True(volume.AmbientTexture == null, "AmbientTexture cleared after Dispose");
+        TestAssert.True(volume.GpuBaker == null, "GpuBaker cleared after Dispose");
+    }
+
+    [Test]
+    public void MapWorld_NotificationPredelete_DisposesRadiance()
+    {
+        var world = new MapWorld();
+        world.Free();
+    }
+
+    [Test]
+    public void MapWorld_NotificationWmCloseRequest_DisposesRadiance()
+    {
+        var world = new MapWorld();
+        world._Notification((int)Window.NotificationWMCloseRequest);
+        TestAssert.True(world.Radiance == null, "Radiance should be null after CloseRequest");
+        world.Free();
+    }
 }

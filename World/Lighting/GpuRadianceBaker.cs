@@ -543,22 +543,33 @@ public sealed class GpuRadianceBaker : IDisposable
     {
         if (_rd == null) return;
 
-        if (_pass1UniformSet.IsValid) _rd.FreeRid(_pass1UniformSet);
-        if (_pass2UniformSet.IsValid) _rd.FreeRid(_pass2UniformSet);
+        if (OutputTextureRd != null)
+        {
+            OutputTextureRd.TextureRdRid = default;
+            OutputTextureRd = null;
+        }
+        if (OutputAmbTextureRd != null)
+        {
+            OutputAmbTextureRd.TextureRdRid = default;
+            OutputAmbTextureRd = null;
+        }
 
-        if (_voxelGridTex.IsValid) _rd.FreeRid(_voxelGridTex);
-        if (_probeDirectTex.IsValid) _rd.FreeRid(_probeDirectTex);
-        if (_probeDirectAmbTex.IsValid) _rd.FreeRid(_probeDirectAmbTex);
-        if (_probeFinalTex.IsValid) _rd.FreeRid(_probeFinalTex);
-        if (_probeFinalAmbTex.IsValid) _rd.FreeRid(_probeFinalAmbTex);
-        if (_voxelSampler.IsValid) _rd.FreeRid(_voxelSampler);
-        if (_probeDirectSampler.IsValid) _rd.FreeRid(_probeDirectSampler);
-        if (_lightBuffer.IsValid) _rd.FreeRid(_lightBuffer);
+        if (_pass1UniformSet.IsValid) { _rd.FreeRid(_pass1UniformSet); _pass1UniformSet = default; }
+        if (_pass2UniformSet.IsValid) { _rd.FreeRid(_pass2UniformSet); _pass2UniformSet = default; }
 
-        if (_directPipeline.IsValid) _rd.FreeRid(_directPipeline);
-        if (_bouncePipeline.IsValid) _rd.FreeRid(_bouncePipeline);
-        if (_directShader.IsValid) _rd.FreeRid(_directShader);
-        if (_bounceShader.IsValid) _rd.FreeRid(_bounceShader);
+        if (_voxelGridTex.IsValid) { _rd.FreeRid(_voxelGridTex); _voxelGridTex = default; }
+        if (_probeDirectTex.IsValid) { _rd.FreeRid(_probeDirectTex); _probeDirectTex = default; }
+        if (_probeDirectAmbTex.IsValid) { _rd.FreeRid(_probeDirectAmbTex); _probeDirectAmbTex = default; }
+        if (_probeFinalTex.IsValid) { _rd.FreeRid(_probeFinalTex); _probeFinalTex = default; }
+        if (_probeFinalAmbTex.IsValid) { _rd.FreeRid(_probeFinalAmbTex); _probeFinalAmbTex = default; }
+        if (_voxelSampler.IsValid) { _rd.FreeRid(_voxelSampler); _voxelSampler = default; }
+        if (_probeDirectSampler.IsValid) { _rd.FreeRid(_probeDirectSampler); _probeDirectSampler = default; }
+        if (_lightBuffer.IsValid) { _rd.FreeRid(_lightBuffer); _lightBuffer = default; }
+
+        if (_directPipeline.IsValid) { _rd.FreeRid(_directPipeline); _directPipeline = default; }
+        if (_bouncePipeline.IsValid) { _rd.FreeRid(_bouncePipeline); _bouncePipeline = default; }
+        if (_directShader.IsValid) { _rd.FreeRid(_directShader); _directShader = default; }
+        if (_bounceShader.IsValid) { _rd.FreeRid(_bounceShader); _bounceShader = default; }
     }
 
     public void Dispose()

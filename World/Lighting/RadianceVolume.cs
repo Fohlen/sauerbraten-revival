@@ -845,6 +845,8 @@ public class RadianceVolume : IDisposable
 
     public void Dispose()
     {
+        Texture = null;
+        AmbientTexture = null;
         GpuBaker?.Dispose();
         GpuBaker = null;
         GC.SuppressFinalize(this);

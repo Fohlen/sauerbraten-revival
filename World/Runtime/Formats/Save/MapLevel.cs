@@ -209,6 +209,8 @@ public partial class MapLevel : Node3D, IGameWorld
 
         if (BakeRadiance)
         {
+            Radiance?.Dispose();
+            Radiance = null;
             var config = MapEnvironment.ToConfig(Sink?.Environment);
             var directLights = DirectLightSource.CollectFromEntities(Entities);
             var volume = RadianceVolume.CreateForOcta(Octa, RadianceSettings);
@@ -453,16 +455,31 @@ public partial class MapLevel : Node3D, IGameWorld
         return hash.ToHashCode();
     }
 
+    public override void _Notification(int what)
+    {
+        base._Notification(what);
+        if (what == NotificationPredelete || what == NotificationExitTree || what == Window.NotificationWMCloseRequest)
+        {
+            Cleanup();
+        }
+    }
+
+    private void Cleanup()
+    {
+        if (_sink != null)
+        {
+            _sink.CommandApplied -= OnCommandApplied;
+            _sink = null;
+        }
+        Radiance?.Dispose();
+        Radiance = null;
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
-            if (_sink != null)
-            {
-                _sink.CommandApplied -= OnCommandApplied;
-                _sink = null;
-            }
-            Radiance?.Dispose();
+            Cleanup();
         }
         base.Dispose(disposing);
     }

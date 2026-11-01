@@ -203,6 +203,8 @@ public partial class EmptyMap : Node3D, IGameWorld
         Materials.MaterialSet? materials = null;
         if (BakeRadiance)
         {
+            Radiance?.Dispose();
+            Radiance = null;
             var config = new Materials.MapConfig
             {
                 Ambient = Ambient,
@@ -283,4 +285,27 @@ public partial class EmptyMap : Node3D, IGameWorld
                 ec.BindMapSource(this);
     }
 
+    public override void _Notification(int what)
+    {
+        base._Notification(what);
+        if (what == NotificationPredelete || what == NotificationExitTree || what == Window.NotificationWMCloseRequest)
+        {
+            Cleanup();
+        }
+    }
+
+    private void Cleanup()
+    {
+        Radiance?.Dispose();
+        Radiance = null;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Cleanup();
+        }
+        base.Dispose(disposing);
+    }
 }
