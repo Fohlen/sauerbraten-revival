@@ -52,6 +52,7 @@ public partial class MapLoad : CanvasLayer
         ResolveNodes();
         MapName = map;
         GameMode = mode;
+        CurrentProgress = 0.0f;
         Visible = true;
 
         string cleanMap = map.Replace(".ogz", "").TrimStart('/');
@@ -97,7 +98,38 @@ public partial class MapLoad : CanvasLayer
     }
 
     /// <summary>
-    /// Updates progress and yields one frame to Godot's main process loop so the UI renders.
+    /// Adds a relative progress increment (clamped to 1.0f) and updates the status message.
+    /// </summary>
+    public void AddProgress(float increment, string status)
+    {
+        SetProgress(CurrentProgress + increment, status);
+    }
+
+    /// <summary>
+    /// Adds a relative progress increment and yields one frame to Godot's main process loop so the UI renders.
+    /// Matches Func&lt;float, string, Task&gt;.
+    /// </summary>
+    public async Task AddProgressAsync(float increment, string status)
+    {
+        AddProgress(increment, status);
+        if (IsInsideTree())
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+    }
+
+    /// <summary>
+    /// Advances progress by 20% (0.20f) for 5-step loading sequences, and updates status.
+    /// </summary>
+    public void StepProgress(string status) => AddProgress(0.20f, status);
+
+    /// <summary>
+    /// Advances progress by 20% (0.20f) and yields one frame. Matches Func&lt;string, Task&gt;.
+    /// </summary>
+    public Task StepProgressAsync(string status) => AddProgressAsync(0.20f, status);
+
+    /// <summary>
+    /// Updates progress to an absolute percentage and yields one frame to Godot's main process loop so the UI renders.
     /// </summary>
     public async Task UpdateProgressAsync(float progress, string status)
     {

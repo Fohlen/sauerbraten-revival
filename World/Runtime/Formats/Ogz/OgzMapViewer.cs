@@ -178,7 +178,7 @@ public partial class OgzMapViewer : Node3D
                 var standaloneLoad = loadScene.Instantiate<MapLoad>();
                 AddChild(standaloneLoad);
                 standaloneLoad.StartLoading(OgzPath, GameMode);
-                ProgressCallback = standaloneLoad.UpdateProgressAsync;
+                ProgressCallback = standaloneLoad.AddProgressAsync;
                 MatchReady += async () =>
                 {
                     await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
@@ -277,10 +277,10 @@ public partial class OgzMapViewer : Node3D
         if (World?.Map != null && World.Textures != null)
             ApplySky(World.Map, World.Textures);
 
-        // Step 5: Spawning Player & Match Start (100%)
+        // Step 5: Spawning Player & Match Start (+20%)
         if (ProgressCallback != null)
         {
-            await ProgressCallback(1.00f, "Spawning Player & Match Start");
+            await ProgressCallback(0.20f, "Spawning Player & Match Start");
         }
 
         if (!Engine.IsEditorHint() && SpawnPlayer) AttachPlayer(userSettings, modeInfo, mapSource);

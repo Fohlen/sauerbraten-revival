@@ -95,12 +95,12 @@ flowchart TD
 - Implement a dedicated loading scene [`scenes/map_load.tscn`](../../scenes/map_load.tscn) backed by [`scripts/MapLoad.cs`](../../scripts/MapLoad.cs):
   - **Backdrop**: Map screenshot (`assets/packages/base/<map>.jpg` or metadata catalogue).
   - **Information**: Map name, game mode, map title, and author.
-  - **Stepped Progress Bar**:
-    1. Parsing Octree & Entities ($10\%$)
-    2. Meshing Geometry & Materials ($40\%$)
-    3. Radiance Hints & Lighting ($70\%$)
-    4. Preloading Weapons, Models & Projectiles ($90\%$)
-    5. Spawning Player & Match Start ($100\%$)
+  - **Stepped Progress Bar** (5 sequential callbacks adding $+20\%$ each):
+    1. Parsing Octree & Entities ($+20\% \to 20\%$)
+    2. Radiance Hints & Lighting ($+20\% \to 40\%$)
+    3. Meshing Geometry & Materials ($+20\% \to 60\%$)
+    4. Preloading Weapons, Models & Projectiles ($+20\% \to 80\%$)
+    5. Spawning Player & Match Start ($+20\% \to 100\%$)
 - Between steps, the loader yields a frame (`await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);`) ensuring Godot renders smooth UI updates and never blocks the window manager.
 - Upon completion, `ResumeGame()` dismisses `map_load.tscn`, smoothly opening directly into interactive gameplay.
 

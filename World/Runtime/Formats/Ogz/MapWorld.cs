@@ -302,8 +302,8 @@ public partial class MapWorld : Node3D, IGameWorld
         RotationDegrees = new Vector3(-90, 0, 0);
         Scale = new Vector3(-1, 1, 1);
 
-        // Step 1: Parsing Octree & Entities (10%)
-        if (onProgress != null) await onProgress(0.10f, "Parsing Octree & Entities");
+        // Step 1: Parsing Octree & Entities
+        if (onProgress != null) await onProgress(0.20f, "Parsing Octree & Entities");
 
         var map = Map ?? LoadMap(path);
         var octa = Octa ?? map.ToOcta();
@@ -319,13 +319,13 @@ public partial class MapWorld : Node3D, IGameWorld
         Textures = textures;
         var catalogue = MetadataCatalogue.TryLoadForMap(mapName);
 
+        // Step 2: Radiance Hints & Lighting
+        if (onProgress != null) await onProgress(0.20f, "Radiance Hints & Lighting");
+
         // Radiance hints volume: bake sky, sun, and direct entity lights (docs/adr/0002-radiance-hints.md §4.1, §4.2)
         Lighting.RadianceVolume? radiance = null;
         if (ComputeVisuals && catalogue != null)
         {
-            // Step 3: Radiance Hints & Lighting (70%)
-            if (onProgress != null) await onProgress(0.70f, "Radiance Hints & Lighting");
-
             Radiance?.Dispose();
             Radiance = null;
             var volume = Lighting.RadianceVolume.CreateForOcta(octa, RadianceSettings);
@@ -335,8 +335,8 @@ public partial class MapWorld : Node3D, IGameWorld
             Radiance = volume;
         }
 
-        // Step 2: Meshing Geometry & Materials (40%)
-        if (onProgress != null) await onProgress(0.40f, "Meshing Geometry & Materials");
+        // Step 3: Meshing Geometry & Materials
+        if (onProgress != null) await onProgress(0.20f, "Meshing Geometry & Materials");
 
         MaterialSet? materials = catalogue != null ? MaterialBuilder.Build(catalogue, textures, radiance) : null;
         if (materials == null) GD.PushWarning($"[world] no metadata catalogue for '{mapName}'; showing untextured geometry.");
@@ -345,8 +345,8 @@ public partial class MapWorld : Node3D, IGameWorld
         var modelCatalog = ModelCatalog.LoadFromProject();
         Models = modelCatalog;
 
-        // Step 4: Preloading Weapons, Models & Projectiles (90%)
-        if (onProgress != null) await onProgress(0.90f, "Preloading Weapons, Models & Projectiles");
+        // Step 4: Preloading Weapons, Models & Projectiles
+        if (onProgress != null) await onProgress(0.20f, "Preloading Weapons & Projectiles");
         ModelCache.PreloadProjectiles(textures);
 
         AddChild(LightBuilder.Build(map));
