@@ -35,7 +35,7 @@ public class MapLoadSceneTest : GoTestBase
     }
 
     [Test]
-    public void StartLoadingConfiguresLabelsAndShows()
+    public async Task StartLoadingConfiguresLabelsAndShows()
     {
         var scene = GD.Load<PackedScene>("res://scenes/map_load.tscn");
         var mapLoad = scene!.Instantiate<MapLoad>();
@@ -50,11 +50,11 @@ public class MapLoadSceneTest : GoTestBase
             TestAssert.Equal("CHURCH 51", mapLoad.TitleLabel!.Text, "Title set");
             TestAssert.True(mapLoad.InfoLabel!.Text.Contains("Nieb"), "Author present in InfoLabel");
 
-            mapLoad.AddProgress(0.20f, "Parsing Octree & Entities");
+            await mapLoad.StepProgressAsync(0.20f, "Parsing Octree & Entities");
             TestAssert.Near(20f, (float)mapLoad.ProgressBar.Value, 0.1f, "Progress incremented to 20%");
             TestAssert.True(mapLoad.StatusLabel!.Text.Contains("20%"), "Status label displays 20%");
 
-            mapLoad.StepProgress("Radiance Hints & Lighting");
+            await mapLoad.StepProgressAsync("Radiance Hints & Lighting");
             TestAssert.Near(40f, (float)mapLoad.ProgressBar.Value, 0.1f, "Progress incremented to 40%");
 
             mapLoad.Dismiss();
@@ -67,7 +67,7 @@ public class MapLoadSceneTest : GoTestBase
     }
 
     [Test]
-    public void FiveStepLoadingReachesHundredPercent()
+    public async Task FiveStepLoadingReachesHundredPercent()
     {
         var scene = GD.Load<PackedScene>("res://scenes/map_load.tscn");
         var mapLoad = scene!.Instantiate<MapLoad>();
@@ -78,19 +78,19 @@ public class MapLoadSceneTest : GoTestBase
             mapLoad.StartLoading("base/church51.ogz", "ctf");
             TestAssert.Near(0f, (float)mapLoad.ProgressBar!.Value, 0.1f, "Starts at 0%");
 
-            mapLoad.AddProgress(0.20f, "Step 1");
+            await mapLoad.StepProgressAsync(0.20f, "Step 1");
             TestAssert.Near(20f, (float)mapLoad.ProgressBar.Value, 0.1f, "Step 1 at 20%");
 
-            mapLoad.AddProgress(0.20f, "Step 2");
+            await mapLoad.StepProgressAsync(0.20f, "Step 2");
             TestAssert.Near(40f, (float)mapLoad.ProgressBar.Value, 0.1f, "Step 2 at 40%");
 
-            mapLoad.AddProgress(0.20f, "Step 3");
+            await mapLoad.StepProgressAsync(0.20f, "Step 3");
             TestAssert.Near(60f, (float)mapLoad.ProgressBar.Value, 0.1f, "Step 3 at 60%");
 
-            mapLoad.AddProgress(0.20f, "Step 4");
+            await mapLoad.StepProgressAsync(0.20f, "Step 4");
             TestAssert.Near(80f, (float)mapLoad.ProgressBar.Value, 0.1f, "Step 4 at 80%");
 
-            mapLoad.AddProgress(0.20f, "Step 5");
+            await mapLoad.StepProgressAsync(0.20f, "Step 5");
             TestAssert.Near(100f, (float)mapLoad.ProgressBar.Value, 0.1f, "Step 5 reaches 100%");
         }
         finally

@@ -178,7 +178,7 @@ public partial class OgzMapViewer : Node3D
                 var standaloneLoad = loadScene.Instantiate<MapLoad>();
                 AddChild(standaloneLoad);
                 standaloneLoad.StartLoading(OgzPath, GameMode);
-                ProgressCallback = standaloneLoad.AddProgressAsync;
+                ProgressCallback = standaloneLoad.StepProgressAsync;
                 MatchReady += async () =>
                 {
                     await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);

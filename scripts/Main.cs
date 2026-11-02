@@ -191,7 +191,7 @@ public partial class Main : Node
                 _menu.Close();
                 _mapLoad.StartLoading(map, mode);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                viewer.ProgressCallback = _mapLoad.AddProgressAsync;
+                viewer.ProgressCallback = _mapLoad.StepProgressAsync;
                 viewer.MatchReady += async () =>
                 {
                     await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);

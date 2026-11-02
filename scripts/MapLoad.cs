@@ -75,13 +75,28 @@ public partial class MapLoad : CanvasLayer
             MapshotRect.Visible = mapshot != null;
         }
 
-        SetProgress(0.0f, "Initializing Map...");
+        ApplyProgress(0.0f, "Initializing Map...");
     }
 
     /// <summary>
-    /// Sets loading progress and status label text.
+    /// Advances progress by a relative increment, updates status, and yields one frame
+    /// to Godot's process loop so the UI renders. Matches Func&lt;float, string, Task&gt;.
     /// </summary>
-    public void SetProgress(float progress, string status)
+    public async Task StepProgressAsync(float increment, string status)
+    {
+        ApplyProgress(CurrentProgress + increment, status);
+        if (IsInsideTree())
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+    }
+
+    /// <summary>
+    /// Advances progress by +20% and yields one frame. Matches Func&lt;string, Task&gt;.
+    /// </summary>
+    public Task StepProgressAsync(string status) => StepProgressAsync(0.20f, status);
+
+    private void ApplyProgress(float progress, string status)
     {
         CurrentProgress = Mathf.Clamp(progress, 0.0f, 1.0f);
         CurrentStatus = status;
@@ -94,49 +109,6 @@ public partial class MapLoad : CanvasLayer
         {
             int percent = Mathf.RoundToInt(CurrentProgress * 100.0f);
             StatusLabel.Text = $"{status} ({percent}%)";
-        }
-    }
-
-    /// <summary>
-    /// Adds a relative progress increment (clamped to 1.0f) and updates the status message.
-    /// </summary>
-    public void AddProgress(float increment, string status)
-    {
-        SetProgress(CurrentProgress + increment, status);
-    }
-
-    /// <summary>
-    /// Adds a relative progress increment and yields one frame to Godot's main process loop so the UI renders.
-    /// Matches Func&lt;float, string, Task&gt;.
-    /// </summary>
-    public async Task AddProgressAsync(float increment, string status)
-    {
-        AddProgress(increment, status);
-        if (IsInsideTree())
-        {
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-    }
-
-    /// <summary>
-    /// Advances progress by 20% (0.20f) for 5-step loading sequences, and updates status.
-    /// </summary>
-    public void StepProgress(string status) => AddProgress(0.20f, status);
-
-    /// <summary>
-    /// Advances progress by 20% (0.20f) and yields one frame. Matches Func&lt;string, Task&gt;.
-    /// </summary>
-    public Task StepProgressAsync(string status) => AddProgressAsync(0.20f, status);
-
-    /// <summary>
-    /// Updates progress to an absolute percentage and yields one frame to Godot's main process loop so the UI renders.
-    /// </summary>
-    public async Task UpdateProgressAsync(float progress, string status)
-    {
-        SetProgress(progress, status);
-        if (IsInsideTree())
-        {
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
     }
 
