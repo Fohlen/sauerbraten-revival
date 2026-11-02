@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.World.Models;
 
@@ -39,13 +40,16 @@ public partial class PlayerModel : ModelInstance
     /// <summary>Engine model name of the attached view weapon (e.g. "vwep/rifle").</summary>
     public string? ViewWeaponPath { get; private set; }
 
+    /// <summary>Number of view weapon models currently cached in the bank.</summary>
+    public int CachedViewWeaponCount => _viewWeapons.Count;
+
     private Vector3 _viewWeaponRotationDegrees = Vector3.Zero;
 
     /// <summary>
     /// Extra rotation applied to the attached view weapon. The weapon is rigid and
     /// follows the body's <c>Weapon</c> bone, so this is only for aligning the
     /// imported glb's up-axis with the body; tune against the reference render.
-    /// Exported so it can be nudged from the remote inspector (it re-attaches live).
+    /// Exported so it can be nudged from the remote inspector (it updates live).
     /// </summary>
     [Export]
     public Vector3 ViewWeaponRotationDegrees
@@ -54,7 +58,11 @@ public partial class PlayerModel : ModelInstance
         set
         {
             _viewWeaponRotationDegrees = value;
-            if (ViewWeapon != null && IsInstanceValid(ViewWeapon)) AttachViewWeapon();
+            foreach (var weapon in _viewWeapons.Values)
+            {
+                if (GodotObject.IsInstanceValid(weapon))
+                    weapon.ModelRotationDegrees = value;
+            }
         }
     }
 
@@ -63,6 +71,7 @@ public partial class PlayerModel : ModelInstance
 
     private AnimationPlayer? _player;
     private readonly Dictionary<string, float> _animSpeeds = new();
+    private readonly Dictionary<string, PlayerViewWeapon> _viewWeapons = new();
 
     // View-weapon attachment state, retained so a later Reload can re-attach.
     private IModelCatalog? _models;
@@ -144,6 +153,9 @@ public partial class PlayerModel : ModelInstance
 
     public override void Reload()
     {
+        _viewWeapons.Clear();
+        ViewWeapon = null;
+        ViewWeaponPath = null;
         base.Reload();
         if (ModelLoaded) BindAnimations();
     }
@@ -163,65 +175,118 @@ public partial class PlayerModel : ModelInstance
         if (_player != null && _player.HasAnimation("idle")) Play("idle");
 
         // The view weapon is independent of the body's AnimationPlayer.
-        AttachViewWeapon();
+        if (!string.IsNullOrEmpty(_viewWeaponName))
+        {
+            PrebuildViewWeapons();
+            AttachViewWeapon();
+        }
+    }
+
+    private Node3D? GetOrCreateWeaponAnchor()
+    {
+        if (Skeleton != null && Skeleton.FindBone(_weaponBone) >= 0)
+        {
+            if (Skeleton.GetNodeOrNull<BoneAttachment3D>("WeaponBone") is { } existing)
+                return existing;
+            var attachment = new BoneAttachment3D { Name = "WeaponBone", BoneName = _weaponBone };
+            Skeleton.AddChild(attachment);
+            return attachment;
+        }
+        return FindChild(_weaponBone, recursive: true, owned: false) as Node3D;
     }
 
     /// <summary>
     /// Parent a rigid view weapon under the body skeleton's <c>Weapon</c> bone
-    /// (render.cpp <c>modelattach("tag_weapon", vweps[gun])</c>). The weapon mesh is
-    /// in the same imported model space as the body, so it only inherits the body
-    /// holder's transform; its own <c>mdlscale</c>/<c>mdltrans</c> are divided by the
-    /// body scale because the body scale is applied at the shared holder (the engine
-    /// scales each model independently). Safe to call repeatedly — the previous weapon
-    /// is discarded first.
+    /// (render.cpp <c>modelattach("tag_weapon", vweps[gun])</c>). Pre-builds or retains
+    /// view weapon nodes in an internal bank, toggling visibility rather than destroying
+    /// and rebuilding them on weapon switches (ADR 0011).
     /// </summary>
     private void AttachViewWeapon()
     {
-        if (ViewWeapon != null && IsInstanceValid(ViewWeapon)) ViewWeapon.Free();
-        ViewWeapon = null;
-        ViewWeaponPath = null;
+        if (string.IsNullOrEmpty(_viewWeaponName))
+        {
+            foreach (var w in _viewWeapons.Values)
+                if (GodotObject.IsInstanceValid(w)) w.Visible = false;
+            ViewWeapon = null;
+            ViewWeaponPath = null;
+            return;
+        }
 
-        if (string.IsNullOrEmpty(_viewWeaponName)) return;
         var info = _models?.Get(_viewWeaponName!);
         if (info?.GlbPath == null && info?.GlbOsPath == null) return;
 
-        // The attachment point is the body's tag_weapon bone. Godot's glTF importer
-        // keeps skin joints on the Skeleton3D (resolve with a BoneAttachment3D) but
-        // imports a tag bone that has no skin weights — like `Weapon` — as a plain
-        // Node3D under the parent joint, so fall back to a node of that name.
-        Node3D? anchor = null;
-        if (Skeleton != null && Skeleton.FindBone(_weaponBone) >= 0)
-        {
-            var attachment = new BoneAttachment3D { Name = "WeaponBone" };
-            Skeleton.AddChild(attachment);
-            attachment.BoneName = _weaponBone;
-            anchor = attachment;
-        }
-        else if (FindChild(_weaponBone, recursive: true, owned: false) is Node3D node)
-        {
-            anchor = node;
-        }
+        var anchor = GetOrCreateWeaponAnchor();
         if (anchor == null) return;
 
-        float bodyScale = Mathf.IsZeroApprox(ModelScale) ? 1.0f : ModelScale;
-        var weapon = new PlayerViewWeapon
+        if (!_viewWeapons.TryGetValue(_viewWeaponName, out var weapon) || !GodotObject.IsInstanceValid(weapon))
         {
-            Name = "ViewWeapon",
-            ModelPath = _viewWeaponName,
-            GlbPath = info.GlbPath,
-            GlbOsPath = info.GlbOsPath,
-            ModelScale = info.Scale / bodyScale,
-            // ModelInstance scales the translation by ModelScale (the engine applies
-            // mdltrans after scale); the parent body already scales by bodyScale, and the
-            // weapon's ModelScale compensates for that, so use the catalog translation as-is.
-            ModelTranslation = info.Translation,
-            ModelRotationDegrees = ViewWeaponRotationDegrees,
-            KeepSkeleton = true,
-            SkinMaterial = ModelSkin.Build(info, _textures, _skinCache ?? ModelCache.SkinCache),
-        };
-        anchor.AddChild(weapon);
+            float bodyScale = Mathf.IsZeroApprox(ModelScale) ? 1.0f : ModelScale;
+            weapon = new PlayerViewWeapon
+            {
+                Name = $"ViewWeapon_{_viewWeaponName.Replace('/', '_')}",
+                ModelPath = _viewWeaponName,
+                GlbPath = info.GlbPath,
+                GlbOsPath = info.GlbOsPath,
+                ModelScale = info.Scale / bodyScale,
+                ModelTranslation = info.Translation,
+                ModelRotationDegrees = ViewWeaponRotationDegrees,
+                KeepSkeleton = true,
+                SkinMaterial = ModelSkin.Build(info, _textures, _skinCache ?? ModelCache.SkinCache),
+            };
+            anchor.AddChild(weapon);
+            _viewWeapons[_viewWeaponName] = weapon;
+        }
+
+        foreach (var (name, w) in _viewWeapons)
+        {
+            if (GodotObject.IsInstanceValid(w))
+                w.Visible = (name == _viewWeaponName);
+        }
+
         ViewWeapon = weapon;
         ViewWeaponPath = _viewWeaponName;
+    }
+
+    /// <summary>
+    /// Pre-builds all 7 standard third-person view weapons (render.cpp:158 vweps[])
+    /// under the weapon anchor, keeping them ready for zero-cost switching (ADR 0011).
+    /// </summary>
+    public void PrebuildViewWeapons()
+    {
+        if (_models == null) return;
+        var anchor = GetOrCreateWeaponAnchor();
+        if (anchor == null) return;
+
+        for (int g = Guns.First; g <= Guns.Last; g++)
+        {
+            string? vwep = WeaponCatalog.Vwep((Gun)g);
+            if (string.IsNullOrEmpty(vwep) || _viewWeapons.ContainsKey(vwep)) continue;
+            var info = _models.Get(vwep);
+            if (info?.GlbPath == null && info?.GlbOsPath == null) continue;
+
+            float bodyScale = Mathf.IsZeroApprox(ModelScale) ? 1.0f : ModelScale;
+            var weapon = new PlayerViewWeapon
+            {
+                Name = $"ViewWeapon_{vwep.Replace('/', '_')}",
+                ModelPath = vwep,
+                GlbPath = info.GlbPath,
+                GlbOsPath = info.GlbOsPath,
+                ModelScale = info.Scale / bodyScale,
+                ModelTranslation = info.Translation,
+                ModelRotationDegrees = ViewWeaponRotationDegrees,
+                KeepSkeleton = true,
+                SkinMaterial = ModelSkin.Build(info, _textures, _skinCache ?? ModelCache.SkinCache),
+                Visible = (vwep == _viewWeaponName),
+            };
+            anchor.AddChild(weapon);
+            _viewWeapons[vwep] = weapon;
+        }
+
+        if (!string.IsNullOrEmpty(_viewWeaponName) && _viewWeapons.TryGetValue(_viewWeaponName, out var active))
+        {
+            ViewWeapon = active;
+            ViewWeaponPath = _viewWeaponName;
+        }
     }
 
     private static AnimationPlayer? FindAnimationPlayer(Node? n)

@@ -77,12 +77,19 @@ public class PlayerViewWeaponTest : GoTestBase
         body.SetViewWeapon("vwep/shotg");
         TestAssert.Equal("vwep/shotg", body.ViewWeaponPath, "weapon path swapped");
         TestAssert.True(body.ViewWeapon != null, "new weapon attached");
-        TestAssert.True(body.ViewWeapon != first, "weapon node replaced");
-        TestAssert.True(!GodotObject.IsInstanceValid(first), "old weapon node freed");
+        TestAssert.True(body.ViewWeapon != first, "weapon node switched");
+        TestAssert.True(GodotObject.IsInstanceValid(first), "old weapon node retained in bank");
+        TestAssert.False(first!.Visible, "old weapon node hidden");
+        TestAssert.True(body.ViewWeapon!.Visible, "new weapon node visible");
 
         body.SetViewWeapon("");
         TestAssert.True(body.ViewWeapon == null, "weapon cleared");
         TestAssert.True(body.ViewWeaponPath == null, "weapon path cleared");
+        TestAssert.False(first.Visible, "weapon remains hidden when cleared");
+
+        body.SetViewWeapon("vwep/rifle");
+        TestAssert.True(object.ReferenceEquals(body.ViewWeapon, first), "exact same weapon node reused without reinstantiating");
+        TestAssert.True(first.Visible, "weapon visible again");
         holder.QueueFree();
     }
 
