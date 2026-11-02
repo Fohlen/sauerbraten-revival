@@ -92,7 +92,7 @@ flowchart TD
   - Pre-warm the rocket mesh and skin material during map load rather than waiting for the first rocket fired.
 
 ### 5. Map Loading UX & Stepped Progress Bar
-- Implement a `LoadingOverlay` (`CanvasLayer`) active during map loading:
+- Implement a dedicated loading scene [`scenes/map_load.tscn`](../../scenes/map_load.tscn) backed by [`scripts/MapLoad.cs`](../../scripts/MapLoad.cs):
   - **Backdrop**: Map screenshot (`assets/packages/base/<map>.jpg` or metadata catalogue).
   - **Information**: Map name, game mode, map title, and author.
   - **Stepped Progress Bar**:
@@ -102,6 +102,7 @@ flowchart TD
     4. Preloading Weapons, Models & Projectiles ($90\%$)
     5. Spawning Player & Match Start ($100\%$)
 - Between steps, the loader yields a frame (`await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);`) ensuring Godot renders smooth UI updates and never blocks the window manager.
+- Upon completion, `ResumeGame()` dismisses `map_load.tscn`, smoothly opening directly into interactive gameplay.
 
 ---
 

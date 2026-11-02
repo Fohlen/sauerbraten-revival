@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Godot;
 using SauerbratenRevival.World.Audio;
 using SauerbratenRevival.World.Content;
@@ -243,9 +244,15 @@ public partial class MapWorld : Node3D, IGameWorld
 
     private static readonly Color MeshTint = new(0.8f, 0.8f, 0.85f);
 
+    /// <summary>Optional progress callback invoked during stepped map building (ADR 0011 §5).</summary>
+    public Func<float, string, Task>? ProgressCallback { get; set; }
+
     public override void _Ready()
     {
-        if (!Built) Build();
+        if (!Built && ProgressCallback == null)
+        {
+            Build();
+        }
     }
 
     private static readonly Dictionary<string, OgzMap> ParsedMapCache = new();
@@ -273,7 +280,12 @@ public partial class MapWorld : Node3D, IGameWorld
     /// Build the world as children of this node. Idempotent: subsequent calls are
     /// no-ops once built. Missing maps log an error and leave <see cref="Built"/> false.
     /// </summary>
-    public void Build()
+    public void Build() => BuildAsync(null).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Asynchronously build the world with stepped progress notifications (ADR 0011 §5).
+    /// </summary>
+    public async Task BuildAsync(Func<float, string, Task>? onProgress = null)
     {
         if (Built) return;
 
@@ -289,6 +301,9 @@ public partial class MapWorld : Node3D, IGameWorld
         // The octree/collision layer is Z-up; rotate so the Godot view is Y-up.
         RotationDegrees = new Vector3(-90, 0, 0);
         Scale = new Vector3(-1, 1, 1);
+
+        // Step 1: Parsing Octree & Entities (10%)
+        if (onProgress != null) await onProgress(0.10f, "Parsing Octree & Entities");
 
         var map = Map ?? LoadMap(path);
         var octa = Octa ?? map.ToOcta();
@@ -308,6 +323,9 @@ public partial class MapWorld : Node3D, IGameWorld
         Lighting.RadianceVolume? radiance = null;
         if (ComputeVisuals && catalogue != null)
         {
+            // Step 3: Radiance Hints & Lighting (70%)
+            if (onProgress != null) await onProgress(0.70f, "Radiance Hints & Lighting");
+
             Radiance?.Dispose();
             Radiance = null;
             var volume = Lighting.RadianceVolume.CreateForOcta(octa, RadianceSettings);
@@ -317,12 +335,18 @@ public partial class MapWorld : Node3D, IGameWorld
             Radiance = volume;
         }
 
+        // Step 2: Meshing Geometry & Materials (40%)
+        if (onProgress != null) await onProgress(0.40f, "Meshing Geometry & Materials");
+
         MaterialSet? materials = catalogue != null ? MaterialBuilder.Build(catalogue, textures, radiance) : null;
         if (materials == null) GD.PushWarning($"[world] no metadata catalogue for '{mapName}'; showing untextured geometry.");
 
         // Converted mapmodels (assimp), imported by Godot as Resources.
         var modelCatalog = ModelCatalog.LoadFromProject();
         Models = modelCatalog;
+
+        // Step 4: Preloading Weapons, Models & Projectiles (90%)
+        if (onProgress != null) await onProgress(0.90f, "Preloading Weapons, Models & Projectiles");
         ModelCache.PreloadProjectiles(textures);
 
         AddChild(LightBuilder.Build(map));

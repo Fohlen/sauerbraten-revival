@@ -28,6 +28,7 @@ public partial class Main : Node
 {
     private Node _gameHost = null!;
     private MainMenu _menu = null!;
+    private MapLoad? _mapLoad;
     private Node? _game;
 
 #if DEBUG
@@ -52,6 +53,7 @@ public partial class Main : Node
 
         _gameHost = GetNode<Node>("GameHost");
         _menu = GetNode<MainMenu>("MainMenu");
+        _mapLoad = GetNodeOrNull<MapLoad>("MapLoad");
         _menu.StartMatch += StartMatch;
         _menu.ResumeRequested += ResumeGame;
         _menu.QuitRequested += () =>
@@ -153,7 +155,7 @@ public partial class Main : Node
     /// selector; the shell owns the match lifetime, so leaving a match is just
     /// freeing this node.
     /// </summary>
-    private void StartMatch(string map, string mode, int team, int playerModel, string playerName)
+    private async void StartMatch(string map, string mode, int team, int playerModel, string playerName)
     {
         EndMatch();
 
@@ -165,7 +167,8 @@ public partial class Main : Node
         }
 
         Node game = packed.Instantiate();
-        if (game is OgzMapViewer viewer)
+        OgzMapViewer? viewer = game as OgzMapViewer;
+        if (viewer != null)
         {
             viewer.OgzPath = map;
             viewer.GameMode = mode;
@@ -182,18 +185,39 @@ public partial class Main : Node
                 viewer.AutoRecordDemo = true;
                 viewer.AutoRecordDemoPath = cli.RecordPath ?? "";
             }
+
+            if (!viewer.EditMode && DisplayServer.GetName() != "headless" && _mapLoad != null)
+            {
+                _menu.Close();
+                _mapLoad.StartLoading(map, mode);
+                await _mapLoad.UpdateProgressAsync(0.0f, "Initializing Map");
+                viewer.ProgressCallback = _mapLoad.UpdateProgressAsync;
+                viewer.MatchReady += async () =>
+                {
+                    await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
+                    _mapLoad.Dismiss();
+                    GD.Print($"[main] match started: map={map} mode={mode} team={team} model={playerModel} name='{playerName}' edit={viewer.EditMode}");
+                    ResumeGame();
+                };
+            }
         }
         // Set before the viewer's _Ready runs (on AddChild), so spawn/visuals use it.
         if (game.GetNodeOrNull<MapPlayer>("Player") is { } player) player.Team = team;
 
         _gameHost.AddChild(game);
         _game = game;
-        GD.Print($"[main] match started: map={map} mode={mode} team={team} model={playerModel} name='{playerName}' edit={(game is OgzMapViewer { EditMode: true })}");
-        ResumeGame();
+
+        if (viewer == null || viewer.ProgressCallback == null)
+        {
+            _mapLoad?.Dismiss();
+            GD.Print($"[main] match started: map={map} mode={mode} team={team} model={playerModel} name='{playerName}' edit={(viewer?.EditMode ?? false)}");
+            ResumeGame();
+        }
     }
 
     private void EndMatch()
     {
+        _mapLoad?.Dismiss();
         if (_game != null && IsInstanceValid(_game)) _game.QueueFree();
         _game = null;
     }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Godot;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Entities;
@@ -67,6 +68,13 @@ public interface IMapSource
 
     /// <summary>Materialize the octree, geometry, and entities.</summary>
     void Build();
+
+    /// <summary>Materialize the octree, geometry, and entities asynchronously with stepped progress reports.</summary>
+    Task BuildAsync(System.Func<float, string, Task>? onProgress = null)
+    {
+        Build();
+        return Task.CompletedTask;
+    }
 
     /// <summary>Finds a player spawn point in Sauerbraten coordinates, falling back to map center.</summary>
     (Vector3 Position, float Yaw) FindSpawn(int index = 0) => (Bounds.GetCenter(), 0f);

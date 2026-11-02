@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
@@ -91,6 +92,17 @@ public partial class OgzMapViewer : Node3D
     public IMapSource? MapSource => World ?? _customSource;
     private IMapSource? _customSource;
 
+    /// <summary>
+    /// Optional progress callback invoked during stepped map loading (ADR 0011 §5).
+    /// When null, map building executes synchronously.
+    /// </summary>
+    public Func<float, string, Task>? ProgressCallback { get; set; }
+
+    /// <summary>
+    /// Event fired when asynchronous map initialization and player spawning finishes.
+    /// </summary>
+    public event Action? MatchReady;
+
     private bool _built;
 #if TOOLS
     private Camera3D? _frameCamera;
@@ -158,6 +170,30 @@ public partial class OgzMapViewer : Node3D
         // ModeEntityBuilder.AppliesToMode).
         Game.GameModeInfo? modeInfo = SpawnPlayer && !EditMode ? Game.GameModeCatalog.Get(GameMode) : null;
 
+        if (ProgressCallback == null && !Engine.IsEditorHint() && DisplayServer.GetName() != "headless" && !EditMode)
+        {
+            var loadScene = GD.Load<PackedScene>("res://scenes/map_load.tscn");
+            if (loadScene != null)
+            {
+                var standaloneLoad = loadScene.Instantiate<MapLoad>();
+                AddChild(standaloneLoad);
+                standaloneLoad.StartLoading(OgzPath, GameMode);
+                ProgressCallback = standaloneLoad.UpdateProgressAsync;
+                MatchReady += async () =>
+                {
+                    await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
+                    standaloneLoad.Dismiss();
+                    standaloneLoad.QueueFree();
+                };
+            }
+        }
+
+        if (ProgressCallback != null)
+        {
+            _ = InitAsync(userSettings, modeInfo);
+            return;
+        }
+
         foreach (var child in GetChildren())
         {
             if (child is IMapSource ms)
@@ -197,6 +233,60 @@ public partial class OgzMapViewer : Node3D
         // mutate the edited scene from the Godot editor viewport.
         if (!Engine.IsEditorHint() && SpawnPlayer) AttachPlayer(userSettings, modeInfo, mapSource);
         if (FrameCamera && !SpawnPlayer) FrameSceneCamera(mapSource.Centre, mapSource.Radius);
+    }
+
+    private async Task InitAsync(UserSettings userSettings, Game.GameModeInfo? modeInfo)
+    {
+        foreach (var child in GetChildren())
+        {
+            if (child is IMapSource ms)
+            {
+                _customSource = ms;
+                break;
+            }
+        }
+
+        if (_customSource != null)
+        {
+            await _customSource.BuildAsync(ProgressCallback);
+            World = _customSource as MapWorld;
+        }
+        else
+        {
+            World = new MapWorld
+            {
+                Name = "MapWorld",
+                OgzPath = OgzPath,
+                ChunkSize = ChunkSize,
+                ShowEntityMarkers = ShowEntityMarkers || EditMode,
+                Mode = modeInfo,
+                RadianceSettings = new Lighting.LightingSettings { Mode = userSettings.LightingMode },
+                ProgressCallback = ProgressCallback,
+            };
+            AddChild(World);
+            await World.BuildAsync(ProgressCallback);
+        }
+
+        var mapSource = MapSource;
+        if (mapSource == null || !mapSource.Built)
+        {
+            MatchReady?.Invoke();
+            return;
+        }
+
+        if (World?.Map != null && World.Textures != null)
+            ApplySky(World.Map, World.Textures);
+
+        // Step 5: Spawning Player & Match Start (100%)
+        if (ProgressCallback != null)
+        {
+            await ProgressCallback(1.00f, "Spawning Player & Match Start");
+        }
+
+        if (!Engine.IsEditorHint() && SpawnPlayer) AttachPlayer(userSettings, modeInfo, mapSource);
+        if (FrameCamera && !SpawnPlayer) FrameSceneCamera(mapSource.Centre, mapSource.Radius);
+
+        MatchReady?.Invoke();
     }
 
     /// <summary>
