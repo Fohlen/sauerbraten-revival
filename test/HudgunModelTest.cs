@@ -66,4 +66,56 @@ public class HudgunModelTest : GoTestBase
         TestScene.RemoveChild(hudgun);
         hudgun.Free();
     }
+
+    [Test]
+    public void PrebuildsWeaponsAndSwapsZeroCost()
+    {
+        string dir = ProjectSettings.GlobalizePath("res://assets/models");
+        var catalog = ModelCatalog.Load(Path.Combine(dir, "models.json"), dir, "res://assets/models");
+        if (catalog?.Get("mrfixit/hudguns/rifle") == null || catalog?.Get("mrfixit/hudguns/shotg") == null)
+        {
+            GD.Print("[hudgun] converted weapon models missing; skipping");
+            return;
+        }
+
+        var hudgun = new HudgunModel();
+        hudgun.Configure(catalog, null, 0, "rifle");
+        TestScene.AddChild(hudgun);
+
+        TestAssert.True(hudgun.CachedWeaponCount > 1, "multiple weapons prebuilt in bank");
+        TestAssert.Equal("rifle", hudgun.CurrentGun, "starts with rifle");
+
+        var riflePart0 = hudgun.Parts[0];
+        var riflePart1 = hudgun.Parts[1];
+        var rifleContainer = riflePart0.GetParent() as Node3D;
+        TestAssert.True(rifleContainer != null, "rifle container exists");
+        TestAssert.True(rifleContainer!.Visible, "rifle container is visible");
+        TestAssert.Equal((int)Node.ProcessModeEnum.Inherit, (int)rifleContainer.ProcessMode, "rifle container is processing");
+
+        // Swap to shotg
+        hudgun.SetGun("shotg");
+        TestAssert.Equal("shotg", hudgun.CurrentGun, "switched to shotg");
+        TestAssert.True(hudgun.ModelLoaded, "shotgun model loaded");
+
+        var shotgPart0 = hudgun.Parts[0];
+        var shotgPart1 = hudgun.Parts[1];
+        TestAssert.True(!object.ReferenceEquals(shotgPart0, riflePart0), "shotg has distinct parts from rifle");
+
+        // Verify rifle parts were NOT freed, but hidden & disabled
+        TestAssert.True(GodotObject.IsInstanceValid(riflePart0), "rifle Part 0 retained in memory");
+        TestAssert.True(GodotObject.IsInstanceValid(riflePart1), "rifle Part 1 retained in memory");
+        TestAssert.False(rifleContainer.Visible, "rifle container is hidden");
+        TestAssert.Equal((int)Node.ProcessModeEnum.Disabled, (int)rifleContainer.ProcessMode, "rifle container is disabled");
+
+        // Swap back to rifle
+        hudgun.SetGun("rifle");
+        TestAssert.Equal("rifle", hudgun.CurrentGun, "switched back to rifle");
+        TestAssert.True(object.ReferenceEquals(hudgun.Parts[0], riflePart0), "exact same rifle instance reused without reallocating");
+        TestAssert.True(object.ReferenceEquals(hudgun.Parts[1], riflePart1), "exact same rifle weapon part reused without reallocating");
+        TestAssert.True(rifleContainer.Visible, "rifle container restored to visible");
+        TestAssert.Equal((int)Node.ProcessModeEnum.Inherit, (int)rifleContainer.ProcessMode, "rifle container restored to processing");
+
+        TestScene.RemoveChild(hudgun);
+        hudgun.Free();
+    }
 }

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.World.Models;
 
@@ -8,6 +9,10 @@ namespace SauerbratenRevival.World.Models;
 /// The local player's first-person hudgun (render.cpp <c>drawhudmodel</c>).
 /// Cube2 stores the view model in its Z-up frame; the camera-local basis maps
 /// Cube2's right/up/forward axes onto Godot's right/up/-Z camera axes.
+///
+/// Pre-builds and retains the weapon rigs for the active player model in an internal
+/// bank (ADR 0011). Switching weapons toggles subtree visibility and process mode,
+/// eliminating runtime node instantiations, heap allocations, and GPU skinning buffer rebuilds.
 /// </summary>
 [GlobalClass]
 public partial class HudgunModel : Node3D
@@ -37,13 +42,17 @@ public partial class HudgunModel : Node3D
     }
 
     public string? ModelPath { get; private set; }
-    public bool ModelLoaded { get; private set; }
-    public IReadOnlyList<ModelInstance> Parts => _parts;
+    public bool ModelLoaded => _activeRig != null && _activeRig.Loaded;
+    public IReadOnlyList<ModelInstance> Parts => _activeRig != null ? _activeRig.Parts : _emptyParts;
 
     /// <summary>Active hudgun submodel name (e.g. "rifle", "shotg").</summary>
     public string CurrentGun => _gunName;
 
+    /// <summary>Number of weapon rigs currently pre-built and retained in the bank.</summary>
+    public int CachedWeaponCount => _weaponBank.Count;
+
     private static readonly Basis BaseHudBasis = new(Vector3.Up, Mathf.Pi / 2f);
+    private static readonly IReadOnlyList<ModelInstance> _emptyParts = System.Array.Empty<ModelInstance>();
 
     /// <summary>
     /// Maps Cube 2 model translation axes to camera-local space:
@@ -54,7 +63,26 @@ public partial class HudgunModel : Node3D
     public static Vector3 CubeVectorToCamera(Vector3 vector) =>
         new(vector.Y, vector.Z, -vector.X);
 
-    private readonly List<ModelInstance> _parts = new();
+    private sealed class WeaponRig
+    {
+        public string GunName { get; }
+        public string ModelPath { get; }
+        public ModelInfo Info { get; }
+        public Node3D Container { get; }
+        public List<ModelInstance> Parts { get; } = new();
+        public bool Loaded { get; set; }
+
+        public WeaponRig(string gunName, string modelPath, ModelInfo info, Node3D container)
+        {
+            GunName = gunName;
+            ModelPath = modelPath;
+            Info = info;
+            Container = container;
+        }
+    }
+
+    private readonly Dictionary<string, WeaponRig> _weaponBank = new();
+    private WeaponRig? _activeRig;
     private IModelCatalog? _models;
     private ModelInfo? _info;
     private ITextureSource? _textures;
@@ -72,6 +100,7 @@ public partial class HudgunModel : Node3D
         string gun,
         IDictionary<string, Material>? skinCache = null)
     {
+        ClearBank();
         _models = models;
         _textures = textures;
         _modelIndex = modelIndex;
@@ -79,64 +108,111 @@ public partial class HudgunModel : Node3D
         ModelPath = $"{Playermodels.Get(modelIndex).Hudguns}/{gun}";
         _info = models?.Get(ModelPath);
         _skinCache = skinCache ?? ModelCache.SkinCache;
-        if (IsInsideTree()) BuildModel();
+        if (IsInsideTree()) BuildBank();
     }
 
     /// <summary>Switch to a different gun model at runtime (e.g. "shotg", "rifle").</summary>
     public void SetGun(string gun)
     {
-        if (gun == _gunName) return;
+        if (gun == _gunName && _activeRig != null) return;
         _gunName = gun;
-        ModelPath = $"{Playermodels.Get(_modelIndex).Hudguns}/{gun}";
-        _info = _models?.Get(ModelPath);
         _currentAnim = "";
         _lastActionSeen = -1;
-        if (IsInsideTree()) BuildModel();
+        if (IsInsideTree()) ActivateGun(gun);
     }
 
-    public override void _Ready() => BuildModel();
-
-    private void BuildModel()
+    public override void _Ready()
     {
-        foreach (var part in _parts)
-            if (GodotObject.IsInstanceValid(part)) part.Free();
-        _parts.Clear();
-        ModelLoaded = false;
+        if (_weaponBank.Count == 0) BuildBank();
+        else if (_activeRig == null && !string.IsNullOrEmpty(_gunName)) ActivateGun(_gunName);
+    }
 
-        if (_info == null || _info.Parts.Count == 0)
+    private void ClearBank()
+    {
+        foreach (var rig in _weaponBank.Values)
         {
-            GD.PushWarning($"[hudgun] linked model '{ModelPath}' is missing from the model catalogue");
-            return;
+            if (GodotObject.IsInstanceValid(rig.Container))
+                rig.Container.Free();
+        }
+        _weaponBank.Clear();
+        _activeRig = null;
+        _info = null;
+    }
+
+    private void BuildBank()
+    {
+        if (_models == null) return;
+        var pm = Playermodels.Get(_modelIndex);
+        string hudgunsDir = pm.Hudguns;
+
+        // Pre-build all 7 player weapons if available in the model catalog
+        for (int g = Guns.First; g <= Guns.Last; g++)
+        {
+            var weapon = WeaponCatalog.Get((Gun)g);
+            if (string.IsNullOrEmpty(weapon.File)) continue;
+            string modelPath = $"{hudgunsDir}/{weapon.File}";
+            if (_models.Get(modelPath) != null)
+            {
+                GetOrCreateRig(weapon.File);
+            }
         }
 
-        ApplyTransform();
-
-        for (int i = 0; i < _info.Parts.Count; i++)
+        // Also ensure requested initial _gunName is built even if not in standard Guns range
+        if (!string.IsNullOrEmpty(_gunName))
         {
-            var info = _info.Parts[i];
-            if (info.GlbPath == null && info.GlbOsPath == null)
+            GetOrCreateRig(_gunName);
+            ActivateGun(_gunName);
+        }
+    }
+
+    private WeaponRig? GetOrCreateRig(string gunName)
+    {
+        if (_weaponBank.TryGetValue(gunName, out var existing))
+            return existing;
+
+        if (_models == null) return null;
+        string modelPath = $"{Playermodels.Get(_modelIndex).Hudguns}/{gunName}";
+        var info = _models.Get(modelPath);
+        if (info == null || info.Parts.Count == 0) return null;
+
+        var container = new Node3D
+        {
+            Name = $"Rig_{gunName}",
+            Visible = false,
+            ProcessMode = ProcessModeEnum.Disabled,
+        };
+        AddChild(container);
+
+        var rig = new WeaponRig(gunName, modelPath, info, container);
+        for (int i = 0; i < info.Parts.Count; i++)
+        {
+            var partInfo = info.Parts[i];
+            if (partInfo.GlbPath == null && partInfo.GlbOsPath == null)
             {
-                GD.PushWarning($"[hudgun] model '{ModelPath}' part {i} has no converted glTF");
-                return;
+                GD.PushWarning($"[hudgun] model '{modelPath}' part {i} has no converted glTF");
+                container.Free();
+                return null;
             }
 
             var part = new ModelInstance
             {
                 Name = $"Part{i}",
-                GlbPath = info.GlbPath,
-                GlbOsPath = info.GlbOsPath,
+                GlbPath = partInfo.GlbPath,
+                GlbOsPath = partInfo.GlbOsPath,
                 KeepSkeleton = true,
-                SkinMaterial = ModelSkin.Build(info, _textures, _skinCache!),
+                SkinMaterial = ModelSkin.Build(partInfo, _textures, _skinCache!),
             };
-            Node3D? parent = this;
-            if (info.LinkParent >= 0)
+
+            Node3D? parent = container;
+            if (partInfo.LinkParent >= 0)
             {
-                if (info.LinkParent >= _parts.Count || string.IsNullOrEmpty(info.LinkTag) ||
-                    !_info.Parts[info.LinkParent].Tags.TryGetValue(info.LinkTag, out string? bone) ||
-                    FindAnchor(_parts[info.LinkParent], bone) is not { } anchor)
+                if (partInfo.LinkParent >= rig.Parts.Count || string.IsNullOrEmpty(partInfo.LinkTag) ||
+                    !info.Parts[partInfo.LinkParent].Tags.TryGetValue(partInfo.LinkTag, out string? bone) ||
+                    FindAnchor(rig.Parts[partInfo.LinkParent], bone) is not { } anchor)
                 {
-                    GD.PushWarning($"[hudgun] cannot resolve link '{info.LinkTag}' for '{ModelPath}' part {i}");
-                    return;
+                    GD.PushWarning($"[hudgun] cannot resolve link '{partInfo.LinkTag}' for '{modelPath}' part {i}");
+                    container.Free();
+                    return null;
                 }
                 parent = anchor;
                 // Part 1 glTF has its own <MD5_Root> (-90 deg X rotation). Because it is
@@ -146,11 +222,55 @@ public partial class HudgunModel : Node3D
             }
 
             parent.AddChild(part);
-            _parts.Add(part);
-            StartIdle(part, info);
+            if (!part.ModelLoaded) part.Reload();
+            rig.Parts.Add(part);
+            StartIdle(part, partInfo);
         }
-        ModelLoaded = _parts.Count == _info.Parts.Count &&
-                      _parts.TrueForAll(part => part.ModelLoaded);
+
+        rig.Loaded = rig.Parts.Count == info.Parts.Count &&
+                     rig.Parts.TrueForAll(p => p.ModelLoaded);
+
+        _weaponBank[gunName] = rig;
+        return rig;
+    }
+
+    private void ActivateGun(string gunName)
+    {
+        var rig = GetOrCreateRig(gunName);
+        if (rig == null)
+        {
+            GD.PushWarning($"[hudgun] linked model '{Playermodels.Get(_modelIndex).Hudguns}/{gunName}' is missing from the model catalogue");
+            if (_activeRig != null)
+            {
+                _activeRig.Container.Visible = false;
+                _activeRig.Container.ProcessMode = ProcessModeEnum.Disabled;
+                _activeRig = null;
+            }
+            _info = null;
+            ModelPath = $"{Playermodels.Get(_modelIndex).Hudguns}/{gunName}";
+            return;
+        }
+
+        if (_activeRig != null && _activeRig != rig)
+        {
+            _activeRig.Container.Visible = false;
+            _activeRig.Container.ProcessMode = ProcessModeEnum.Disabled;
+        }
+
+        rig.Container.Visible = true;
+        rig.Container.ProcessMode = ProcessModeEnum.Inherit;
+        _activeRig = rig;
+        _info = rig.Info;
+        ModelPath = rig.ModelPath;
+
+        ApplyTransform();
+
+        for (int i = 0; i < rig.Parts.Count; i++)
+        {
+            var part = rig.Parts[i];
+            var partInfo = (rig.Info != null && i < rig.Info.Parts.Count) ? rig.Info.Parts[i] : null;
+            if (partInfo != null) StartIdle(part, partInfo);
+        }
     }
 
     private void ApplyTransform()
@@ -188,10 +308,13 @@ public partial class HudgunModel : Node3D
     /// </summary>
     public void Play(string name, bool loop = true, bool restart = false)
     {
-        for (int i = 0; i < _parts.Count; i++)
+        if (_activeRig == null) return;
+        var parts = _activeRig.Parts;
+        var info = _activeRig.Info;
+        for (int i = 0; i < parts.Count; i++)
         {
-            var part = _parts[i];
-            var partInfo = (_info != null && i < _info.Parts.Count) ? _info.Parts[i] : null;
+            var part = parts[i];
+            var partInfo = (info != null && i < info.Parts.Count) ? info.Parts[i] : null;
             var player = FindAnimationPlayer(part);
             if (player == null || !player.HasAnimation(name)) continue;
             var animation = player.GetAnimation(name);
