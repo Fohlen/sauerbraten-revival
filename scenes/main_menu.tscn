@@ -459,6 +459,7 @@ mouse_filter = 2
 stretch = true
 
 [node name="StageSubViewport" type="SubViewport" parent="RootMargin/MainLayout/ContentArea/CharacterStage/StageViewport"]
+unique_name_in_owner = true
 own_world_3d = true
 handle_input_locally = false
 
@@ -468,7 +469,7 @@ environment = SubResource("Environment_stage")
 [node name="KeyLight" type="DirectionalLight3D" parent="RootMargin/MainLayout/ContentArea/CharacterStage/StageViewport/StageSubViewport"]
 rotation_degrees = Vector3(-50, -40, 0)
 light_energy = 1.4
-shadow_enabled = true
+shadow_enabled = false
 
 [node name="FillLight" type="DirectionalLight3D" parent="RootMargin/MainLayout/ContentArea/CharacterStage/StageViewport/StageSubViewport"]
 rotation_degrees = Vector3(-15, 145, 0)

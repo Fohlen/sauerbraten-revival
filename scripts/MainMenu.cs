@@ -109,6 +109,7 @@ public partial class MainMenu : CanvasLayer
     private TextureRect _mapPreview = null!;
 
     private Control _dragCatcher = null!;
+    private SubViewport _stageSubViewport = null!;
     private Node3D _stagePivot = null!;
     private Camera3D _camera = null!;
     private LineEdit _nametag = null!;
@@ -160,6 +161,7 @@ public partial class MainMenu : CanvasLayer
         _mapPreview = GetNode<TextureRect>("%MapPreview");
 
         _dragCatcher = GetNode<Control>("%DragCatcher");
+        _stageSubViewport = GetNode<SubViewport>("%StageSubViewport");
         _stagePivot = GetNode<Node3D>("%StagePivot");
         _camera = GetNode<Camera3D>("%PreviewCamera");
         _nametag = GetNode<LineEdit>("%NametagEdit");
@@ -215,6 +217,11 @@ public partial class MainMenu : CanvasLayer
     public void Open(bool inGame)
     {
         Visible = true;
+        ProcessMode = ProcessModeEnum.Always;
+        if (_stageSubViewport != null)
+        {
+            _stageSubViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        }
         _resumeButton.Visible = inGame;
         //_netStatus.Text = inGame ? "LOCAL  ·  MATCH PAUSED" : "LOCAL  ·  OFFLINE";
         if (!_previewBuilt) BuildPreview();
@@ -226,6 +233,11 @@ public partial class MainMenu : CanvasLayer
     public void Close()
     {
         Visible = false;
+        ProcessMode = ProcessModeEnum.Disabled;
+        if (_stageSubViewport != null)
+        {
+            _stageSubViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+        }
         _settingsPanel.Visible = false;
     }
 
