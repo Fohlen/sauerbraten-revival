@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
@@ -37,6 +38,7 @@ public partial class HudController : Control
     private Label? _flagLabel;
 
     private Texture2D? _itemsTexture;
+    private readonly Dictionary<HudIcon, AtlasTexture> _atlasCache = new();
     private ArmourType? _lastArmourType;
     private Gun? _lastGun;
     private HudIcon? _lastFlagIcon;
@@ -45,6 +47,22 @@ public partial class HudController : Control
     private int _lastSelectedAmmo = -1;
     private int _lastArmour = -1;
     private bool _lastQuadActive;
+    private int? _lastCarriedFlagId;
+    private int _lastCarriedFlagVersion;
+    private int _lastCarriedFlagTeam;
+    private int _lastHoldRemaining = -1;
+    private int _lastPlayerTeam;
+
+    private int _lastClockSecond = -1;
+    private int _lastClockMapLimit = -1;
+    private Vector2 _lastClockViewportSize;
+    private int _lastClockFontSize = -1;
+
+    private int _lastScore1 = int.MinValue;
+    private int _lastScore2 = int.MinValue;
+    private bool _lastScore1IsPlayer;
+    private Vector2 _lastScoreViewportSize;
+    private int _lastScoreFontSize = -1;
 
     private MapPlayer? _player;
     private int _observedHealth = PlayerState.DefaultMaxHealth;
@@ -686,6 +704,7 @@ public partial class HudController : Control
     {
         _crosshairRenderer.LoadTextures(textures);
         _itemsTexture = textures.Get("hud/items.png");
+        _atlasCache.Clear();
         UpdateAtlasTextures();
     }
 
@@ -722,6 +741,8 @@ public partial class HudController : Control
     private AtlasTexture? CreateAtlasTexture(HudIcon icon)
     {
         if (_itemsTexture == null) return null;
+        if (_atlasCache.TryGetValue(icon, out var cached))
+            return cached;
 
         var atlas = new AtlasTexture
         {
@@ -734,6 +755,7 @@ public partial class HudController : Control
             Rect2 uv = StatusBarRenderer.GetIconUv(icon);
             atlas.Region = new Rect2(uv.Position.X * texSize.X, uv.Position.Y * texSize.Y, uv.Size.X * texSize.X, uv.Size.Y * texSize.Y);
         }
+        _atlasCache[icon] = atlas;
         return atlas;
     }
 
@@ -758,7 +780,31 @@ public partial class HudController : Control
         if (_player.Combat.SelectedAmmo != _lastSelectedAmmo) return true;
         if (_player.Combat.Armour != _lastArmour) return true;
         if ((_player.Combat.QuadMillis > 0) != _lastQuadActive) return true;
-        if (_player.Flags != null && _player.Flags.Flags.Count > 0) return true;
+        if (_player.Team != _lastPlayerTeam) return true;
+
+        if (_player.Flags != null)
+        {
+            var carried = _player.Flags.GetCarriedFlagState(_player.PlayerId);
+            int? carriedId = carried?.Id;
+            int carriedVersion = carried?.Version ?? 0;
+            int carriedTeam = carried?.Team ?? 0;
+            int holdRemaining = (carried != null && IsHoldMode)
+                ? Math.Max(0, FlagManager.HoldSecs - carried.HoldCounter(_player.LastMillis) / 1000)
+                : -1;
+
+            if (carriedId != _lastCarriedFlagId ||
+                carriedVersion != _lastCarriedFlagVersion ||
+                carriedTeam != _lastCarriedFlagTeam ||
+                holdRemaining != _lastHoldRemaining)
+            {
+                return true;
+            }
+        }
+        else if (_lastCarriedFlagId != null)
+        {
+            return true;
+        }
+
         return false;
     }
 
@@ -1036,6 +1082,25 @@ public partial class HudController : Control
         _lastSelectedAmmo = Player.Combat.SelectedAmmo;
         _lastArmour = Player.Combat.Armour;
         _lastQuadActive = Player.Combat.QuadMillis > 0;
+        _lastPlayerTeam = Player.Team;
+
+        if (Player.Flags != null)
+        {
+            var carried = Player.Flags.GetCarriedFlagState(Player.PlayerId);
+            _lastCarriedFlagId = carried?.Id;
+            _lastCarriedFlagVersion = carried?.Version ?? 0;
+            _lastCarriedFlagTeam = carried?.Team ?? 0;
+            _lastHoldRemaining = (carried != null && IsHoldMode)
+                ? Math.Max(0, FlagManager.HoldSecs - carried.HoldCounter(Player.LastMillis) / 1000)
+                : -1;
+        }
+        else
+        {
+            _lastCarriedFlagId = null;
+            _lastCarriedFlagVersion = 0;
+            _lastCarriedFlagTeam = 0;
+            _lastHoldRemaining = -1;
+        }
     }
 
     /// <summary>
@@ -1175,7 +1240,11 @@ public partial class HudController : Control
         // Only drawn if gameclock is enabled and MapLimit is active (>= 0).
         if (!GameClock || MapLimit < 0)
         {
-            _gameClockLabel.Visible = false;
+            if (_gameClockLabel.Visible)
+            {
+                _gameClockLabel.Visible = false;
+                _lastClockSecond = -1;
+            }
             return;
         }
 
@@ -1185,6 +1254,19 @@ public partial class HudController : Control
         int currentMillis = LastMillis >= 0
             ? LastMillis
             : (Player?.LastMillis ?? 0);
+        int currentSecond = currentMillis / 1000;
+
+        if (currentSecond == _lastClockSecond &&
+            viewportSize == _lastClockViewportSize &&
+            MapLimit == _lastClockMapLimit &&
+            _gameClockLabel.Visible)
+        {
+            return;
+        }
+
+        _lastClockSecond = currentSecond;
+        _lastClockViewportSize = viewportSize;
+        _lastClockMapLimit = MapLimit;
 
         var (mins, secs, formatted) = StatusBarRenderer.FormatGameClock(MapLimit, currentMillis);
         Color clockColor = StatusBarRenderer.GetGameClockColor(mins, GameClockColour, GameClockLowColour, GameClockAlpha);
@@ -1203,7 +1285,11 @@ public partial class HudController : Control
             GameClockAlign);
 
         int fontSize = Mathf.Max(12, (int)(StatusBarRenderer.DefaultFontHeight * GameClockScale));
-        _gameClockLabel.AddThemeFontSizeOverride("font_size", fontSize);
+        if (_lastClockFontSize != fontSize)
+        {
+            _gameClockLabel.AddThemeFontSizeOverride("font_size", fontSize);
+            _lastClockFontSize = fontSize;
+        }
         _gameClockLabel.Position = screenPos;
         _gameClockLabel.Size = screenSize;
         _gameClockLabel.HorizontalAlignment = GameClockAlign switch
@@ -1233,13 +1319,32 @@ public partial class HudController : Control
 
         if (!HudScore || Score1 == int.MinValue)
         {
-            _hudScoreLabel1.Visible = false;
-            _hudScoreLabel2.Visible = false;
+            if (_hudScoreLabel1.Visible || _hudScoreLabel2.Visible)
+            {
+                _hudScoreLabel1.Visible = false;
+                _hudScoreLabel2.Visible = false;
+                _lastScore1 = int.MinValue;
+                _lastScore2 = int.MinValue;
+            }
             return;
         }
 
         Vector2 viewportSize = GetViewportRect().Size;
         if (viewportSize.X <= 0 || viewportSize.Y <= 0) return;
+
+        if (Score1 == _lastScore1 &&
+            Score2 == _lastScore2 &&
+            Score1IsPlayer == _lastScore1IsPlayer &&
+            viewportSize == _lastScoreViewportSize &&
+            _hudScoreLabel1.Visible)
+        {
+            return;
+        }
+
+        _lastScore1 = Score1;
+        _lastScore2 = Score2;
+        _lastScore1IsPlayer = Score1IsPlayer;
+        _lastScoreViewportSize = viewportSize;
 
         string text1 = Score1.ToString();
         string text2 = Score2 != int.MinValue ? Score2.ToString() : "";
@@ -1256,6 +1361,12 @@ public partial class HudController : Control
             HudScoreSep);
 
         int fontSize = Mathf.Max(12, (int)(StatusBarRenderer.DefaultFontHeight * HudScoreScale));
+        if (_lastScoreFontSize != fontSize)
+        {
+            _hudScoreLabel1.AddThemeFontSizeOverride("font_size", fontSize);
+            _hudScoreLabel2.AddThemeFontSizeOverride("font_size", fontSize);
+            _lastScoreFontSize = fontSize;
+        }
 
         uint rgb1 = Score1IsPlayer ? HudScorePlayerColour : HudScoreEnemyColour;
         Color col1 = StatusBarRenderer.GetHudScoreColor(rgb1, HudScoreAlpha);
@@ -1264,7 +1375,6 @@ public partial class HudController : Control
         _hudScoreLabel1.Modulate = col1;
         _hudScoreLabel1.Position = pos1;
         _hudScoreLabel1.Size = size1;
-        _hudScoreLabel1.AddThemeFontSizeOverride("font_size", fontSize);
         _hudScoreLabel1.HorizontalAlignment = HorizontalAlignment.Center;
         _hudScoreLabel1.VerticalAlignment = VerticalAlignment.Center;
 
@@ -1277,7 +1387,6 @@ public partial class HudController : Control
             _hudScoreLabel2.Modulate = col2;
             _hudScoreLabel2.Position = pos2;
             _hudScoreLabel2.Size = size2;
-            _hudScoreLabel2.AddThemeFontSizeOverride("font_size", fontSize);
             _hudScoreLabel2.HorizontalAlignment = HorizontalAlignment.Center;
             _hudScoreLabel2.VerticalAlignment = VerticalAlignment.Center;
         }

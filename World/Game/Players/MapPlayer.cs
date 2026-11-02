@@ -823,6 +823,16 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         }
     }
 
+    private static readonly string[] HoldAnims =
+    {
+        "hold 1", "hold 2", "hold 3", "hold 4", "hold 5", "hold 6", "hold 7"
+    };
+
+    private static readonly string[] AttackAnims =
+    {
+        "attack 1", "attack 2", "attack 3", "attack 4", "attack 5", "attack 6", "attack 7"
+    };
+
     /// <summary>
     /// Engine anim name for the current player state, faithfully porting
     /// <c>rendermodel.cpp:1060-1110</c> (<c>renderclient</c>) and
@@ -858,7 +868,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             int gun = Combat.LastAttackGun >= Guns.First && Combat.LastAttackGun <= Guns.Last
                 ? Combat.LastAttackGun
                 : Combat.GunSelect;
-            return $"attack {gun + 1}";
+            return gun >= Guns.First && gun <= Guns.Last ? AttackAnims[gun] : $"attack {gun + 1}";
         }
 
         // Locomotion (secondary anim in rendermodel.cpp:1095-1107)
@@ -887,7 +897,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         // hold = mdl.vwep || d->gunselect==GUN_PISTOL ? 0 : (ANIM_HOLD1+d->gunselect)|ANIM_LOOP.
         // Pistol and models with mdl.vwep fall back to ANIM_IDLE.
         if (Combat.GunSelect >= Guns.First && Combat.GunSelect < (int)Gun.Pistol)
-            return $"hold {Combat.GunSelect + 1}";
+            return HoldAnims[Combat.GunSelect];
 
         return "idle";
     }

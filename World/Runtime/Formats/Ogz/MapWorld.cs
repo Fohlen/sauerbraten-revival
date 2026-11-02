@@ -23,6 +23,7 @@ using FlagNode = SauerbratenRevival.World.Game.Ctf.FlagNode;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 using MapModel = SauerbratenRevival.World.Models.MapModel;
 using SimClock = SauerbratenRevival.World.Runtime.SimClock;
+using FlagOwnerInfoLookup = System.Func<int, (Godot.Vector3 pos, float yaw, float aboveEye)>;
 
 namespace SauerbratenRevival.World.Runtime.Formats.Ogz;
 
@@ -44,6 +45,13 @@ namespace SauerbratenRevival.World.Runtime.Formats.Ogz;
 [GlobalClass]
 public partial class MapWorld : Node3D, IGameWorld
 {
+    private readonly FlagOwnerInfoLookup _cachedGetPlayerOwnerInfo;
+
+    public MapWorld()
+    {
+        _cachedGetPlayerOwnerInfo = GetPlayerOwnerInfo;
+    }
+
     /// <summary>Override map to build. Absolute, or package-relative (e.g. <c>base/church51.ogz</c>), resolved through <see cref="ContentRoots.ResolveMap"/>; empty uses the default.</summary>
     [Export] public string OgzPath { get; set; } = "";
     [Export] public int ChunkSize { get; set; } = 512;
@@ -497,7 +505,7 @@ public partial class MapWorld : Node3D, IGameWorld
             {
                 if (i < Flags.Flags.Count)
                 {
-                    _flagNodes[i].UpdateVisual(Flags.Flags[i], lastMillis, LocalPlayer?.Team ?? 1, getOwnerInfo: GetPlayerOwnerInfo);
+                    _flagNodes[i].UpdateVisual(Flags.Flags[i], lastMillis, LocalPlayer?.Team ?? 1, getOwnerInfo: _cachedGetPlayerOwnerInfo);
                 }
             }
         }

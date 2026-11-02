@@ -17,8 +17,22 @@ namespace SauerbratenRevival.World.Game.Players;
 /// </summary>
 public partial class PlayerView : Node3D
 {
+    private MapPlayer? _player;
+    private bool _nodesResolved;
+
     /// <summary>The player whose simulated state is presented by this view.</summary>
-    public MapPlayer? Player { get; set; }
+    public MapPlayer? Player
+    {
+        get => _player;
+        set
+        {
+            if (_player != value)
+            {
+                _player = value;
+                _nodesResolved = false;
+            }
+        }
+    }
 
     /// <summary>The active scene camera for this player.</summary>
     public Camera3D? Camera { get; set; }
@@ -67,6 +81,7 @@ public partial class PlayerView : Node3D
     public override void _Ready()
     {
         ResolveNodes();
+        _nodesResolved = true;
         if (Camera != null)
         {
             Camera.Current = true;
@@ -78,6 +93,7 @@ public partial class PlayerView : Node3D
     /// <summary>Resolves child camera and placeholder body if not explicitly assigned.</summary>
     public void ResolveNodes()
     {
+        if (_nodesResolved) return;
         var parentPlayer = Player ?? GetParent() as MapPlayer;
         if (parentPlayer != null)
         {
@@ -86,11 +102,15 @@ public partial class PlayerView : Node3D
             PlaceholderBody ??= parentPlayer.GetNodeOrNull<MeshInstance3D>("Body");
             PlayerModel ??= parentPlayer.PlayerModel;
             Hudgun ??= parentPlayer.Hudgun;
+            if (Camera != null && IsInsideTree())
+                _nodesResolved = true;
         }
         else
         {
             Camera ??= GetNodeOrNull<Camera3D>("Camera3D");
             PlaceholderBody ??= GetNodeOrNull<MeshInstance3D>("Body");
+            if (Camera != null && IsInsideTree())
+                _nodesResolved = true;
         }
     }
 
@@ -205,7 +225,7 @@ public partial class PlayerView : Node3D
     public void UpdateBodyAnim()
     {
         ResolveNodes();
-        if (Player == null || PlayerModel == null) return;
+        if (Player == null || PlayerModel == null || !PlayerModel.Visible) return;
 
         string name = Player.SelectBodyAnim();
         bool isNewAction = (Player.Combat.LastAction != _lastActionSeen && name.StartsWith("attack "))
@@ -227,14 +247,5 @@ public partial class PlayerView : Node3D
 
         int attackDelay = WeaponCatalog.Get((Gun)Player.Combat.GunSelect).AttackDelay;
         Hudgun.UpdateAnim(Player.LastMillis, Player.Combat.LastAction, Player.Combat.LastAttackGun, Player.Combat.GunSelect, attackDelay);
-    }
-
-    /// <summary>Observes player state and refreshes presentation nodes during _Process.</summary>
-    public override void _Process(double delta)
-    {
-        if (Player == null) return;
-        SyncTransform();
-        UpdateBodyAnim();
-        UpdateHudgunAnim();
     }
 }
