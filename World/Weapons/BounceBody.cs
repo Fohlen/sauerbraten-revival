@@ -130,18 +130,24 @@ public partial class BounceBody : Node3D
             Node3D? visualNode = null;
             if (BodyKind == Kind.Grenade)
             {
+                var textures = Textures ?? TextureSources.CreateDefault();
+                var mat = ModelCache.GetGrenadeMaterial(textures);
+
                 string glbPath = ContentRoots.ProjectPath(ContentKind.Model, "projectiles_grenade.glb");
                 var packed = ModelCache.GetOrLoadScene(glbPath);
                 if (packed != null && packed.Instantiate() is Node3D scene)
                 {
-                    var textures = Textures ?? TextureSources.CreateDefault();
-                    var mat = ModelCache.GetGrenadeMaterial(textures);
-
                     // Apply material to all meshes in the scene and scale to match original dimensions (radius ~1.2)
                     ApplyMaterial(scene, mat);
                     scene.Scale = Vector3.One * 0.2f;
                     scene.Name = "Visual";
                     visualNode = scene;
+                }
+                else
+                {
+                    const float meshRadius = 1.2f;
+                    var sphere = new SphereMesh { Radius = meshRadius, Height = meshRadius * 2f };
+                    visualNode = new MeshInstance3D { Name = "Visual", Mesh = sphere, MaterialOverride = mat };
                 }
             }
 
@@ -151,7 +157,7 @@ public partial class BounceBody : Node3D
                 var sphere = new SphereMesh { Radius = meshRadius, Height = meshRadius * 2f };
                 var mat = new StandardMaterial3D
                 {
-                    AlbedoColor = BodyKind == Kind.Grenade ? new Color(0.21f, 0.31f, 0.33f) : new Color(0.5f, 0.3f, 0.1f),
+                    AlbedoColor = new Color(0.5f, 0.3f, 0.1f),
                     Roughness = 0.3f,
                     Metallic = 0.5f
                 };
