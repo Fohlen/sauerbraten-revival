@@ -42,7 +42,7 @@ def build_combinations():
     combos = [
         ("baseline", ["--ablation-enable", "--ablation-idle-after=5"]),
         ("all_off", ["--ablation-disable=all", "--ablation-idle-after=5"]),
-        ("all_off_no_physics", ["--ablation-disable=all,worldphysics", "--ablation-idle-after=5"]),
+        ("all_off_no_physics", ["--ablation-disable=all,worldphysics", "--ablation-duration=5"]),
         ("menu_idle_on", ["--ablation-idle-menu", "--ablation-duration=5"]),
         ("menu_idle_off", ["--ablation-idle-menu", "--ablation-disable=menu", "--ablation-duration=5"]),
     ]
@@ -63,9 +63,22 @@ def build_combinations():
     return combos
 
 
-def run_single(godot: str, project_dir: Path, demo: str, label: str, extra_args: list[str], out_dir: Path, duration: float | None):
+def run_single(godot: str, project_dir: Path, demo: str, label: str, extra_args: list[str], out_dir: Path, duration: float | None, skip_existing: bool = False):
     out_json = out_dir / f"{label}.json"
     out_log = out_dir / f"{label}.log"
+
+    if skip_existing and out_json.exists():
+        with open(out_json, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        active = data.get("ActiveDemo") or {}
+        print(
+            f"[cached] {label}: fps={active.get('EffectiveFps')} "
+            f"p50={active.get('P50Ms')}ms p99={active.get('P99Ms')}ms max={active.get('MaxMs')}ms "
+            f">16.7ms={active.get('FramesOver16_7Ms')} cpu={active.get('CpuPercent')}% "
+            f"alloc={active.get('AllocKbPerFrame')}KB/f",
+            flush=True,
+        )
+        return data
 
     cmd = [godot, "--path", str(project_dir)]
     if "--ablation-idle-menu" not in extra_args:
@@ -89,7 +102,7 @@ def run_single(godot: str, project_dir: Path, demo: str, label: str, extra_args:
         print(f"  -> FAILED (exit={proc.returncode}, {elapsed:.1f}s) see {out_log}", file=sys.stderr)
         return None
 
-    with open(out_json, "r", encoding="utf-8") as f:
+    with open(out_json, "r", encoding="utf-8-sig") as f:
         data = json.load(f)
     active = data.get("ActiveDemo") or {}
     print(
@@ -104,8 +117,8 @@ def run_single(godot: str, project_dir: Path, demo: str, label: str, extra_args:
 
 def format_markdown_table(results: list[dict]) -> str:
     lines = [
-        "| Label | Phase | Frames | FPS | Mean (ms) | P50 (ms) | P95 (ms) | P99 (ms) | Max (ms) | Jitter P99 | >8.3ms | >16.7ms | Excess (ms) | CPU % | CPU ms/f | Proc (ms) | Phys (ms) | Draws | Alloc KB/f | GC (0/1/2) |",
-        "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |",
+        "| Label | Phase | Frames | FPS | Mean | P50 | P95 | P99 | Max (ms) | Jitter P99 | >8.3ms | >16.7ms | >33.3ms | Excess (ms) | CPU % | CPU ms/f | Proc (mean/max) | Phys (mean/max) | Rend (mean/max) | Draws | Alloc KB/f | GC (0/1/2) |",
+        "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |",
     ]
     for r in results:
         if not r:
@@ -116,13 +129,16 @@ def format_markdown_table(results: list[dict]) -> str:
             if not s:
                 continue
             gc_str = f"{s.get('GcGen0', 0)}/{s.get('GcGen1', 0)}/{s.get('GcGen2', 0)}"
+            proc_str = f"{s.get('ProcessMsMean', 0):.2f}/{s.get('ProcessMsMax', 0):.1f}"
+            phys_str = f"{s.get('PhysicsMsMean', 0):.2f}/{s.get('PhysicsMsMax', 0):.1f}"
+            rend_str = f"{s.get('RenderMsMean', 0):.2f}/{s.get('RenderMsMax', 0):.1f}"
             lines.append(
                 f"| `{label}` | `{s.get('Phase')}` | {s.get('Frames')} | {s.get('EffectiveFps'):.1f} | "
                 f"{s.get('MeanMs'):.2f} | {s.get('P50Ms'):.2f} | {s.get('P95Ms'):.2f} | "
                 f"{s.get('P99Ms'):.2f} | {s.get('MaxMs'):.2f} | {s.get('JitterP99Ms'):.2f} | "
-                f"{s.get('FramesOver8_3Ms')} | {s.get('FramesOver16_7Ms')} | {s.get('ExcessStutterMs'):.1f} | "
+                f"{s.get('FramesOver8_3Ms')} | {s.get('FramesOver16_7Ms')} | {s.get('FramesOver33_3Ms', 0)} | {s.get('ExcessStutterMs'):.1f} | "
                 f"{s.get('CpuPercent'):.1f}% | {s.get('CpuMsPerFrame'):.2f} | "
-                f"{s.get('ProcessMsMean'):.2f} | {s.get('PhysicsMsMean'):.2f} | "
+                f"{proc_str} | {phys_str} | {rend_str} | "
                 f"{s.get('DrawCallsMean'):.0f} | {s.get('AllocKbPerFrame'):.2f} | {gc_str} |"
             )
     return "\n".join(lines)
@@ -135,6 +151,7 @@ def main():
     parser.add_argument("--out-dir", default="/tmp/sauer_ablation", help="Directory for JSON and log outputs")
     parser.add_argument("--duration", type=float, default=None, help="Optional fixed duration override (seconds)")
     parser.add_argument("--filter", default=None, help="Comma-separated substring filter on combination labels")
+    parser.add_argument("--skip-existing", action="store_true", help="Reuse existing JSON files in out-dir")
     args = parser.parse_args()
 
     project_dir = Path(__file__).resolve().parents[2]
@@ -148,7 +165,7 @@ def main():
 
     results = []
     for label, extra in combos:
-        res = run_single(args.godot, project_dir, args.demo, label, extra, out_dir, args.duration)
+        res = run_single(args.godot, project_dir, args.demo, label, extra, out_dir, args.duration, args.skip_existing)
         if res:
             results.append(res)
 

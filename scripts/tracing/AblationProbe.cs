@@ -82,9 +82,20 @@ public partial class AblationProbe : Node
     private readonly List<double> _frameDeltasMs = new(8192);
     private readonly List<double> _processTimesMs = new(8192);
     private readonly List<double> _physicsTimesMs = new(8192);
+    private readonly List<double> _renderTimesMs = new(8192);
+    private readonly List<int> _physicsSteps = new(8192);
     private readonly List<double> _drawCalls = new(8192);
     private readonly List<double> _primitives = new(8192);
     private readonly List<double> _objects = new(8192);
+    private readonly List<long> _frameAllocBytes = new(8192);
+    private readonly List<int> _frameGc0 = new(8192);
+    private long _lastFrameAllocBytes;
+    private int _lastFrameGc0;
+
+    internal ulong CurrentProcessStartUsec;
+    internal ulong CurrentPhysicsStartUsec;
+    internal ulong AccumPhysicsUsecInFrame;
+    internal int AccumPhysicsStepsInFrame;
 
     private readonly List<Node3D> _forcedHidden3D = new();
     private readonly List<CanvasItem> _forcedHidden2D = new();
@@ -105,9 +116,36 @@ public partial class AblationProbe : Node
         probe.Name = "AblationProbe";
         probe.ProcessMode = ProcessModeEnum.Always;
         probe.ProcessPriority = 10000;
+        probe.ProcessPhysicsPriority = 10000;
         probe._main = main;
+
+        var beginHook = new FrameBeginHook(probe)
+        {
+            Name = "AblationBeginHook",
+            ProcessMode = ProcessModeEnum.Always,
+            ProcessPriority = -10000,
+            ProcessPhysicsPriority = -10000,
+        };
+        main.AddChild(beginHook);
         main.AddChild(probe);
         return probe;
+    }
+
+    private sealed partial class FrameBeginHook : Node
+    {
+        private readonly AblationProbe _probe;
+        public FrameBeginHook(AblationProbe probe) => _probe = probe;
+        public FrameBeginHook() => _probe = null!;
+
+        public override void _Process(double delta)
+        {
+            if (_probe != null) _probe.CurrentProcessStartUsec = Time.GetTicksUsec();
+        }
+
+        public override void _PhysicsProcess(double delta)
+        {
+            if (_probe != null) _probe.CurrentPhysicsStartUsec = Time.GetTicksUsec();
+        }
     }
 
     public bool IsIdleMenuRequested => _idleMenu;
@@ -248,7 +286,22 @@ public partial class AblationProbe : Node
         {
             Engine.MaxFps = _overrideMaxFps.Value;
         }
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.AlwaysOnTop, true);
+        DisplayServer.WindowMoveToForeground();
         GD.Print($"[ablation] initialized label='{_label}' disabled=[{string.Join(", ", _disabled)}] duration={_durationSeconds:F1}s idleAfter={_idleAfterSeconds:F1}s quit={_quitOnFinish}");
+    }
+
+    public override void _PhysicsProcess(double delta)
+    {
+        if (CurrentPhysicsStartUsec > 0)
+        {
+            ulong endUsec = Time.GetTicksUsec();
+            if (endUsec >= CurrentPhysicsStartUsec)
+            {
+                AccumPhysicsUsecInFrame += (endUsec - CurrentPhysicsStartUsec);
+            }
+            AccumPhysicsStepsInFrame++;
+        }
     }
 
     public override void _Process(double delta)
@@ -622,9 +675,15 @@ public partial class AblationProbe : Node
         _frameDeltasMs.Clear();
         _processTimesMs.Clear();
         _physicsTimesMs.Clear();
+        _renderTimesMs.Clear();
+        _physicsSteps.Clear();
         _drawCalls.Clear();
         _primitives.Clear();
         _objects.Clear();
+        _frameAllocBytes.Clear();
+        _frameGc0.Clear();
+        AccumPhysicsUsecInFrame = 0;
+        AccumPhysicsStepsInFrame = 0;
 
         _phaseStartUsec = nowUsec;
         _lastFrameTickUsec = nowUsec;
@@ -636,16 +695,38 @@ public partial class AblationProbe : Node
         _phaseStartGc0 = GC.CollectionCount(0);
         _phaseStartGc1 = GC.CollectionCount(1);
         _phaseStartGc2 = GC.CollectionCount(2);
+        _lastFrameAllocBytes = _phaseStartAllocBytes;
+        _lastFrameGc0 = _phaseStartGc0;
     }
 
     private void RecordFrameSample(double frameMs)
     {
+        ulong nowUsec = Time.GetTicksUsec();
+        double procMs = CurrentProcessStartUsec > 0 && nowUsec >= CurrentProcessStartUsec
+            ? (nowUsec - CurrentProcessStartUsec) / 1000.0
+            : 0.0;
+        double physMs = AccumPhysicsUsecInFrame / 1000.0;
+        int physSteps = AccumPhysicsStepsInFrame;
+        AccumPhysicsUsecInFrame = 0;
+        AccumPhysicsStepsInFrame = 0;
+
+        double renderMs = Math.Max(0.0, frameMs - procMs - physMs);
+
         _frameDeltasMs.Add(frameMs);
-        _processTimesMs.Add(Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000.0);
-        _physicsTimesMs.Add(Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess) * 1000.0);
+        _processTimesMs.Add(procMs);
+        _physicsTimesMs.Add(physMs);
+        _renderTimesMs.Add(renderMs);
+        _physicsSteps.Add(physSteps);
         _drawCalls.Add(Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame));
         _primitives.Add(Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame));
         _objects.Add(Performance.GetMonitor(Performance.Monitor.RenderTotalObjectsInFrame));
+
+        long nowAlloc = GC.GetTotalAllocatedBytes(false);
+        int nowGc0 = GC.CollectionCount(0);
+        _frameAllocBytes.Add(nowAlloc - _lastFrameAllocBytes);
+        _frameGc0.Add(nowGc0 - _lastFrameGc0);
+        _lastFrameAllocBytes = nowAlloc;
+        _lastFrameGc0 = nowGc0;
     }
 
     private PhaseSummary CompleteCurrentPhase(string phaseName, ulong nowUsec)
@@ -663,6 +744,7 @@ public partial class AblationProbe : Node
         sorted.Sort();
 
         var jitters = new List<double>(Math.Max(0, n - 1));
+        var stutters = new List<StutterSpike>();
         int over8_3 = 0;
         int over16_7 = 0;
         int over33_3 = 0;
@@ -673,7 +755,22 @@ public partial class AblationProbe : Node
         {
             double dt = _frameDeltasMs[i];
             sumMs += dt;
-            if (dt > 8.333) over8_3++;
+            if (dt > 8.333)
+            {
+                over8_3++;
+                stutters.Add(new StutterSpike
+                {
+                    Frame = i,
+                    TimeSec = Math.Round(sumMs / 1000.0, 3),
+                    FrameMs = Math.Round(dt, 3),
+                    ProcessMs = Math.Round(_processTimesMs[i], 3),
+                    PhysicsMs = Math.Round(_physicsTimesMs[i], 3),
+                    RenderMs = Math.Round(_renderTimesMs[i], 3),
+                    PhysSteps = _physicsSteps[i],
+                    AllocKb = Math.Round(_frameAllocBytes[i] / 1024.0, 2),
+                    Gc0 = _frameGc0[i],
+                });
+            }
             if (dt > 16.667)
             {
                 over16_7++;
@@ -717,6 +814,8 @@ public partial class AblationProbe : Node
             ProcessMsMax = Math.Round(Max(_processTimesMs), 3),
             PhysicsMsMean = Math.Round(Mean(_physicsTimesMs), 3),
             PhysicsMsMax = Math.Round(Max(_physicsTimesMs), 3),
+            RenderMsMean = Math.Round(Mean(_renderTimesMs), 3),
+            RenderMsMax = Math.Round(Max(_renderTimesMs), 3),
             DrawCallsMean = Math.Round(Mean(_drawCalls), 1),
             PrimitivesMean = Math.Round(Mean(_primitives), 1),
             ObjectsMean = Math.Round(Mean(_objects), 1),
@@ -724,6 +823,7 @@ public partial class AblationProbe : Node
             GcGen0 = gc0,
             GcGen1 = gc1,
             GcGen2 = gc2,
+            Stutters = stutters.OrderByDescending(s => s.FrameMs).Take(50).ToArray(),
         };
 
         GD.Print(
@@ -759,7 +859,7 @@ public partial class AblationProbe : Node
                 };
 
                 string json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(fullPath, json, Encoding.UTF8);
+                File.WriteAllText(fullPath, json, new UTF8Encoding(false));
                 GD.Print($"[ablation] wrote report to '{fullPath}'");
             }
             catch (Exception ex)
@@ -891,6 +991,8 @@ public partial class AblationProbe : Node
         public double ProcessMsMax { get; set; }
         public double PhysicsMsMean { get; set; }
         public double PhysicsMsMax { get; set; }
+        public double RenderMsMean { get; set; }
+        public double RenderMsMax { get; set; }
         public double DrawCallsMean { get; set; }
         public double PrimitivesMean { get; set; }
         public double ObjectsMean { get; set; }
@@ -898,5 +1000,19 @@ public partial class AblationProbe : Node
         public int GcGen0 { get; set; }
         public int GcGen1 { get; set; }
         public int GcGen2 { get; set; }
+        public StutterSpike[] Stutters { get; set; } = Array.Empty<StutterSpike>();
+    }
+
+    public sealed class StutterSpike
+    {
+        public int Frame { get; set; }
+        public double TimeSec { get; set; }
+        public double FrameMs { get; set; }
+        public double ProcessMs { get; set; }
+        public double PhysicsMs { get; set; }
+        public double RenderMs { get; set; }
+        public int PhysSteps { get; set; }
+        public double AllocKb { get; set; }
+        public int Gc0 { get; set; }
     }
 }
