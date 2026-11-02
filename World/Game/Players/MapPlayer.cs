@@ -1337,12 +1337,11 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         CheckTeleports(LastMillis);
         CheckFlags(LastMillis);
 
-        var explosionCandidates = candidates ?? new IExplosionTarget[] { this };
-
         // When running standalone (not under IGameWorld), advance own active projectiles & bouncers.
         // Under IGameWorld, UpdateProjectiles and UpdateBouncers are called centrally once per substep.
-        if (GetParent() is not IGameWorld)
+        if (GetParent() is not IGameWorld && (_standaloneRockets.Count > 0 || _standaloneGrenades.Count > 0))
         {
+            var explosionCandidates = candidates ?? new IExplosionTarget[] { this };
             for (int i = _standaloneRockets.Count - 1; i >= 0; i--)
             {
                 var rocket = _standaloneRockets[i];

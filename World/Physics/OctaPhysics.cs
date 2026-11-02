@@ -153,26 +153,33 @@ public sealed class OctaPhysics
         if (d.Type == Phys.EntCamera || d.State != PhysEnt.CsAlive) return false;
         int lastinside = CollideInside;
         PhysEnt? insideplayer = null;
-        LoopDynentCache(d.O, d.Radius, (x, y) =>
+        int startx = Mathf.Max((int)(d.O.X - d.Radius), 0) >> DynEntSize;
+        int endx = Mathf.Min((int)(d.O.X + d.Radius), _octa.WorldSize - 1) >> DynEntSize;
+        int starty = Mathf.Max((int)(d.O.Y - d.Radius), 0) >> DynEntSize;
+        int endy = Mathf.Min((int)(d.O.Y + d.Radius), _octa.WorldSize - 1) >> DynEntSize;
+        for (int x = startx; x <= endx; x++)
         {
-            foreach (var o in CheckDynentCache(x, y))
+            for (int y = starty; y <= endy; y++)
             {
-                if (ReferenceEquals(o, d) || o.Type == Phys.EntBounce || Reject(d.O, o.O, d.Radius + o.Radius)) continue;
-                if (PlCollide1(d, dir, o))
+                var bucket = CheckDynentCache(x, y);
+                for (int i = 0; i < bucket.Count; i++)
                 {
-                    CollidePlayer = o;
-                    DynEntCollide?.Invoke(d, o, CollideWall);
-                    return true;
-                }
-                if (CollideInside > lastinside)
-                {
-                    lastinside = CollideInside;
-                    insideplayer = o;
+                    var o = bucket[i];
+                    if (ReferenceEquals(o, d) || o.Type == Phys.EntBounce || Reject(d.O, o.O, d.Radius + o.Radius)) continue;
+                    if (PlCollide1(d, dir, o))
+                    {
+                        CollidePlayer = o;
+                        DynEntCollide?.Invoke(d, o, CollideWall);
+                        return true;
+                    }
+                    if (CollideInside > lastinside)
+                    {
+                        lastinside = CollideInside;
+                        insideplayer = o;
+                    }
                 }
             }
-            return false;
-        });
-        if (CollidePlayer != null) return true;
+        }
         if (insideplayer != null && insideplayercol)
         {
             CollidePlayer = insideplayer;
@@ -307,37 +314,41 @@ public sealed class OctaPhysics
     /// <summary>physics.cpp:616 <c>updatedynentcache</c> — add a dynent to every bucket it overlaps.</summary>
     public void UpdateDynentCache(PhysEnt d)
     {
-        LoopDynentCache(d.O, d.Radius, (x, y) =>
+        int startx = Mathf.Max((int)(d.O.X - d.Radius), 0) >> DynEntSize;
+        int endx = Mathf.Min((int)(d.O.X + d.Radius), _octa.WorldSize - 1) >> DynEntSize;
+        int starty = Mathf.Max((int)(d.O.Y - d.Radius), 0) >> DynEntSize;
+        int endy = Mathf.Min((int)(d.O.Y + d.Radius), _octa.WorldSize - 1) >> DynEntSize;
+        for (int x = startx; x <= endx; x++)
         {
-            var dec = _dynEntCache[DynEntHash(x, y)];
-            if (dec.X != x || dec.Y != y || dec.Frame != _dynEntFrame || dec.DynEnts.Contains(d)) return false;
-            dec.DynEnts.Add(d);
-            return false;
-        });
+            for (int y = starty; y <= endy; y++)
+            {
+                var dec = _dynEntCache[DynEntHash(x, y)];
+                if (dec.X != x || dec.Y != y || dec.Frame != _dynEntFrame || dec.DynEnts.Contains(d)) continue;
+                dec.DynEnts.Add(d);
+            }
+        }
     }
 
     /// <summary>physics.cpp:625 <c>overlapsdynent</c> — is any dynent within <paramref name="radius"/> of <paramref name="o"/>?</summary>
     public bool OverlapsDynent(Vector3 o, float radius)
     {
-        bool found = false;
-        LoopDynentCache(o, radius, (x, y) =>
+        int startx = Mathf.Max((int)(o.X - radius), 0) >> DynEntSize;
+        int endx = Mathf.Min((int)(o.X + radius), _octa.WorldSize - 1) >> DynEntSize;
+        int starty = Mathf.Max((int)(o.Y - radius), 0) >> DynEntSize;
+        int endy = Mathf.Min((int)(o.Y + radius), _octa.WorldSize - 1) >> DynEntSize;
+        for (int x = startx; x <= endx; x++)
         {
-            foreach (var d in CheckDynentCache(x, y))
-                if (o.DistanceTo(d.O) - d.Radius < radius) { found = true; return true; }
-            return false;
-        });
-        return found;
-    }
-
-    /// <summary>physics.cpp:617 <c>loopdynentcache</c> — iterate the buckets overlapping a circle.
-    /// <paramref name="body"/> returns true to stop early.</summary>
-    private void LoopDynentCache(Vector3 o, float radius, System.Func<int, int, bool> body)
-    {
-        int curx, endx, cury, endy;
-        bool stop = false;
-        for (curx = Mathf.Max((int)(o.X - radius), 0) >> DynEntSize, endx = Mathf.Min((int)(o.X + radius), _octa.WorldSize - 1) >> DynEntSize; curx <= endx && !stop; curx++)
-            for (cury = Mathf.Max((int)(o.Y - radius), 0) >> DynEntSize, endy = Mathf.Min((int)(o.Y + radius), _octa.WorldSize - 1) >> DynEntSize; cury <= endy; cury++)
-                if (body(curx, cury)) { stop = true; break; }
+            for (int y = starty; y <= endy; y++)
+            {
+                var bucket = CheckDynentCache(x, y);
+                for (int i = 0; i < bucket.Count; i++)
+                {
+                    var d = bucket[i];
+                    if (o.DistanceTo(d.O) - d.Radius < radius) return true;
+                }
+            }
+        }
+        return false;
     }
 
     /// <summary>physics.cpp:1014 <c>octacollide</c> (the readable recursive form).</summary>
@@ -388,7 +399,7 @@ public sealed class OctaPhysics
 
         CollideWall = Vector3.Zero;
         float bestdist = -1e10f;
-        int visible = c.IsEntirelySolid() ? OctaVisible.CollisionVisibleMask(_octa, c, co, size) : 0xFF;
+        int visible = c.IsEntirelySolid() ? OctaClipping.GetCollisionVisibleMask(_octa, c, co, size) : 0xFF;
 
         bool Side(int side, float dist, float dotval, float margin, Vector3 normal)
         {
@@ -419,15 +430,14 @@ public sealed class OctaPhysics
     /// <summary>physics.cpp:843 <c>fuzzycollideplanes</c> — COLLIDE_ELLIPSE vs a deformed cube.</summary>
     private bool FuzzyCollidePlanes(PhysEnt d, Vector3 dir, float cutoff, Cube c, Vector3I co, int size)
     {
-        int mask = OctaVisible.CollisionVisibleMask(_octa, c, co, size);
-        var p = OctaClipping.GetClipPlanes(_octa, c, co, size, mask);
+        var p = OctaClipping.GetClipPlanes(_octa, c, co, size);
         if (Mathf.Abs(d.O.X - p.O.X) > p.R.X + d.Radius || Mathf.Abs(d.O.Y - p.O.Y) > p.R.Y + d.Radius ||
             d.O.Z + d.AboveEye < p.O.Z - p.R.Z || d.O.Z - d.EyeHeight > p.O.Z + p.R.Z) return false;
 
         CollideWall = Vector3.Zero;
         float bestdist = -1e10f;
         int visible = p.Visible;
-        if (MoveTrace != null) MT($"    fcp co={co} size={size} mask={mask} pVis={p.Visible} nplanes={p.Size} o={d.O} dir={dir}");
+        if (MoveTrace != null) MT($"    fcp co={co} size={size} mask={OctaClipping.GetCollisionVisibleMask(_octa, c, co, size)} pVis={p.Visible} nplanes={p.Size} o={d.O} dir={dir}");
 
         bool Side(int side, float dist, float dotval, float margin, Vector3 normal)
         {

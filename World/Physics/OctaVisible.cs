@@ -1,3 +1,4 @@
+using System;
 using Godot;
 
 namespace SauerbratenRevival.World.Physics;
@@ -78,7 +79,7 @@ public static class OctaVisible
     }
 
     /// <summary>octa.cpp:827 <c>genfacevecs</c> — face polygon in 2D face coords.</summary>
-    public static int GenFaceVecs(Cube c, int orient, Vector3I pos, int size, bool solid, Vector2I[] fvecs, Vector3I[]? v = null)
+    public static int GenFaceVecs(Cube c, int orient, Vector3I pos, int size, bool solid, Span<Vector2I> fvecs, scoped ReadOnlySpan<Vector3I> v = default)
     {
         int dim = Dim(orient), cd = C(dim), rd = R(dim);
         if (solid)
@@ -93,8 +94,12 @@ public static class OctaVisible
             return 4;
         }
 
-        var buf = v ?? new Vector3I[4];
-        if (v == null) c.GenFaceVerts(orient, buf);
+        Span<Vector3I> localBuf = stackalloc Vector3I[4];
+        if (v.IsEmpty)
+        {
+            c.GenFaceVerts(orient, localBuf);
+            v = localBuf;
+        }
         int i = 0;
         var prev = new Vector2I(int.MaxValue, int.MaxValue);
         int coord = DimCoord(orient) ? 8 : 0;
@@ -105,7 +110,7 @@ public static class OctaVisible
         for (int k = 0; k < 4; k++)
         {
             int n = DimCoord(orient) ? k : (3 - k);
-            var e = buf[n];
+            var e = v[n];
             if (Comp(e, dim) != coord) continue;
             var f = new Vector2I(Comp(e, cd) * size + Comp(pos, cd) * 8, Comp(e, rd) * size + Comp(pos, rd) * 8);
             if (f != prev) { prev = f; fvecs[i++] = f; }
@@ -136,7 +141,7 @@ public static class OctaVisible
         return 1;
     }
 
-    private static int ClipFaceVec(Vector2I o, Vector2I dir, int cx, int cy, int size, Vector2I[] rvecs, int off)
+    private static int ClipFaceVec(Vector2I o, Vector2I dir, int cx, int cy, int size, Span<Vector2I> rvecs, int off)
     {
         int r = 0;
         if (o.X >= cx && o.X <= cx + size && o.Y >= cy && o.Y <= cy + size &&
@@ -150,7 +155,7 @@ public static class OctaVisible
     }
 
     /// <summary>octa.cpp:944 <c>clipfacevecs</c>.</summary>
-    public static int ClipFaceVecs(Vector2I[] o, int numo, int cx, int cy, int size, Vector2I[] rvecs)
+    public static int ClipFaceVecs(ReadOnlySpan<Vector2I> o, int numo, int cx, int cy, int size, Span<Vector2I> rvecs)
     {
         cx <<= 3; cy <<= 3; size <<= 3;
         int r = 0;
@@ -161,13 +166,19 @@ public static class OctaVisible
             r += ClipFaceVec(prev, new Vector2I(cur.X - prev.X, cur.Y - prev.Y), cx, cy, size, rvecs, r);
             prev = cur;
         }
-        var corner = new[] { new Vector2I(cx, cy), new Vector2I(cx + size, cy), new Vector2I(cx + size, cy + size), new Vector2I(cx, cy + size) };
-        for (int i = 0; i < 4; i++) if (InsideFace(new[] { corner[i] }, 1, o, numo)) rvecs[r++] = corner[i];
+        Span<Vector2I> corner = stackalloc Vector2I[4]
+        {
+            new Vector2I(cx, cy),
+            new Vector2I(cx + size, cy),
+            new Vector2I(cx + size, cy + size),
+            new Vector2I(cx, cy + size),
+        };
+        for (int i = 0; i < 4; i++) if (InsideFace(corner[i], o, numo)) rvecs[r++] = corner[i];
         return r;
     }
 
     /// <summary>octa.cpp:928 <c>insideface</c>.</summary>
-    public static bool InsideFace(Vector2I[] p, int nump, Vector2I[] o, int numo)
+    public static bool InsideFace(ReadOnlySpan<Vector2I> p, int nump, ReadOnlySpan<Vector2I> o, int numo)
     {
         int bounds = 0;
         var prev = o[numo - 1];
@@ -184,25 +195,44 @@ public static class OctaVisible
         return bounds >= 3;
     }
 
+    /// <summary>Single-point overload of <see cref="InsideFace(ReadOnlySpan{Vector2I}, int, ReadOnlySpan{Vector2I}, int)"/>.</summary>
+    public static bool InsideFace(Vector2I pt, ReadOnlySpan<Vector2I> o, int numo)
+    {
+        int bounds = 0;
+        var prev = o[numo - 1];
+        for (int i = 0; i < numo; i++)
+        {
+            var cur = o[i];
+            var dir = new Vector2I(cur.X - prev.X, cur.Y - prev.Y);
+            int offset = dir.X * prev.Y - dir.Y * prev.X;
+            if (dir.X * pt.Y - dir.Y * pt.X > offset) return false;
+            bounds++;
+            prev = cur;
+        }
+        return bounds >= 3;
+    }
+
     /// <summary>octa.cpp:981 <c>occludesface</c>.</summary>
     public static bool OccludesFace(Cube c, int orient, Vector3I o, int size, Vector3I vo, int vsize,
-                                    ushort vmat, ushort nmat, ushort matmask, Vector2I[] vf, int numv)
+                                    ushort vmat, ushort nmat, ushort matmask, ReadOnlySpan<Vector2I> vf, int numv)
     {
         int dim = Dim(orient);
         if (c.Children == null)
         {
-            var nf = new Vector2I[8];
             if (nmat != Octa.MAT_AIR && (c.Material & matmask) == nmat)
+            {
+                Span<Vector2I> nf = stackalloc Vector2I[8];
                 return ClipFaceVecs(vf, numv, Comp(o, C(dim)), Comp(o, R(dim)), size, nf) < 3;
+            }
             if (c.IsEntirelySolid()) return true;
             if (vmat != Octa.MAT_AIR && ((c.Material & matmask) == vmat ||
                 (Phys.IsLiquid(vmat) && Phys.IsClipped(c.Material)))) return true;
             if (c.TouchingFace(orient) && FaceEdges(c, orient) == Octa.F_SOLID) return true;
-            var cf = new Vector2I[8];
+            Span<Vector2I> cf = stackalloc Vector2I[8];
             int numc = ClipFaceVecs(vf, numv, Comp(o, C(dim)), Comp(o, R(dim)), size, cf);
             if (numc < 3) return true;
             if (c.IsEmpty() || NotTouchingFace(c, orient)) return false;
-            var of = new Vector2I[4];
+            Span<Vector2I> of = stackalloc Vector2I[4];
             int numo = GenFaceVecs(c, orient, o, size, false, of);
             return numo >= 3 && InsideFace(cf, numc, of, numo);
         }
@@ -223,7 +253,7 @@ public static class OctaVisible
                                   ushort nmat = Phys.MatAlpha, ushort matmask = Phys.MatAlpha, bool showoutside = false)
     {
         int vis = 3, touching = 0xF;
-        var v = new Vector3I[4];
+        Span<Vector3I> v = stackalloc Vector3I[4];
         c.GenFaceVerts(orient, v);
         Vector3I e1 = v[1] - v[0], e2 = v[2] - v[0], e3 = v[0] - v[3];
         Vector3I n = CubeGeometry.Cross(e1, e2);
@@ -253,8 +283,8 @@ public static class OctaVisible
         if ((c.Material & matmask) == nmat) nmat = Octa.MAT_AIR;
         var vo = new Vector3I(co.X & 0xFFF, co.Y & 0xFFF, co.Z & 0xFFF);
         no = new Vector3I(no.X & 0xFFF, no.Y & 0xFFF, no.Z & 0xFFF);
-        var cf = new Vector2I[4];
-        var of = new Vector2I[4];
+        Span<Vector2I> cf = stackalloc Vector2I[4];
+        Span<Vector2I> of = stackalloc Vector2I[4];
         int opp = Opposite(orient), numo = 0, numc;
         if (nsize > size || (nsize == size && o.Children == null))
         {
@@ -273,12 +303,15 @@ public static class OctaVisible
         }
         if (vis != 3 || notouch != 0) return vis;
 
+        Span<Vector2I> tf = stackalloc Vector2I[3];
         do
         {
             for (int i = 0; i < 2; i++)
             {
                 var tv = TriVerts[order][coord][i];
-                var tf = new[] { cf[tv[0]], cf[tv[1]], cf[tv[2]] };
+                tf[0] = cf[tv[0]];
+                tf[1] = cf[tv[1]];
+                tf[2] = cf[tv[2]];
                 if (numo > 0) { if (!InsideFace(tf, 3, of, numo)) continue; }
                 else if (!OccludesFace(o, opp, no, nsize, vo, size, Octa.MAT_AIR, nmat, matmask, tf, 3)) continue;
                 return vis & ~(1 << i);
@@ -321,14 +354,15 @@ public static class OctaVisible
             if (o.TouchingFace(opp) && FaceEdges(o, opp) == Octa.F_SOLID) return vis;
             var vo = new Vector3I(co.X & 0xFFF, co.Y & 0xFFF, co.Z & 0xFFF);
             no = new Vector3I(no.X & 0xFFF, no.Y & 0xFFF, no.Z & 0xFFF);
-            var cf = new Vector2I[4]; var of = new Vector2I[4];
+            Span<Vector2I> cf = stackalloc Vector2I[4];
+            Span<Vector2I> of = stackalloc Vector2I[4];
             int numc = GenFaceVecs(c, orient, vo, size, false, cf);
             int numo = GenFaceVecs(o, opp, no, nsize, false, of);
             return numo < 3 || !InsideFace(cf, numc, of, numo) ? vismask : vis;
         }
         var vo2 = new Vector3I(co.X & 0xFFF, co.Y & 0xFFF, co.Z & 0xFFF);
         no = new Vector3I(no.X & 0xFFF, no.Y & 0xFFF, no.Z & 0xFFF);
-        var cf2 = new Vector2I[4];
+        Span<Vector2I> cf2 = stackalloc Vector2I[4];
         int numc2 = GenFaceVecs(c, orient, vo2, size, false, cf2);
         if (!OccludesFace(o, opp, no, nsize, vo2, size, Octa.MAT_AIR,
                 (ushort)((c.Material & Phys.MatAlpha) ^ Phys.MatAlpha), Phys.MatAlpha, cf2, numc2)) vis |= 1;

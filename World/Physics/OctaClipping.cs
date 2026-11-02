@@ -42,7 +42,7 @@ public sealed class ClipPlanes
 }
 
 /// <summary>mpr.h:112 <c>EntFuzzy</c>/<c>EntCapsule</c>.</summary>
-public sealed class EntCapsule
+public readonly struct EntCapsule
 {
     private readonly PhysEnt _e;
     public EntCapsule(PhysEnt e) { _e = e; }
@@ -82,6 +82,16 @@ public static class OctaClipping
     };
 
     private static readonly Dictionary<Cube, ClipPlanes> Cache = new();
+    private static readonly Dictionary<Cube, byte> VisibleMaskCache = new();
+
+    /// <summary>Cached 6-bit collision visibility mask (<see cref="OctaVisible.CollisionVisibleMask"/>) per <see cref="Cube"/>.</summary>
+    public static int GetCollisionVisibleMask(Octa octa, Cube c, Vector3I co, int size)
+    {
+        if (VisibleMaskCache.TryGetValue(c, out byte cached)) return cached;
+        byte mask = (byte)OctaVisible.CollisionVisibleMask(octa, c, co, size);
+        VisibleMaskCache[c] = mask;
+        return mask;
+    }
 
     /// <summary>octa.cpp:660 <c>gencubevert</c> (0..8 units from the cube edges).</summary>
     public static Vector3I GenCubeVert(Cube c, int i)
@@ -101,9 +111,10 @@ public static class OctaClipping
     }
 
     /// <summary>octa.cpp:1204 <c>genclipplanes</c> (simplified; see file header).</summary>
-    public static ClipPlanes GetClipPlanes(Octa octa, Cube c, Vector3I co, int size, int visibleMask)
+    public static ClipPlanes GetClipPlanes(Octa octa, Cube c, Vector3I co, int size, int visibleMask = -1)
     {
         if (Cache.TryGetValue(c, out var cached)) return cached;
+        if (visibleMask < 0) visibleMask = GetCollisionVisibleMask(octa, c, co, size);
 
         var p = new ClipPlanes();
         for (int i = 0; i < 8; i++) p.V[i] = CalcVert(c, co, size, i);
