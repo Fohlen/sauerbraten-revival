@@ -99,7 +99,7 @@ public partial class ModelInstance : Node3D
         Node? scene = null;
         if (!string.IsNullOrEmpty(GlbPath) && ResourceLoader.Exists(GlbPath))
         {
-            var packed = ResourceLoader.Load<PackedScene>(GlbPath);
+            var packed = ModelCache.GetOrLoadScene(GlbPath);
             if (packed != null) scene = packed.Instantiate();
         }
         else if (!string.IsNullOrEmpty(GlbOsPath) && File.Exists(GlbOsPath))

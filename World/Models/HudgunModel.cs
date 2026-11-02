@@ -58,7 +58,7 @@ public partial class HudgunModel : Node3D
     private IModelCatalog? _models;
     private ModelInfo? _info;
     private ITextureSource? _textures;
-    private Dictionary<string, Material>? _skinCache;
+    private IDictionary<string, Material>? _skinCache;
     private int _modelIndex;
     private string _gunName = "";
     private string _currentAnim = "";
@@ -70,7 +70,7 @@ public partial class HudgunModel : Node3D
         ITextureSource? textures,
         int modelIndex,
         string gun,
-        Dictionary<string, Material>? skinCache = null)
+        IDictionary<string, Material>? skinCache = null)
     {
         _models = models;
         _textures = textures;
@@ -78,7 +78,7 @@ public partial class HudgunModel : Node3D
         _gunName = gun;
         ModelPath = $"{Playermodels.Get(modelIndex).Hudguns}/{gun}";
         _info = models?.Get(ModelPath);
-        _skinCache = skinCache ?? new Dictionary<string, Material>();
+        _skinCache = skinCache ?? ModelCache.SkinCache;
         if (IsInsideTree()) BuildModel();
     }
 

@@ -7,7 +7,7 @@ namespace SauerbratenRevival.World.Models;
 /// <summary>Builds a Godot skin material (diffuse + optional normal) for a converted model.</summary>
 public static class ModelSkin
 {
-    public static Material? Build(ModelInfo? info, ITextureSource? textures, Dictionary<string, Material> cache)
+    public static Material? Build(ModelInfo? info, ITextureSource? textures, IDictionary<string, Material> cache)
     {
         if (info?.Skin == null || textures == null) return null;
         string key = $"{info.Skin}|{info.Bump}|{info.AlphaTest}|{info.AlphaBlend}|{info.CullFace}";

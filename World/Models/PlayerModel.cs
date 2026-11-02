@@ -67,7 +67,7 @@ public partial class PlayerModel : ModelInstance
     // View-weapon attachment state, retained so a later Reload can re-attach.
     private IModelCatalog? _models;
     private ITextureSource? _textures;
-    private Dictionary<string, Material>? _skinCache;
+    private IDictionary<string, Material>? _skinCache;
     private string? _viewWeaponName;
     private string _weaponBone = "Weapon";
 
@@ -85,14 +85,14 @@ public partial class PlayerModel : ModelInstance
         ITextureSource? textures,
         int modelIndex,
         int team,
-        Dictionary<string, Material>? skinCache = null,
+        IDictionary<string, Material>? skinCache = null,
         string? viewWeapon = null)
     {
         ModelIndex = modelIndex;
         Team = team;
         _models = models;
         _textures = textures;
-        _skinCache = skinCache;
+        _skinCache = skinCache ?? ModelCache.SkinCache;
         _viewWeaponName = viewWeapon;
         var info = models?.Get(Playermodels.Get(modelIndex).Body(team));
 
@@ -119,7 +119,7 @@ public partial class PlayerModel : ModelInstance
         _animSpeeds.Clear();
         if (info != null)
             foreach (var (animName, fps) in info.AnimSpeeds) _animSpeeds[animName] = fps;
-        SkinMaterial = ModelSkin.Build(info, textures, skinCache ?? new Dictionary<string, Material>());
+        SkinMaterial = ModelSkin.Build(info, textures, _skinCache);
 
         if (IsInsideTree()) Reload();
     }
@@ -217,7 +217,7 @@ public partial class PlayerModel : ModelInstance
             ModelTranslation = info.Translation,
             ModelRotationDegrees = ViewWeaponRotationDegrees,
             KeepSkeleton = true,
-            SkinMaterial = ModelSkin.Build(info, _textures, _skinCache ?? new Dictionary<string, Material>()),
+            SkinMaterial = ModelSkin.Build(info, _textures, _skinCache ?? ModelCache.SkinCache),
         };
         anchor.AddChild(weapon);
         ViewWeapon = weapon;
