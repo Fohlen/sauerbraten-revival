@@ -150,25 +150,32 @@ public static class ResourceCascade
         where TEnum : struct, Enum
         where TRes : Resource
     {
-        if (string.IsNullOrEmpty(dir) || !DirAccess.DirExistsAbsolute(dir))
+        if (string.IsNullOrEmpty(dir))
             return;
 
         using var da = DirAccess.Open(dir);
         if (da == null) return;
 
-        da.ListDirBegin();
-        string fileName = da.GetNext();
-        while (!string.IsNullOrEmpty(fileName))
+        string[] files = da.GetFiles();
+        Array.Sort(files, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (string file in files)
         {
-            if (!da.CurrentIsDir() && fileName.EndsWith(".tres", StringComparison.OrdinalIgnoreCase))
+            // Exported PCKs replace each authored `foo.tres` with a
+            // `foo.tres.remap` sidecar, and DirAccess lists only the sidecar.
+            // Strip it so Load follows the remap to the packed resource.
+            string resource = file.EndsWith(".remap", StringComparison.OrdinalIgnoreCase)
+                ? file[..^".remap".Length]
+                : file;
+            if (!resource.EndsWith(".tres", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!seen.Add(resource)) continue;
+
+            string fullPath = $"{dir.TrimEnd('/')}/{resource}";
+            if (ResourceLoader.Load(fullPath) is Resource res)
             {
-                string fullPath = $"{dir.TrimEnd('/')}/{fileName}";
-                if (ResourceLoader.Load(fullPath) is Resource res)
-                {
-                    list.ApplyResource<TItem, TRes, TEnum>(res, fileName, convert, emptyFactory);
-                }
+                list.ApplyResource<TItem, TRes, TEnum>(res, resource, convert, emptyFactory);
             }
-            fileName = da.GetNext();
         }
     }
 
