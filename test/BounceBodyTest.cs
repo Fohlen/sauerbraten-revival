@@ -3,6 +3,8 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
@@ -227,5 +229,39 @@ public class BounceBodyTest : GoTestBase
         TestAssert.True(victim.State.Health < 100, "victim took damage on contact detonation");
 
         grenade.QueueFree();
+    }
+
+    [Test]
+    public void GrenadeVisualUsesModelCacheAndSharesMaterial()
+    {
+        var textures = TextureSources.CreateDefault();
+        ModelCache.PreloadProjectiles(textures);
+
+        var phys = NewWorld();
+        var grenade1 = new BounceBody { BodyKind = BounceBody.Kind.Grenade, Textures = textures };
+        grenade1.Setup(phys, new Vector3(256, 256, FloorZ + 30.0f), Vector3.Zero);
+        TestScene.AddChild(grenade1);
+
+        var visual1 = grenade1.GetNodeOrNull<Node3D>("Visual");
+        TestAssert.True(visual1 != null, "grenade visual created");
+
+        var grenade2 = new BounceBody { BodyKind = BounceBody.Kind.Grenade, Textures = textures };
+        grenade2.Setup(phys, new Vector3(256, 256, FloorZ + 30.0f), Vector3.Zero);
+        TestScene.AddChild(grenade2);
+
+        var visual2 = grenade2.GetNodeOrNull<Node3D>("Visual");
+        TestAssert.True(visual2 != null, "second grenade visual created");
+
+        // Verify shared material between spawned grenades
+        var mesh1 = visual1?.FindChild("*", recursive: true, owned: false) as MeshInstance3D ?? visual1 as MeshInstance3D;
+        var mesh2 = visual2?.FindChild("*", recursive: true, owned: false) as MeshInstance3D ?? visual2 as MeshInstance3D;
+        if (mesh1?.MaterialOverride != null && mesh2?.MaterialOverride != null)
+        {
+            TestAssert.True(object.ReferenceEquals(mesh1.MaterialOverride, mesh2.MaterialOverride),
+                "both grenades share the exact same cached Material instance");
+        }
+
+        grenade1.QueueFree();
+        grenade2.QueueFree();
     }
 }

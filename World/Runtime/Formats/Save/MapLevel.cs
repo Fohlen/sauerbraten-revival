@@ -268,6 +268,7 @@ public partial class MapLevel : Node3D, IGameWorld
         // Converted mapmodels (assimp), imported by Godot as Resources.
         var modelCatalog = ModelCatalog.LoadFromProject();
         Models = modelCatalog;
+        ModelCache.PreloadProjectiles(_textures);
 
         ApplyLightsInitial();
         var envMaps = EnvMapBuilder.Build(Entities);

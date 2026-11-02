@@ -4,6 +4,7 @@ using Godot;
 using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Runtime;
 using SauerbratenRevival.World.Weapons;
 
@@ -162,31 +163,13 @@ public partial class WeaponEffectsRenderer : Node3D
         Textures ?? (GetParent() as IGameWorld)?.Textures ?? TextureSources.CreateDefault();
 
     /// <summary>
-    /// Loads the converted <c>projectiles/rocket</c> model and its skin once. Mirrors
-    /// the grenade visual in <see cref="BounceBody"/> (the imperfect
-    /// direct GLB/skin load used for the first pass).
+    /// Loads the converted <c>projectiles/rocket</c> model and its skin once from <see cref="ModelCache"/>.
     /// </summary>
     private void LoadRocketVisual(ITextureSource textures)
     {
-        if (!ResourceLoader.Exists(RocketModelPath)) return;
-        _rocketScene = ResourceLoader.Load<PackedScene>(RocketModelPath);
+        _rocketScene = ModelCache.GetOrLoadScene(RocketModelPath);
         if (_rocketScene == null) return;
-
-        var mat = new StandardMaterial3D
-        {
-            Roughness = 0.3f,
-            Metallic = 0.6f
-        };
-        if (textures.Get(RocketSkinRelative) is { } skin)
-        {
-            mat.AlbedoTexture = skin;
-            mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps;
-        }
-        else
-        {
-            mat.AlbedoColor = new Color(0.5f, 0.5f, 0.5f); // fallback when the skin is missing
-        }
-        _rocketMaterial = mat;
+        _rocketMaterial = ModelCache.GetRocketMaterial(textures);
     }
 
     /// <summary>

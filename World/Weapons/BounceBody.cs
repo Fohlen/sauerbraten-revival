@@ -4,6 +4,7 @@ using SauerbratenRevival.World.Content;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Runtime;
 
@@ -130,33 +131,17 @@ public partial class BounceBody : Node3D
             if (BodyKind == Kind.Grenade)
             {
                 string glbPath = ContentRoots.ProjectPath(ContentKind.Model, "projectiles_grenade.glb");
-                if (ResourceLoader.Exists(glbPath))
+                var packed = ModelCache.GetOrLoadScene(glbPath);
+                if (packed != null && packed.Instantiate() is Node3D scene)
                 {
-                    var packed = ResourceLoader.Load<PackedScene>(glbPath);
-                    if (packed != null && packed.Instantiate() is Node3D scene)
-                    {
-                        var textures = Textures ?? TextureSources.CreateDefault();
-                        var mat = new StandardMaterial3D
-                        {
-                            Roughness = 0.3f,
-                            Metallic = 0.6f
-                        };
-                        if (textures.Get("models/projectiles/grenade/skin.jpg") is { } skin)
-                        {
-                            mat.AlbedoTexture = skin;
-                            mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps;
-                        }
-                        else
-                        {
-                            mat.AlbedoColor = new Color(0.21f, 0.31f, 0.33f); // r6889 skin.jpg average
-                        }
+                    var textures = Textures ?? TextureSources.CreateDefault();
+                    var mat = ModelCache.GetGrenadeMaterial(textures);
 
-                        // Apply material to all meshes in the scene and scale to match original dimensions (radius ~1.2)
-                        ApplyMaterial(scene, mat);
-                        scene.Scale = Vector3.One * 0.2f;
-                        scene.Name = "Visual";
-                        visualNode = scene;
-                    }
+                    // Apply material to all meshes in the scene and scale to match original dimensions (radius ~1.2)
+                    ApplyMaterial(scene, mat);
+                    scene.Scale = Vector3.One * 0.2f;
+                    scene.Name = "Visual";
+                    visualNode = scene;
                 }
             }
 

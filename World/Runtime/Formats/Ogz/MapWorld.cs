@@ -323,6 +323,7 @@ public partial class MapWorld : Node3D, IGameWorld
         // Converted mapmodels (assimp), imported by Godot as Resources.
         var modelCatalog = ModelCatalog.LoadFromProject();
         Models = modelCatalog;
+        ModelCache.PreloadProjectiles(textures);
 
         AddChild(LightBuilder.Build(map));
         var envMaps = EnvMapBuilder.Build(map);

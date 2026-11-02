@@ -7,6 +7,7 @@ using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Runtime;
 using SauerbratenRevival.World.Weapons;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
+using ModelCache = SauerbratenRevival.World.Models.ModelCache;
 using PlayerModel = SauerbratenRevival.World.Models.PlayerModel;
 
 namespace SauerbratenRevival.World.Runtime.Formats.Ogz;
@@ -301,9 +302,11 @@ public partial class OgzMapViewer : Node3D
 	/// the player so <see cref="Game.Players.MapPlayer.SyncBodyModel"/> can keep it upright at the
 	/// feet, independent of the camera view pitch.
 	/// </summary>
-	private void AttachPlayerModel(Game.Players.MapPlayer player, IMapSource mapSource)
+    private void AttachPlayerModel(Game.Players.MapPlayer player, IMapSource mapSource)
     {
         if (PlayerModelIndex < 0) return;
+
+        ModelCache.PreloadPlayermodel(PlayerModelIndex, mapSource.Models, mapSource.Textures, player.Team);
 
         var gun = (Gun)player.Combat.GunSelect;
 
