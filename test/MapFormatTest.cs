@@ -327,9 +327,8 @@ public class MapFormatTest : GoTestBase
     }
 
     [Test]
-    public void CanonicalEmptyMapGeneratesValidSnapshot()
+    public void ShippedCanonicalEmptyMapIsValid()
     {
-        MapStore.CreateCanonicalEmptyMap(MapStore.EmptyMapDir);
         TestAssert.True(File.Exists(ProjectSettings.GlobalizePath(MapStore.EmptyMapPackagePath)), "canonical empty_map map.bin exists");
 
         var loadedBase = MapStore.Load(MapStore.EmptyMapDir);
@@ -616,5 +615,7 @@ public class MapFormatTest : GoTestBase
         var loaded = MapStore.Load(dir);
         TestAssert.Equal(10, loaded.World.WorldScale, "empty map scale is 10");
         TestAssert.Equal(1, loaded.Entities.Count, "has playerstart entity");
+        TestAssert.True(loaded.Environment != null, "empty map ships an environment command");
+        TestAssert.Equal(MapEnvironment.DefaultSunColor, loaded.Environment!.SunColor, "empty map has default sun");
     }
 }
