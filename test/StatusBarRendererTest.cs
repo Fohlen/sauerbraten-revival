@@ -656,6 +656,24 @@ public class StatusBarRendererTest : GoTestBase
         hud.UpdateGameClock();
         TestAssert.False(clockLabel.Visible, "Game clock hidden when GameClock is false");
 
+        // Editor mode hides the game clock even if MapLimit is set and GameClock is enabled
+        hud.GameClock = true;
+        hud.IsEditMode = true;
+        hud.UpdateGameClock();
+        TestAssert.False(clockLabel.Visible, "Game clock hidden when IsEditMode is true");
+
+        hud.IsEditMode = false;
+        hud.UpdateGameClock();
+        TestAssert.True(clockLabel.Visible, "Game clock visible when IsEditMode is false");
+
+        player.EditMode = true;
+        hud.UpdateGameClock();
+        TestAssert.False(clockLabel.Visible, "Game clock hidden when player is in EditMode");
+
+        player.EditMode = false;
+        hud.UpdateGameClock();
+        TestAssert.True(clockLabel.Visible, "Game clock visible when player leaves EditMode");
+
         canvas.Free();
         player.Free();
     }

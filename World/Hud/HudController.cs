@@ -349,6 +349,9 @@ public partial class HudController : Control
     /// <summary>Whether the editor mode HUD is active.</summary>
     public bool IsEditMode { get; set; }
 
+    /// <summary>Whether the player or HUD is currently in editor mode (engine <c>fps.cpp:1094: !m_edit</c>).</summary>
+    public bool CurrentEditMode => IsEditMode || (Player != null && (Player.Entity.State == PhysEnt.CsEditing || (Player.Mode != null && Player.Mode.Has(Game.ModeFlags.Edit))));
+
     /// <summary>Current editor grid size (cube units).</summary>
     public int EditGridSize { get; set; } = 8;
 
@@ -1236,9 +1239,9 @@ public partial class HudController : Control
     {
         if (_gameClockLabel == null) return;
 
-        // In Sauerbraten: if(gameclock) drawgameclock(w, h);
-        // Only drawn if gameclock is enabled and MapLimit is active (>= 0).
-        if (!GameClock || MapLimit < 0)
+        // In Sauerbraten: if(!m_edit && !m_sp) if(gameclock) drawgameclock(w, h);
+        // Match clock is disabled in editor mode (coop edit or editing state), or when untimed (MapLimit < 0).
+        if (CurrentEditMode || !GameClock || MapLimit < 0)
         {
             if (_gameClockLabel.Visible)
             {
@@ -1317,7 +1320,8 @@ public partial class HudController : Control
             Score1IsPlayer = true;
         }
 
-        if (!HudScore || Score1 == int.MinValue)
+        // In Sauerbraten: if(!m_edit && !m_sp) if(hudscore) drawhudscore(w, h);
+        if (CurrentEditMode || !HudScore || Score1 == int.MinValue)
         {
             if (_hudScoreLabel1.Visible || _hudScoreLabel2.Visible)
             {
@@ -1455,8 +1459,7 @@ public partial class HudController : Control
     {
         if (_editHudRoot == null || _editCubeLabel == null || _editStatsLabel == null) return;
 
-        bool isEdit = IsEditMode || (Player != null && Player.Entity.State == PhysEnt.CsEditing);
-        if (!isEdit)
+        if (!CurrentEditMode)
         {
             _editHudRoot.Visible = false;
             return;

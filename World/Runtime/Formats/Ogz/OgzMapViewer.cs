@@ -347,8 +347,8 @@ public partial class OgzMapViewer : Node3D
             Player = player,
             IsEditMode = isEdit,
             // Default 10 minute match timer (10 * 60 * 1000 = 600000 ms) matching Sauerbraten standard maplimit.
-            // Seeded from the world's simulation clock, which the game clock is compared against.
-            MapLimit = (mapSource.Clock?.NowMillis ?? 0) + 10 * 60 * 1000
+            // In editor mode (coop edit / edit viewer), there is no match timer (untimed, -1).
+            MapLimit = isEdit ? -1 : (mapSource.Clock?.NowMillis ?? 0) + 10 * 60 * 1000
         };
         hud.SetupTextures(mapSource.Textures ?? new Materials.ResourceTextureSource());
         canvas.AddChild(hud);
