@@ -94,8 +94,10 @@ Godot types and lives in the game assembly. Tests are excluded from
 automatically** (no CI hook), so it is on you to run it explicitly:
 
 ```sh
-./run-tests.sh            # headless; set GODOT=/path/to/Godot if needed
+SAUER_REF=/Users/fohlen/Downloads/sauerbraten-code-r6889 ./run-tests.sh            # headless; set GODOT=/path/to/Godot if needed
 ```
+
+You **NEED** to set `SAUER_REF` (e.g. `export SAUER_REF=/Users/fohlen/Downloads/sauerbraten-code-r6889`) when running tests or tools; test map fixtures and content fallbacks require it.
 
 If `$GODOT` is unset, both the helper and the commands below fall back to
 `/Applications/Godot_mono.app/Contents/MacOS/Godot`.
@@ -169,9 +171,7 @@ The original engine is a pristine snapshot of **Sauerbraten SVN r6889**:
 and is **never modified** — patches are applied to a copy at build time. Use it
 for lookup when porting original behaviour.
 
-The runtime dump fallback is **opt-in**: point `SAUER_REF` (or the
-`sauerbraten/reference_path` ProjectSetting, shipped empty) at this path when you
-want it, e.g. `SAUER_REF=~/Downloads/sauerbraten-code-r6889 ./run-tests.sh`.
+You **NEED** to set `SAUER_REF` (e.g. `export SAUER_REF=/Users/fohlen/Downloads/sauerbraten-code-r6889`, or configure the `sauerbraten/reference_path` ProjectSetting) whenever running tests, tools, or viewing maps that load original assets.
 Nothing guesses a default location, so an unconfigured checkout never reads the
 dump — which also keeps macOS from prompting for Downloads access on launch.
 
