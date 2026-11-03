@@ -95,33 +95,33 @@ def parse_cfg(path: str) -> dict:
                     pass
             elif cmd in ("objdir",) and args:
                 params["objdir"] = args[0]
-            elif cmd == "md5dir" and args:
-                # md5dir sets the skin/bumpmap base dir (modelcommands::setdir); it may
+            elif cmd in ("md5dir", "iqmdir") and args:
+                # md5dir/iqmdir sets the skin/bumpmap base dir (modelcommands::setdir); it may
                 # differ from the mesh dir (e.g. vwep/shotg loads its mesh from vwep/
-                # but its textures from hudguns/shotg).
+                # but its textures from hudguns/shotg; ogro2/blue sets iqmdir "ogro2").
                 params["md5dir"] = args[0]
             elif cmd in ("objload", "md2load", "md3load", "md5load", "iqmload") and args:
                 params["source"] = args[0]
-            elif cmd in ("objskin", "md3skin", "md5skin", "md2skin") and args:
+            elif cmd in ("objskin", "md3skin", "md5skin", "md2skin", "iqmskin") and args:
                 # objskin * diffuse mask  |  md3skin layer1 "diffuse" "mask"
-                # md5skin <part> "diffuse" "mask" [gloss] [glow]  (skelmodel: per-part)
-                if cmd == "md5skin" and len(args) >= 2:
+                # md5skin/iqmskin <part> "diffuse" "mask" [gloss] [glow]  (skelmodel: per-part)
+                if cmd in ("md5skin", "iqmskin") and len(args) >= 2:
                     params["skins"].append({"part": args[0], "diffuse": args[1],
                                             "mask": args[2] if len(args) >= 3 else None})
                 if params["skin"] is None and len(args) >= 2:
                     params["skin"] = args[1]
             elif cmd == "objbumpmap" and len(args) >= 2:
                 params["bump"] = args[1]
-            elif cmd == "md5bumpmap" and len(args) >= 2:
-                # md5bumpmap <part> "normal"
+            elif cmd in ("md5bumpmap", "iqmbumpmap") and len(args) >= 2:
+                # md5bumpmap/iqmbumpmap <part> "normal"
                 if params["bump"] is None:
                     params["bump"] = args[1]
-            elif cmd == "md5anim" and len(args) >= 2:
-                # md5anim "name" "file.md5anim" [fps] [priority]. The third value is
+            elif cmd in ("md5anim", "iqmanim") and len(args) >= 2:
+                # md5anim/iqmanim "name" "file" [fps] [priority]. The third value is
                 # the engine's skelmodel setanim speed (animmodel.h: 1000/fps ms per
                 # frame); the fourth is the per-part selection priority (nothing /
                 # 0 means the engine default). The animation belongs to the current
-                # md5animpart.
+                # md5animpart/iqmanimpart.
                 anim = {"name": args[0], "file": args[1], "part": part}
                 if len(args) >= 3:
                     try:
@@ -134,16 +134,16 @@ def parse_cfg(path: str) -> dict:
                     except ValueError:
                         pass
                 params["anims"].append(anim)
-            elif cmd == "md5animpart":
-                # md5animpart <bone> [<bone> ...]: the new part's bone mask. The
+            elif cmd in ("md5animpart", "iqmanimpart"):
+                # md5animpart/iqmanimpart <bone> [<bone> ...]: the new part's bone mask. The
                 # engine expands each named bone to its whole subtree (skelmodel.h
                 # expandbonemask); later parts override earlier ones for shared bones.
                 # The list may arrive as one quoted string (setanimpart explodes it on
                 # whitespace) or as separate arguments; normalise both.
                 params["animparts"].append([b for arg in args for b in arg.split()])
                 part += 1
-            elif cmd == "md5pitch" and args:
-                # md5pitch <bone> <scale> <offset> <min> <max> (skelmodel.h setpitch).
+            elif cmd in ("md5pitch", "iqmpitch") and args:
+                # md5pitch/iqmpitch <bone> <scale> <offset> <min> <max> (skelmodel.h setpitch).
                 # An empty bone name sets the part-wide pitch scale instead of a
                 # single bone's. Missing trailing values default to 0 (the engine's
                 # min/max then widen to +/-360*|scale|).
@@ -155,11 +155,11 @@ def parse_cfg(path: str) -> dict:
                         except ValueError:
                             pass
                 params["pitches"].append(pitch)
-            elif cmd == "md5tag" and len(args) >= 2:
-                # md5tag <bone> <tag>  (e.g. md5tag Weapon tag_weapon)
+            elif cmd in ("md5tag", "iqmtag") and len(args) >= 2:
+                # md5tag/iqmtag <bone> <tag>  (e.g. md5tag Weapon tag_weapon)
                 params["tags"].append({"bone": args[0], "tag": args[1]})
-            elif cmd == "md5adjust" and args:
-                # md5adjust <bone> <yaw> <pitch> <roll> [tx ty tz] (skelmodel.h setadjust).
+            elif cmd in ("md5adjust", "iqmadjust") and args:
+                # md5adjust/iqmadjust <bone> <yaw> <pitch> <roll> [tx ty tz] (skelmodel.h setadjust).
                 # Rotates/translates a bone's bind+anim pose; the engine applies it per
                 # animation frame, so it is recorded here and composed offline.
                 adj = {"bone": args[0]}
@@ -170,8 +170,8 @@ def parse_cfg(path: str) -> dict:
                         except ValueError:
                             pass
                 params["adjusts"].append(adj)
-            elif cmd == "md5link" and len(args) >= 3:
-                # md5link <parent> <child> <tag> [x y z] (skelmodel.h setlink): attach
+            elif cmd in ("md5link", "iqmlink") and len(args) >= 3:
+                # md5link/iqmlink <parent> <child> <tag> [x y z] (skelmodel.h setlink): attach
                 # the child mesh part to a tag on the parent part (hudguns link the
                 # weapon mesh to the hands' tag_bicep/tag_weapon).
                 link = {"parent": int(float(args[0])), "child": int(float(args[1])), "tag": args[2]}
@@ -1229,11 +1229,11 @@ def main(argv: list[str] | None = None) -> int:
             record["skin"] = rel_to_packages(skin, packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
             record["bump"] = rel_to_packages(params.get("bump"), packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
 
-            # MD5 (skelmodel) extras: per-part skins, the .md5anim table and the
+            # MD5 / IQM (skelmodel) extras: per-part skins, the anim table and the
             # named bone tags the engine attaches sub-models to. The single `skin`
             # above stays the runtime fallback; `skins` preserves the per-part split.
             ext = os.path.splitext(source)[1].lower()
-            if ext == ".md5mesh":
+            if ext in (".md5mesh", ".iqm"):
                 record["skeleton"] = True
                 skins = []
                 for s in params.get("skins", []):

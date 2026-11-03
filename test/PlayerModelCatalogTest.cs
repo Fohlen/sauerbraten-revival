@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using Chickensoft.GoDotTest;
 using Godot;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Models;
 
 namespace SauerbratenRevival.Tests;
@@ -280,5 +282,35 @@ public class PlayerModelCatalogTest : GoTestBase
         var catalogInstance = new SubclassedPlayerModelCatalog();
         TestAssert.Equal(PlayerModelCatalog.Defaults.Length, catalogInstance.All.Length, "inherits active table");
         TestAssert.Equal("mrfixit", catalogInstance.All[(int)PlayerModelId.MrFixit].Name, "inherits mrfixit name");
+    }
+
+    [Test]
+    public void AllPlayerModelsResolveSkinMaterialsWhenManifestPresent()
+    {
+        var catalog = ModelCatalog.LoadFromProject();
+        if (catalog == null)
+        {
+            GD.Print("[playermodel] no converted models; skipping");
+            return;
+        }
+
+        var textures = TextureSources.CreateDefault();
+        var cache = new Dictionary<string, Material>();
+
+        for (int modelIdx = 0; modelIdx < PlayerModelCatalog.Count; modelIdx++)
+        {
+            var pm = PlayerModelCatalog.Get(modelIdx);
+            for (int team = 0; team <= 2; team++)
+            {
+                string bodyPath = pm.Body(team);
+                var info = catalog.Get(bodyPath);
+                TestAssert.True(info != null, $"manifest entry present for {bodyPath}");
+                TestAssert.True(!string.IsNullOrEmpty(info!.Skin), $"skin path present for {bodyPath}");
+
+                var mat = ModelSkin.Build(info, textures, cache) as StandardMaterial3D;
+                TestAssert.True(mat != null, $"skin material built for {bodyPath}");
+                TestAssert.True(mat!.AlbedoTexture != null, $"albedo texture loaded for {bodyPath} ({info.Skin})");
+            }
+        }
     }
 }

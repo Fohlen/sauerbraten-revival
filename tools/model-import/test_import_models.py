@@ -331,6 +331,33 @@ class MetadataBuildTest(unittest.TestCase):
         self.assertEqual(["Spine1", "Head"], [p["bone"] for p in md["pitch"]])
         self.assertEqual("models/mrfixit/sniper_idle.md5anim", md["anims"]["hold 5"])
 
+    def test_ogro2_iqm_skin_and_metadata(self):
+        models_root = os.path.join(self.ref, "packages", "models")
+        if not os.path.isdir(models_root):
+            self.skipTest("reference dump not present")
+        packages = os.path.dirname(models_root)
+        expected_skins = {
+            "ogro2": "models/ogro2/green.jpg",
+            "ogro2/blue": "models/ogro2/blue.jpg",
+            "ogro2/red": "models/ogro2/red.jpg",
+        }
+        for name, expected_skin in expected_skins.items():
+            with self.subTest(name=name):
+                source, params = import_models.find_model(models_root, name)
+                self.assertIsNotNone(source)
+                cfg_dir = params["cfg_dir"]
+                name_dir = os.path.join(models_root, name)
+                mesh_dir = os.path.dirname(source)
+                tex_dir = (os.path.join(models_root, params["md5dir"])
+                           if params.get("md5dir") else None)
+                skin = import_models.resolve_skin(params.get("skin"), cfg_dir, name_dir, mesh_dir, tex_dir)
+                rel_skin = import_models.rel_to_packages(skin, packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
+                self.assertEqual(expected_skin, rel_skin)
+                self.assertTrue(any(t["tag"] == "tag_weapon" and t["bone"] == "Tag.L" for t in params["tags"]))
+                md = import_models.build_anim_metadata(params, packages, cfg_dir, mesh_dir)
+                self.assertEqual([{"mask": ["Waist"]}], md["animParts"])
+                self.assertEqual("models/ogro2/idle.iqm", md["anims"]["idle"])
+
 
 class ReferenceCfgTest(unittest.TestCase):
     """Ground-truth checks against the read-only reference dump (skipped if absent)."""
