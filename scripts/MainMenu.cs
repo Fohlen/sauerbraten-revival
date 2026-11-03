@@ -428,6 +428,34 @@ public partial class MainMenu : CanvasLayer
         // to leave room for the nametag above the head and the controls below the
         // feet (~50% of the viewport height; fov 34, KEEP_HEIGHT).
         float height = Mathf.Max(bounds.Size.Y, 1f);
+
+        // When a skeleton is present, verify against posed bone extents. Some models
+        // (such as inky) have their MeshInstance3D node rotated under a parent bone,
+        // which places the character's vertical extent into horizontal bounds while
+        // bounds.Size.Y only measures depth. If the posed skeleton's upright height
+        // exceeds bounds.Size.Y, resolve the true vertical extent.
+        if (_preview.Skeleton != null && _preview.Skeleton.GetBoneCount() > 0)
+        {
+            float minY = float.MaxValue;
+            float maxY = float.MinValue;
+            for (int b = 0; b < _preview.Skeleton.GetBoneCount(); b++)
+            {
+                Vector3 p = _preview.Skeleton.GlobalTransform * _preview.Skeleton.GetBoneGlobalPose(b).Origin;
+                minY = Mathf.Min(minY, p.Y);
+                maxY = Mathf.Max(maxY, p.Y);
+            }
+
+            if (maxY > minY)
+            {
+                float skelHeight = maxY - Mathf.Min(minY, 0f);
+                if (skelHeight > height)
+                {
+                    float candidate = Mathf.Min(bounds.Size.X, bounds.Size.Z);
+                    height = candidate > skelHeight * 0.9f ? candidate : skelHeight * 1.1f;
+                }
+            }
+        }
+
         float distance = height * 3.4f;
         _camera.Position = new Vector3(0f, height * 0.5f, distance);
         _camera.RotationDegrees = Vector3.Zero;

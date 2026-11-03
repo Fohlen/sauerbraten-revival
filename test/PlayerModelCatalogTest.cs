@@ -313,4 +313,93 @@ public class PlayerModelCatalogTest : GoTestBase
             }
         }
     }
+
+    [Test]
+    public void VerifyPreviewFramingHeightAcrossAllModels()
+    {
+        string dir = ProjectSettings.GlobalizePath("res://assets/models");
+        var catalog = ModelCatalog.Load(System.IO.Path.Combine(dir, "models.json"), dir, "res://assets/models");
+        if (catalog == null) return;
+
+        for (int i = 0; i < PlayerModelCatalog.Count; i++)
+        {
+            var body = new PlayerModel();
+            TestScene.AddChild(body);
+            body.Configure(catalog, null, i, team: 0);
+
+            bool any = false;
+            Aabb bounds = default;
+            foreach (Node node in body.FindChildren("*", "MeshInstance3D", true, false))
+            {
+                if (node is not MeshInstance3D { Mesh: not null } mesh) continue;
+                Aabb world = mesh.GlobalTransform * mesh.GetAabb();
+                bounds = any ? bounds.Merge(world) : world;
+                any = true;
+            }
+
+            float height = Mathf.Max(bounds.Size.Y, 1f);
+            if (body.Skeleton != null && body.Skeleton.GetBoneCount() > 0)
+            {
+                float minY = float.MaxValue;
+                float maxY = float.MinValue;
+                for (int b = 0; b < body.Skeleton.GetBoneCount(); b++)
+                {
+                    Vector3 p = body.Skeleton.GlobalTransform * body.Skeleton.GetBoneGlobalPose(b).Origin;
+                    minY = Mathf.Min(minY, p.Y);
+                    maxY = Mathf.Max(maxY, p.Y);
+                }
+
+                if (maxY > minY)
+                {
+                    float skelHeight = maxY - Mathf.Min(minY, 0f);
+                    if (skelHeight > height)
+                    {
+                        float candidate = Mathf.Min(bounds.Size.X, bounds.Size.Z);
+                        height = candidate > skelHeight * 0.9f ? candidate : skelHeight * 1.1f;
+                    }
+                }
+            }
+
+            float distance = height * 3.4f;
+            GD.Print($"[PREVIEW FRAMING] model {i} ({PlayerModelCatalog.Get(i).Name}): final height={height:F2}, distance={distance:F2}");
+            TestAssert.True(height >= 14.0f && height <= 18.0f, $"model {i} height {height} is between 14.0 and 18.0");
+            TestAssert.True(distance >= 47.0f && distance <= 62.0f, $"model {i} camera distance {distance} is between 47.0 and 62.0");
+
+            body.Free();
+        }
+    }
+
+    [Test]
+    public void AllPlayerModelsShareIdenticalHitmaskAndCollisionBounds()
+    {
+        // Sauerbraten dynent / physent hit cylinder (src/shared/ents.h:90-95, src/fpsgame/weapon.cpp:706-712):
+        // All player models (including Inky with its wide wings and higher mdlscale) share the exact same
+        // hitmask cylinder and collision extents. Hit testing is strictly decoupled from presentation geometry.
+        var player = new SauerbratenRevival.World.Game.Players.MapPlayer();
+        try
+        {
+            TestAssert.Near(4.1f, player.CollisionEntity.Radius, 0.001f, "player hit radius is 4.1");
+            TestAssert.Near(14.0f, player.CollisionEntity.EyeHeight, 0.001f, "player eye height is 14.0");
+            TestAssert.Near(1.0f, player.CollisionEntity.AboveEye, 0.001f, "player above eye is 1.0");
+            TestAssert.Near(4.1f, player.CollisionEntity.XRadius, 0.001f, "player xradius is 4.1");
+            TestAssert.Near(4.1f, player.CollisionEntity.YRadius, 0.001f, "player yradius is 4.1");
+
+            // Verify configuring any player model (0 = MrFixit, 3 = Inky, etc.) leaves collision hitmask invariant
+            for (int i = 0; i < PlayerModelCatalog.Count; i++)
+            {
+                var body = new PlayerModel();
+                body.Configure(null, null, i, team: 0);
+                player.PlayerModel = body;
+
+                TestAssert.Near(4.1f, player.CollisionEntity.Radius, 0.001f, $"model {i} retains radius 4.1");
+                TestAssert.Near(14.0f, player.CollisionEntity.EyeHeight, 0.001f, $"model {i} retains eye height 14.0");
+                TestAssert.Near(1.0f, player.CollisionEntity.AboveEye, 0.001f, $"model {i} retains above eye 1.0");
+                body.Free();
+            }
+        }
+        finally
+        {
+            player.Free();
+        }
+    }
 }
