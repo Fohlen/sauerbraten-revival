@@ -78,7 +78,8 @@ public static class ModelCache
         string gunFile,
         string hudgunsDir,
         IModelCatalog? catalog,
-        ITextureSource? textures)
+        ITextureSource? textures,
+        int team = 0)
     {
         if (catalog == null) return;
 
@@ -89,11 +90,11 @@ public static class ModelCache
             PreloadModel(hudgunInfo);
             if (textures != null)
             {
-                ModelSkin.Build(hudgunInfo, textures, _skinCache);
+                ModelSkin.Build(hudgunInfo, textures, _skinCache, team);
                 if (hudgunInfo.Parts != null)
                 {
                     foreach (var part in hudgunInfo.Parts)
-                        ModelSkin.Build(part, textures, _skinCache);
+                        ModelSkin.Build(part, textures, _skinCache, team);
                 }
             }
         }
@@ -127,7 +128,7 @@ public static class ModelCache
         {
             PreloadModel(bodyInfo);
             if (textures != null)
-                ModelSkin.Build(bodyInfo, textures, _skinCache);
+                ModelSkin.Build(bodyInfo, textures, _skinCache, team);
         }
 
         // All 7 weapons: fist, shotg, chaing, rocket, rifle, gl, pistol
@@ -135,7 +136,7 @@ public static class ModelCache
         {
             var weapon = WeaponCatalog.Get((Gun)g);
             if (string.IsNullOrEmpty(weapon.File)) continue;
-            PreloadWeapon(weapon.File, info.Hudguns, catalog, textures);
+            PreloadWeapon(weapon.File, info.Hudguns, catalog, textures, team);
         }
     }
 

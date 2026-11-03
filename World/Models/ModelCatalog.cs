@@ -66,12 +66,52 @@ public sealed class ModelInfo
     /// <summary>View-pitch corrections (<c>md5pitch</c>): per-bone, or part-wide when the bone is empty.</summary>
     public readonly List<PitchInfo> Pitches = new();
 
+    /// <summary>Per-part or variant skins (diffuse + optional mask).</summary>
+    public readonly List<ModelSkinInfo> Skins = new();
+
     /// <summary>Linked submodels, as used by first-person hudguns.</summary>
     public readonly List<ModelInfo> Parts = new();
 
     /// <summary>For linked submodels, the parent part and attachment tag.</summary>
     public int LinkParent = -1;
     public string? LinkTag;
+
+    /// <summary>
+    /// Returns the diffuse skin texture path for a team (0 = neutral/FFA, 1 = blue, 2 = red).
+    /// If no team-specific skins exist, falls back to <see cref="Skin"/>.
+    /// </summary>
+    public string? SkinForTeam(int team)
+    {
+        if (Skins.Count == 0) return Skin;
+
+        if (team == 1)
+        {
+            var blue = Skins.Find(s => !string.IsNullOrEmpty(s.Diffuse) && s.Diffuse.Contains("blue", System.StringComparison.OrdinalIgnoreCase));
+            if (blue?.Diffuse != null) return blue.Diffuse;
+        }
+        else if (team == 2)
+        {
+            var red = Skins.Find(s => !string.IsNullOrEmpty(s.Diffuse) && s.Diffuse.Contains("red", System.StringComparison.OrdinalIgnoreCase));
+            if (red?.Diffuse != null) return red.Diffuse;
+        }
+        else if (team == 0)
+        {
+            var neutral = Skins.Find(s => !string.IsNullOrEmpty(s.Diffuse) &&
+                !s.Diffuse.Contains("blue", System.StringComparison.OrdinalIgnoreCase) &&
+                !s.Diffuse.Contains("red", System.StringComparison.OrdinalIgnoreCase));
+            if (neutral?.Diffuse != null) return neutral.Diffuse;
+        }
+
+        return Skin;
+    }
+}
+
+/// <summary>One model part or variant skin specification.</summary>
+public sealed class ModelSkinInfo
+{
+    public string Part = "";
+    public string? Diffuse;
+    public string? Mask;
 }
 
 /// <summary>One MD5 animation part's bone mask (<c>md5animpart</c>).</summary>
@@ -168,6 +208,18 @@ public sealed class ModelCatalog : IModelCatalog
         if (v.TryGetProperty("scale", out var scale)) info.Scale = (float)scale.GetDouble();
         if (v.TryGetProperty("skin", out var skin) && skin.ValueKind == JsonValueKind.String)
             info.Skin = skin.GetString();
+        if (v.TryGetProperty("skins", out var skins) && skins.ValueKind == JsonValueKind.Array)
+            foreach (var s in skins.EnumerateArray())
+            {
+                var skinInfo = new ModelSkinInfo();
+                if (s.TryGetProperty("part", out var part) && part.ValueKind == JsonValueKind.String)
+                    skinInfo.Part = part.GetString()!;
+                if (s.TryGetProperty("diffuse", out var diff) && diff.ValueKind == JsonValueKind.String)
+                    skinInfo.Diffuse = diff.GetString();
+                if (s.TryGetProperty("mask", out var mask) && mask.ValueKind == JsonValueKind.String)
+                    skinInfo.Mask = mask.GetString();
+                info.Skins.Add(skinInfo);
+            }
         if (v.TryGetProperty("bump", out var bump) && bump.ValueKind == JsonValueKind.String)
             info.Bump = bump.GetString();
         if (v.TryGetProperty("alphatest", out var at) && at.ValueKind == JsonValueKind.Number)

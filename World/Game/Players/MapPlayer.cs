@@ -244,7 +244,11 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public HudgunModel? Hudgun
     {
         get => View.Hudgun;
-        set => View.Hudgun = value;
+        set
+        {
+            View.Hudgun = value;
+            if (value != null) value.Team = Team;
+        }
     }
 
     private Effects.WeaponEffectsRenderer? _weaponEffects;
@@ -317,7 +321,11 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public int Team
     {
         get => PlayerState.TeamFlag(Combat.Team);
-        set => Combat.Team = PlayerState.FlagTeam(value);
+        set
+        {
+            Combat.Team = PlayerState.FlagTeam(value);
+            if (Hudgun != null) Hudgun.Team = value;
+        }
     }
 
     /// <summary>Player team name (e.g. "good" or "evil"). Delegates to Combat.Team.</summary>

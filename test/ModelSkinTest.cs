@@ -22,6 +22,12 @@ public class ModelSkinTest : GoTestBase
             _textures["skin.png"] = ImageTexture.CreateFromImage(img);
         }
 
+        public void Add(string path)
+        {
+            var img = Image.CreateEmpty(4, 4, false, Image.Format.Rgba8);
+            _textures[path] = ImageTexture.CreateFromImage(img);
+        }
+
         public Texture2D? Get(string path) => _textures.GetValueOrDefault(path);
         public Vector2I Size(string path) => new(4, 4);
         public Image? GetImage(string path) => null;
@@ -133,5 +139,38 @@ public class ModelSkinTest : GoTestBase
         TestAssert.True(mat != null, "material created");
         TestAssert.Equal(BaseMaterial3D.TransparencyEnum.Disabled, mat!.Transparency, "opaque default transparency is Disabled");
         TestAssert.Equal(BaseMaterial3D.CullModeEnum.Disabled, mat.CullMode, "default cull mode is Disabled");
+    }
+
+    [Test]
+    public void TeamSkinResolutionWorks()
+    {
+        var textures = new DummyTextureSource();
+        textures.Add("hands_blue.png");
+        textures.Add("hands_red.png");
+        textures.Add("hands.png");
+
+        var info = new ModelInfo
+        {
+            Skin = "hands.png",
+            Skins =
+            {
+                new ModelSkinInfo { Part = "hands", Diffuse = "hands_blue.png" },
+                new ModelSkinInfo { Part = "hands", Diffuse = "hands_red.png" },
+                new ModelSkinInfo { Part = "hands", Diffuse = "hands.png" },
+            },
+        };
+
+        TestAssert.Equal("hands_blue.png", info.SkinForTeam(1), "team 1 resolves blue skin");
+        TestAssert.Equal("hands_red.png", info.SkinForTeam(2), "team 2 resolves red skin");
+        TestAssert.Equal("hands.png", info.SkinForTeam(0), "team 0 resolves neutral skin");
+
+        var cache = new Dictionary<string, Material>();
+        var blueMat = ModelSkin.Build(info, textures, cache, team: 1) as StandardMaterial3D;
+        var redMat = ModelSkin.Build(info, textures, cache, team: 2) as StandardMaterial3D;
+        var neutralMat = ModelSkin.Build(info, textures, cache, team: 0) as StandardMaterial3D;
+
+        TestAssert.True(blueMat != null && blueMat.AlbedoTexture == textures.Get("hands_blue.png"), "blue material built");
+        TestAssert.True(redMat != null && redMat.AlbedoTexture == textures.Get("hands_red.png"), "red material built");
+        TestAssert.True(neutralMat != null && neutralMat.AlbedoTexture == textures.Get("hands.png"), "neutral material built");
     }
 }

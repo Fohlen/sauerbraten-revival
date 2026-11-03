@@ -88,9 +88,22 @@ public partial class HudgunModel : Node3D
     private ITextureSource? _textures;
     private IDictionary<string, Material>? _skinCache;
     private int _modelIndex;
+    private int _team;
     private string _gunName = "";
     private string _currentAnim = "";
     private int _lastActionSeen = -1;
+
+    [Export]
+    public int Team
+    {
+        get => _team;
+        set
+        {
+            if (_team == value) return;
+            _team = value;
+            ApplyTeamSkins();
+        }
+    }
 
     /// <summary>Configure before adding this node to the camera.</summary>
     public void Configure(
@@ -98,6 +111,7 @@ public partial class HudgunModel : Node3D
         ITextureSource? textures,
         int modelIndex,
         string gun,
+        int team = 0,
         IDictionary<string, Material>? skinCache = null)
     {
         ClearBank();
@@ -105,6 +119,7 @@ public partial class HudgunModel : Node3D
         _textures = textures;
         _modelIndex = modelIndex;
         _gunName = gun;
+        _team = team;
         ModelPath = $"{Playermodels.Get(modelIndex).Hudguns}/{gun}";
         _info = models?.Get(ModelPath);
         _skinCache = skinCache ?? ModelCache.SkinCache;
@@ -137,6 +152,27 @@ public partial class HudgunModel : Node3D
         _weaponBank.Clear();
         _activeRig = null;
         _info = null;
+    }
+
+    private void ApplyTeamSkins()
+    {
+        foreach (var rig in _weaponBank.Values)
+        {
+            ApplyTeamSkinsToRig(rig);
+        }
+    }
+
+    private void ApplyTeamSkinsToRig(WeaponRig rig)
+    {
+        if (_textures == null) return;
+        var cache = _skinCache ?? ModelCache.SkinCache;
+        for (int i = 0; i < rig.Parts.Count && i < rig.Info.Parts.Count; i++)
+        {
+            var part = rig.Parts[i];
+            var partInfo = rig.Info.Parts[i];
+            var material = ModelSkin.Build(partInfo, _textures, cache, _team);
+            part.ApplyMaterial(material);
+        }
     }
 
     private void BuildBank()
@@ -200,7 +236,7 @@ public partial class HudgunModel : Node3D
                 GlbPath = partInfo.GlbPath,
                 GlbOsPath = partInfo.GlbOsPath,
                 KeepSkeleton = true,
-                SkinMaterial = ModelSkin.Build(partInfo, _textures, _skinCache!),
+                SkinMaterial = ModelSkin.Build(partInfo, _textures, _skinCache!, _team),
             };
 
             Node3D? parent = container;

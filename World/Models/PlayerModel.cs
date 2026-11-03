@@ -128,7 +128,7 @@ public partial class PlayerModel : ModelInstance
         _animSpeeds.Clear();
         if (info != null)
             foreach (var (animName, fps) in info.AnimSpeeds) _animSpeeds[animName] = fps;
-        SkinMaterial = ModelSkin.Build(info, textures, _skinCache);
+        SkinMaterial = ModelSkin.Build(info, textures, _skinCache, team);
 
         if (IsInsideTree()) Reload();
     }

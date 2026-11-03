@@ -7,15 +7,17 @@ namespace SauerbratenRevival.World.Models;
 /// <summary>Builds a Godot skin material (diffuse + optional normal) for a converted model.</summary>
 public static class ModelSkin
 {
-    public static Material? Build(ModelInfo? info, ITextureSource? textures, IDictionary<string, Material> cache)
+    public static Material? Build(ModelInfo? info, ITextureSource? textures, IDictionary<string, Material> cache, int team = 0)
     {
-        if (info?.Skin == null || textures == null) return null;
-        string key = $"{info.Skin}|{info.Bump}|{info.AlphaTest}|{info.AlphaBlend}|{info.CullFace}";
+        if (info == null || textures == null) return null;
+        string? skin = info.SkinForTeam(team);
+        if (skin == null) return null;
+        string key = $"{skin}|{info.Bump}|{info.AlphaTest}|{info.AlphaBlend}|{info.CullFace}";
         if (cache.TryGetValue(key, out var cached)) return cached;
 
         var material = new StandardMaterial3D
         {
-            AlbedoTexture = textures.Get(info.Skin),
+            AlbedoTexture = textures.Get(skin),
             TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
             CullMode = info.CullFace == true
                 ? BaseMaterial3D.CullModeEnum.Back

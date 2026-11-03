@@ -155,9 +155,24 @@ public partial class ModelInstance : Node3D
         return count;
     }
 
-    private static void ApplyMaterial(Node node, Material material)
+    /// <summary>Applies a skin material to this instance's mesh hierarchies dynamically.</summary>
+    public void ApplyMaterial(Material? material)
+    {
+        SkinMaterial = material;
+        foreach (var child in GetChildren())
+        {
+            if (child is ModelInstance) continue;
+            ApplyMaterial(child, material);
+        }
+    }
+
+    private static void ApplyMaterial(Node node, Material? material)
     {
         if (node is MeshInstance3D mesh) mesh.MaterialOverride = material;
-        foreach (var child in node.GetChildren()) ApplyMaterial(child, material);
+        foreach (var child in node.GetChildren())
+        {
+            if (child is ModelInstance) continue;
+            ApplyMaterial(child, material);
+        }
     }
 }

@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using System.IO;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Models;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
 
@@ -114,6 +116,83 @@ public class HudgunModelTest : GoTestBase
         TestAssert.True(object.ReferenceEquals(hudgun.Parts[1], riflePart1), "exact same rifle weapon part reused without reallocating");
         TestAssert.True(rifleContainer.Visible, "rifle container restored to visible");
         TestAssert.Equal((int)Node.ProcessModeEnum.Inherit, (int)rifleContainer.ProcessMode, "rifle container restored to processing");
+
+        TestScene.RemoveChild(hudgun);
+        hudgun.Free();
+    }
+
+    private sealed class DummyTextureSource : ITextureSource
+    {
+        private readonly Dictionary<string, Texture2D> _textures = new();
+
+        public DummyTextureSource(params string[] paths)
+        {
+            var img = Image.CreateEmpty(4, 4, false, Image.Format.Rgba8);
+            foreach (var p in paths)
+                _textures[p] = ImageTexture.CreateFromImage(img);
+        }
+
+        public Texture2D? Get(string path) => _textures.GetValueOrDefault(path);
+        public Vector2I Size(string path) => new(4, 4);
+        public Image? GetImage(string path) => null;
+    }
+
+    [Test]
+    public void TeamSkinAppliedInFirstPerson()
+    {
+        string dir = ProjectSettings.GlobalizePath("res://assets/models");
+        var catalog = ModelCatalog.Load(Path.Combine(dir, "models.json"), dir, "res://assets/models");
+        if (catalog?.Get("mrfixit/hudguns/rifle") == null)
+        {
+            GD.Print("[hudgun] converted rifle model missing; skipping");
+            return;
+        }
+
+        var textures = new DummyTextureSource(
+            "models/mrfixit/hudguns/fixit_hands_blue.png",
+            "models/mrfixit/hudguns/fixit_hands_red.png",
+            "models/mrfixit/hudguns/fixit_hands.png",
+            "models/hudguns/rifle/sniper.png"
+        );
+
+        var skinCache = new Dictionary<string, Material>();
+        var hudgun = new HudgunModel();
+        hudgun.Configure(catalog, textures, 0, "rifle", team: 1, skinCache: skinCache);
+        TestScene.AddChild(hudgun);
+
+        TestAssert.Equal(1, hudgun.Team, "initial team is blue (1)");
+        TestAssert.True(hudgun.Parts.Count >= 2, "hudgun has hands and rifle parts");
+
+        var handsPart = hudgun.Parts[0];
+        var weaponPart = hudgun.Parts[1];
+
+        var blueMat = handsPart.SkinMaterial as StandardMaterial3D;
+        TestAssert.True(blueMat != null, "blue hands material created");
+        TestAssert.Equal(textures.Get("models/mrfixit/hudguns/fixit_hands_blue.png"), blueMat!.AlbedoTexture,
+            "team 1 uses blue hands skin in 1st person");
+
+        var weaponMat = weaponPart.SkinMaterial as StandardMaterial3D;
+        TestAssert.True(weaponMat != null, "weapon material created");
+        TestAssert.Equal(textures.Get("models/hudguns/rifle/sniper.png"), weaponMat!.AlbedoTexture,
+            "weapon skin remains sniper texture");
+
+        // Change team to red (2)
+        hudgun.Team = 2;
+        var redMat = handsPart.SkinMaterial as StandardMaterial3D;
+        TestAssert.True(redMat != null, "red hands material created");
+        TestAssert.Equal(textures.Get("models/mrfixit/hudguns/fixit_hands_red.png"), redMat!.AlbedoTexture,
+            "team 2 switches hands to red skin in 1st person");
+        TestAssert.Equal(textures.Get("models/hudguns/rifle/sniper.png"), (weaponPart.SkinMaterial as StandardMaterial3D)?.AlbedoTexture,
+            "weapon skin unaffected by team switch to red");
+
+        // Change team to neutral (0)
+        hudgun.Team = 0;
+        var neutralMat = handsPart.SkinMaterial as StandardMaterial3D;
+        TestAssert.True(neutralMat != null, "neutral hands material created");
+        TestAssert.Equal(textures.Get("models/mrfixit/hudguns/fixit_hands.png"), neutralMat!.AlbedoTexture,
+            "team 0 switches hands to neutral skin in 1st person");
+        TestAssert.Equal(textures.Get("models/hudguns/rifle/sniper.png"), (weaponPart.SkinMaterial as StandardMaterial3D)?.AlbedoTexture,
+            "weapon skin unaffected by team switch to neutral");
 
         TestScene.RemoveChild(hudgun);
         hudgun.Free();

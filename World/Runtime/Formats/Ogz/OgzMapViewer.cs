@@ -413,7 +413,7 @@ public partial class OgzMapViewer : Node3D
             viewWeapon: WeaponCatalog.Vwep(gun));
         player.SyncBodyModelNow();
         var hudgun = new HudgunModel { Name = "Hudgun" };
-        hudgun.Configure(mapSource.Models, mapSource.Textures, PlayerModelIndex, WeaponCatalog.Get(gun).File);
+        hudgun.Configure(mapSource.Models, mapSource.Textures, PlayerModelIndex, WeaponCatalog.Get(gun).File, player.Team);
         if (player.GetNodeOrNull<Camera3D>("Camera3D") is { } camera)
         {
             camera.AddChild(hudgun);
