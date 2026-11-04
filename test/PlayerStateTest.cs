@@ -154,12 +154,13 @@ public class PlayerStateTest : GoTestBase
     [Test]
     public void CatalogExposesAllModes()
     {
-        TestAssert.Equal(20, GameModeCatalog.All.Length, "All 20 mode count");
+        TestAssert.Equal(22, GameModeCatalog.All.Length, "All mode count (20 classic + 2 MVP)");
         string[] expected =
         {
             "ffa", "coop_edit", "teamplay", "insta", "instateam", "effic", "efficteam",
             "tactics", "tactics_team", "capture", "regen_capture", "ctf", "insta_ctf",
-            "effic_ctf", "protect", "insta_protect", "effic_protect", "hold", "insta_hold", "effic_hold"
+            "effic_ctf", "protect", "insta_protect", "effic_protect", "hold", "insta_hold", "effic_hold",
+            "rugby", "race"
         };
         foreach (string id in expected)
             TestAssert.True(GameModeCatalog.TryGet(id) != null, $"mode '{id}' present");

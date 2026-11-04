@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="GameMutator" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://World/Game/GameMutator.cs" id="1_mut"]
+
+[resource]
+script = ExtResource("1_mut")
+Id = "insta"
+Name = "instagib"
+SpawnHealth = 1
+MaxHealth = 100
+SpawnArmour = 0
+SpawnArmourType = 0
+SpawnGun = 4
+SpawnAmmo = PackedInt32Array(1, 0, 0, 0, 100, 0, 0)
+RandomGunsCount = 0
+RandomGunsAmmoScale = 1
+AllowedItems = 0
+ItemRespawnScale = 1.0
+InfiniteAmmo = false
+DamageScale = 1.0
+SelfDamageScale = 0.5
+SelfPushScale = 2.5
+HitPushScale = 1.0
+FriendlyFireScale = 0.0
