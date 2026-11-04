@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="DeathmatchObjectiveResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://World/Game/Objectives/DeathmatchObjectiveResource.cs" id="1_dm"]
+
+[resource]
+script = ExtResource("1_dm")
+Id = "dm"
+Name = "deathmatch"
+DefaultTeamPlay = false
+IsEditMode = false
+DefaultMapPool = 0
+DefaultSpawnArmour = 25
+FragLimit = 0

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="FlagObjectiveResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://World/Game/Objectives/FlagObjectiveResource.cs" id="1_flag"]
+
+[resource]
+script = ExtResource("1_flag")
+Id = "collect"
+Name = "collect"
+DefaultTeamPlay = true
+IsEditMode = false
+DefaultMapPool = 2
+DefaultSpawnArmour = 50
+Placement = 0
+ScoreRule = 0
+ReturnRule = 0
+ResetDelayMillis = 10000
+InvisDelayMillis = 20000
+HoldSeconds = 20
+HoldDeathPenaltySeconds = 5
+PassOnFriendlyHit = false
