@@ -34,9 +34,24 @@ public static class MapListCatalog
     /// </summary>
     public static readonly MapList[] Defaults =
     {
-        new() { Id = MapListId.Dm, Name = "ffa" },
-        new() { Id = MapListId.Capture, Name = "capture" },
-        new() { Id = MapListId.Ctf, Name = "ctf" },
+        new()
+        {
+            Id = MapListId.Dm,
+            Name = "ffa",
+            Modes = new[] { "ffa", "coop_edit", "teamplay", "insta", "instateam", "effic", "efficteam", "tactics", "tactics_team", "race" }
+        },
+        new()
+        {
+            Id = MapListId.Capture,
+            Name = "capture",
+            Modes = new[] { "capture", "regen_capture", "hold", "insta_hold", "effic_hold" }
+        },
+        new()
+        {
+            Id = MapListId.Ctf,
+            Name = "ctf",
+            Modes = new[] { "ctf", "insta_ctf", "effic_ctf", "protect", "insta_protect", "effic_protect", "rugby" }
+        },
         new() { Id = MapListId.Sp, Name = "single player" },
         new() { Id = MapListId.Concept, Name = "concept" },
         new() { Id = MapListId.Rpg, Name = "rpg" },
@@ -121,28 +136,31 @@ public static class MapListCatalog
             () => new MapList());
     }
 
-    /// <summary>Map lists whose modes the engine's maps GUI feeds from the capture pool.</summary>
-    private static readonly HashSet<string> CaptureListModes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "capture", "regen_capture", "hold", "insta_hold", "effic_hold",
-    };
-
     /// <summary>
     /// The map list the front-end should offer for a mode, following the engine's
-    /// maps GUI (<c>data/menus/_utility.cfg</c> <c>ML__SetupMode</c> →
-    /// <c>ML_ModeMaps</c>): CTF/protect/collect use the CTF pool, capture and hold
-    /// use the capture pool, and free-for-all/teamplay/edit use the deathmatch
-    /// pool.
+    /// maps GUI (<c>data/menus/_utility.cfg</c> <c>ML__SetupMode</c> → <c>ML_ModeMaps</c>).
+    /// Checks <see cref="MapList.Modes"/> on loaded pools first, falling back to
+    /// <see cref="ModeObjectiveResource.DefaultMapPool"/>.
     /// </summary>
     public static MapList? ForMode(GameModeInfo? mode)
     {
         if (mode == null) return TryGet(MapListId.Dm);
 
-        // Hold is an M_CTF mode in the engine, but its maps GUI uses the capture
-        // list (ML_ModeType 4 -> ML_ModeMaps 1), so check it before the Ctf flag.
-        if (CaptureListModes.Contains(mode.Id)) return TryGet(MapListId.Capture);
-        if (mode.Has(ModeFlags.Capture) || mode.Has(ModeFlags.Hold)) return TryGet(MapListId.Capture);
-        if (mode.Has(ModeFlags.Ctf)) return TryGet(MapListId.Ctf);
+        // 1. Check if any map list explicitly includes this mode ID in its Modes list
+        foreach (var list in All)
+        {
+            if (list.Modes != null && Array.Exists(list.Modes, m => string.Equals(m, mode.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                return list;
+            }
+        }
+
+        // 2. Fall back to mode's objective default map pool
+        if (mode.Objective != null && mode.Objective.DefaultMapPool != MapListId.None)
+        {
+            return TryGet(mode.Objective.DefaultMapPool);
+        }
+
         return TryGet(MapListId.Dm);
     }
 }

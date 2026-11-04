@@ -73,17 +73,6 @@ public partial class ItemManager : Node3D
     }
 
     /// <summary>
-    /// Legacy overload checking whether an item type is allowed under mode flags.
-    /// </summary>
-    public static bool CanSpawnItem(int type, ModeFlags mode)
-    {
-        if (mode.HasFlag(ModeFlags.NoItems)) return false;
-        if (type < ItemStats.FirstItemType || type >= ItemStats.FirstItemType + ItemStats.Count) return false;
-        if (mode.HasFlag(ModeFlags.NoAmmo) && type >= EntityType.Shells && type <= EntityType.Cartridges) return false;
-        return true;
-    }
-
-    /// <summary>
     /// Engine <c>spawnitems(force)</c> (fpsgame/entities.cpp:372). Initialises or resets item spawns
     /// according to the active game mode and delay rules.
     /// </summary>

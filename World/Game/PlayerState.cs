@@ -126,7 +126,7 @@ public partial class PlayerState : RefCounted
     /// <summary>Engine <c>isteam(a, b)</c>: true if mode is team mode and teams match.</summary>
     public bool IsTeam(string? otherTeam, GameModeInfo? mode = null)
     {
-        if (mode != null && !mode.Has(ModeFlags.Team)) return false;
+        if (mode != null && !mode.TeamPlay) return false;
         return string.Equals(Team, otherTeam, StringComparison.OrdinalIgnoreCase);
     }
 

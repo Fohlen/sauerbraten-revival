@@ -1,9 +1,11 @@
 [gd_resource type="Resource" script_class="GameModeInfo" format=3]
 
-[ext_resource type="Script" path="res://World/Game/GameModeInfo.cs" id="1_protect"]
+[ext_resource type="Script" path="res://World/Game/GameModeInfo.cs" id="1_mode"]
 
 [resource]
-script = ExtResource("1_protect")
+script = ExtResource("1_mode")
 Id = "protect"
 Name = "protect"
-Flags = 769
+ObjectiveId = "protect"
+TeamPlay = true
+Mutator = ""

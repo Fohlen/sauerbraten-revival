@@ -6,6 +6,7 @@
 script = ExtResource("1_ctf")
 Id = 2
 Name = "ctf"
+Modes = PackedStringArray("ctf", "insta_ctf", "effic_ctf", "protect", "insta_protect", "effic_protect", "rugby")
 Maps = PackedStringArray(
 	"aastha",
 	"abbey",

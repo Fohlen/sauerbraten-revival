@@ -29,13 +29,17 @@ public partial class MapList : Resource, IResourceDefinition<MapListId>
     /// <summary>Map names without package or extension (e.g. <c>metl3</c>), in engine list order.</summary>
     [Export] public string[] Maps { get; set; } = System.Array.Empty<string>();
 
+    /// <summary>Game modes associated with this map pool.</summary>
+    [Export] public string[] Modes { get; set; } = System.Array.Empty<string>();
+
     public MapList() { }
 
-    public MapList(MapListId id, string name, string[] maps)
+    public MapList(MapListId id, string name, string[] maps, string[]? modes = null)
     {
         Id = id;
         Name = name;
         Maps = maps;
+        Modes = modes ?? System.Array.Empty<string>();
     }
 
     public override string ToString() => string.IsNullOrEmpty(Name)

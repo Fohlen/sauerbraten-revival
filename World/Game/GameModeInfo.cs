@@ -56,12 +56,6 @@ public partial class GameModeInfo : Resource
     [Export] public int ScoreLimit { get; set; } = 0;
     [Export] public int MatchDurationSeconds { get; set; } = 600;
 
-    /// <summary>Legacy ModeFlags for backwards compatibility during migration.</summary>
-    [Export] public ModeFlags Flags { get; set; }
-
-    /// <summary>Engine <c>m_check(gamemode, flag)</c> for this mode.</summary>
-    public bool Has(ModeFlags flag) => (Flags & flag) != 0;
-
     // --- Pre-Baked Runtime Properties (Computed in Bake, O(1) Hot Path) ---
 
     /// <summary>Resolved objective resource definition.</summary>
@@ -74,7 +68,7 @@ public partial class GameModeInfo : Resource
     public int WeaponPoolCount => BitOperations.PopCount((uint)WeaponPoolMask);
 
     /// <summary>True when this mode's objective boots into the interactive world editor.</summary>
-    public bool IsEdit => Objective?.IsEditMode ?? (ObjectiveId == "edit" || Has(ModeFlags.Edit));
+    public bool IsEdit => Objective?.IsEditMode ?? (ObjectiveId == "edit");
 
     /// <summary>Instantiates a fresh runtime objective controller for a match.</summary>
     public IModeObjective CreateObjective() =>
@@ -130,90 +124,7 @@ public partial class GameModeInfo : Resource
             }
         }
 
-        // 3. Reconcile with legacy Flags if present (for un-migrated .tres files or test fixtures)
-        if (Flags != 0)
-        {
-            if (Has(ModeFlags.Team)) TeamPlay = true;
-            if (Has(ModeFlags.NoItems)) AllowedItems = ItemSpawnMask.None;
-            else if (Has(ModeFlags.NoAmmo)) AllowedItems = ItemSpawnMask.NonAmmo;
-
-            if (string.IsNullOrEmpty(Mutator))
-            {
-                if (Has(ModeFlags.Insta))
-                {
-                    Mutator = "insta";
-                    var mut = GameMutatorCatalog.TryGet("insta");
-                    if (mut != null) ApplyMutator(mut);
-                }
-                else if (Has(ModeFlags.Efficiency))
-                {
-                    Mutator = "effic";
-                    var mut = GameMutatorCatalog.TryGet("effic");
-                    if (mut != null) ApplyMutator(mut);
-                }
-                else if (Has(ModeFlags.Tactics))
-                {
-                    if (Has(ModeFlags.Capture))
-                    {
-                        Mutator = "capture_loadout";
-                        var mut = GameMutatorCatalog.TryGet("capture_loadout");
-                        if (mut != null) ApplyMutator(mut);
-                    }
-                    else
-                    {
-                        Mutator = "tactics";
-                        var mut = GameMutatorCatalog.TryGet("tactics");
-                        if (mut != null) ApplyMutator(mut);
-                    }
-                }
-                else if (Has(ModeFlags.Regen))
-                {
-                    Mutator = "regen_loadout";
-                    var mut = GameMutatorCatalog.TryGet("regen_loadout");
-                    if (mut != null) ApplyMutator(mut);
-                }
-            }
-
-            if (ObjectiveId == "dm" || string.IsNullOrEmpty(ObjectiveId))
-            {
-                if (Has(ModeFlags.Ctf))
-                {
-                    ObjectiveId = Has(ModeFlags.Hold) ? "hold" : (Has(ModeFlags.Protect) ? "protect" : "ctf");
-                    Objective = ObjectiveCatalog.TryGet(ObjectiveId) ?? Objective;
-                    if (string.IsNullOrEmpty(Mutator) && Objective != null)
-                        SpawnArmour = Objective.DefaultSpawnArmour;
-                }
-                else if (Has(ModeFlags.Capture))
-                {
-                    ObjectiveId = "capture";
-                    Objective = ObjectiveCatalog.TryGet("capture") ?? Objective;
-                    if (string.IsNullOrEmpty(Mutator) && Objective != null)
-                        SpawnArmour = Objective.DefaultSpawnArmour;
-                }
-                else if (Has(ModeFlags.Edit))
-                {
-                    ObjectiveId = "edit";
-                    Objective = ObjectiveCatalog.TryGet("edit") ?? Objective;
-                }
-            }
-        }
-        else
-        {
-            // Sync Flags from new properties for backwards compatibility
-            if (TeamPlay) Flags |= ModeFlags.Team;
-            if (ObjectiveId is "ctf" or "protect" or "hold" or "rugby") Flags |= ModeFlags.Ctf;
-            if (ObjectiveId is "protect") Flags |= ModeFlags.Protect;
-            if (ObjectiveId is "hold") Flags |= ModeFlags.Hold;
-            if (ObjectiveId is "capture") Flags |= ModeFlags.Capture;
-            if (ObjectiveId is "edit") Flags |= ModeFlags.Edit;
-            if (Mutator is "insta") Flags |= ModeFlags.Insta;
-            if (Mutator is "effic") Flags |= ModeFlags.Efficiency;
-            if (Mutator is "tactics") Flags |= ModeFlags.Tactics;
-            if (AllowedItems == ItemSpawnMask.None) Flags |= ModeFlags.NoItems;
-            else if (AllowedItems == ItemSpawnMask.NonAmmo) Flags |= ModeFlags.NoAmmo;
-        }
-
-        // 4. Precompute WeaponPoolMask
+        // 3. Precompute WeaponPoolMask
         int mask = 0;
         if (SpawnGun >= Gun.Shotgun && SpawnGun <= Gun.Pistol)
             mask |= 1 << (int)SpawnGun;

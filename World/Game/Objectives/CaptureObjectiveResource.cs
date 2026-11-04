@@ -35,7 +35,8 @@ public class CaptureObjective : IModeObjective
         Mode = mode;
     }
 
-    public bool ClaimsEntity(MapEntity e) => e.Type == EntityType.Base;
+    // Bases are rendered by ModeEntityBuilder for CaptureObjective; we do not omit them.
+    public bool ClaimsEntity(MapEntity e) => false;
 
     public int GetTeamScore(int team) => team is >= 1 and <= 2 ? _teamScores[team - 1] : 0;
     public void SetTeamScore(int team, int score)

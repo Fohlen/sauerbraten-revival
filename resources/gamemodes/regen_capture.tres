@@ -1,9 +1,11 @@
 [gd_resource type="Resource" script_class="GameModeInfo" format=3]
 
-[ext_resource type="Script" path="res://World/Game/GameModeInfo.cs" id="1_regen_capture"]
+[ext_resource type="Script" path="res://World/Game/GameModeInfo.cs" id="1_mode"]
 
 [resource]
-script = ExtResource("1_regen_capture")
+script = ExtResource("1_mode")
 Id = "regen_capture"
 Name = "regen capture"
-Flags = 195
+ObjectiveId = "capture"
+TeamPlay = true
+Mutator = "regen_loadout"
