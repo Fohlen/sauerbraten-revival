@@ -11,4 +11,7 @@ public readonly record struct ObjectiveHudState(
     int SecondaryScore = int.MinValue,
     bool PrimaryIsFriendly = true,
     HudIcon? StatusIcon = null,
-    int StatusCounter = -1);
+    int StatusCounter = -1)
+{
+    public static ObjectiveHudState Empty => new(int.MinValue, int.MinValue, true, null, -1);
+}

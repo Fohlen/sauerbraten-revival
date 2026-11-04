@@ -294,81 +294,46 @@ public partial class PlayerState : RefCounted
     }
 
     /// <summary>
-    /// Engine <c>fpsstate::spawnstate(gamemode)</c>: apply the mode's loadout on top
-    /// of a fresh <see cref="Respawn"/>. Branches are tested in the engine's order
-    /// (insta before regen before tactics before efficiency before ctf before else). Behaviour is keyed on <see cref="GameModeInfo.Flags"/>,
-    /// not on a mode identity, so a modded mode that sets the same flags gets the same loadout.
+    /// Branchless spawn loadout algorithm ported per ADR 0012 Section 4.2.
+    /// Sets health, armour, starting weapon, and base ammo directly from <see cref="GameModeInfo"/>.
     /// </summary>
     private void SpawnStateInternal(GameModeInfo mode, Random? rng = null)
     {
-        if (mode.Has(ModeFlags.Insta))
-        {
-            // Instagib: full rifle, one-shot kills.
-            _armour = 0;
-            _health = 1;
-            _gunSelect = (int)Gun.Rifle;
-            Ammo[(int)Gun.Rifle] = 100;
-        }
-        else if (mode.Has(ModeFlags.Regen) && mode.Has(ModeFlags.Capture))
-        {
-            // Regen capture: blue armour 25, pistol 40, grenade 1.
-            ArmourType = ArmourType.Blue;
-            _armour = 25;
-            _gunSelect = (int)Gun.Pistol;
-            Ammo[(int)Gun.Pistol] = 40;
-            Ammo[(int)Gun.GrenadeLauncher] = 1;
-        }
-        else if (mode.Has(ModeFlags.Tactics))
-        {
-            // Tactics: green armour 100, pistol 40, two random guns with baseammo, grenade+1 if noitems.
-            ArmourType = ArmourType.Green;
-            _armour = 100;
-            Ammo[(int)Gun.Pistol] = 40;
+        MaxHealth = mode.MaxHealth;
+        _health = mode.SpawnHealth;
+        ArmourType = mode.SpawnArmourType;
+        _armour = mode.SpawnArmour;
+        _gunSelect = (int)mode.SpawnGun;
 
+        int count = Math.Min(Ammo.Length, mode.SpawnAmmo.Length);
+        for (int i = 0; i < count; i++)
+            Ammo[i] = mode.SpawnAmmo[i];
+        for (int i = count; i < Ammo.Length; i++)
+            Ammo[i] = 0;
+
+        if (mode.RandomGunsCount > 0)
+        {
             rng ??= Random.Shared;
-            int spawngun1 = rng.Next(1, 6);
-            _gunSelect = spawngun1;
-            BaseAmmo(spawngun1, mode.Has(ModeFlags.NoItems) ? 2 : 1);
+            int gun1 = rng.Next((int)Gun.Shotgun, (int)Gun.GrenadeLauncher + 1);
+            _gunSelect = gun1;
+            AddBaseAmmo(gun1, mode.RandomGunsAmmoScale);
 
-            int spawngun2;
-            do
+            if (mode.RandomGunsCount > 1)
             {
-                spawngun2 = rng.Next(1, 6);
-            } while (spawngun1 == spawngun2);
-            BaseAmmo(spawngun2, mode.Has(ModeFlags.NoItems) ? 2 : 1);
-
-            if (mode.Has(ModeFlags.NoItems))
-            {
-                Ammo[(int)Gun.GrenadeLauncher] += 1;
+                int gun2;
+                do
+                {
+                    gun2 = rng.Next((int)Gun.Shotgun, (int)Gun.GrenadeLauncher + 1);
+                } while (gun2 == gun1);
+                AddBaseAmmo(gun2, mode.RandomGunsAmmoScale);
             }
         }
-        else if (mode.Has(ModeFlags.Efficiency))
-        {
-            // Efficiency: armour + a base load for SG..GL, then halve the chaingun.
-            ArmourType = ArmourType.Green;
-            _armour = 100;
-            for (int gun = (int)Gun.Shotgun; gun <= (int)Gun.GrenadeLauncher; gun++) BaseAmmo(gun);
-            _gunSelect = (int)Gun.Chaingun;
-            Ammo[(int)Gun.Chaingun] /= 2;
-        }
-        else if (mode.Has(ModeFlags.Ctf) || mode.Has(ModeFlags.Collect))
-        {
-            // CTF / Protect / Hold: blue armour 50, pistol 40, grenade 1.
-            ArmourType = ArmourType.Blue;
-            _armour = 50;
-            _gunSelect = (int)Gun.Pistol;
-            Ammo[(int)Gun.Pistol] = 40;
-            Ammo[(int)Gun.GrenadeLauncher] = 1;
-        }
-        else
-        {
-            // Engine else branch: ffa, teamplay, and coop edit.
-            ArmourType = ArmourType.Blue;
-            _armour = 25;
-            _gunSelect = (int)Gun.Pistol;
-            Ammo[(int)Gun.Pistol] = 40;
-            Ammo[(int)Gun.GrenadeLauncher] = 1;
-        }
+    }
+
+    private void AddBaseAmmo(int gun, int k)
+    {
+        ItemInfo stat = ItemCatalog.ForGun((Gun)gun);
+        Ammo[gun] += stat.Add * k;
     }
 
     public void SpawnState(GameModeInfo mode, Random? rng = null)
