@@ -186,7 +186,7 @@ public partial class HudController : Control
     /// <summary>Whether the current game mode is team-based. Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsTeamPlay
     {
-        get => _isTeamPlay ?? (Player?.Mode.TeamPlay ?? (Player?.Mode.Has(Game.ModeFlags.Team) ?? false));
+        get => _isTeamPlay ?? (Player?.Mode.TeamPlay ?? false);
         set => _isTeamPlay = value;
     }
 
@@ -197,7 +197,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is insta-gib (disables low-health coloring). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsInsta
     {
-        get => _isInsta ?? (Player?.Mode.SpawnHealth <= 25 || (Player?.Mode.Has(Game.ModeFlags.Insta) ?? false));
+        get => _isInsta ?? (Player?.Mode.SpawnHealth <= 25 || Player?.Mode.Mutator == "insta");
         set => _isInsta = value;
     }
 
@@ -205,7 +205,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is hold mode (m_hold in Sauerbraten). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsHoldMode
     {
-        get => _isHoldMode ?? ((Player?.Mode.Objective as FlagObjectiveResource)?.Placement == FlagPlacementMode.DynamicHoldSpawns || (Player?.Mode.Has(Game.ModeFlags.Hold) ?? false));
+        get => _isHoldMode ?? ((Player?.Mode.Objective as FlagObjectiveResource)?.Placement == FlagPlacementMode.DynamicHoldSpawns || Player?.Mode.ObjectiveId == "hold");
         set => _isHoldMode = value;
     }
 
@@ -213,7 +213,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is efficiency mode (no pistol). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsEfficiency
     {
-        get => _isEfficiency ?? ((Player != null && (Player.Mode.WeaponPoolMask & (1 << (int)Gun.Pistol)) == 0) || (Player?.Mode.Has(Game.ModeFlags.Efficiency) ?? false));
+        get => _isEfficiency ?? ((Player != null && (Player.Mode.WeaponPoolMask & (1 << (int)Gun.Pistol)) == 0) || Player?.Mode.Mutator == "effic");
         set => _isEfficiency = value;
     }
 
@@ -365,7 +365,7 @@ public partial class HudController : Control
     public bool IsEditMode { get; set; }
 
     /// <summary>Whether the player or HUD is currently in editor mode (engine <c>fps.cpp:1094: !m_edit</c>).</summary>
-    public bool CurrentEditMode => IsEditMode || (Player != null && (Player.Entity.State == PhysEnt.CsEditing || (Player.Mode != null && Player.Mode.Has(Game.ModeFlags.Edit))));
+    public bool CurrentEditMode => IsEditMode || (Player != null && (Player.Entity.State == PhysEnt.CsEditing || (Player.Mode != null && Player.Mode.IsEdit)));
 
     /// <summary>Current editor grid size (cube units).</summary>
     public int EditGridSize { get; set; } = 8;

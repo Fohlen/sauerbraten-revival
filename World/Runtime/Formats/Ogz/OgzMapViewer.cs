@@ -161,7 +161,7 @@ public partial class OgzMapViewer : Node3D
             {
                 var cliModeInfo = GameModeCatalog.TryGet(cli.Mode);
                 GameMode = cliModeInfo?.Id ?? cli.Mode;
-                if (cliModeInfo != null && cliModeInfo.Has(ModeFlags.Edit))
+                if (cliModeInfo != null && cliModeInfo.IsEdit)
                 {
                     EditMode = true;
                 }

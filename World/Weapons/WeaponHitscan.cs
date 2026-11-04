@@ -56,7 +56,9 @@ public static class WeaponHitscan
         WeaponInfo gun,
         bool quadDamage,
         IReadOnlyList<TTarget> candidates,
-        WeaponRay.Mt19937? rng = null)
+        WeaponRay.Mt19937? rng = null,
+        float damageScale = 1.0f,
+        float hitPushScale = 1.0f)
         where TTarget : class, IHitscanTarget
     {
         rng ??= new WeaponRay.Mt19937();
@@ -154,10 +156,10 @@ public static class WeaponHitscan
                     }
                 }
 
-                int totalDamage = numHits * qdam;
+                int totalDamage = (int)(numHits * qdam * damageScale);
                 Vector3 hitPushDir = (to - from).Normalized();
                 int weight = Math.Max(1, target.Weight);
-                Vector3 pushVel = hitPushDir * (gun.HitPush * totalDamage / weight);
+                Vector3 pushVel = hitPushDir * (gun.HitPush * hitPushScale * totalDamage / weight);
 
                 var hitRecord = new HitscanTargetHit<TTarget>
                 {
@@ -180,12 +182,13 @@ public static class WeaponHitscan
                 rayEnds[0] = from + (rayEnds[0] - from) * Math.Min(1.0f, hitDist);
                 Vector3 hitPushDir = (to - from).Normalized();
                 int weight = Math.Max(1, target.Weight);
-                Vector3 pushVel = hitPushDir * (gun.HitPush * qdam / weight);
+                int damage = (int)(qdam * damageScale);
+                Vector3 pushVel = hitPushDir * (gun.HitPush * hitPushScale * damage / weight);
 
                 var hitRecord = new HitscanTargetHit<TTarget>
                 {
                     Target = target,
-                    Damage = qdam,
+                    Damage = damage,
                     Rays = 1,
                     HitPos = rayEnds[0],
                     PushDir = hitPushDir,

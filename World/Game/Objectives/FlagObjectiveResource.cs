@@ -65,7 +65,7 @@ public class FlagObjective : IModeObjective
     public ModeObjectiveResource Definition => Resource;
     public FlagObjectiveResource Resource { get; }
     public GameModeInfo Mode { get; }
-    public FlagManager Flags { get; }
+    public FlagManager Flags { get; set; }
 
     public FlagObjective(FlagObjectiveResource resource, GameModeInfo mode, FlagManager? flags = null)
     {
@@ -112,6 +112,11 @@ public class FlagObjective : IModeObjective
     public void Step(IGameWorld world, int stepMillis, int nowMillis)
     {
         Flags.Update(nowMillis);
+    }
+
+    public void StepPlayer(MapPlayer player, int nowMillis)
+    {
+        player.CheckFlags(nowMillis);
     }
 
     public bool OnBeforeDamage(

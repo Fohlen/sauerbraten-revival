@@ -152,7 +152,7 @@ public class EditorViewSceneTest : GoTestBase
     /// <summary>
     /// The play scene launched with the front-end's EDIT objective: the menu emits
     /// the <c>coop_edit</c> mode and <see cref="Main"/> maps that mode's
-    /// <see cref="ModeFlags.Edit"/> flag onto the viewer's edit entry point, so the
+    /// <see cref="GameModeInfo.IsEdit"/> property onto the viewer's edit entry point, so the
     /// player spawns floating with a live editor + edit HUD (not a match player).
     /// </summary>
     [Test]
@@ -164,9 +164,9 @@ public class EditorViewSceneTest : GoTestBase
         var root = scene!.Instantiate<OgzMapViewer>();
         root.OgzPath = TestData.OgzPath;
         root.GameMode = "coop_edit";
-        // Mirrors Main.StartMatch: the mode's Edit flag selects edit mode.
-        root.EditMode = GameModeCatalog.TryGet(root.GameMode)?.Has(ModeFlags.Edit) ?? false;
-        TestAssert.True(root.EditMode, "coop_edit carries ModeFlags.Edit");
+        // Mirrors Main.StartMatch: the mode's IsEdit property selects edit mode.
+        root.EditMode = GameModeCatalog.TryGet(root.GameMode)?.IsEdit ?? false;
+        TestAssert.True(root.EditMode, "coop_edit is an edit mode");
 
         TestScene.AddChild(root);
 

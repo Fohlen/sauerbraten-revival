@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Audio;
+using SauerbratenRevival.World.Game.Objectives;
 
 namespace SauerbratenRevival.World.Game.Ctf;
 
@@ -39,6 +40,16 @@ public sealed class FlagManager
 
     /// <summary>Active game mode info governing flag rules.</summary>
     public GameModeInfo Mode { get; set; } = GameModeCatalog.Get("ctf");
+
+    /// <summary>Checks whether a game mode is configured with Hold flag rules.</summary>
+    public static bool IsHoldMode(GameModeInfo? mode) =>
+        (mode?.Objective as FlagObjectiveResource)?.Placement == FlagPlacementMode.DynamicHoldSpawns ||
+        mode?.ObjectiveId == "hold";
+
+    /// <summary>Checks whether a game mode is configured with Protect flag rules.</summary>
+    public static bool IsProtectMode(GameModeInfo? mode) =>
+        (mode?.Objective as FlagObjectiveResource)?.ScoreRule == FlagScoreRule.TouchEnemyFlag ||
+        mode?.ObjectiveId is "protect" or "insta_protect" or "effic_protect";
 
     /// <summary>Invoked whenever an audio event occurs.</summary>
     public event Action<FlagAudioEvent>? OnAudioEvent;
@@ -244,8 +255,8 @@ public sealed class FlagManager
         if (flagId < 0 || flagId >= _flags.Count || playerTeam is < 1 or > 2) return false;
         var f = _flags[flagId];
 
-        bool isHold = mode.Has(ModeFlags.Hold);
-        bool isProtect = mode.Has(ModeFlags.Protect);
+        bool isHold = IsHoldMode(mode);
+        bool isProtect = IsProtectMode(mode);
 
         if ((isHold ? f.SpawnIndex < 0 : f.Team is < 1 or > 2) ||
             f.Owner.HasValue ||
@@ -313,8 +324,8 @@ public sealed class FlagManager
     /// </summary>
     public void ScoreFlag(int playerId, int playerTeam, int goalFlagId, int relayFlagId, GameModeInfo mode, int nowMillis, Action<int, int>? onPlayerScore = null, Random? rng = null)
     {
-        bool isHold = mode.Has(ModeFlags.Hold);
-        bool isProtect = mode.Has(ModeFlags.Protect);
+        bool isHold = IsHoldMode(mode);
+        bool isProtect = IsProtectMode(mode);
 
         int flagToReturn = relayFlagId >= 0 ? relayFlagId : goalFlagId;
         ReturnFlag(flagToReturn, isProtect ? nowMillis : 0);
@@ -352,7 +363,7 @@ public sealed class FlagManager
     public void DropPlayerFlag(int playerId, Vector3 playerPos, GameModeInfo mode, int nowMillis, int dropperId = -1, bool tkPenalty = false, float dropAngle = 0f)
     {
         if (GetCarriedFlag(playerId) is not int carriedFlagId) return;
-        bool isProtect = mode.Has(ModeFlags.Protect);
+        bool isProtect = IsProtectMode(mode);
         var f = _flags[carriedFlagId];
         if (isProtect && InsideBase(f, playerPos))
         {
@@ -379,7 +390,7 @@ public sealed class FlagManager
     /// </summary>
     public void OnPlayerDied(int victimId, int? actorId, bool isTeammate, Vector3 victimPos, GameModeInfo mode, int nowMillis, float dropAngle = 0f)
     {
-        bool isHold = mode.Has(ModeFlags.Hold);
+        bool isHold = IsHoldMode(mode);
         if (isHold && GetCarriedFlag(victimId) is int heldFlagId)
         {
             DeadFlag(heldFlagId, nowMillis);
@@ -410,8 +421,8 @@ public sealed class FlagManager
     /// </summary>
     public void Update(GameModeInfo mode, int nowMillis, Func<int, (int team, Vector3 pos)?>? getPlayerInfo = null, Action<int, int>? onPlayerScore = null, Random? rng = null)
     {
-        bool isHold = mode.Has(ModeFlags.Hold);
-        bool isProtect = mode.Has(ModeFlags.Protect);
+        bool isHold = IsHoldMode(mode);
+        bool isProtect = IsProtectMode(mode);
 
         for (int i = 0; i < _flags.Count; i++)
         {

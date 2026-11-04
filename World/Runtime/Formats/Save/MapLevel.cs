@@ -11,6 +11,7 @@ using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Game.Monsters;
+using SauerbratenRevival.World.Game.Objectives;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;
@@ -74,7 +75,27 @@ public partial class MapLevel : Node3D, IGameWorld
     public IReadOnlyList<MapPlayer> Players => _players;
 
     public MapPlayer? LocalPlayer { get; set; }
-    public Game.GameModeInfo? Mode { get; set; }
+
+    /// <summary>Active match objective controlling match rules and state.</summary>
+    public IModeObjective? Objective { get; set; }
+
+    private Game.GameModeInfo? _mode;
+
+    /// <summary>Active game mode info.</summary>
+    public Game.GameModeInfo? Mode
+    {
+        get => _mode;
+        set
+        {
+            _mode = value;
+            if (value != null)
+            {
+                Objective = value.CreateObjective();
+                if (Items != null) Items.Mode = value;
+                for (int i = 0; i < _players.Count; i++) _players[i].Mode = value;
+            }
+        }
+    }
 
     /// <summary>The shared octree physics simulation authority for this world.</summary>
     public OctaPhysics? Physics { get; private set; }

@@ -1028,7 +1028,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         if (now - Combat.LastAction < Combat.GunWait) return false;
 
         var weapon = WeaponCatalog.Get((Gun)Combat.GunSelect);
-        if (Combat.GunSelect != (int)Gun.Fist && !Combat.HasAmmo(Combat.GunSelect))
+        bool infiniteAmmo = Mode?.InfiniteAmmo ?? false;
+        if (!infiniteAmmo && Combat.GunSelect != (int)Gun.Fist && !Combat.HasAmmo(Combat.GunSelect))
         {
             Combat.GunWait = 600; // weapon.cpp:788 msgsound(S_NOAMMO); d->gunwait = 600;
             PlaySound(GameSound.NoAmmo);
@@ -1039,7 +1040,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Combat.LastAction = now;
         Combat.LastAttackGun = Combat.GunSelect;
         Combat.GunWait = weapon.AttackDelay;
-        if (Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
+        if (!infiniteAmmo && Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
             Combat.Ammo[Combat.GunSelect]--;
 
         // Play weapon firing sound (weapon.cpp:672 playsound(sound))
@@ -1071,8 +1072,15 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             for (int i = 0; i < hitscan.Hits.Count; i++)
             {
                 var hit = hitscan.Hits[i];
-                hit.Target.ApplyHitPush(hit.PushVel);
-                hit.Target.TakeDamage(hit.Damage);
+                if (hit.Target is MapPlayer mp)
+                {
+                    mp.TakeDamage(hit.Damage, attacker: this, gun: (Gun)Combat.GunSelect, pushVel: hit.PushVel, nowMillis: now);
+                }
+                else
+                {
+                    hit.Target.ApplyHitPush(hit.PushVel);
+                    hit.Target.TakeDamage(hit.Damage);
+                }
                 int targetId = (hit.Target as MapPlayer)?.PlayerId ?? -1;
                 EmitSignal(Game.Players.MapPlayer.SignalName.DamageDealt, targetId, hit.Damage);
             }
@@ -1292,11 +1300,51 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>Apply damage to the player, updating health and lastpain timestamp.</summary>
-    public void TakeDamage(int damage, int? nowMillis = null)
+    public void TakeDamage(int damage, int? nowMillis = null) =>
+        TakeDamage(damage, attacker: null, gun: Gun.Fist, pushVel: null, nowMillis: nowMillis);
+
+    /// <summary>
+    /// Apply damage to the player from an optional <paramref name="attacker"/> and weapon <paramref name="gun"/>,
+    /// running objective pre-damage hooks (e.g. Rugby pass) and mode push/damage scaling.
+    /// </summary>
+    public void TakeDamage(
+        int damage,
+        MapPlayer? attacker,
+        Gun gun = Gun.Fist,
+        Vector3? pushVel = null,
+        int? nowMillis = null)
     {
         if (Entity.Dead) return;
 
         int now = nowMillis ?? LastMillis;
+        Vector3 push = pushVel ?? Vector3.Zero;
+
+        // Mode damage & push scaling
+        if (attacker != null && attacker == this && Mode != null)
+        {
+            damage = (int)(damage * Mode.SelfDamageScale);
+            push *= Mode.SelfPushScale;
+        }
+        else if (attacker != null && Mode != null)
+        {
+            damage = (int)(damage * Mode.DamageScale);
+            push *= Mode.HitPushScale;
+        }
+
+        // Objective pre-damage hook (e.g. Rugby flag pass, King of the Hill protection)
+        if (Objective != null)
+        {
+            if (!Objective.OnBeforeDamage(attacker, this, gun, ref damage, ref push, now))
+                return;
+        }
+
+        if (push != Vector3.Zero)
+        {
+            Entity.Vel += push;
+        }
+
+        if (damage <= 0) return;
+
         Combat.LastPain = now;
 
         int ad = (damage * ((int)Combat.ArmourType + 1) * 25) / 100;
@@ -1307,7 +1355,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             Combat.Armour -= ad;
             Combat.Health = 0;
-            Die(now);
+            Die(attacker, gun, now);
         }
         else
         {
@@ -1317,7 +1365,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>Kill the player (engine <c>deathstate</c>, fpsgame/fps.cpp:425).</summary>
-    public void Die(int? nowMillis = null)
+    public void Die(int? nowMillis) => Die(null, Gun.Fist, nowMillis);
+
+    /// <summary>Kill the player with attributed killer and weapon.</summary>
+    public void Die(MapPlayer? killer = null, Gun gun = Gun.Fist, int? nowMillis = null)
     {
         Deaths++;
         int now = nowMillis ?? LastMillis;
@@ -1332,9 +1383,13 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         PlaySound(Random.Shared.Next(2) == 0 ? GameSound.Die1 : GameSound.Die2);
         UpdateBodyAnim();
 
-        if (Flags != null)
+        if (Objective != null)
         {
-            Flags.OnPlayerDied(PlayerId, null, false, Entity.FeetPos(), now, Entity.Yaw);
+            Objective.OnPlayerDied(this, killer, gun, now);
+        }
+        else if (Flags != null)
+        {
+            Flags.OnPlayerDied(PlayerId, killer?.PlayerId, killer?.Team == Team, Entity.FeetPos(), now, Entity.Yaw);
         }
 
         EmitSignal(SignalName.Died);
@@ -1373,17 +1428,26 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             feet = spawnFeet.Value;
             yaw = yawDegrees ?? SpawnYaw;
         }
-        else if (GetParent() is IMapSource ms)
-        {
-            int tag = GameModeCatalog.GetSpawnGroup(Mode, Team);
-            (feet, yaw) = ms.FindSpawn(tag: tag, player: this);
-            SpawnFeet = feet;
-            SpawnYaw = yaw;
-        }
         else
         {
-            feet = SpawnFeet;
-            yaw = SpawnYaw;
+            var resolved = Objective?.ResolveSpawn(this);
+            if (resolved.HasValue)
+            {
+                feet = resolved.Value.FeetPos;
+                yaw = yawDegrees ?? resolved.Value.Yaw;
+            }
+            else if (GetParent() is IMapSource ms)
+            {
+                int tag = GameModeCatalog.GetSpawnGroup(Mode, Team);
+                (feet, yaw) = ms.FindSpawn(tag: tag, player: this);
+                SpawnFeet = feet;
+                SpawnYaw = yaw;
+            }
+            else
+            {
+                feet = SpawnFeet;
+                yaw = SpawnYaw;
+            }
         }
 
         Entity.O = feet with { Z = feet.Z + EyeHeight };
@@ -1402,6 +1466,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         SyncTransform();
         UpdateBodyAnim();
         UpdateHudgunAnim();
+
+        Objective?.OnPlayerSpawn(this);
+
         EmitSignal(SignalName.Respawned);
     }
 
@@ -1432,7 +1499,14 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Items?.CheckPickups(this, LastMillis);
         CheckJumpPads(LastMillis);
         CheckTeleports(LastMillis);
-        CheckFlags(LastMillis);
+        if (Objective != null)
+        {
+            Objective.StepPlayer(this, LastMillis);
+        }
+        else
+        {
+            CheckFlags(LastMillis);
+        }
 
         // When running standalone (not under IGameWorld), advance own active projectiles & bouncers.
         // Under IGameWorld, UpdateProjectiles and UpdateBouncers are called centrally once per substep.
@@ -1715,7 +1789,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     {
         if (Flags == null || Mode == null || !IsAlive) return;
 
-        bool isHold = Mode.Has(ModeFlags.Hold);
+        bool isHold = FlagManager.IsHoldMode(Mode);
         Vector3 o = Entity.FeetPos();
         bool tookFlag = false;
 

@@ -33,7 +33,7 @@ public interface IGameWorld : IMapSource
     GameModeInfo? Mode { get; set; }
 
     /// <summary>Active match objective controlling match rules and state.</summary>
-    IModeObjective? Objective => null;
+    IModeObjective? Objective { get => null; set { } }
 
     /// <summary>Registers a bouncer to be stepped by the world's physics loop.</summary>
     void RegisterBouncer(BounceBody bouncer);

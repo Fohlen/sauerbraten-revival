@@ -180,22 +180,26 @@ public class ItemPickupTest : GoTestBase
     [Test]
     public void ModeBasedItemFiltering()
     {
-        // NoItems mode (e.g. instagib)
-        TestAssert.False(ItemManager.CanSpawnItem(EntityType.Shells, ModeFlags.NoItems), "No items in NoItems mode");
-        TestAssert.False(ItemManager.CanSpawnItem(EntityType.Health, ModeFlags.NoItems), "No health in NoItems mode");
-        TestAssert.False(ItemManager.CanSpawnItem(EntityType.QuadDamage, ModeFlags.NoItems), "No quad in NoItems mode");
+        var instaMode = GameModeCatalog.Get("insta");
+        var captureMode = GameModeCatalog.Get("capture");
+        var ffaMode = GameModeCatalog.Get("ffa");
 
-        // NoAmmo mode (e.g. efficiency)
-        TestAssert.False(ItemManager.CanSpawnItem(EntityType.Shells, ModeFlags.NoAmmo), "No ammo in NoAmmo mode");
-        TestAssert.False(ItemManager.CanSpawnItem(EntityType.Cartridges, ModeFlags.NoAmmo), "No cartridges in NoAmmo mode");
-        TestAssert.True(ItemManager.CanSpawnItem(EntityType.Health, ModeFlags.NoAmmo), "Health allowed in NoAmmo mode");
-        TestAssert.True(ItemManager.CanSpawnItem(EntityType.GreenArmour, ModeFlags.NoAmmo), "Armour allowed in NoAmmo mode");
-        TestAssert.True(ItemManager.CanSpawnItem(EntityType.QuadDamage, ModeFlags.NoAmmo), "Quad allowed in NoAmmo mode");
+        // NoItems mode (e.g. instagib)
+        TestAssert.False(ItemManager.CanSpawnItem(EntityType.Shells, instaMode), "No items in NoItems mode");
+        TestAssert.False(ItemManager.CanSpawnItem(EntityType.Health, instaMode), "No health in NoItems mode");
+        TestAssert.False(ItemManager.CanSpawnItem(EntityType.QuadDamage, instaMode), "No quad in NoItems mode");
+
+        // NonAmmo mode (e.g. capture loadout)
+        TestAssert.False(ItemManager.CanSpawnItem(EntityType.Shells, captureMode), "No ammo in capture mode");
+        TestAssert.False(ItemManager.CanSpawnItem(EntityType.Cartridges, captureMode), "No cartridges in capture mode");
+        TestAssert.True(ItemManager.CanSpawnItem(EntityType.Health, captureMode), "Health allowed in capture mode");
+        TestAssert.True(ItemManager.CanSpawnItem(EntityType.GreenArmour, captureMode), "Armour allowed in capture mode");
+        TestAssert.True(ItemManager.CanSpawnItem(EntityType.QuadDamage, captureMode), "Quad allowed in capture mode");
 
         // Standard FFA
-        TestAssert.True(ItemManager.CanSpawnItem(EntityType.Shells, ModeFlags.None), "Ammo allowed in FFA");
-        TestAssert.True(ItemManager.CanSpawnItem(EntityType.Health, ModeFlags.None), "Health allowed in FFA");
-        TestAssert.True(ItemManager.CanSpawnItem(EntityType.GreenArmour, ModeFlags.None), "Armour allowed in FFA");
+        TestAssert.True(ItemManager.CanSpawnItem(EntityType.Shells, ffaMode), "Ammo allowed in FFA");
+        TestAssert.True(ItemManager.CanSpawnItem(EntityType.Health, ffaMode), "Health allowed in FFA");
+        TestAssert.True(ItemManager.CanSpawnItem(EntityType.GreenArmour, ffaMode), "Armour allowed in FFA");
     }
 
     [Test]

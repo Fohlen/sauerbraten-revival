@@ -60,8 +60,12 @@ public sealed class WorldSimulation
                 world.Players[i].Step(Phys.PhysFrameTime);
             }
 
-            // 4. Update game mode flag rules with synchronized simulation clock.
-            if (world.Flags != null && world.Mode != null && world.Mode.Has(Game.ModeFlags.Ctf))
+            // 4. Update game mode objective or flag rules with synchronized simulation clock.
+            if (world.Objective != null)
+            {
+                world.Objective.Step(world, Phys.PhysFrameTime, nowMillis);
+            }
+            else if (world.Flags != null)
             {
                 world.Flags.Update(nowMillis);
             }

@@ -294,18 +294,26 @@ public class MapListCatalogTest : GoTestBase
     }
 
     [Test]
-    public void ForModeFallsBackToFlagsForModModes()
+    public void ForModeFallsBackToObjectiveForModModes()
     {
-        var ctf = new GameModeInfo { Id = "my_ctf", Flags = ModeFlags.Ctf | ModeFlags.Team };
-        TestAssert.Equal(MapListId.Ctf, MapListCatalog.ForMode(ctf)?.Id, "unknown ctf mode");
+        var ctf = new GameModeInfo { Id = "my_ctf", ObjectiveId = "ctf" };
+        ctf.Bake();
+        TestAssert.Equal(MapListId.Ctf, MapListCatalog.ForMode(ctf)?.Id, "custom ctf mode");
 
-        var hold = new GameModeInfo { Id = "my_hold", Flags = ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team };
-        TestAssert.Equal(MapListId.Capture, MapListCatalog.ForMode(hold)?.Id, "hold flag wins over ctf");
+        var hold = new GameModeInfo { Id = "my_hold", ObjectiveId = "hold" };
+        hold.Bake();
+        TestAssert.Equal(MapListId.Capture, MapListCatalog.ForMode(hold)?.Id, "hold mode uses capture pool");
 
-        var capture = new GameModeInfo { Id = "my_capture", Flags = ModeFlags.Capture | ModeFlags.Team };
-        TestAssert.Equal(MapListId.Capture, MapListCatalog.ForMode(capture)?.Id, "unknown capture mode");
+        var capture = new GameModeInfo { Id = "my_capture", ObjectiveId = "capture" };
+        capture.Bake();
+        TestAssert.Equal(MapListId.Capture, MapListCatalog.ForMode(capture)?.Id, "custom capture mode");
 
-        var ffa = new GameModeInfo { Id = "my_ffa" };
+        var rugby = new GameModeInfo { Id = "my_rugby", ObjectiveId = "rugby" };
+        rugby.Bake();
+        TestAssert.Equal(MapListId.Ctf, MapListCatalog.ForMode(rugby)?.Id, "custom rugby mode uses ctf pool");
+
+        var ffa = new GameModeInfo { Id = "my_ffa", ObjectiveId = "dm" };
+        ffa.Bake();
         TestAssert.Equal(MapListId.Dm, MapListCatalog.ForMode(ffa)?.Id, "unknown mode defaults to dm");
 
         TestAssert.Equal(MapListId.Dm, MapListCatalog.ForMode(null)?.Id, "no mode defaults to dm");
