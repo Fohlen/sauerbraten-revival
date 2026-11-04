@@ -193,6 +193,19 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public ItemManager? Items { get; set; }
 
     private FlagManager? _flags;
+    private Objectives.IModeObjective? _objective;
+
+    /// <summary>Active match objective controlling scoring, proximity, HUD state, and rules.</summary>
+    public Objectives.IModeObjective? Objective
+    {
+        get => _objective ?? (GetParent() as Runtime.IGameWorld)?.Objective;
+        set
+        {
+            _objective = value;
+            if (value is Objectives.FlagObjective fo)
+                Flags = fo.Flags;
+        }
+    }
 
     /// <summary>Active flag manager for CTF / Protect / Hold modes.</summary>
     public FlagManager? Flags

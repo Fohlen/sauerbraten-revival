@@ -52,10 +52,11 @@ public static class StatusBarRenderer
     /// Calculates the color for health text matching <c>fps.cpp:910</c>:
     /// Grey if dead (0x808080), red if &lt;= 25 (0xFF0000), orange if &lt;= 50 (0xFF8000),
     /// white if &lt;= 100 (0xFFFFFF), blue/cyan if &gt; 100 (0x40C0FF, megahealth boost).
+    /// Low-health coloring is suppressed when <paramref name="spawnHealth"/> &lt;= 25 or <paramref name="isInsta"/> is true.
     /// </summary>
-    public static Color GetHealthColor(int health, bool isDead, bool healthColors = true, bool isInsta = false)
+    public static Color GetHealthColor(int health, bool isDead, bool healthColors = true, int spawnHealth = 100, bool isInsta = false)
     {
-        if (!healthColors || isInsta)
+        if (!healthColors || isInsta || spawnHealth <= 25)
             return Colors.White;
 
         if (isDead || health <= 0)
@@ -72,6 +73,10 @@ public static class StatusBarRenderer
 
         return new Color(0.25f, 0.75f, 1f); // 0x40C0FF
     }
+
+    /// <summary>Backwards-compatible overload for legacy callers.</summary>
+    public static Color GetHealthColor(int health, bool isDead, bool healthColors, bool isInsta)
+        => GetHealthColor(health, isDead, healthColors, isInsta ? 1 : 100, isInsta);
 
     /// <summary>
     /// Computes the UV rect on the 4x4 atlas <c>items.png</c> for a given <see cref="HudIcon"/>.
@@ -127,15 +132,24 @@ public static class StatusBarRenderer
 
     /// <summary>
     /// Determines whether a weapon should be visible in the ammo bar strip.
-    /// Port of <c>fps.cpp:1019-1026: ammobargunvisible</c>.
+    /// Port of <c>fps.cpp:1019-1026: ammobargunvisible</c> using data-driven <paramref name="weaponPoolMask"/>.
     /// </summary>
-    public static bool IsAmmoBarGunVisible(int ammo, int selectedGun, int gun, bool hideEmpty, bool isInsta, bool isEfficiency)
+    public static bool IsAmmoBarGunVisible(int ammo, int selectedGun, int gun, bool hideEmpty, int weaponPoolMask = 0b111_1110)
     {
         if (ammo > 0 || selectedGun == gun) return true;
         if (hideEmpty) return false;
-        if (isEfficiency) return gun != (int)Gun.Pistol;
-        if (isInsta) return gun == (int)Gun.Rifle;
-        return true;
+        return (weaponPoolMask & (1 << gun)) != 0;
+    }
+
+    /// <summary>
+    /// Legacy overload for mode flag checks.
+    /// </summary>
+    public static bool IsAmmoBarGunVisible(int ammo, int selectedGun, int gun, bool hideEmpty, bool isInsta, bool isEfficiency)
+    {
+        int mask = 0b111_1110;
+        if (isInsta) mask = 1 << (int)Gun.Rifle;
+        else if (isEfficiency) mask &= ~(1 << (int)Gun.Pistol);
+        return IsAmmoBarGunVisible(ammo, selectedGun, gun, hideEmpty, mask);
     }
 
     /// <summary>
@@ -163,7 +177,72 @@ public static class StatusBarRenderer
     public record struct AmmoBarItem(Gun Gun, int Ammo, Vector2 Center, Color Color, float Alpha);
 
     /// <summary>
-    /// Calculates layout positions for ammo bar counters matching engine <c>fps.cpp:1028-1055</c>.
+    /// Calculates layout positions for ammo bar counters matching engine <c>fps.cpp:1028-1055</c>
+    /// using data-driven <paramref name="weaponPoolMask"/>.
+    /// </summary>
+    public static System.Collections.Generic.List<AmmoBarItem> LayoutAmmoBar(
+        int[] playerAmmo,
+        int selectedGun,
+        float screenW,
+        float screenH,
+        int weaponPoolMask = 0b111_1110,
+        int align = 0,
+        bool horizontal = false,
+        bool flip = false,
+        bool hideEmpty = true,
+        float sep = 20f,
+        float countSep = 20f,
+        float countScale = 1.5f,
+        float barX = 0.025f,
+        float barY = 0.5f,
+        float barScale = 0.5f)
+    {
+        var items = new System.Collections.Generic.List<AmmoBarItem>();
+        if (System.Numerics.BitOperations.PopCount((uint)weaponPoolMask) <= 1) return items;
+
+        int numPlayerGuns = (int)Gun.Pistol - (int)Gun.Shotgun + 1;
+        int numVisibleGuns = 0;
+        for (int i = 0; i < numPlayerGuns; i++)
+        {
+            int gun = (int)Gun.Shotgun + i;
+            int ammo = playerAmmo != null && gun < playerAmmo.Length ? playerAmmo[gun] : 0;
+            if (IsAmmoBarGunVisible(ammo, selectedGun, gun, hideEmpty, weaponPoolMask))
+                numVisibleGuns++;
+        }
+
+        if (numVisibleGuns == 0) return items;
+
+        Vector2 origin = new Vector2(barX, barY) * (new Vector2(screenW, screenH) / barScale);
+        Vector2 offsetDir = horizontal ? new Vector2(1, 0) : new Vector2(0, 1);
+        float stepSize = IconSize + sep;
+        float initialOffset = (align - 1) * (numVisibleGuns - 1) * stepSize / 2f;
+
+        int numSkippedGuns = 0;
+        for (int i = 0; i < numPlayerGuns; i++)
+        {
+            int gunId = (int)Gun.Shotgun + i;
+            Gun gun = (Gun)gunId;
+            int ammo = playerAmmo != null && gunId < playerAmmo.Length ? playerAmmo[gunId] : 0;
+            if (IsAmmoBarGunVisible(ammo, selectedGun, gunId, hideEmpty, weaponPoolMask))
+            {
+                float offset = initialOffset + (i - numSkippedGuns) * stepSize;
+                Vector2 center = offsetDir * offset + origin;
+                ItemInfo stat = ItemCatalog.ForGun(gun);
+                Color color = GetAmmoBarColor(ammo, stat.Add);
+                float alpha = ammo > 0 ? 1.0f : 0.5f; // alpha = p->ammo[gun] ? 0xFF : 0x7F
+                items.Add(new AmmoBarItem(gun, ammo, center, color, alpha));
+            }
+            else
+            {
+                numSkippedGuns++;
+            }
+        }
+
+        return items;
+    }
+
+    /// <summary>
+    /// Legacy overload for LayoutAmmoBar accepting isInsta and isEfficiency.
     /// </summary>
     public static System.Collections.Generic.List<AmmoBarItem> LayoutAmmoBar(
         int[] playerAmmo,
@@ -183,48 +262,13 @@ public static class StatusBarRenderer
         float barY = 0.5f,
         float barScale = 0.5f)
     {
-        var items = new System.Collections.Generic.List<AmmoBarItem>();
-        if (isInsta) return items;
+        int mask = 0b111_1110;
+        if (isInsta) mask = 1 << (int)Gun.Rifle;
+        else if (isEfficiency) mask &= ~(1 << (int)Gun.Pistol);
 
-        int numPlayerGuns = (int)Gun.Pistol - (int)Gun.Shotgun + 1;
-        int numVisibleGuns = 0;
-        for (int i = 0; i < numPlayerGuns; i++)
-        {
-            int gun = (int)Gun.Shotgun + i;
-            int ammo = playerAmmo != null && gun < playerAmmo.Length ? playerAmmo[gun] : 0;
-            if (IsAmmoBarGunVisible(ammo, selectedGun, gun, hideEmpty, isInsta, isEfficiency))
-                numVisibleGuns++;
-        }
-
-        if (numVisibleGuns == 0) return items;
-
-        Vector2 origin = new Vector2(barX, barY) * (new Vector2(screenW, screenH) / barScale);
-        Vector2 offsetDir = horizontal ? new Vector2(1, 0) : new Vector2(0, 1);
-        float stepSize = IconSize + sep;
-        float initialOffset = (align - 1) * (numVisibleGuns - 1) * stepSize / 2f;
-
-        int numSkippedGuns = 0;
-        for (int i = 0; i < numPlayerGuns; i++)
-        {
-            int gunId = (int)Gun.Shotgun + i;
-            Gun gun = (Gun)gunId;
-            int ammo = playerAmmo != null && gunId < playerAmmo.Length ? playerAmmo[gunId] : 0;
-            if (IsAmmoBarGunVisible(ammo, selectedGun, gunId, hideEmpty, isInsta, isEfficiency))
-            {
-                float offset = initialOffset + (i - numSkippedGuns) * stepSize;
-                Vector2 center = offsetDir * offset + origin;
-                ItemInfo stat = ItemCatalog.ForGun(gun);
-                Color color = GetAmmoBarColor(ammo, stat.Add);
-                float alpha = ammo > 0 ? 1.0f : 0.5f; // alpha = p->ammo[gun] ? 0xFF : 0x7F
-                items.Add(new AmmoBarItem(gun, ammo, center, color, alpha));
-            }
-            else
-            {
-                numSkippedGuns++;
-            }
-        }
-
-        return items;
+        return LayoutAmmoBar(
+            playerAmmo, selectedGun, screenW, screenH, mask,
+            align, horizontal, flip, hideEmpty, sep, countSep, countScale, barX, barY, barScale);
     }
 
     public record struct AmmoHudItem(Gun Gun, Vector2 Position, float Size);

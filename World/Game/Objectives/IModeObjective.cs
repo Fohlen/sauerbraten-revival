@@ -72,5 +72,5 @@ public interface IModeObjective
     void OnPlayerDied(MapPlayer victim, MapPlayer? killer, Gun gun, int nowMillis) { }
 
     /// <summary>Returns the current score and bottom status-bar indicator for <paramref name="localPlayer"/>.</summary>
-    ObjectiveHudState GetHudState(MapPlayer localPlayer, int nowMillis) => default;
+    ObjectiveHudState GetHudState(MapPlayer localPlayer, int nowMillis) => ObjectiveHudState.Empty;
 }

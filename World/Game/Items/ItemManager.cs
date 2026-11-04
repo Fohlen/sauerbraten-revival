@@ -63,8 +63,17 @@ public partial class ItemManager : Node3D
         ItemCatalog.TryGetByEntityType(type)?.CalculateSpawnTime(numPlayers) ?? 0;
 
     /// <summary>
-    /// Engine <c>server::canspawnitem(type)</c> (fpsgame/server.cpp:855). Checks whether an item
-    /// type is allowed under the current game mode flags.
+    /// Checks whether an item entity type is allowed under the active game mode rules.
+    /// Port of ADR 0012 Section 4.3 using <see cref="GameModeInfo.CanSpawnItem"/>.
+    /// </summary>
+    public static bool CanSpawnItem(int entityType, GameModeInfo mode)
+    {
+        ItemType itemType = ItemCatalog.FromEntityType(entityType);
+        return mode.CanSpawnItem(itemType);
+    }
+
+    /// <summary>
+    /// Legacy overload checking whether an item type is allowed under mode flags.
     /// </summary>
     public static bool CanSpawnItem(int type, ModeFlags mode)
     {
@@ -86,9 +95,8 @@ public partial class ItemManager : Node3D
     public void SpawnItems(GameModeInfo? mode, bool force = false)
     {
         if (mode != null) Mode = mode;
-        ModeFlags flags = Mode.Flags;
 
-        if (flags.HasFlag(ModeFlags.NoItems))
+        if (Mode.AllowedItems == ItemSpawnMask.None)
         {
             foreach (var item in _items)
             {
@@ -101,7 +109,7 @@ public partial class ItemManager : Node3D
 
         foreach (var item in _items)
         {
-            if (!CanSpawnItem(item.ItemType, flags))
+            if (!CanSpawnItem(item.ItemType, Mode))
             {
                 item.Spawned = false;
                 item.SpawnTime = 0;
