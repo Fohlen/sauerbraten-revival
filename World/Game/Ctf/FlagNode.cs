@@ -66,7 +66,7 @@ public partial class FlagNode : Models.ModelInstance
     /// </summary>
     public void UpdateVisual(FlagState flag, GameModeInfo mode, int lastMillis, int localPlayerTeam, Vector3? cameraPos = null, Func<int, (Vector3 pos, float yaw, float aboveEye)>? getOwnerInfo = null)
     {
-        bool isHold = mode.Has(ModeFlags.Hold);
+        bool isHold = FlagManager.IsHoldMode(mode);
 
         // Invisible / unrendered check matching ctf.h:665
         if (!flag.HasOwner && flag.DropTime > 0 && flag.DropLoc.X < 0)

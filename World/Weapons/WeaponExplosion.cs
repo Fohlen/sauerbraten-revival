@@ -90,16 +90,16 @@ public static class WeaponExplosion
     /// if(o==at) damage /= EXP_SELFDAMDIV;
     /// </code>
     /// </summary>
-    public static int CalculateRadialDamage(float dist, float expRad, int baseDamage, bool isSelf)
+    public static int CalculateRadialDamage(float dist, float expRad, int baseDamage, bool isSelf, float damageScale = 1.0f, float selfDamageScale = 0.5f)
     {
         if (expRad <= 0f || dist >= expRad) return 0;
 
-        int damage = (int)(baseDamage * (1.0f - dist / (ExpDistScale * expRad)));
+        int damage = (int)(baseDamage * damageScale * (1.0f - dist / (ExpDistScale * expRad)));
         if (damage < 0) damage = 0;
 
         if (isSelf)
         {
-            damage /= ExpSelfDamDiv;
+            damage = (int)(damage * selfDamageScale);
         }
 
         return damage;
@@ -120,11 +120,13 @@ public static class WeaponExplosion
         int weight,
         int hitPush,
         float expRad,
-        bool isSelf)
+        bool isSelf,
+        float hitPushScale = 1.0f,
+        float selfPushScale = 2.5f)
     {
         if (damage <= 0 || weight <= 0) return Vector3.Zero;
 
-        float pushMultiplier = (isSelf && expRad > 0f) ? ExpSelfPush : 1.0f;
+        float pushMultiplier = (isSelf && expRad > 0f) ? selfPushScale : hitPushScale;
         float magnitude = pushMultiplier * hitPush * damage / weight;
         return dir * magnitude;
     }
@@ -151,7 +153,11 @@ public static class WeaponExplosion
         bool quadDamage,
         TTarget? shooter,
         IReadOnlyList<TTarget> candidates,
-        TTarget? safe = null)
+        TTarget? safe = null,
+        float damageScale = 1.0f,
+        float selfDamageScale = 0.5f,
+        float hitPushScale = 1.0f,
+        float selfPushScale = 2.5f)
         where TTarget : class, IExplosionTarget
     {
         var result = new ExplosionResult<TTarget>
@@ -180,9 +186,9 @@ public static class WeaponExplosion
                 continue;
 
             bool isSelf = (shooter != null && candidate == shooter);
-            int damage = CalculateRadialDamage(dist, gun.ExpRad, qdam, isSelf);
+            int damage = CalculateRadialDamage(dist, gun.ExpRad, qdam, isSelf, damageScale, selfDamageScale);
             int weight = Math.Max(1, candidate.Weight);
-            Vector3 pushVel = CalculateExplosionPush(dir, damage, weight, gun.HitPush, gun.ExpRad, isSelf);
+            Vector3 pushVel = CalculateExplosionPush(dir, damage, weight, gun.HitPush, gun.ExpRad, isSelf, hitPushScale, selfPushScale);
 
             result.Hits.Add(new ExplosionTargetHit<TTarget>
             {

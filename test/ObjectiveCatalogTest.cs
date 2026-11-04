@@ -181,4 +181,83 @@ public class ObjectiveCatalogTest : GoTestBase
         TestAssert.Equal(new Vector3(100, 0, 0), spawn2!.Value.FeetPos, "cp 1 pos");
         TestAssert.Equal(180f, spawn2.Value.Yaw, "cp 1 yaw");
     }
+
+    [Test]
+    public void MapPlayer_TakeDamage_RugbyPassViaFriendlyFire()
+    {
+        var rugbyMode = GameModeCatalog.Get("rugby");
+        var obj = rugbyMode.CreateObjective() as FlagObjective;
+        TestAssert.True(obj != null, "rugby FlagObjective created");
+
+        var entities = new List<MapEntity>
+        {
+            new() { Type = EntityType.Flag, Attr1 = 0, Attr2 = 1, Position = new Vector3(10, 0, 0) },
+            new() { Type = EntityType.Flag, Attr1 = 0, Attr2 = 2, Position = new Vector3(20, 0, 0) },
+        };
+        obj!.SetupWorld(null!, entities, new Node3D());
+
+        var carrier = new MapPlayer { PlayerId = 1, Team = 1, Mode = rugbyMode, Objective = obj };
+        var receiver = new MapPlayer { PlayerId = 2, Team = 1, Mode = rugbyMode, Objective = obj };
+
+        carrier.Respawn(new Vector3(10, 0, 0));
+        receiver.Respawn(new Vector3(20, 0, 0));
+
+        // Carrier carries enemy flag (flag 1)
+        obj.Flags.OwnFlag(1, carrier.PlayerId, 1000);
+        TestAssert.Equal(carrier.PlayerId, obj.Flags.GetCarrier(1) ?? -1, "carrier holds flag 1");
+
+        int initialHealth = receiver.Combat.Health;
+
+        // Carrier shoots friendly receiver to pass the flag
+        receiver.TakeDamage(100, attacker: carrier, gun: Gun.Rifle, pushVel: new Vector3(0, 0, 50), nowMillis: 1100);
+
+        // Receiver must not take damage or push, and receiver now holds flag 1
+        TestAssert.Equal(initialHealth, receiver.Combat.Health, "receiver took 0 damage");
+        TestAssert.Equal(receiver.PlayerId, obj.Flags.GetCarrier(1) ?? -1, "receiver now holds flag 1");
+        TestAssert.Equal(1, obj.Flags.GetCarriedFlag(receiver.PlayerId) ?? -1, "receiver carried flag");
+    }
+
+    [Test]
+    public void MapPlayer_InfiniteAmmo_BypassesAmmoConsumption()
+    {
+        var raceMode = GameModeCatalog.Get("race");
+        TestAssert.True(raceMode.InfiniteAmmo, "race has infinite ammo");
+
+        var player = new MapPlayer { Mode = raceMode };
+        player.Respawn(new Vector3(0, 0, 0));
+        player.Combat.GunSelect = (int)Gun.Rifle;
+        player.Combat.Ammo[(int)Gun.Rifle] = 0; // 0 ammo
+
+        // Should be able to attack without ammo
+        bool fired = player.TryAttack(nowMillis: 1000);
+        TestAssert.True(fired, "attack succeeds with 0 ammo under InfiniteAmmo");
+        TestAssert.Equal(0, player.Combat.Ammo[(int)Gun.Rifle], "ammo unchanged at 0");
+    }
+
+    [Test]
+    public void MapPlayer_SelfDamageAndPushScaling()
+    {
+        var customMode = new GameModeInfo
+        {
+            Id = "custom_rocket_jump",
+            Name = "Rocket Jump Custom",
+            ObjectiveId = "dm",
+            SelfDamageScale = 0.25f,
+            SelfPushScale = 2.0f,
+        };
+        customMode.Bake();
+
+        var player = new MapPlayer { Mode = customMode };
+        player.Respawn(new Vector3(0, 0, 0));
+        player.Combat.Armour = 0; // Strip armour so damage directly affects health
+        int initialHealth = player.Combat.Health;
+
+        var initialVel = player.Entity.Vel;
+        player.TakeDamage(100, attacker: player, gun: Gun.RocketLauncher, pushVel: new Vector3(0, 10, 0), nowMillis: 1000);
+
+        // Damage is scaled by 0.25 -> 25 damage
+        TestAssert.Equal(initialHealth - 25, player.Combat.Health, "damage scaled by SelfDamageScale");
+        // Push is scaled by 2.0 -> (0, 20, 0)
+        TestAssert.Equal(initialVel + new Vector3(0, 20, 0), player.Entity.Vel, "push scaled by SelfPushScale");
+    }
 }
