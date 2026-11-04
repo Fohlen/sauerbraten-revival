@@ -385,14 +385,14 @@ public partial class PlayerState : RefCounted
     }
 
     /// <summary>fps.cpp <c>spawnstate()</c> wrapper: <see cref="Respawn"/> then <see cref="SpawnState"/>.</summary>
-    public void Spawn(GameModeInfo mode, Random? rng = null)
+    public void Spawn(GameModeInfo? mode, Random? rng = null)
     {
         int prevHealth = _health;
         int prevArmour = _armour;
         int prevGun = _gunSelect;
 
         RespawnInternal();
-        SpawnStateInternal(mode, rng);
+        if (mode != null) SpawnStateInternal(mode, rng);
 
         if (_health != prevHealth) EmitSignal(SignalName.HealthChanged, prevHealth, _health);
         if (_armour != prevArmour) EmitSignal(SignalName.ArmourChanged, prevArmour, _armour);

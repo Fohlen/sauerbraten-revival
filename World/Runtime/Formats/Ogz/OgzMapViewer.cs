@@ -307,10 +307,17 @@ public partial class OgzMapViewer : Node3D
 
         player.Reparent(mapSource.WorldNode); // into the rotated Z-up world
 
-        (Vector3 feet, float yaw) = mapSource.FindSpawn();
         // The player node owns its team (set in the scene); the world only needs a
         // reference to it so flag visuals can colour relative to the local team.
-        if (mapSource is IGameWorld gw) gw.LocalPlayer = player;
+        if (mapSource is IGameWorld gw)
+        {
+            gw.LocalPlayer = player;
+            if (gw.Mode == null && modeInfo != null) gw.Mode = modeInfo;
+        }
+        if (modeInfo != null) player.Mode = modeInfo;
+
+        int tag = Game.GameModeCatalog.GetSpawnGroup(modeInfo, player.Team);
+        (Vector3 feet, float yaw) = mapSource.FindSpawn(tag: tag, player: player);
         var phys = mapSource.Physics ?? new Physics.OctaPhysics(mapSource.Octa ?? new Octa(10));
         player.Setup(phys, feet, yaw);
         mapSource.RegisterPlayer(player);

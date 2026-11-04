@@ -153,4 +153,20 @@ public static class GameModeCatalog
         }
         return modes.ToArray();
     }
+
+    /// <summary>
+    /// Engine <c>cmode ? cmode->getspawngroup(d) : 0</c> (fpsgame/fps.cpp:327, ctf.h:1052, collect.h:763).
+    /// In CTF / Protect / Collect, returns 1 for "good" team or 2 for "evil" team.
+    /// In Hold mode or non-team/FFA modes, returns 0.
+    /// </summary>
+    public static int GetSpawnGroup(GameModeInfo? mode, int team)
+    {
+        if (mode == null) return 0;
+        if (mode.Has(ModeFlags.Hold)) return 0;
+        if (mode.Has(ModeFlags.Ctf) || mode.Has(ModeFlags.Collect))
+        {
+            return team is 1 or 2 ? team : 0;
+        }
+        return 0;
+    }
 }

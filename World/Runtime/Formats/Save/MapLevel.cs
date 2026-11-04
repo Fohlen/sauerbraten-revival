@@ -486,10 +486,19 @@ public partial class MapLevel : Node3D, IGameWorld
     }
 
     /// <summary>Finds a player spawn point in Sauerbraten coordinates.</summary>
-    public (Vector3 Position, float Yaw) FindSpawn(int index = 0) =>
-        IMapSource.ResolveSpawn(
-            Entities.Where(e => e.Type == (byte)SauerbratenRevival.World.Entities.EntityType.PlayerStart).Select(e => (e.Position, (float)e.Attr1)),
-            ((IMapSource)this).Bounds.GetCenter(), index);
+    public (Vector3 Position, float Yaw) FindSpawn(int tag = 0, int forceIndex = -1, System.Random? rng = null, MapPlayer? player = null) =>
+        SauerbratenRevival.World.Entities.SpawnResolver.FindPlayerSpawn(
+            Entities,
+            ((IMapSource)this).Bounds.GetCenter(),
+            tag,
+            forceIndex,
+            rng,
+            player,
+            Physics,
+            Octa,
+            mode: null,
+            players: null,
+            flags: null);
 
     /// <summary>Project Resources first, then the reference dump (when configured).</summary>
     private ITextureSource BuildTextureSource()

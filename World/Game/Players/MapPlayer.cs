@@ -1300,12 +1300,34 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>
     /// Respawn the player after death, resetting combat state, loadout, position,
-    /// and velocity to the spawn point (<c>fpsgame/fps.cpp:350 respawnself</c>).
+    /// and velocity to a resolved spawn point (<c>fpsgame/fps.cpp:350 respawnself</c>).
     /// </summary>
     public void Respawn(Vector3? spawnFeet = null, float? yawDegrees = null)
     {
-        Vector3 feet = spawnFeet ?? SpawnFeet;
-        float yaw = yawDegrees ?? SpawnYaw;
+        Vector3 feet;
+        float yaw;
+        if (spawnFeet.HasValue && yawDegrees.HasValue)
+        {
+            feet = spawnFeet.Value;
+            yaw = yawDegrees.Value;
+        }
+        else if (spawnFeet.HasValue)
+        {
+            feet = spawnFeet.Value;
+            yaw = yawDegrees ?? SpawnYaw;
+        }
+        else if (GetParent() is IMapSource ms)
+        {
+            int tag = GameModeCatalog.GetSpawnGroup(Mode, Team);
+            (feet, yaw) = ms.FindSpawn(tag: tag, player: this);
+            SpawnFeet = feet;
+            SpawnYaw = yaw;
+        }
+        else
+        {
+            feet = SpawnFeet;
+            yaw = SpawnYaw;
+        }
 
         Entity.O = feet with { Z = feet.Z + EyeHeight };
         Entity.Yaw = yaw;

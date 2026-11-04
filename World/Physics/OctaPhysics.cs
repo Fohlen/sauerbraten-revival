@@ -1,3 +1,4 @@
+using System;
 using Godot;
 
 namespace SauerbratenRevival.World.Physics;
@@ -96,6 +97,9 @@ public sealed class PhysEnt
     /// <summary>nets.h: the interpolated offset between <see cref="O"/> and <see cref="NewPos"/>.</summary>
     public Vector3 DeltaPos;
 
+    /// <summary>ents.h:118 <c>resetinterp()</c>: resets interpolation deltas to origin.</summary>
+    public void ResetInterp() { NewPos = O; DeltaPos = Vector3.Zero; }
+
     // ents.h:60 CS_* player states (only the two physics cares about are named here).
     public const int CsAlive = 0, CsDead = 1, CsSpawning = 2, CsLagged = 3, CsEditing = 4, CsSpectator = 5;
     /// <summary>ents.h:82 <c>state</c>; <see cref="CsEditing"/>/<see cref="CsSpectator"/> imply floating.</summary>
@@ -140,6 +144,44 @@ public sealed class OctaPhysics
         bs += Vector3I.One; // guard space (physics.cpp:1055)
         bool hit = OctaCollide(d, dir, cutoff, bo, bs, _octa.WorldRoot, Vector3I.Zero, _octa.WorldSize >> 1);
         return hit || (playercol && PlCollide(d, dir, insideplayercol));
+    }
+
+    /// <summary>
+    /// physics.cpp:2022 <c>entinmap</c> — brute force but effective way to find a free spawn spot in the map.
+    /// Position specified on entry is at feet; <see cref="PhysEnt.EyeHeight"/> is added internally.
+    /// </summary>
+    public bool EntInMap(PhysEnt d, bool avoidPlayers = false, Random? rng = null)
+    {
+        rng ??= Random.Shared;
+        d.O = d.O with { Z = d.O.Z + d.EyeHeight };
+        Vector3 orig = d.O;
+        for (int i = 0; i < 100; i++)
+        {
+            if (i > 0)
+            {
+                d.O = new Vector3(
+                    orig.X + (rng.Next(21) - 10) * i / 5.0f,
+                    orig.Y + (rng.Next(21) - 10) * i / 5.0f,
+                    orig.Z + (rng.Next(21) - 10) * i / 5.0f);
+            }
+
+            if (!Collide(d, Vector3.Zero, 0f, true, false) && CollideInside == 0)
+            {
+                if (CollidePlayer != null)
+                {
+                    if (!avoidPlayers) continue;
+                    d.O = orig;
+                    d.ResetInterp();
+                    return false;
+                }
+
+                d.ResetInterp();
+                return true;
+            }
+        }
+        d.O = orig;
+        d.ResetInterp();
+        return false;
     }
 
     /// <summary>

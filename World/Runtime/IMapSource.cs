@@ -77,7 +77,7 @@ public interface IMapSource
     }
 
     /// <summary>Finds a player spawn point in Sauerbraten coordinates, falling back to map center.</summary>
-    (Vector3 Position, float Yaw) FindSpawn(int index = 0) => (Bounds.GetCenter(), 0f);
+    (Vector3 Position, float Yaw) FindSpawn(int tag = 0, int forceIndex = -1, System.Random? rng = null, MapPlayer? player = null) => (Bounds.GetCenter(), 0f);
 
     /// <summary>Map item manager, if supported by the world.</summary>
     ItemManager? Items { get; }

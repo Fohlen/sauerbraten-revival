@@ -468,9 +468,20 @@ public partial class MapWorld : Node3D, IGameWorld
     }
 
     /// <summary>Finds a player start spawn point in Sauerbraten coordinates, falling back to bounds center.</summary>
-    public (Vector3 Position, float Yaw) FindSpawn(int index = 0) =>
+    public (Vector3 Position, float Yaw) FindSpawn(int tag = 0, int forceIndex = -1, System.Random? rng = null, MapPlayer? player = null) =>
         Map != null
-            ? IMapSource.ResolveSpawn(Map.OfType(Entities.EntityType.PlayerStart).Select(t => (t.Entity.Position, (float)t.Entity.Attr1)), Bounds.GetCenter(), index)
+            ? Entities.SpawnResolver.FindPlayerSpawn(
+                Map.Entities,
+                Bounds.GetCenter(),
+                tag,
+                forceIndex,
+                rng,
+                player ?? LocalPlayer,
+                Physics,
+                Octa,
+                Mode,
+                Players,
+                Flags)
             : (Bounds.GetCenter(), 0f);
 
     private void LinkChildEditors()
