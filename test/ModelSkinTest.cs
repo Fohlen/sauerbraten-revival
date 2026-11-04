@@ -205,4 +205,26 @@ public class ModelSkinTest : GoTestBase
         TestAssert.True(mat1 != null && mat1.AlbedoTexture == textures.Get("upper.png"), "surface 1 gets Upper texture");
         TestAssert.True(mat1 != null && mat1.NormalTexture == textures.Get("upper_norm.png"), "surface 1 gets Upper normal");
     }
+
+    [Test]
+    public void ApplyMaterialsAdvancesAcrossMultipleChildMeshes()
+    {
+        var mat0 = new StandardMaterial3D { AlbedoColor = Colors.Red };
+        var mat1 = new StandardMaterial3D { AlbedoColor = Colors.Green };
+
+        var instance = new ModelInstance();
+        var holder = new Node3D { Name = "Model" };
+        var mesh0 = new MeshInstance3D { Name = "bark", Mesh = new BoxMesh() };
+        var mesh1 = new MeshInstance3D { Name = "leaf", Mesh = new QuadMesh() };
+        holder.AddChild(mesh0);
+        holder.AddChild(mesh1);
+        instance.AddChild(holder);
+
+        instance.ApplyMaterials(new Material?[] { mat0, mat1 });
+
+        TestAssert.Equal(mat0, mesh0.GetSurfaceOverrideMaterial(0), "first child mesh gets material 0 (bark)");
+        TestAssert.Equal(mat1, mesh1.GetSurfaceOverrideMaterial(0), "second child mesh gets material 1 (leaf)");
+
+        instance.Free();
+    }
 }

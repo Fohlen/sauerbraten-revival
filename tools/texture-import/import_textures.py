@@ -42,7 +42,7 @@ def _extract_model_textures(info: dict, paths: set[str]) -> None:
             paths.add(info[key])
     for s in info.get("skins", []):
         if isinstance(s, dict):
-            for key in ("diffuse", "mask"):
+            for key in ("diffuse", "mask", "bump"):
                 if s.get(key):
                     paths.add(s[key])
     for part in info.get("parts", []):

@@ -28,6 +28,7 @@ public static class ItemBuilder
             string modelName = ModelName(e.Type)!;
 
             var info = models?.Get(modelName);
+            var skinMaterials = ModelSkin.BuildSkins(info, textures, skinCache);
             var item = new Item
             {
                 Name = $"Item_{i}",
@@ -41,7 +42,8 @@ public static class ItemBuilder
                 GlbOsPath = info?.GlbOsPath,
                 ModelScale = info?.Scale ?? 1.0f,
                 ModelTranslation = info?.Translation ?? Vector3.Zero,
-                SkinMaterial = ModelSkin.Build(info, textures, skinCache),
+                SkinMaterials = skinMaterials,
+                SkinMaterial = skinMaterials.Count > 0 ? skinMaterials[0] : ModelSkin.Build(info, textures, skinCache),
             };
             EntityFacing.ApplyYaw(item, 0);
             root.AddItem(item);

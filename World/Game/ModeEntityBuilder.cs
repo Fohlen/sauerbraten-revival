@@ -53,6 +53,7 @@ public static class ModeEntityBuilder
             string? modelName = ModelName(e, catalogue);
             var info = modelName != null ? models?.Get(modelName) : null;
 
+            var skinMaterials = ModelSkin.BuildSkins(info, textures, skinCache);
             var node = new ModeEntity
             {
                 Name = $"{EntityType.Name(e.Type)}_{i}",
@@ -70,7 +71,8 @@ public static class ModeEntityBuilder
                 GlbOsPath = info?.GlbOsPath,
                 ModelScale = info?.Scale ?? 1.0f,
                 ModelTranslation = info?.Translation ?? Vector3.Zero,
-                SkinMaterial = ModelSkin.Build(info, textures, skinCache),
+                SkinMaterials = skinMaterials,
+                SkinMaterial = skinMaterials.Count > 0 ? skinMaterials[0] : ModelSkin.Build(info, textures, skinCache),
             };
 
             PopulateSemantics(node, e);

@@ -58,6 +58,7 @@ public static class MonsterBuilder
 
             var model = models?.Get(info.ModelName);
             var vwep = info.ViewWeapon != null ? models?.Get(info.ViewWeapon) : null;
+            var skinMaterials = ModelSkin.BuildSkins(model, textures, skinCache);
 
             // bscale scales the body box (monster constructor).
             float scale = info.BScale / 10.0f;
@@ -83,7 +84,8 @@ public static class MonsterBuilder
                 GlbOsPath = model?.GlbOsPath,
                 ModelScale = model?.Scale ?? 1.0f,
                 ModelTranslation = model?.Translation ?? Vector3.Zero,
-                SkinMaterial = ModelSkin.Build(model, textures, skinCache),
+                SkinMaterials = skinMaterials,
+                SkinMaterial = skinMaterials.Count > 0 ? skinMaterials[0] : ModelSkin.Build(model, textures, skinCache),
             };
 
             EntityFacing.ApplyYaw(node, e.Attr1);
@@ -95,6 +97,7 @@ public static class MonsterBuilder
             // import-time representation; the exact bone offset is a render concern.
             if (vwep != null || info.ViewWeapon != null)
             {
+                var vwepSkins = ModelSkin.BuildSkins(vwep, textures, skinCache);
                 node.AddChild(new MonsterViewWeapon
                 {
                     Name = "ViewWeapon",
@@ -103,7 +106,8 @@ public static class MonsterBuilder
                     GlbOsPath = vwep?.GlbOsPath,
                     ModelScale = vwep?.Scale ?? 1.0f,
                     ModelTranslation = vwep?.Translation ?? Vector3.Zero,
-                    SkinMaterial = ModelSkin.Build(vwep, textures, skinCache),
+                    SkinMaterials = vwepSkins,
+                    SkinMaterial = vwepSkins.Count > 0 ? vwepSkins[0] : ModelSkin.Build(vwep, textures, skinCache),
                 });
             }
 

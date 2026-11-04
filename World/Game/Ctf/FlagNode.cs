@@ -43,11 +43,13 @@ public partial class FlagNode : Models.ModelInstance
         var info = Models?.Get(modelName);
         if (info == null) return;
 
+        var skinMaterials = ModelSkin.BuildSkins(info, Textures, _skinCache);
         GlbPath = info.GlbPath;
         GlbOsPath = info.GlbOsPath;
         ModelScale = info.Scale;
         ModelTranslation = info.Translation;
-        SkinMaterial = ModelSkin.Build(info, Textures, _skinCache);
+        SkinMaterials = skinMaterials;
+        SkinMaterial = skinMaterials.Count > 0 ? skinMaterials[0] : ModelSkin.Build(info, Textures, _skinCache);
         Reload();
     }
 

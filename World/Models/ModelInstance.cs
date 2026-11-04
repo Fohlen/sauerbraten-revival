@@ -136,9 +136,14 @@ public partial class ModelInstance : Node3D
 
         AddChild(holder);
         if (SkinMaterials != null && SkinMaterials.Count > 0)
-            ApplyMaterials(holder, SkinMaterials);
+        {
+            int surfaceIndex = 0;
+            ApplyMaterials(holder, SkinMaterials, ref surfaceIndex);
+        }
         else if (SkinMaterial != null)
+        {
             ApplyMaterial(holder, SkinMaterial);
+        }
         return true;
     }
 
@@ -179,10 +184,11 @@ public partial class ModelInstance : Node3D
     {
         SkinMaterials = materials;
         SkinMaterial = materials.Count > 0 ? materials[0] : null;
+        int surfaceIndex = 0;
         foreach (var child in GetChildren())
         {
             if (child is ModelInstance) continue;
-            ApplyMaterials(child, materials);
+            ApplyMaterials(child, materials, ref surfaceIndex);
         }
     }
 
@@ -202,7 +208,7 @@ public partial class ModelInstance : Node3D
         }
     }
 
-    private static void ApplyMaterials(Node node, IReadOnlyList<Material?> materials)
+    private static void ApplyMaterials(Node node, IReadOnlyList<Material?> materials, ref int surfaceIndex)
     {
         if (node is MeshInstance3D mesh)
         {
@@ -210,14 +216,17 @@ public partial class ModelInstance : Node3D
             int surfaces = mesh.Mesh?.GetSurfaceCount() ?? 0;
             for (int i = 0; i < surfaces; i++)
             {
-                var mat = i < materials.Count ? materials[i] : (materials.Count > 0 ? materials[0] : null);
+                var mat = surfaceIndex < materials.Count
+                    ? materials[surfaceIndex]
+                    : (materials.Count > 0 ? materials[0] : null);
                 mesh.SetSurfaceOverrideMaterial(i, mat);
+                surfaceIndex++;
             }
         }
         foreach (var child in node.GetChildren())
         {
             if (child is ModelInstance) continue;
-            ApplyMaterials(child, materials);
+            ApplyMaterials(child, materials, ref surfaceIndex);
         }
     }
 }

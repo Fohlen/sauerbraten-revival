@@ -105,15 +105,13 @@ def parse_cfg(path: str) -> dict:
             elif cmd in ("objskin", "md3skin", "md5skin", "md2skin", "iqmskin") and args:
                 # objskin * diffuse mask  |  md3skin layer1 "diffuse" "mask"
                 # md5skin/iqmskin <part> "diffuse" "mask" [gloss] [glow]  (skelmodel: per-part)
-                if cmd in ("md5skin", "iqmskin") and len(args) >= 2:
+                if len(args) >= 2:
                     params["skins"].append({"part": args[0], "diffuse": args[1],
                                             "mask": args[2] if len(args) >= 3 else None})
                 if params["skin"] is None and len(args) >= 2:
                     params["skin"] = args[1]
-            elif cmd == "objbumpmap" and len(args) >= 2:
-                params["bump"] = args[1]
-            elif cmd in ("md5bumpmap", "iqmbumpmap") and len(args) >= 2:
-                # md5bumpmap/iqmbumpmap <part> "normal"
+            elif cmd in ("objbumpmap", "md3bumpmap", "md2bumpmap", "md5bumpmap", "iqmbumpmap") and len(args) >= 2:
+                # *bumpmap <part> "normal"
                 params["bumpmaps"].append({"part": args[0], "normal": args[1]})
                 if params["bump"] is None:
                     params["bump"] = args[1]
@@ -842,6 +840,129 @@ def read_md5mesh_parts(path: str) -> list[str]:
     return parts
 
 
+def read_iqm_parts(path: str) -> list[str]:
+    """Extract the mesh part names in order from an .iqm file (iqm.h loadiqmmeshes)."""
+    parts = []
+    if not os.path.isfile(path):
+        return parts
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        if len(data) < 44 or data[:16] != b"INTERQUAKEMODEL\0":
+            return parts
+        num_text, ofs_text, num_meshes, ofs_meshes = struct.unpack_from("<IIII", data, 28)
+        text = data[ofs_text:ofs_text + num_text] if ofs_text else b""
+        for i in range(num_meshes):
+            name_ofs = struct.unpack_from("<I", data, ofs_meshes + i * 24)[0]
+            name = text[name_ofs:].split(b"\0", 1)[0].decode("latin-1")
+            parts.append(name)
+    except (OSError, struct.error):
+        pass
+    return parts
+
+
+def read_md3_parts(path: str) -> list[str]:
+    """Extract the mesh surface names in order from an .md3 file (md3.h md3meshgroup::load)."""
+    parts = []
+    if not os.path.isfile(path):
+        return parts
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        if len(data) < 108 or data[:4] != b"IDP3":
+            return parts
+        n_meshes = struct.unpack_from("<i", data, 84)[0]
+        ofs_meshes = struct.unpack_from("<i", data, 100)[0]
+        off = ofs_meshes
+        for _ in range(n_meshes):
+            raw_name = struct.unpack_from("<64s", data, off + 4)[0]
+            meshsize = struct.unpack_from("<i", data, off + 104)[0]
+            parts.append(raw_name.split(b"\0", 1)[0].decode("latin-1"))
+            off += meshsize
+    except (OSError, struct.error):
+        pass
+    return parts
+
+
+def read_glb_mesh_parts(path: str | None) -> list[str]:
+    """Extract mesh names per primitive in order from an exported .glb (used for .obj)."""
+    parts = []
+    if not path or not os.path.isfile(path):
+        return parts
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        if len(data) < 20:
+            return parts
+        magic, _version, _length = struct.unpack_from("<III", data, 0)
+        if magic != 0x46546C67:
+            return parts
+        clen, ctype = struct.unpack_from("<II", data, 12)
+        if ctype != 0x4E4F534A:
+            return parts
+        doc = json.loads(data[20:20 + clen].decode("latin-1"))
+        for m in doc.get("meshes", []):
+            mname = m.get("name") or ""
+            for _ in m.get("primitives", []):
+                parts.append(mname)
+    except (OSError, struct.error, ValueError):
+        pass
+    return parts
+
+
+def resolve_mesh_skins(mesh_parts: list[str], raw_skins: list[dict], raw_bumps: list[dict],
+                       default_bump: str | None, packages: str, cfg_dir: str,
+                       mesh_dir: str | None, tex_dir: str | None) -> list[dict]:
+    """Resolve per-part skins in surface order (animmodel.h loopskins)."""
+    skins = []
+    extra_dirs = [d for d in (tex_dir, mesh_dir) if d]
+    # Check if all raw_skins target the exact same part name (e.g. team variants of a single-part model)
+    distinct_parts = {s.get("part", "").lower() for s in raw_skins if s.get("part")}
+    is_team_variant_list = len(raw_skins) > 1 and len(distinct_parts) == 1 and len(mesh_parts) <= 1
+
+    if mesh_parts and not is_team_variant_list:
+        for mp in mesh_parts:
+            matched_skin = None
+            mp_lower = mp.lower()
+            for s in raw_skins:
+                sp_lower = s.get("part", "").lower()
+                if sp_lower == mp_lower or sp_lower == "*":
+                    matched_skin = s
+            if not matched_skin:
+                for s in raw_skins:
+                    sp_lower = s.get("part", "").lower()
+                    if sp_lower and mp_lower and (sp_lower in mp_lower or mp_lower in sp_lower):
+                        matched_skin = s
+            if matched_skin:
+                diffuse = rel_to_packages(matched_skin.get("diffuse"), packages, cfg_dir, extra_dirs=extra_dirs)
+                mask = rel_to_packages(matched_skin.get("mask"), packages, cfg_dir, extra_dirs=extra_dirs)
+                bump = None
+                for b in raw_bumps:
+                    bp_lower = b.get("part", "").lower()
+                    if bp_lower == mp_lower or bp_lower == "*" or (bp_lower and mp_lower and (bp_lower in mp_lower or mp_lower in bp_lower)):
+                        bump = rel_to_packages(b.get("normal"), packages, cfg_dir, extra_dirs=extra_dirs)
+                if not bump and not raw_bumps and default_bump:
+                    bump = rel_to_packages(default_bump, packages, cfg_dir, extra_dirs=[d for d in (mesh_dir, tex_dir) if d])
+                if diffuse:
+                    skin_entry = {"part": mp, "diffuse": diffuse, "mask": mask}
+                    if bump:
+                        skin_entry["bump"] = bump
+                    skins.append(skin_entry)
+
+    if not skins:
+        for s in raw_skins:
+            diffuse = rel_to_packages(s.get("diffuse"), packages, cfg_dir, extra_dirs=extra_dirs)
+            mask = rel_to_packages(s.get("mask"), packages, cfg_dir, extra_dirs=extra_dirs)
+            bump = rel_to_packages(default_bump, packages, cfg_dir, extra_dirs=[d for d in (mesh_dir, tex_dir) if d])
+            if diffuse:
+                skin_entry = {"part": s["part"], "diffuse": diffuse, "mask": mask}
+                if bump:
+                    skin_entry["bump"] = bump
+                skins.append(skin_entry)
+
+    return skins
+
+
 def parse_linked_parts(model_name: str, models_root: str, packages_root: str) -> tuple[list[dict], dict]:
     """Parse a multi-part (``md5link``) model into its per-mesh parts, in cfg order.
 
@@ -940,7 +1061,7 @@ def parse_linked_parts(model_name: str, models_root: str, packages_root: str) ->
                         "source_rel": resolve(args[0], dirs),
                         "cfg_dir": cfg_dir,
                         "md5dir": model.get("md5dir"),
-                        "skins": [], "bump": None, "anims": [],
+                        "skins": [], "bumpmaps": [], "bump": None, "anims": [],
                         "tags": [], "adjusts": [], "pitches": [],
                     })
                 elif parts and cmd == "md5skin" and len(args) >= 2:
@@ -952,7 +1073,11 @@ def parse_linked_parts(model_name: str, models_root: str, packages_root: str) ->
                         "mask": resolve(args[2], dirs) if len(args) >= 3 else None,
                     })
                 elif parts and cmd == "md5bumpmap" and len(args) >= 2:
-                    parts[-1]["bump"] = resolve(args[1], candidates(cfg_dir))
+                    part = parts[-1]
+                    resolved_bump = resolve(args[1], candidates(cfg_dir))
+                    part["bumpmaps"].append({"part": args[0], "normal": resolved_bump})
+                    if part["bump"] is None:
+                        part["bump"] = resolved_bump
                 elif parts and cmd == "md5anim" and len(args) >= 2:
                     part = parts[-1]
                     anim = {"name": args[0], "file": resolve(args[1], candidates(cfg_dir)),
@@ -1012,11 +1137,15 @@ def build_linked_record(name: str, parts: list[dict], model: dict, packages: str
         # Pick the FFA skin as the flat fallback: the team variants are the ones
         # whose filenames mention blue/red, so prefer the remaining entry.
         skin = None
-        skins = [s for s in part["skins"] if s.get("diffuse")]
-        if skins:
-            plain = [s for s in skins if "blue" not in s["diffuse"].lower()
+        raw_skins = [s for s in part["skins"] if s.get("diffuse")]
+        if raw_skins:
+            plain = [s for s in raw_skins if "blue" not in s["diffuse"].lower()
                      and "red" not in s["diffuse"].lower()]
-            skin = (plain or skins)[-1]["diffuse"]
+            skin = (plain or raw_skins)[-1]["diffuse"]
+        mesh_parts = read_md5mesh_parts(source) if source.lower().endswith(".md5mesh") else []
+        skins = resolve_mesh_skins(
+            mesh_parts, raw_skins, part.get("bumpmaps", []),
+            part.get("bump"), packages, packages, None, None)
         entry: dict = {
             "source": part.get("source_rel"),
             "scale": scale, "trans": model["trans"],
@@ -1243,62 +1372,11 @@ def main(argv: list[str] | None = None) -> int:
             record["skin"] = rel_to_packages(skin, packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
             record["bump"] = rel_to_packages(params.get("bump"), packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
 
-            # MD5 / IQM (skelmodel) extras: per-part skins, the anim table and the
-            # named bone tags the engine attaches sub-models to. The single `skin`
-            # above stays the runtime fallback; `skins` preserves the per-part split.
+            # MD5 / IQM (skelmodel) extras: the anim table and the named bone tags
+            # the engine attaches sub-models to.
             ext = os.path.splitext(source)[1].lower()
             if ext in (".md5mesh", ".iqm"):
                 record["skeleton"] = True
-                mesh_parts = read_md5mesh_parts(source) if ext == ".md5mesh" else []
-                raw_skins = params.get("skins", [])
-                raw_bumps = params.get("bumpmaps", [])
-                skins = []
-
-                if mesh_parts:
-                    for mp in mesh_parts:
-                        matched_skin = None
-                        mp_lower = mp.lower()
-                        for s in raw_skins:
-                            sp_lower = s.get("part", "").lower()
-                            if sp_lower == mp_lower or sp_lower == "*":
-                                matched_skin = s
-                                break
-                        if not matched_skin:
-                            for s in raw_skins:
-                                sp_lower = s.get("part", "").lower()
-                                if sp_lower in mp_lower or mp_lower in sp_lower:
-                                    matched_skin = s
-                                    break
-                        if matched_skin:
-                            diffuse = rel_to_packages(matched_skin.get("diffuse"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
-                            mask = rel_to_packages(matched_skin.get("mask"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
-                            bump = None
-                            for b in raw_bumps:
-                                bp_lower = b.get("part", "").lower()
-                                if bp_lower == mp_lower or bp_lower == "*" or bp_lower in mp_lower or mp_lower in bp_lower:
-                                    bump = rel_to_packages(b.get("normal"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
-                                    break
-                            if not bump and params.get("bump"):
-                                bump = rel_to_packages(params.get("bump"), packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
-                            if diffuse:
-                                skin_entry = {"part": mp, "diffuse": diffuse, "mask": mask}
-                                if bump:
-                                    skin_entry["bump"] = bump
-                                skins.append(skin_entry)
-
-                if not skins:
-                    for s in raw_skins:
-                        diffuse = rel_to_packages(s.get("diffuse"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
-                        mask = rel_to_packages(s.get("mask"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
-                        bump = rel_to_packages(params.get("bump"), packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
-                        if diffuse:
-                            skin_entry = {"part": s["part"], "diffuse": diffuse, "mask": mask}
-                            if bump:
-                                skin_entry["bump"] = bump
-                            skins.append(skin_entry)
-
-                if skins:
-                    record["skins"] = skins
                 if params.get("tags"):
                     record["tags"] = params["tags"]
                 record.update(build_anim_metadata(params, packages, cfg_dir, mesh_dir))
@@ -1329,6 +1407,26 @@ def main(argv: list[str] | None = None) -> int:
                     glb_cache[key] = (record["glb"], baked)
                     print(f"OK    {name} -> {os.path.basename(glb)} (scale={record['scale']}"
                           + (", animated" if baked else "") + ")")
+
+            # Per-part / multi-surface skins (animmodel.h loopskins): resolve against
+            # the source format's mesh surface order (or the exported .glb for .obj).
+            if params.get("skins"):
+                glb_path = os.path.join(args.out, record["glb"]) if record.get("glb") else None
+                if ext == ".md5mesh":
+                    mesh_parts = read_md5mesh_parts(source)
+                elif ext == ".iqm":
+                    mesh_parts = read_iqm_parts(source)
+                elif ext == ".md3":
+                    mesh_parts = read_md3_parts(source)
+                elif ext == ".obj":
+                    mesh_parts = read_glb_mesh_parts(glb_path)
+                else:
+                    mesh_parts = []
+                skins = resolve_mesh_skins(
+                    mesh_parts, params.get("skins", []), params.get("bumpmaps", []),
+                    params.get("bump"), packages, cfg_dir, mesh_dir, tex_dir)
+                if skins:
+                    record["skins"] = skins
         else:
             print(f"MISS  {name}: no source geometry")
         manifest["models"][name] = record

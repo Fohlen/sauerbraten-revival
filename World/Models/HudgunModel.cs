@@ -170,8 +170,11 @@ public partial class HudgunModel : Node3D
         {
             var part = rig.Parts[i];
             var partInfo = rig.Info.Parts[i];
-            var material = ModelSkin.Build(partInfo, _textures, cache, _team);
-            part.ApplyMaterial(material);
+            var materials = ModelSkin.BuildSkins(partInfo, _textures, cache, _team);
+            if (materials.Count > 1)
+                part.ApplyMaterials(materials);
+            else
+                part.ApplyMaterial(materials.Count > 0 ? materials[0] : ModelSkin.Build(partInfo, _textures, cache, _team));
         }
     }
 
@@ -230,13 +233,15 @@ public partial class HudgunModel : Node3D
                 return null;
             }
 
+            var partSkins = ModelSkin.BuildSkins(partInfo, _textures, _skinCache!, _team);
             var part = new ModelInstance
             {
                 Name = $"Part{i}",
                 GlbPath = partInfo.GlbPath,
                 GlbOsPath = partInfo.GlbOsPath,
                 KeepSkeleton = true,
-                SkinMaterial = ModelSkin.Build(partInfo, _textures, _skinCache!, _team),
+                SkinMaterials = partSkins,
+                SkinMaterial = partSkins.Count > 0 ? partSkins[0] : ModelSkin.Build(partInfo, _textures, _skinCache!, _team),
             };
 
             Node3D? parent = container;

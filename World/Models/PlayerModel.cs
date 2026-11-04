@@ -222,6 +222,7 @@ public partial class PlayerModel : ModelInstance
         if (!_viewWeapons.TryGetValue(_viewWeaponName, out var weapon) || !GodotObject.IsInstanceValid(weapon))
         {
             float bodyScale = Mathf.IsZeroApprox(ModelScale) ? 1.0f : ModelScale;
+            var vwepSkins = ModelSkin.BuildSkins(info, _textures, _skinCache ?? ModelCache.SkinCache);
             weapon = new PlayerViewWeapon
             {
                 Name = $"ViewWeapon_{_viewWeaponName.Replace('/', '_')}",
@@ -232,7 +233,8 @@ public partial class PlayerModel : ModelInstance
                 ModelTranslation = info.Translation,
                 ModelRotationDegrees = ViewWeaponRotationDegrees,
                 KeepSkeleton = true,
-                SkinMaterial = ModelSkin.Build(info, _textures, _skinCache ?? ModelCache.SkinCache),
+                SkinMaterials = vwepSkins,
+                SkinMaterial = vwepSkins.Count > 0 ? vwepSkins[0] : ModelSkin.Build(info, _textures, _skinCache ?? ModelCache.SkinCache),
             };
             anchor.AddChild(weapon);
             _viewWeapons[_viewWeaponName] = weapon;
@@ -266,6 +268,7 @@ public partial class PlayerModel : ModelInstance
             if (info?.GlbPath == null && info?.GlbOsPath == null) continue;
 
             float bodyScale = Mathf.IsZeroApprox(ModelScale) ? 1.0f : ModelScale;
+            var vwepSkins = ModelSkin.BuildSkins(info, _textures, _skinCache ?? ModelCache.SkinCache);
             var weapon = new PlayerViewWeapon
             {
                 Name = $"ViewWeapon_{vwep.Replace('/', '_')}",
@@ -276,7 +279,8 @@ public partial class PlayerModel : ModelInstance
                 ModelTranslation = info.Translation,
                 ModelRotationDegrees = ViewWeaponRotationDegrees,
                 KeepSkeleton = true,
-                SkinMaterial = ModelSkin.Build(info, _textures, _skinCache ?? ModelCache.SkinCache),
+                SkinMaterials = vwepSkins,
+                SkinMaterial = vwepSkins.Count > 0 ? vwepSkins[0] : ModelSkin.Build(info, _textures, _skinCache ?? ModelCache.SkinCache),
                 Visible = (vwep == _viewWeaponName),
             };
             anchor.AddChild(weapon);

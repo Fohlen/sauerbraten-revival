@@ -40,6 +40,7 @@ public static class TriggerBuilder
                 case EntityType.Teleport:
                     string? modelName = ResolveModel(e.Attr2, catalogue);
                     var modelInfo = modelName != null ? models?.Get(modelName) : null;
+                    var skinMaterials = ModelSkin.BuildSkins(modelInfo, textures, skinCache);
                     var teleport = new Teleport
                     {
                         Name = $"Teleport_{i}",
@@ -54,7 +55,8 @@ public static class TriggerBuilder
                         GlbOsPath = modelInfo?.GlbOsPath,
                         ModelScale = modelInfo?.Scale ?? 1.0f,
                         ModelTranslation = modelInfo?.Translation ?? Vector3.Zero,
-                        SkinMaterial = ModelSkin.Build(modelInfo, textures, skinCache),
+                        SkinMaterials = skinMaterials,
+                        SkinMaterial = skinMaterials.Count > 0 ? skinMaterials[0] : ModelSkin.Build(modelInfo, textures, skinCache),
                     };
                     teleports.Add(teleport);
                     root.AddChild(teleport);

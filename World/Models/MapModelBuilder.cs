@@ -29,6 +29,7 @@ public static class MapModelBuilder
             string name = catalogue?.MapModelPath(e.Attr2) ?? $"mapmodel#{e.Attr2}";
             var info = models?.Get(name);
 
+            var skinMaterials = ModelSkin.BuildSkins(info, textures, skinCache);
             var model = new MapModel
             {
                 Name = $"MapModel_{i}",
@@ -39,7 +40,8 @@ public static class MapModelBuilder
                 GlbOsPath = info?.GlbOsPath,
                 ModelScale = info?.Scale ?? 1.0f,
                 ModelTranslation = info?.Translation ?? Vector3.Zero,
-                SkinMaterial = ModelSkin.Build(info, textures, skinCache),
+                SkinMaterials = skinMaterials,
+                SkinMaterial = skinMaterials.Count > 0 ? skinMaterials[0] : ModelSkin.Build(info, textures, skinCache),
             };
 
             EntityFacing.ApplyYaw(model, e.Attr1);

@@ -90,11 +90,15 @@ public static class ModelCache
             PreloadModel(hudgunInfo);
             if (textures != null)
             {
+                ModelSkin.BuildSkins(hudgunInfo, textures, _skinCache, team);
                 ModelSkin.Build(hudgunInfo, textures, _skinCache, team);
                 if (hudgunInfo.Parts != null)
                 {
                     foreach (var part in hudgunInfo.Parts)
+                    {
+                        ModelSkin.BuildSkins(part, textures, _skinCache, team);
                         ModelSkin.Build(part, textures, _skinCache, team);
+                    }
                 }
             }
         }
@@ -105,7 +109,10 @@ public static class ModelCache
         {
             PreloadModel(vwepInfo);
             if (textures != null)
+            {
+                ModelSkin.BuildSkins(vwepInfo, textures, _skinCache);
                 ModelSkin.Build(vwepInfo, textures, _skinCache);
+            }
         }
     }
 
