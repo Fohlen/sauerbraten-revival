@@ -16,6 +16,9 @@ public sealed class ArrayMeshBuilder
     private readonly Dictionary<int, List<Vector2>> _uvs = new();
     private readonly Dictionary<int, List<int>> _indices = new();
 
+    /// <summary>Maximum surfaces supported by a single Godot Mesh (engine hard limit).</summary>
+    public const int MaxSurfacesPerMesh = 256;
+
     /// <summary>Total triangles emitted.</summary>
     public int TriangleCount { get; private set; }
 
@@ -165,15 +168,68 @@ public sealed class ArrayMeshBuilder
     public ArrayMesh Build(MaterialSet? materials = null)
     {
         var mesh = new ArrayMesh();
+        int count = 0;
         foreach (var entry in _positions)
         {
+            if (count >= MaxSurfacesPerMesh)
+            {
+                GD.PushWarning($"ArrayMesh surface limit ({MaxSurfacesPerMesh}) reached. {_positions.Count - count} surfaces will be omitted from ArrayMesh.");
+                break;
+            }
             var arrays = CreateSurfaceArrays(entry.Key, entry.Value);
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
 
             var material = materials?.MaterialFor(entry.Key);
             if (material != null) mesh.SurfaceSetMaterial(mesh.GetSurfaceCount() - 1, material);
+            count++;
         }
         return mesh;
+    }
+
+    /// <summary>
+    /// Stream the accumulated surfaces directly into one or more <see cref="RenderingServer"/>
+    /// mesh RIDs, clearing each first. Godot limits each mesh to at most 256 surfaces;
+    /// chunks with more surfaces require multiple mesh RIDs.
+    /// </summary>
+    public void UploadTo(IList<Rid> meshRids, MaterialSet? materials = null)
+    {
+        if (meshRids == null || meshRids.Count == 0)
+            throw new System.ArgumentException("At least one mesh RID is required.", nameof(meshRids));
+
+        int currentMeshIndex = 0;
+        int surfaceIndexInMesh = 0;
+        Rid currentMeshRid = meshRids[0];
+        RenderingServer.MeshClear(currentMeshRid);
+
+        foreach (var entry in _positions)
+        {
+            if (surfaceIndexInMesh >= MaxSurfacesPerMesh)
+            {
+                currentMeshIndex++;
+                if (currentMeshIndex < meshRids.Count)
+                {
+                    currentMeshRid = meshRids[currentMeshIndex];
+                    RenderingServer.MeshClear(currentMeshRid);
+                    surfaceIndexInMesh = 0;
+                }
+                else
+                {
+                    GD.PushWarning($"Mesh RID count ({meshRids.Count}) exhausted for {_positions.Count} surfaces. Remaining surfaces omitted.");
+                    break;
+                }
+            }
+
+            var arrays = CreateSurfaceArrays(entry.Key, entry.Value);
+            RenderingServer.MeshAddSurfaceFromArrays(currentMeshRid, RenderingServer.PrimitiveType.Triangles, arrays);
+
+            var material = materials?.MaterialFor(entry.Key);
+            if (material != null)
+                RenderingServer.MeshSurfaceSetMaterial(currentMeshRid, surfaceIndexInMesh, material.GetRid());
+            surfaceIndexInMesh++;
+        }
+
+        for (int i = currentMeshIndex + 1; i < meshRids.Count; i++)
+            RenderingServer.MeshClear(meshRids[i]);
     }
 
     /// <summary>
@@ -182,18 +238,7 @@ public sealed class ArrayMeshBuilder
     /// </summary>
     public void UploadTo(Rid meshRid, MaterialSet? materials = null)
     {
-        RenderingServer.MeshClear(meshRid);
-        int surfaceIndex = 0;
-        foreach (var entry in _positions)
-        {
-            var arrays = CreateSurfaceArrays(entry.Key, entry.Value);
-            RenderingServer.MeshAddSurfaceFromArrays(meshRid, RenderingServer.PrimitiveType.Triangles, arrays);
-
-            var material = materials?.MaterialFor(entry.Key);
-            if (material != null)
-                RenderingServer.MeshSurfaceSetMaterial(meshRid, surfaceIndex, material.GetRid());
-            surfaceIndex++;
-        }
+        UploadTo(new[] { meshRid }, materials);
     }
 
     private Godot.Collections.Array CreateSurfaceArrays(int key, List<Vector3> positions)

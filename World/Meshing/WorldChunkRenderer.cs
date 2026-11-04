@@ -31,12 +31,14 @@ public partial class WorldChunkRenderer : Node3D
 {
     private sealed class ChunkEntry
     {
-        public Rid InstanceRid;
-        public Rid OwnedMeshRid;
+        public readonly List<Rid> InstanceRids = new();
+        public readonly List<Rid> OwnedMeshRids = new();
         public ArrayMesh? SharedMesh;
         public int Triangles;
         public Aabb LocalAabb;
 
+        public Rid InstanceRid => InstanceRids.Count > 0 ? InstanceRids[0] : default;
+        public Rid OwnedMeshRid => OwnedMeshRids.Count > 0 ? OwnedMeshRids[0] : default;
         public Rid MeshRid => OwnedMeshRid.IsValid ? OwnedMeshRid : SharedMesh?.GetRid() ?? default;
     }
 
@@ -79,7 +81,8 @@ public partial class WorldChunkRenderer : Node3D
             _fallbackMaterial = value;
             Rid overrideRid = _fallbackMaterial?.GetRid() ?? default;
             foreach (var entry in _chunks.Values)
-                RenderingServer.InstanceGeometrySetMaterialOverride(entry.InstanceRid, overrideRid);
+                foreach (var inst in entry.InstanceRids)
+                    RenderingServer.InstanceGeometrySetMaterialOverride(inst, overrideRid);
         }
     }
 
@@ -206,17 +209,42 @@ public partial class WorldChunkRenderer : Node3D
         }
         else if (existing != null)
         {
-            if (!existing.OwnedMeshRid.IsValid)
+            existing.SharedMesh = null;
+            int needed = Mathf.Max(1, (builder.TextureCount + ArrayMeshBuilder.MaxSurfacesPerMesh - 1) / ArrayMeshBuilder.MaxSurfacesPerMesh);
+
+            if (existing.OwnedMeshRids.Count == 0)
             {
-                existing.OwnedMeshRid = RenderingServer.MeshCreate();
-                existing.SharedMesh = null;
-                builder.UploadTo(existing.OwnedMeshRid, _materials);
-                RenderingServer.InstanceSetBase(existing.InstanceRid, existing.OwnedMeshRid);
+                Rid meshRid = RenderingServer.MeshCreate();
+                existing.OwnedMeshRids.Add(meshRid);
+                if (existing.InstanceRids.Count > 0)
+                {
+                    RenderingServer.InstanceSetBase(existing.InstanceRids[0], meshRid);
+                }
+                else
+                {
+                    Rid instanceRid = CreateAndBindInstance(origin, meshRid);
+                    existing.InstanceRids.Add(instanceRid);
+                }
             }
-            else
+
+            while (existing.OwnedMeshRids.Count < needed)
             {
-                builder.UploadTo(existing.OwnedMeshRid, _materials);
+                Rid meshRid = RenderingServer.MeshCreate();
+                existing.OwnedMeshRids.Add(meshRid);
+                Rid instanceRid = CreateAndBindInstance(origin, meshRid);
+                existing.InstanceRids.Add(instanceRid);
             }
+
+            while (existing.OwnedMeshRids.Count > needed)
+            {
+                int last = existing.OwnedMeshRids.Count - 1;
+                RenderingServer.FreeRid(existing.InstanceRids[last]);
+                existing.InstanceRids.RemoveAt(last);
+                RenderingServer.FreeRid(existing.OwnedMeshRids[last]);
+                existing.OwnedMeshRids.RemoveAt(last);
+            }
+
+            builder.UploadTo(existing.OwnedMeshRids, _materials);
             existing.Triangles = tris;
             existing.LocalAabb = builder.GetAabb();
         }
@@ -317,29 +345,36 @@ public partial class WorldChunkRenderer : Node3D
 
     private void CreateStreamedChunk(Vector3I origin, ArrayMeshBuilder builder)
     {
-        Rid meshRid = RenderingServer.MeshCreate();
-        builder.UploadTo(meshRid, _materials);
-
-        Rid instanceRid = CreateAndBindInstance(origin, meshRid);
-        _chunks[origin] = new ChunkEntry
+        int needed = Mathf.Max(1, (builder.TextureCount + ArrayMeshBuilder.MaxSurfacesPerMesh - 1) / ArrayMeshBuilder.MaxSurfacesPerMesh);
+        var entry = new ChunkEntry
         {
-            InstanceRid = instanceRid,
-            OwnedMeshRid = meshRid,
             Triangles = builder.TriangleCount,
             LocalAabb = builder.GetAabb(),
         };
+
+        for (int i = 0; i < needed; i++)
+        {
+            Rid meshRid = RenderingServer.MeshCreate();
+            entry.OwnedMeshRids.Add(meshRid);
+            Rid instanceRid = CreateAndBindInstance(origin, meshRid);
+            entry.InstanceRids.Add(instanceRid);
+        }
+
+        builder.UploadTo(entry.OwnedMeshRids, _materials);
+        _chunks[origin] = entry;
     }
 
     private void CreatePrebuiltChunk(Vector3I origin, ArrayMesh mesh)
     {
         Rid instanceRid = CreateAndBindInstance(origin, mesh.GetRid());
-        _chunks[origin] = new ChunkEntry
+        var entry = new ChunkEntry
         {
-            InstanceRid = instanceRid,
             SharedMesh = mesh,
             Triangles = CountTriangles(mesh),
             LocalAabb = mesh.GetAabb(),
         };
+        entry.InstanceRids.Add(instanceRid);
+        _chunks[origin] = entry;
     }
 
     private Rid CreateAndBindInstance(Vector3I origin, Rid meshRid)
@@ -374,37 +409,53 @@ public partial class WorldChunkRenderer : Node3D
         bool visible = CurrentVisibility();
         foreach (var (origin, entry) in _chunks)
         {
-            RenderingServer.InstanceSetScenario(entry.InstanceRid, scenario);
-            RenderingServer.InstanceSetTransform(entry.InstanceRid, ChunkTransform(origin));
-            RenderingServer.InstanceSetVisible(entry.InstanceRid, visible);
+            var transform = ChunkTransform(origin);
+            foreach (var inst in entry.InstanceRids)
+            {
+                RenderingServer.InstanceSetScenario(inst, scenario);
+                RenderingServer.InstanceSetTransform(inst, transform);
+                RenderingServer.InstanceSetVisible(inst, visible);
+            }
         }
     }
 
     private void UpdateAllTransforms()
     {
         foreach (var (origin, entry) in _chunks)
-            RenderingServer.InstanceSetTransform(entry.InstanceRid, ChunkTransform(origin));
+        {
+            var transform = ChunkTransform(origin);
+            foreach (var inst in entry.InstanceRids)
+                RenderingServer.InstanceSetTransform(inst, transform);
+        }
     }
 
     private void UpdateAllVisibility()
     {
         bool visible = CurrentVisibility();
         foreach (var entry in _chunks.Values)
-            RenderingServer.InstanceSetVisible(entry.InstanceRid, visible);
+            foreach (var inst in entry.InstanceRids)
+                RenderingServer.InstanceSetVisible(inst, visible);
     }
 
     private void DetachAllFromScenario()
     {
         foreach (var entry in _chunks.Values)
-            RenderingServer.InstanceSetScenario(entry.InstanceRid, default);
+            foreach (var inst in entry.InstanceRids)
+                RenderingServer.InstanceSetScenario(inst, default);
     }
 
     private static void FreeChunkEntry(ChunkEntry entry)
     {
-        if (entry.InstanceRid.IsValid)
-            RenderingServer.FreeRid(entry.InstanceRid);
-        if (entry.OwnedMeshRid.IsValid)
-            RenderingServer.FreeRid(entry.OwnedMeshRid);
+        foreach (var inst in entry.InstanceRids)
+            if (inst.IsValid)
+                RenderingServer.FreeRid(inst);
+        entry.InstanceRids.Clear();
+
+        foreach (var mesh in entry.OwnedMeshRids)
+            if (mesh.IsValid)
+                RenderingServer.FreeRid(mesh);
+        entry.OwnedMeshRids.Clear();
+
         entry.SharedMesh = null;
     }
 

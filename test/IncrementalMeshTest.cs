@@ -1,9 +1,11 @@
+using System.Threading.Tasks;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Editor;
 using SauerbratenRevival.World.Meshing;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 namespace SauerbratenRevival.Tests;
 
@@ -223,5 +225,46 @@ public class IncrementalMeshTest : GoTestBase
         TestAssert.False(renderer.GetChunkMeshRid(origin).IsValid, "mesh RID removed");
 
         renderer.Free();
+    }
+
+    [Test]
+    public void SupportsChunksWithMoreThan256Surfaces()
+    {
+        var map = TestData.ReadMap("breakout");
+        var octa = map.ToOcta();
+        var renderer = new WorldChunkRenderer { ChunkSize = 512 };
+        TestScene.AddChild(renderer);
+        renderer.Setup(octa, materials: null);
+
+        var heavyOrigin = new Vector3I(0, 512, 512);
+        TestAssert.True(renderer.GetChunkMeshRid(heavyOrigin).IsValid, "primary mesh RID is valid");
+        TestAssert.True(renderer.GetChunkInstanceRid(heavyOrigin).IsValid, "primary instance RID is valid");
+
+        // Rebuilding the chunk with 547 surfaces should also succeed without overflowing Godot's 256 surface limit
+        renderer.RebuildChunk(heavyOrigin);
+        TestAssert.True(renderer.GetChunkMeshRid(heavyOrigin).IsValid, "mesh RID valid after rebuild");
+
+        renderer.Free();
+    }
+
+    [Test]
+    public async Task MapWorldBuildsBreakoutWithoutSurfaceOverflow()
+    {
+        var world = new MapWorld
+        {
+            OgzPath = "base/breakout.ogz",
+            ChunkSize = 512,
+        };
+        TestScene.AddChild(world);
+        try
+        {
+            await world.BuildAsync();
+            TestAssert.True(world.Built, "MapWorld built breakout successfully");
+            TestAssert.True(world.Renderer != null && world.Renderer.ChunkCount > 0, "Renderer chunks created");
+        }
+        finally
+        {
+            world.QueueFree();
+        }
     }
 }
