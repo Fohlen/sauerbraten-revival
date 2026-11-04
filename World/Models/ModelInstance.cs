@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using Godot;
 using SauerbratenRevival.World.Entities;
@@ -32,6 +33,9 @@ public partial class ModelInstance : Node3D
 
     /// <summary>Skin/normal material, applied to the loaded model.</summary>
     public Material? SkinMaterial { get; set; }
+
+    /// <summary>Per-surface skin materials, applied in surface order to multi-surface meshes.</summary>
+    public IReadOnlyList<Material?>? SkinMaterials { get; set; }
 
     /// <summary>
     /// Keep the imported scene's node hierarchy (skeleton, bone attachments, skinned
@@ -131,7 +135,10 @@ public partial class ModelInstance : Node3D
         }
 
         AddChild(holder);
-        if (SkinMaterial != null) ApplyMaterial(holder, SkinMaterial);
+        if (SkinMaterials != null && SkinMaterials.Count > 0)
+            ApplyMaterials(holder, SkinMaterials);
+        else if (SkinMaterial != null)
+            ApplyMaterial(holder, SkinMaterial);
         return true;
     }
 
@@ -159,6 +166,7 @@ public partial class ModelInstance : Node3D
     public void ApplyMaterial(Material? material)
     {
         SkinMaterial = material;
+        SkinMaterials = null;
         foreach (var child in GetChildren())
         {
             if (child is ModelInstance) continue;
@@ -166,13 +174,50 @@ public partial class ModelInstance : Node3D
         }
     }
 
+    /// <summary>Applies per-surface skin materials to this instance's mesh hierarchies dynamically.</summary>
+    public void ApplyMaterials(IReadOnlyList<Material?> materials)
+    {
+        SkinMaterials = materials;
+        SkinMaterial = materials.Count > 0 ? materials[0] : null;
+        foreach (var child in GetChildren())
+        {
+            if (child is ModelInstance) continue;
+            ApplyMaterials(child, materials);
+        }
+    }
+
     private static void ApplyMaterial(Node node, Material? material)
     {
-        if (node is MeshInstance3D mesh) mesh.MaterialOverride = material;
+        if (node is MeshInstance3D mesh)
+        {
+            int surfaces = mesh.Mesh?.GetSurfaceCount() ?? 0;
+            for (int i = 0; i < surfaces; i++)
+                mesh.SetSurfaceOverrideMaterial(i, null);
+            mesh.MaterialOverride = material;
+        }
         foreach (var child in node.GetChildren())
         {
             if (child is ModelInstance) continue;
             ApplyMaterial(child, material);
+        }
+    }
+
+    private static void ApplyMaterials(Node node, IReadOnlyList<Material?> materials)
+    {
+        if (node is MeshInstance3D mesh)
+        {
+            mesh.MaterialOverride = null;
+            int surfaces = mesh.Mesh?.GetSurfaceCount() ?? 0;
+            for (int i = 0; i < surfaces; i++)
+            {
+                var mat = i < materials.Count ? materials[i] : (materials.Count > 0 ? materials[0] : null);
+                mesh.SetSurfaceOverrideMaterial(i, mat);
+            }
+        }
+        foreach (var child in node.GetChildren())
+        {
+            if (child is ModelInstance) continue;
+            ApplyMaterials(child, materials);
         }
     }
 }

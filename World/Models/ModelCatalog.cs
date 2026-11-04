@@ -112,6 +112,7 @@ public sealed class ModelSkinInfo
     public string Part = "";
     public string? Diffuse;
     public string? Mask;
+    public string? Bump;
 }
 
 /// <summary>One MD5 animation part's bone mask (<c>md5animpart</c>).</summary>
@@ -218,6 +219,8 @@ public sealed class ModelCatalog : IModelCatalog
                     skinInfo.Diffuse = diff.GetString();
                 if (s.TryGetProperty("mask", out var mask) && mask.ValueKind == JsonValueKind.String)
                     skinInfo.Mask = mask.GetString();
+                if (s.TryGetProperty("bump", out var bumpProp) && bumpProp.ValueKind == JsonValueKind.String)
+                    skinInfo.Bump = bumpProp.GetString();
                 info.Skins.Add(skinInfo);
             }
         if (v.TryGetProperty("bump", out var bump) && bump.ValueKind == JsonValueKind.String)

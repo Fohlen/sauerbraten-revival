@@ -331,6 +331,22 @@ class MetadataBuildTest(unittest.TestCase):
         self.assertEqual(["Spine1", "Head"], [p["bone"] for p in md["pitch"]])
         self.assertEqual("models/mrfixit/sniper_idle.md5anim", md["anims"]["hold 5"])
 
+    def test_md5_surface_skins_order(self):
+        models_root = os.path.join(self.ref, "packages", "models")
+        if not os.path.isdir(models_root):
+            self.skipTest("reference dump not present")
+        packages = os.path.dirname(models_root)
+
+        # mrfixit: Body (surface 0) then Head (surface 1)
+        source, params = import_models.find_model(models_root, "mrfixit")
+        mesh_parts = import_models.read_md5mesh_parts(source)
+        self.assertEqual(["Body", "Head"], mesh_parts)
+
+        # snoutx10k: Lower (surface 0) then Upper (surface 1)
+        source, params = import_models.find_model(models_root, "snoutx10k")
+        mesh_parts = import_models.read_md5mesh_parts(source)
+        self.assertEqual(["Lower", "Upper"], mesh_parts)
+
     def test_ogro2_iqm_skin_and_metadata(self):
         models_root = os.path.join(self.ref, "packages", "models")
         if not os.path.isdir(models_root):

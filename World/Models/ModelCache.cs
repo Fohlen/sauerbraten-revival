@@ -128,7 +128,10 @@ public static class ModelCache
         {
             PreloadModel(bodyInfo);
             if (textures != null)
+            {
+                ModelSkin.BuildSkins(bodyInfo, textures, _skinCache, team);
                 ModelSkin.Build(bodyInfo, textures, _skinCache, team);
+            }
         }
 
         // All 7 weapons: fist, shotg, chaing, rocket, rifle, gl, pistol

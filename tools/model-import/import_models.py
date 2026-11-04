@@ -46,7 +46,7 @@ def parse_cfg(path: str) -> dict:
     params: dict = {"scale": 1.0, "trans": [0.0, 0.0, 0.0], "glow": None, "spec": None,
                     "skin": None, "bump": None, "source": None, "objdir": None,
                     "md5dir": None, "alphatest": None, "alphablend": None, "cullface": None,
-                    "execs": [], "cfgs": [], "skins": [], "anims": [], "tags": [],
+                    "execs": [], "cfgs": [], "skins": [], "bumpmaps": [], "anims": [], "tags": [],
                     "animparts": [], "pitches": [], "adjusts": [], "links": []}
     if not os.path.isfile(path):
         return params
@@ -114,6 +114,7 @@ def parse_cfg(path: str) -> dict:
                 params["bump"] = args[1]
             elif cmd in ("md5bumpmap", "iqmbumpmap") and len(args) >= 2:
                 # md5bumpmap/iqmbumpmap <part> "normal"
+                params["bumpmaps"].append({"part": args[0], "normal": args[1]})
                 if params["bump"] is None:
                     params["bump"] = args[1]
             elif cmd in ("md5anim", "iqmanim") and len(args) >= 2:
@@ -228,7 +229,7 @@ def _execute_cfg(params: dict, models_root: str, packages_root: str) -> None:
             params["anims"].append(merged)
         params["animparts"].extend(sub.get("animparts", []))
         params.setdefault("pitches", []).extend(sub.get("pitches", []))
-        for key in ("skins", "tags", "adjusts", "links"):
+        for key in ("skins", "bumpmaps", "tags", "adjusts", "links"):
             params.setdefault(key, []).extend(sub.get(key, []))
 
 
@@ -327,7 +328,7 @@ def _merge_cfg_params(params: dict, base: str) -> None:
                 params.setdefault("anims", []).append(merged)
             params["animparts"].extend(other.get("animparts", []))
             params.setdefault("pitches", []).extend(other.get("pitches", []))
-            for k in ("skins", "tags"):
+            for k in ("skins", "bumpmaps", "tags"):
                 params.setdefault(k, []).extend(other.get(k, []))
 
 
@@ -828,6 +829,19 @@ def bake_animated_glb(assimp: str, mesh_source: str, anims: dict, packages_root:
     return True
 
 
+def read_md5mesh_parts(path: str) -> list[str]:
+    """Extract the mesh part names in order from an .md5mesh file."""
+    parts = []
+    if not os.path.isfile(path):
+        return parts
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            m = re.match(r"^\s*//\s*meshes:\s*(\S+)", line)
+            if m:
+                parts.append(m.group(1))
+    return parts
+
+
 def parse_linked_parts(model_name: str, models_root: str, packages_root: str) -> tuple[list[dict], dict]:
     """Parse a multi-part (``md5link``) model into its per-mesh parts, in cfg order.
 
@@ -1235,12 +1249,54 @@ def main(argv: list[str] | None = None) -> int:
             ext = os.path.splitext(source)[1].lower()
             if ext in (".md5mesh", ".iqm"):
                 record["skeleton"] = True
+                mesh_parts = read_md5mesh_parts(source) if ext == ".md5mesh" else []
+                raw_skins = params.get("skins", [])
+                raw_bumps = params.get("bumpmaps", [])
                 skins = []
-                for s in params.get("skins", []):
-                    diffuse = rel_to_packages(s.get("diffuse"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
-                    mask = rel_to_packages(s.get("mask"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
-                    if diffuse:
-                        skins.append({"part": s["part"], "diffuse": diffuse, "mask": mask})
+
+                if mesh_parts:
+                    for mp in mesh_parts:
+                        matched_skin = None
+                        mp_lower = mp.lower()
+                        for s in raw_skins:
+                            sp_lower = s.get("part", "").lower()
+                            if sp_lower == mp_lower or sp_lower == "*":
+                                matched_skin = s
+                                break
+                        if not matched_skin:
+                            for s in raw_skins:
+                                sp_lower = s.get("part", "").lower()
+                                if sp_lower in mp_lower or mp_lower in sp_lower:
+                                    matched_skin = s
+                                    break
+                        if matched_skin:
+                            diffuse = rel_to_packages(matched_skin.get("diffuse"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
+                            mask = rel_to_packages(matched_skin.get("mask"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
+                            bump = None
+                            for b in raw_bumps:
+                                bp_lower = b.get("part", "").lower()
+                                if bp_lower == mp_lower or bp_lower == "*" or bp_lower in mp_lower or mp_lower in bp_lower:
+                                    bump = rel_to_packages(b.get("normal"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
+                                    break
+                            if not bump and params.get("bump"):
+                                bump = rel_to_packages(params.get("bump"), packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
+                            if diffuse:
+                                skin_entry = {"part": mp, "diffuse": diffuse, "mask": mask}
+                                if bump:
+                                    skin_entry["bump"] = bump
+                                skins.append(skin_entry)
+
+                if not skins:
+                    for s in raw_skins:
+                        diffuse = rel_to_packages(s.get("diffuse"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
+                        mask = rel_to_packages(s.get("mask"), packages, cfg_dir, extra_dirs=[tex_dir, mesh_dir])
+                        bump = rel_to_packages(params.get("bump"), packages, cfg_dir, extra_dirs=[mesh_dir, tex_dir])
+                        if diffuse:
+                            skin_entry = {"part": s["part"], "diffuse": diffuse, "mask": mask}
+                            if bump:
+                                skin_entry["bump"] = bump
+                            skins.append(skin_entry)
+
                 if skins:
                     record["skins"] = skins
                 if params.get("tags"):

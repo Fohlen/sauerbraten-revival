@@ -310,6 +310,27 @@ public class PlayerModelCatalogTest : GoTestBase
                 var mat = ModelSkin.Build(info, textures, cache) as StandardMaterial3D;
                 TestAssert.True(mat != null, $"skin material built for {bodyPath}");
                 TestAssert.True(mat!.AlbedoTexture != null, $"albedo texture loaded for {bodyPath} ({info.Skin})");
+
+                var surfaceMats = ModelSkin.BuildSkins(info, textures, cache, team);
+                TestAssert.True(surfaceMats.Count > 0, $"per-surface materials built for {bodyPath}");
+                foreach (var sMat in surfaceMats)
+                {
+                    var stdMat = sMat as StandardMaterial3D;
+                    TestAssert.True(stdMat != null && stdMat.AlbedoTexture != null, $"surface material has valid albedo for {bodyPath}");
+                }
+
+                if (pm.Id == PlayerModelId.Snoutx10k && team == 0)
+                {
+                    TestAssert.Equal(2, surfaceMats.Count, "snoutx10k has 2 surfaces");
+                    TestAssert.Equal("Lower", info.Skins[0].Part, "snoutx10k surface 0 is Lower");
+                    TestAssert.Equal("Upper", info.Skins[1].Part, "snoutx10k surface 1 is Upper");
+                }
+                else if (pm.Id == PlayerModelId.MrFixit && team == 0)
+                {
+                    TestAssert.Equal(2, surfaceMats.Count, "mrfixit has 2 surfaces");
+                    TestAssert.Equal("Body", info.Skins[0].Part, "mrfixit surface 0 is Body");
+                    TestAssert.Equal("Head", info.Skins[1].Part, "mrfixit surface 1 is Head");
+                }
             }
         }
     }

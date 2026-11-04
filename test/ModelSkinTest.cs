@@ -173,4 +173,36 @@ public class ModelSkinTest : GoTestBase
         TestAssert.True(redMat != null && redMat.AlbedoTexture == textures.Get("hands_red.png"), "red material built");
         TestAssert.True(neutralMat != null && neutralMat.AlbedoTexture == textures.Get("hands.png"), "neutral material built");
     }
+
+    [Test]
+    public void MultiSurfaceSkinsBuildInOrder()
+    {
+        var textures = new DummyTextureSource();
+        textures.Add("lower.png");
+        textures.Add("upper.png");
+        textures.Add("lower_norm.png");
+        textures.Add("upper_norm.png");
+
+        var info = new ModelInfo
+        {
+            Skin = "upper.png",
+            Skins =
+            {
+                new ModelSkinInfo { Part = "Lower", Diffuse = "lower.png", Bump = "lower_norm.png" },
+                new ModelSkinInfo { Part = "Upper", Diffuse = "upper.png", Bump = "upper_norm.png" },
+            },
+        };
+
+        var cache = new Dictionary<string, Material>();
+        var skins = ModelSkin.BuildSkins(info, textures, cache);
+
+        TestAssert.Equal(2, skins.Count, "builds exactly 2 surface materials");
+        var mat0 = skins[0] as StandardMaterial3D;
+        var mat1 = skins[1] as StandardMaterial3D;
+
+        TestAssert.True(mat0 != null && mat0.AlbedoTexture == textures.Get("lower.png"), "surface 0 gets Lower texture");
+        TestAssert.True(mat0 != null && mat0.NormalTexture == textures.Get("lower_norm.png"), "surface 0 gets Lower normal");
+        TestAssert.True(mat1 != null && mat1.AlbedoTexture == textures.Get("upper.png"), "surface 1 gets Upper texture");
+        TestAssert.True(mat1 != null && mat1.NormalTexture == textures.Get("upper_norm.png"), "surface 1 gets Upper normal");
+    }
 }
