@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="EditObjectiveResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://World/Game/Objectives/EditObjectiveResource.cs" id="1_edit"]
+
+[resource]
+script = ExtResource("1_edit")
+Id = "edit"
+Name = "coop edit"
+DefaultTeamPlay = false
+IsEditMode = true
+DefaultMapPool = 0
+DefaultSpawnArmour = 25
