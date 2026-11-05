@@ -21,22 +21,23 @@ namespace SauerbratenRevival.World.Entities;
 /// Entities are a *view* of the command log, not scene data: maps never
 /// serialize them into scene files, and hand-editing is editor/command-path only (§3.5, §7.2).
 /// </summary>
-public sealed class MapEntity
+[GlobalClass]
+public partial class MapEntity : RefCounted
 {
     /// <summary>Stable 64-bit entity identity across edits and sessions.</summary>
-    public ulong Id { get; set; }
+    [Export] public ulong Id { get; set; }
 
     /// <summary>shared/ents.h type id (see <see cref="EntityType"/>).</summary>
-    public byte Type { get; set; }
+    [Export] public byte Type { get; set; }
 
     /// <summary>Position in Sauerbraten (Z-up) world coordinates, in world units.</summary>
-    public Vector3 Position { get; set; }
+    [Export] public Vector3 Position { get; set; }
 
-    public short Attr1 { get; set; }
-    public short Attr2 { get; set; }
-    public short Attr3 { get; set; }
-    public short Attr4 { get; set; }
-    public short Attr5 { get; set; }
+    [Export] public short Attr1 { get; set; }
+    [Export] public short Attr2 { get; set; }
+    [Export] public short Attr3 { get; set; }
+    [Export] public short Attr4 { get; set; }
+    [Export] public short Attr5 { get; set; }
 
     /// <summary>The canonical fixed-point position — the stored/hashed representation.</summary>
     public (int X, int Y, int Z) FixedPosition =>

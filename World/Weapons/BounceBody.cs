@@ -295,11 +295,24 @@ public partial class BounceBody : Node3D
             shooter: ShooterOwner,
             candidates: candidates);
 
+        var attacker = ShooterOwner as MapPlayer;
+        Gun gunId = GunInfo != null && GunInfo.Id != Weapons.Gun.None ? GunInfo.Id : Weapons.Gun.GrenadeLauncher;
+        int? now = attacker?.LastMillis;
+
         for (int i = 0; i < result.Hits.Count; i++)
         {
             var hit = result.Hits[i];
-            hit.Target.ApplyHitPush(hit.PushVel);
-            hit.Target.TakeDamage(hit.Damage);
+            if (hit.Target is MapPlayer player)
+            {
+                int dmg = hit.IsSelf ? (int)System.Math.Round(hit.Damage / 0.5f) : hit.Damage;
+                Vector3 push = hit.IsSelf ? (hit.PushVel / WeaponExplosion.ExpSelfPush) : hit.PushVel;
+                player.TakeDamage(dmg, attacker, gunId, push, now);
+            }
+            else
+            {
+                hit.Target.ApplyHitPush(hit.PushVel);
+                hit.Target.TakeDamage(hit.Damage);
+            }
         }
 
         if (ShooterOwner is MapPlayer ownerPlayer)

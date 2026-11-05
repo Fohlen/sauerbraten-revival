@@ -279,14 +279,9 @@ public class MapListCatalogTest : GoTestBase
     [Test]
     public void ForModeSelectsTheEnginePool()
     {
-        // ML_ModeType 5/6/7 -> ML_ModeMaps 2 (ctf pool).
-        foreach (string id in new[] { "ctf", "insta_ctf", "effic_ctf", "protect", "insta_protect", "effic_protect" })
+        // ML_ModeType 5 -> ML_ModeMaps 2 (ctf pool).
+        foreach (string id in new[] { "ctf", "insta_ctf", "effic_ctf" })
             TestAssert.Equal(MapListId.Ctf, MapListCatalog.ForMode(GameModeCatalog.TryGet(id))?.Id, $"{id} uses the ctf pool");
-
-        // ML_ModeType 3/4 -> ML_ModeMaps 1 (capture pool); hold is an M_CTF mode
-        // but the engine still feeds it from the capture list.
-        foreach (string id in new[] { "capture", "regen_capture", "hold", "insta_hold", "effic_hold" })
-            TestAssert.Equal(MapListId.Capture, MapListCatalog.ForMode(GameModeCatalog.TryGet(id))?.Id, $"{id} uses the capture pool");
 
         // ML_ModeType 1/2 (and edit) -> ML_ModeMaps 0; our single picker starts at dm.
         foreach (string id in new[] { "ffa", "insta", "effic", "tactics", "teamplay", "instateam", "coop_edit" })
@@ -294,18 +289,14 @@ public class MapListCatalogTest : GoTestBase
     }
 
     [Test]
-    public void ForModeFallsBackToFlagsForModModes()
+    public void ForModeFallsBackToObjectiveForModModes()
     {
-        var ctf = new GameModeInfo { Id = "my_ctf", Flags = ModeFlags.Ctf | ModeFlags.Team };
-        TestAssert.Equal(MapListId.Ctf, MapListCatalog.ForMode(ctf)?.Id, "unknown ctf mode");
+        var ctf = new GameModeInfo { Id = "my_ctf", ObjectiveId = "ctf" };
+        ctf.Bake();
+        TestAssert.Equal(MapListId.Ctf, MapListCatalog.ForMode(ctf)?.Id, "custom ctf mode");
 
-        var hold = new GameModeInfo { Id = "my_hold", Flags = ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team };
-        TestAssert.Equal(MapListId.Capture, MapListCatalog.ForMode(hold)?.Id, "hold flag wins over ctf");
-
-        var capture = new GameModeInfo { Id = "my_capture", Flags = ModeFlags.Capture | ModeFlags.Team };
-        TestAssert.Equal(MapListId.Capture, MapListCatalog.ForMode(capture)?.Id, "unknown capture mode");
-
-        var ffa = new GameModeInfo { Id = "my_ffa" };
+        var ffa = new GameModeInfo { Id = "my_ffa", ObjectiveId = "dm" };
+        ffa.Bake();
         TestAssert.Equal(MapListId.Dm, MapListCatalog.ForMode(ffa)?.Id, "unknown mode defaults to dm");
 
         TestAssert.Equal(MapListId.Dm, MapListCatalog.ForMode(null)?.Id, "no mode defaults to dm");

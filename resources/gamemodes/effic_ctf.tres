@@ -1,9 +1,11 @@
 [gd_resource type="Resource" script_class="GameModeInfo" format=3]
 
-[ext_resource type="Script" path="res://World/Game/GameModeInfo.cs" id="1_effic"]
+[ext_resource type="Script" path="res://World/Game/GameModeInfo.cs" id="1_mode"]
 
 [resource]
-script = ExtResource("1_effic")
+script = ExtResource("1_mode")
 Id = "effic_ctf"
 Name = "effic ctf"
-Flags = 275
+ObjectiveId = "ctf"
+TeamPlay = true
+Mutator = "effic"

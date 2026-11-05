@@ -55,6 +55,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     public PhysEnt CollisionEntity => Entity;
     public bool IsAlive => Entity.State == PhysEnt.CsAlive;
+    public Vector3 FeetPos => Entity.FeetPos();
+    public Vector3 GetFeetPos() => Entity.FeetPos();
     public int Weight => 100;
     public void ApplyHitPush(Vector3 pushVel) => Entity.Vel += pushVel;
     int IExplosionTarget.TakeDamage(int damage)
@@ -193,6 +195,19 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public ItemManager? Items { get; set; }
 
     private FlagManager? _flags;
+    private Objectives.IModeObjective? _objective;
+
+    /// <summary>Active match objective controlling scoring, proximity, HUD state, and rules.</summary>
+    public Objectives.IModeObjective? Objective
+    {
+        get => _objective ?? (GetParent() as Runtime.IGameWorld)?.Objective;
+        set
+        {
+            _objective = value;
+            if (value is Objectives.FlagObjective fo)
+                Flags = fo.Flags;
+        }
+    }
 
     /// <summary>Active flag manager for CTF / Protect / Hold modes.</summary>
     public FlagManager? Flags
@@ -223,7 +238,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>Local player/client ID (default 0).</summary>
-    public int PlayerId { get; set; } = 0;
+    [Export] public int PlayerId { get; set; } = 0;
 
     /// <summary>Active jump pad trigger entities in this map/session.</summary>
     public IReadOnlyList<JumpPad>? JumpPads { get; set; }
@@ -282,6 +297,17 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>The simulated entity (Sauerbraten Z-up). Read by tests/diagnostics.</summary>
     public PhysEnt Entity { get; } = new();
+
+    private PlayerEntityProxy? _entityProxy;
+    public PlayerEntityProxy EntityProxy => _entityProxy ??= new PlayerEntityProxy(this);
+
+    public override Variant _Get(StringName property)
+    {
+        if (property == "Entity") return EntityProxy;
+        if (property == "IsAlive") return IsAlive;
+        if (property == "FeetPos") return FeetPos;
+        return base._Get(property);
+    }
 
     /// <summary>Combat and weapon state (fpsgame/game.h:367 <c>fpsstate</c>).</summary>
     public PlayerState Combat { get; } = new();
@@ -972,7 +998,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         if (now - Combat.LastAction < Combat.GunWait) return false;
 
         var weapon = WeaponCatalog.Get((Gun)Combat.GunSelect);
-        if (Combat.GunSelect != (int)Gun.Fist && !Combat.HasAmmo(Combat.GunSelect))
+        bool infiniteAmmo = Mode?.InfiniteAmmo ?? false;
+        if (!infiniteAmmo && Combat.GunSelect != (int)Gun.Fist && !Combat.HasAmmo(Combat.GunSelect))
         {
             Combat.GunWait = 600; // weapon.cpp:788 msgsound(S_NOAMMO); d->gunwait = 600;
             PlaySound(GameSound.NoAmmo);
@@ -983,7 +1010,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Combat.LastAction = now;
         Combat.LastAttackGun = Combat.GunSelect;
         Combat.GunWait = weapon.AttackDelay;
-        if (Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
+        if (!infiniteAmmo && Combat.GunSelect != (int)Gun.Fist && Combat.Ammo[Combat.GunSelect] > 0)
             Combat.Ammo[Combat.GunSelect]--;
 
         // Play weapon firing sound (weapon.cpp:672 playsound(sound))
@@ -1015,8 +1042,15 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             for (int i = 0; i < hitscan.Hits.Count; i++)
             {
                 var hit = hitscan.Hits[i];
-                hit.Target.ApplyHitPush(hit.PushVel);
-                hit.Target.TakeDamage(hit.Damage);
+                if (hit.Target is MapPlayer mp)
+                {
+                    mp.TakeDamage(hit.Damage, attacker: this, gun: (Gun)Combat.GunSelect, pushVel: hit.PushVel, nowMillis: now);
+                }
+                else
+                {
+                    hit.Target.ApplyHitPush(hit.PushVel);
+                    hit.Target.TakeDamage(hit.Damage);
+                }
                 int targetId = (hit.Target as MapPlayer)?.PlayerId ?? -1;
                 EmitSignal(Game.Players.MapPlayer.SignalName.DamageDealt, targetId, hit.Damage);
             }
@@ -1235,12 +1269,48 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Combat.Pickup(itemType);
     }
 
-    /// <summary>Apply damage to the player, updating health and lastpain timestamp.</summary>
-    public void TakeDamage(int damage, int? nowMillis = null)
+    /// <summary>
+    /// Apply damage to the player from an optional <paramref name="attacker"/> and weapon <paramref name="gun"/>,
+    /// running objective pre-damage hooks and mode push/damage scaling.
+    /// </summary>
+    public void TakeDamage(
+        int damage,
+        MapPlayer? attacker = null,
+        Gun gun = Gun.Fist,
+        Vector3? pushVel = null,
+        int? nowMillis = null)
     {
         if (Entity.Dead) return;
 
         int now = nowMillis ?? LastMillis;
+        Vector3 push = pushVel ?? Vector3.Zero;
+
+        // Mode damage & push scaling
+        if (attacker != null && attacker == this && Mode != null)
+        {
+            damage = (int)(damage * Mode.SelfDamageScale);
+            push *= Mode.SelfPushScale;
+        }
+        else if (attacker != null && Mode != null)
+        {
+            damage = (int)(damage * Mode.DamageScale);
+            push *= Mode.HitPushScale;
+        }
+
+        // Objective pre-damage hook (e.g. Rugby flag pass, King of the Hill protection)
+        if (Objective != null)
+        {
+            if (!Objective.OnBeforeDamage(attacker, this, gun, ref damage, ref push, now))
+                return;
+        }
+
+        if (push != Vector3.Zero)
+        {
+            Entity.Vel += push;
+        }
+
+        if (damage <= 0) return;
+
         Combat.LastPain = now;
 
         int ad = (damage * ((int)Combat.ArmourType + 1) * 25) / 100;
@@ -1251,7 +1321,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             Combat.Armour -= ad;
             Combat.Health = 0;
-            Die(now);
+            Die(attacker, gun, now);
         }
         else
         {
@@ -1261,7 +1331,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>Kill the player (engine <c>deathstate</c>, fpsgame/fps.cpp:425).</summary>
-    public void Die(int? nowMillis = null)
+    public void Die(int? nowMillis) => Die(null, Gun.Fist, nowMillis);
+
+    /// <summary>Kill the player with attributed killer and weapon.</summary>
+    public void Die(MapPlayer? killer = null, Gun gun = Gun.Fist, int? nowMillis = null)
     {
         int now = nowMillis ?? LastMillis;
         Health = 0;
@@ -1275,9 +1348,13 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         PlaySound(Random.Shared.Next(2) == 0 ? GameSound.Die1 : GameSound.Die2);
         UpdateBodyAnim();
 
-        if (Flags != null)
+        if (Objective != null)
         {
-            Flags.OnPlayerDied(PlayerId, null, false, Entity.FeetPos(), now, Entity.Yaw);
+            Objective.OnPlayerDied(this, killer, gun, now);
+        }
+        else if (Flags != null)
+        {
+            Flags.OnPlayerDied(PlayerId, killer?.PlayerId, killer?.Team == Team, Entity.FeetPos(), now, Entity.Yaw);
         }
 
         EmitSignal(SignalName.Died);
@@ -1316,17 +1393,26 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             feet = spawnFeet.Value;
             yaw = yawDegrees ?? SpawnYaw;
         }
-        else if (GetParent() is IMapSource ms)
-        {
-            int tag = GameModeCatalog.GetSpawnGroup(Mode, Team);
-            (feet, yaw) = ms.FindSpawn(tag: tag, player: this);
-            SpawnFeet = feet;
-            SpawnYaw = yaw;
-        }
         else
         {
-            feet = SpawnFeet;
-            yaw = SpawnYaw;
+            var resolved = Objective?.ResolveSpawn(this);
+            if (resolved.HasValue)
+            {
+                feet = resolved.Value.FeetPos;
+                yaw = yawDegrees ?? resolved.Value.Yaw;
+            }
+            else if (GetParent() is IMapSource ms)
+            {
+                int tag = GameModeCatalog.GetSpawnGroup(Mode, Team);
+                (feet, yaw) = ms.FindSpawn(tag: tag, player: this);
+                SpawnFeet = feet;
+                SpawnYaw = yaw;
+            }
+            else
+            {
+                feet = SpawnFeet;
+                yaw = SpawnYaw;
+            }
         }
 
         Entity.O = feet with { Z = feet.Z + EyeHeight };
@@ -1345,6 +1431,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         SyncTransform();
         UpdateBodyAnim();
         UpdateHudgunAnim();
+
+        Objective?.OnPlayerSpawn(this);
+
         EmitSignal(SignalName.Respawned);
     }
 
@@ -1375,7 +1464,14 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Items?.CheckPickups(this, LastMillis);
         CheckJumpPads(LastMillis);
         CheckTeleports(LastMillis);
-        CheckFlags(LastMillis);
+        if (Objective != null)
+        {
+            Objective.StepPlayer(this, LastMillis);
+        }
+        else
+        {
+            CheckFlags(LastMillis);
+        }
 
         // When running standalone (not under IGameWorld), advance own active projectiles & bouncers.
         // Under IGameWorld, UpdateProjectiles and UpdateBouncers are called centrally once per substep.
@@ -1658,7 +1754,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     {
         if (Flags == null || Mode == null || !IsAlive) return;
 
-        bool isHold = Mode.Has(ModeFlags.Hold);
+        bool isHold = FlagManager.IsHoldMode(Mode);
         Vector3 o = Entity.FeetPos();
         bool tookFlag = false;
 
@@ -1712,5 +1808,45 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 Combat.FlagPickup &= ~(1 << f.Id);
             }
         }
+    }
+}
+
+[GlobalClass]
+public partial class PlayerEntityProxy : RefCounted
+{
+    private readonly MapPlayer _player;
+
+    public PlayerEntityProxy()
+    {
+        _player = null!;
+    }
+
+    public PlayerEntityProxy(MapPlayer player)
+    {
+        _player = player;
+    }
+
+    public Vector3 FeetPos() => _player != null ? _player.Entity.FeetPos() : Vector3.Zero;
+
+    public override Variant _Get(StringName property)
+    {
+        if (_player == null) return default;
+        if (property == "O") return _player.Entity.O;
+        if (property == "Vel") return _player.Entity.Vel;
+        if (property == "Yaw") return _player.Entity.Yaw;
+        if (property == "Pitch") return _player.Entity.Pitch;
+        if (property == "State") return _player.Entity.State;
+        return base._Get(property);
+    }
+
+    public override bool _Set(StringName property, Variant value)
+    {
+        if (_player == null) return false;
+        if (property == "Vel")
+        {
+            _player.Entity.Vel = value.AsVector3();
+            return true;
+        }
+        return base._Set(property, value);
     }
 }

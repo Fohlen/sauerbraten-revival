@@ -6,6 +6,7 @@
 script = ExtResource("1_dm")
 Id = 0
 Name = "ffa"
+Modes = PackedStringArray("ffa", "coop_edit", "teamplay", "insta", "instateam", "effic", "efficteam", "tactics", "tactics_team")
 Maps = PackedStringArray(
 	"aard3c",
 	"abyss",

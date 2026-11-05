@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
+using SauerbratenRevival.World.Game.Objectives;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 using SauerbratenRevival.World.Physics;
@@ -185,7 +186,7 @@ public partial class HudController : Control
     /// <summary>Whether the current game mode is team-based. Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsTeamPlay
     {
-        get => _isTeamPlay ?? (Player?.Mode.Has(Game.ModeFlags.Team) ?? false);
+        get => _isTeamPlay ?? (Player?.Mode.TeamPlay ?? false);
         set => _isTeamPlay = value;
     }
 
@@ -196,7 +197,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is insta-gib (disables low-health coloring). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsInsta
     {
-        get => _isInsta ?? (Player?.Mode.Has(Game.ModeFlags.Insta) ?? false);
+        get => _isInsta ?? (Player?.Mode.SpawnHealth <= 25 || Player?.Mode.Mutator == "insta");
         set => _isInsta = value;
     }
 
@@ -204,7 +205,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is hold mode (m_hold in Sauerbraten). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsHoldMode
     {
-        get => _isHoldMode ?? (Player?.Mode.Has(Game.ModeFlags.Hold) ?? false);
+        get => _isHoldMode ?? ((Player?.Mode.Objective as FlagObjectiveResource)?.Placement == FlagPlacementMode.DynamicHoldSpawns || Player?.Mode.ObjectiveId == "hold");
         set => _isHoldMode = value;
     }
 
@@ -212,7 +213,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is efficiency mode (no pistol). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsEfficiency
     {
-        get => _isEfficiency ?? (Player?.Mode.Has(Game.ModeFlags.Efficiency) ?? false);
+        get => _isEfficiency ?? ((Player != null && (Player.Mode.WeaponPoolMask & (1 << (int)Gun.Pistol)) == 0) || Player?.Mode.Mutator == "effic");
         set => _isEfficiency = value;
     }
 
@@ -350,7 +351,7 @@ public partial class HudController : Control
     public bool IsEditMode { get; set; }
 
     /// <summary>Whether the player or HUD is currently in editor mode (engine <c>fps.cpp:1094: !m_edit</c>).</summary>
-    public bool CurrentEditMode => IsEditMode || (Player != null && (Player.Entity.State == PhysEnt.CsEditing || (Player.Mode != null && Player.Mode.Has(Game.ModeFlags.Edit))));
+    public bool CurrentEditMode => IsEditMode || (Player != null && (Player.Entity.State == PhysEnt.CsEditing || (Player.Mode != null && Player.Mode.IsEdit)));
 
     /// <summary>Current editor grid size (cube units).</summary>
     public int EditGridSize { get; set; } = 8;
@@ -785,25 +786,24 @@ public partial class HudController : Control
         if ((_player.Combat.QuadMillis > 0) != _lastQuadActive) return true;
         if (_player.Team != _lastPlayerTeam) return true;
 
-        if (_player.Flags != null)
+        var hudState = _player.Objective?.GetHudState(_player, _player.LastMillis) ?? ObjectiveHudState.Empty;
+        HudIcon? currentStatusIcon = hudState.StatusIcon;
+        int currentStatusCounter = hudState.StatusCounter;
+
+        if (!currentStatusIcon.HasValue && _player.Flags != null)
         {
             var carried = _player.Flags.GetCarriedFlagState(_player.PlayerId);
-            int? carriedId = carried?.Id;
-            int carriedVersion = carried?.Version ?? 0;
-            int carriedTeam = carried?.Team ?? 0;
-            int holdRemaining = (carried != null && IsHoldMode)
-                ? Math.Max(0, FlagManager.HoldSecs - carried.HoldCounter(_player.LastMillis) / 1000)
-                : -1;
-
-            if (carriedId != _lastCarriedFlagId ||
-                carriedVersion != _lastCarriedFlagVersion ||
-                carriedTeam != _lastCarriedFlagTeam ||
-                holdRemaining != _lastHoldRemaining)
+            if (carried != null)
             {
-                return true;
+                currentStatusIcon = StatusBarRenderer.GetFlagIcon(IsHoldMode, carried.Team, _player.Team);
+                if (IsHoldMode)
+                {
+                    currentStatusCounter = Math.Max(0, FlagManager.HoldSecs - carried.HoldCounter(_player.LastMillis) / 1000);
+                }
             }
         }
-        else if (_lastCarriedFlagId != null)
+
+        if (currentStatusIcon != _lastFlagIcon || currentStatusCounter != _lastHoldRemaining)
         {
             return true;
         }
@@ -876,7 +876,7 @@ public partial class HudController : Control
         }
 
         // Health text color
-        Color healthColor = StatusBarRenderer.GetHealthColor(health, isDead, HealthColors, IsInsta);
+        Color healthColor = StatusBarRenderer.GetHealthColor(health, isDead, HealthColors, Player?.Mode?.SpawnHealth ?? 100, IsInsta);
 
         // Health Label: in Sauerbraten fps.cpp:906, text matrix is scaled by 2,
         // placed at (HICON_X + HICON_SIZE + HICON_SPACE) / 2 and HICON_TEXTY / 2.
@@ -1010,23 +1010,35 @@ public partial class HudController : Control
                 if (_quadIcon != null) _quadIcon.Visible = false;
             }
 
-            // Flag carrier state comes straight from the FlagManager's owner model
-            // instead of scanning the flag list.
-            var carriedFlag = Player.Flags?.GetCarriedFlagState(Player.PlayerId);
+            // Objective / Flag status indicator icon with counter (e.g. hold timer, skulls, lap)
+            var hudState = Player.Objective?.GetHudState(Player, Player.LastMillis) ?? ObjectiveHudState.Empty;
+            HudIcon? flagIconType = hudState.StatusIcon;
+            int statusCounter = hudState.StatusCounter;
 
-            // CTF / Mode flag: flag indicator icon with hold counter or carrier status
-            // (ctf.h:547-565: drawhud in ctfmode)
-            // Position: int x = HICON_X + 3*HICON_STEP + (d->quadmillis ? HICON_SIZE + HICON_SPACE : 0);
-            // drawicon(m_hold ? HICON_NEUTRAL_FLAG : (f.team==ctfteamflag(player1->team) ? HICON_BLUE_FLAG : HICON_RED_FLAG), x, HICON_Y);
-            if (carriedFlag != null)
+            if (!flagIconType.HasValue && Player.Flags != null)
             {
-                HudIcon flagIconType = StatusBarRenderer.GetFlagIcon(IsHoldMode, carriedFlag.Team, Player.Team);
+                var carriedFlag = Player.Flags.GetCarriedFlagState(Player.PlayerId);
+                if (carriedFlag != null)
+                {
+                    flagIconType = StatusBarRenderer.GetFlagIcon(IsHoldMode, carriedFlag.Team, Player.Team);
+                    if (IsHoldMode)
+                    {
+                        int now = Player.LastMillis;
+                        statusCounter = Math.Max(0, FlagManager.HoldSecs - carriedFlag.HoldCounter(now) / 1000);
+                    }
+                }
+            }
+
+            _lastHoldRemaining = statusCounter;
+
+            if (flagIconType.HasValue)
+            {
                 if (_flagIcon != null)
                 {
                     if (_lastFlagIcon != flagIconType || _flagIcon.Texture == null)
                     {
                         _lastFlagIcon = flagIconType;
-                        _flagIcon.Texture = CreateAtlasTexture(flagIconType);
+                        _flagIcon.Texture = CreateAtlasTexture(flagIconType.Value);
                     }
                     _flagIcon.Visible = true;
 
@@ -1037,13 +1049,10 @@ public partial class HudController : Control
 
                 if (_flagLabel != null)
                 {
-                    if (IsHoldMode)
+                    if (statusCounter >= 0)
                     {
-                        // In Sauerbraten hold mode: draw_textf("%d", (x + HICON_SIZE + HICON_SPACE)/2, HICON_TEXTY/2, max(HOLDSECS - f.holdcounter()/1000, 0));
-                        int now = Player.LastMillis;
-                        int holdRemaining = Math.Max(0, FlagManager.HoldSecs - carriedFlag.HoldCounter(now) / 1000);
                         _flagLabel.Visible = true;
-                        _flagLabel.Text = holdRemaining.ToString();
+                        _flagLabel.Text = statusCounter.ToString();
                         _flagLabel.Modulate = Colors.White;
 
                         float flagX = StatusBarRenderer.IconX + 3 * StatusBarRenderer.IconStep + (hasQuad ? StatusBarRenderer.IconSize + StatusBarRenderer.IconSpace : 0f);
@@ -1064,6 +1073,7 @@ public partial class HudController : Control
             }
             else
             {
+                _lastFlagIcon = null;
                 if (_flagIcon != null) _flagIcon.Visible = false;
                 if (_flagLabel != null) _flagLabel.Visible = false;
             }
@@ -1153,7 +1163,22 @@ public partial class HudController : Control
     {
         if (_ammoBarRoot == null) return;
 
-        if (isDead || !AmmoBar || IsInsta || Player == null)
+        int weaponPoolMask;
+        if (IsInsta)
+        {
+            weaponPoolMask = 1 << (int)Gun.Rifle;
+        }
+        else if (Player?.Mode != null)
+        {
+            weaponPoolMask = Player.Mode.WeaponPoolMask;
+            if (IsEfficiency) weaponPoolMask &= ~(1 << (int)Gun.Pistol);
+        }
+        else
+        {
+            weaponPoolMask = IsEfficiency ? 0b011_1110 : 0b111_1110;
+        }
+
+        if (isDead || !AmmoBar || IsInsta || System.Numerics.BitOperations.PopCount((uint)weaponPoolMask) <= 1 || Player == null)
         {
             _ammoBarRoot.Visible = false;
             return;
@@ -1165,8 +1190,7 @@ public partial class HudController : Control
             Player.Combat.GunSelect,
             viewportSize.X,
             viewportSize.Y,
-            IsInsta,
-            IsEfficiency,
+            weaponPoolMask,
             AmmoBarAlign,
             AmmoBarHorizontal,
             AmmoBarFlip,
@@ -1311,13 +1335,23 @@ public partial class HudController : Control
     {
         if (_hudScoreLabel1 == null || _hudScoreLabel2 == null) return;
 
-        if (Player?.Flags != null)
+        if (Player != null)
         {
-            int playerTeam = Player.Team;
-            int enemyTeam = playerTeam == 1 ? 2 : 1;
-            Score1 = Player.Flags.GetScore(playerTeam);
-            Score2 = Player.Flags.GetScore(enemyTeam);
-            Score1IsPlayer = true;
+            var hudState = Player.Objective?.GetHudState(Player, Player.LastMillis) ?? ObjectiveHudState.Empty;
+            if (hudState.PrimaryScore != int.MinValue)
+            {
+                Score1 = hudState.PrimaryScore;
+                Score2 = hudState.SecondaryScore;
+                Score1IsPlayer = hudState.PrimaryIsFriendly;
+            }
+            else if (Player.Flags != null)
+            {
+                int playerTeam = Player.Team;
+                int enemyTeam = playerTeam == 1 ? 2 : 1;
+                Score1 = Player.Flags.GetScore(playerTeam);
+                Score2 = Player.Flags.GetScore(enemyTeam);
+                Score1IsPlayer = true;
+            }
         }
 
         // In Sauerbraten: if(!m_edit && !m_sp) if(hudscore) drawhudscore(w, h);

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
+using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Physics;
 
@@ -72,8 +73,8 @@ public static class SpawnResolver
     {
         float eyeHeight = MapPlayer.EyeHeight;
         Vector3 loc = spawn.Position with { Z = spawn.Position.Z + eyeHeight };
-        bool hasNoItems = mode?.Has(ModeFlags.NoItems) ?? false;
-        bool hasCmode = mode?.Has(ModeFlags.Ctf) ?? false;
+        bool hasNoItems = mode?.AllowedItems == ItemSpawnMask.None;
+        bool hasCmode = mode?.Objective is Game.Objectives.FlagObjectiveResource || mode?.ObjectiveId == "ctf";
         float maxRange = !hasNoItems ? 400.0f : (hasCmode ? 300.0f : 110.0f);
         float minPlayerDist = maxRange;
 
@@ -85,7 +86,7 @@ public static class SpawnResolver
                 if (ReferenceEquals(o, player)) continue;
                 if (o.Entity.Dead) continue;
                 // In team modes, ignore teammates (fps.cpp:308 isteam(o->team, p->team))
-                if (mode != null && mode.Has(ModeFlags.Team) && o.Team == player.Team && player.Team != 0) continue;
+                if (mode != null && mode.TeamPlay && o.Team == player.Team && player.Team != 0) continue;
 
                 Vector3 dir = o.Entity.O - loc;
                 float distSq = dir.LengthSquared();
@@ -106,7 +107,7 @@ public static class SpawnResolver
         }
 
         float rating = 1.0f - ProximityScore(minPlayerDist, 80.0f, maxRange);
-        if (mode != null && mode.Has(ModeFlags.Hold))
+        if (mode != null && FlagManager.IsHoldMode(mode))
         {
             float holdRating = RateHoldSpawn(spawn.Position, flags);
             return HarmonicMean(rating, holdRating);

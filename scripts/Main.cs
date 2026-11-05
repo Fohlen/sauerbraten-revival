@@ -174,10 +174,10 @@ public partial class Main : Node
             viewer.GameMode = mode;
             viewer.PlayerModelIndex = playerModel;
             // EDIT is one of the menu's objectives but a plain mode to the world
-            // (`coop_edit`, ModeFlags.Edit). It maps onto the editor's entry point,
+            // (`coop_edit`, IsEdit). It maps onto the editor's entry point,
             // the same one scenes/editor_scene.tscn uses through its EditMode export:
             // spawn floating with a live EditorController instead of a match player.
-            viewer.EditMode = GameModeCatalog.TryGet(mode)?.Has(ModeFlags.Edit) ?? false;
+            viewer.EditMode = GameModeCatalog.TryGet(mode)?.IsEdit ?? false;
 
             var cli = SauerbratenRevival.World.Demo.DemoCommandLine.Parse(OS.GetCmdlineUserArgs().Length > 0 ? OS.GetCmdlineUserArgs() : OS.GetCmdlineArgs());
             if (cli.Record)

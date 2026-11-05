@@ -11,6 +11,7 @@ using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Game.Items;
 using SauerbratenRevival.World.Game.Monsters;
+using SauerbratenRevival.World.Game.Objectives;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Lighting;
 using SauerbratenRevival.World.Materials;
@@ -179,8 +180,33 @@ public partial class MapWorld : Node3D, IGameWorld
     /// <summary>The item manager holding map item pickups.</summary>
     public ItemManager? Items { get; private set; }
 
+    private IModeObjective? _objective;
+
+    /// <summary>Active match objective controlling match rules and state.</summary>
+    public IModeObjective? Objective
+    {
+        get => _objective;
+        set
+        {
+            _objective = value;
+            if (value is FlagObjective fo)
+                Flags = fo.Flags;
+        }
+    }
+
+    private FlagManager? _flags;
+
     /// <summary>Flag manager tracking CTF / Protect / Hold state.</summary>
-    public FlagManager? Flags { get; private set; }
+    public FlagManager? Flags
+    {
+        get => (_objective as FlagObjective)?.Flags ?? _flags;
+        set
+        {
+            _flags = value;
+            if (_objective is FlagObjective fo && value != null)
+                fo.Flags = value;
+        }
+    }
 
     /// <summary>Shared weapon tracer and explosion effects renderer for this world.</summary>
     public Effects.WeaponEffectsRenderer? WeaponEffects { get; set; }
@@ -196,6 +222,7 @@ public partial class MapWorld : Node3D, IGameWorld
             _mode = value;
             if (value != null)
             {
+                Objective = value.CreateObjective();
                 if (Items != null) Items.Mode = value;
                 if (Flags != null) Flags.Mode = value;
                 for (int i = 0; i < _players.Count; i++) _players[i].Mode = value;
@@ -363,7 +390,11 @@ public partial class MapWorld : Node3D, IGameWorld
         AddChild(envMaps);
         radiance?.RegisterEnvMaps(envMaps);
         AddChild(PlayerStartBuilder.Build(map, textures));
-        AddChild(ModeEntityBuilder.Build(map, catalogue, modelCatalog, textures, Mode));
+        Objective ??= Mode?.CreateObjective();
+        AddChild(ModeEntityBuilder.Build(map, catalogue, modelCatalog, textures, Objective));
+        var objectiveRoot = new Node3D { Name = "ObjectiveEntities" };
+        Objective?.SetupWorld(this, map.Entities, objectiveRoot);
+        AddChild(objectiveRoot);
         AddChild(MonsterBuilder.Build(map, modelCatalog, textures));
         var (triggers, jumpPads, teleports) = TriggerBuilder.BuildTriggers(map, catalogue, modelCatalog, textures);
         JumpPads = jumpPads;
@@ -374,42 +405,20 @@ public partial class MapWorld : Node3D, IGameWorld
         AddChild(Items);
 
         // Flag manager and visual flag nodes (ctf.h setup). Flags are a ctf-mode
-        // concept: the engine selects ctf/capture mode code from the flags
-        // (client.cpp setclientmode), and only m_ctf builds flag state. Other modes
-        // get an empty manager so player/HUD code can keep a stable reference.
-        Flags = new FlagManager();
+        // concept: Objective.SetupWorld is authoritative for configuring flag state
+        // and hold spawns. Visual nodes reflect the initialized flag state. Other
+        // modes get an empty manager so player/HUD code can keep a stable reference.
+        Flags = (Objective as FlagObjective)?.Flags ?? new FlagManager();
         if (Mode != null) Flags.Mode = Mode;
         var flagsRoot = new Node3D { Name = "Flags" };
         _flagNodes.Clear();
-        if (Mode != null && Mode.Has(Game.ModeFlags.Ctf))
+        if (Flags != null && Objective is FlagObjective)
         {
-            bool isHold = Mode.Has(Game.ModeFlags.Hold);
-            if (isHold)
+            foreach (var flag in Flags.Flags)
             {
-                // ctf.h:729: BASE entities are hold spawns; HOLDFLAGS neutral flags
-                // are created dynamically, not baked from the map's FLAG entities.
-                foreach (var (_, e) in map.OfType(EntityType.Base))
-                    Flags.AddHoldSpawn(e.Position);
-                Flags.SetupHoldSpawns();
-                foreach (var flag in Flags.Flags)
-                {
-                    var flagNode = CreateFlagNode(flag.Id, flag.Team, flag.SpawnLoc, 0f, modelCatalog, textures, Mode);
-                    _flagNodes.Add(flagNode);
-                    flagsRoot.AddChild(flagNode);
-                }
-            }
-            else
-            {
-                // ctf.h:311: one flag per team-coloured map FLAG entity.
-                foreach (var (_, e) in map.OfType(EntityType.Flag))
-                {
-                    if (e.Attr2 < 1 || e.Attr2 > 2) continue;
-                    int flagId = Flags.Flags.Count;
-                    Flags.AddFlag(flagId, e.Position, e.Attr2, 0, isProtect: false, spawnAngle: e.Attr1);
-                    var flagNode = CreateFlagNode(flagId, e.Attr2, e.Position, e.Attr1, modelCatalog, textures, Mode);
-                    _flagNodes.Add(flagNode);
-                    flagsRoot.AddChild(flagNode);
-                }
+                var flagNode = CreateFlagNode(flag.Id, flag.Team, flag.SpawnLoc, flag.SpawnAngle, modelCatalog, textures, Mode);
+                _flagNodes.Add(flagNode);
+                flagsRoot.AddChild(flagNode);
             }
         }
         AddChild(flagsRoot);
@@ -510,7 +519,9 @@ public partial class MapWorld : Node3D, IGameWorld
             }
         }
 
-        if (Flags != null && _flagNodes.Count > 0 && Mode != null && Mode.Has(Game.ModeFlags.Ctf))
+        Objective?.UpdateVisual(this, lastMillis);
+
+        if (Flags != null && _flagNodes.Count > 0)
         {
             for (int i = 0; i < _flagNodes.Count; i++)
             {

@@ -6,6 +6,7 @@
 script = ExtResource("1_capture")
 Id = 1
 Name = "capture"
+Modes = PackedStringArray()
 Maps = PackedStringArray(
 	"aastha",
 	"abbey",

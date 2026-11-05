@@ -1,57 +1,63 @@
+using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace SauerbratenRevival.World.Game;
 
 /// <summary>
-/// The active game-mode definitions, loaded from the <c>.tres</c> files under
-/// <see cref="ResourceDir"/> — data-first content, editable in the Godot inspector
-/// and extendable by a mod (a mod pack can mount its own modes into the directory) —
-/// with a built-in <see cref="Defaults"/> fallback so the four MVP modes always
-/// exist even without files.
+/// The active game-mode definitions, loaded from the <c>.tres</c> files following the
+/// ADR 0010 3-tier cascade:
+/// 1. Core base directory (<see cref="ResourceDir"/>), falling back to <see cref="Defaults"/>
+/// 2. Mod overrides (<see cref="ModOverrideDir"/>)
+/// 3. User overrides (<see cref="UserOverrideDir"/>)
 ///
-/// This mirrors <c>WeaponCatalog</c>: modes are <see cref="GameModeInfo"/> Resources
-/// keyed by a stable string <see cref="GameModeInfo.Id"/>, replacing the engine's
-/// integer <c>gamemode</c> index.
+/// Modes are <see cref="GameModeInfo"/> Resources keyed by a stable string <see cref="GameModeInfo.Id"/>,
+/// pre-baked for zero-allocation hot-path reads.
 /// </summary>
 public static class GameModeCatalog
 {
     /// <summary>Directory scanned for authored per-mode <c>.tres</c> files.</summary>
     public const string ResourceDir = "res://resources/gamemodes";
 
+    /// <summary>Directory scanned for modded game mode overrides.</summary>
+    public const string ModOverrideDir = "res://resources/gamemodes/overrides";
+
+    /// <summary>Directory scanned for user-specific game mode overrides.</summary>
+    public const string UserOverrideDir = "user://gamemodes/overrides";
+
     /// <summary>
-    /// Built-in default modes. Values are the engine <c>gamemodes[]</c> flag sets for
-    /// the four MVP modes (fpsgame/game.h:104); the ids are ours.
+    /// Built-in default modes (DM, Teamplay, Coop Edit, and CTF across normal, instagib, efficiency, and tactics loadouts).
     /// </summary>
-    public static readonly GameModeInfo[] Defaults =
+    public static readonly GameModeInfo[] Defaults;
+
+    static GameModeCatalog()
     {
-        new() { Id = "ffa",            Name = "ffa",            Flags = ModeFlags.Lobby },
-        new() { Id = "coop_edit",      Name = "coop edit",      Flags = ModeFlags.Edit },
-        new() { Id = "teamplay",       Name = "teamplay",       Flags = ModeFlags.Team },
-        new() { Id = "insta",          Name = "instagib",       Flags = ModeFlags.NoItems | ModeFlags.Insta },
-        new() { Id = "instateam",      Name = "insta team",     Flags = ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Team },
-        new() { Id = "effic",          Name = "efficiency",     Flags = ModeFlags.NoItems | ModeFlags.Efficiency },
-        new() { Id = "efficteam",      Name = "effic team",     Flags = ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Team },
-        new() { Id = "tactics",        Name = "tactics",        Flags = ModeFlags.NoItems | ModeFlags.Tactics },
-        new() { Id = "tactics_team",   Name = "tac team",       Flags = ModeFlags.NoItems | ModeFlags.Tactics | ModeFlags.Team },
-        new() { Id = "capture",        Name = "capture",        Flags = ModeFlags.NoAmmo | ModeFlags.Tactics | ModeFlags.Capture | ModeFlags.Team },
-        new() { Id = "regen_capture",  Name = "regen capture",  Flags = ModeFlags.NoItems | ModeFlags.Capture | ModeFlags.Regen | ModeFlags.Team },
-        new() { Id = "ctf",            Name = "ctf",            Flags = ModeFlags.Ctf | ModeFlags.Team },
-        new() { Id = "insta_ctf",      Name = "insta ctf",      Flags = ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Ctf | ModeFlags.Team },
-        new() { Id = "effic_ctf",      Name = "effic ctf",      Flags = ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Ctf | ModeFlags.Team },
-        new() { Id = "protect",        Name = "protect",        Flags = ModeFlags.Ctf | ModeFlags.Protect | ModeFlags.Team },
-        new() { Id = "insta_protect",  Name = "insta protect",  Flags = ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Ctf | ModeFlags.Protect | ModeFlags.Team },
-        new() { Id = "effic_protect",  Name = "effic protect",  Flags = ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Ctf | ModeFlags.Protect | ModeFlags.Team },
-        new() { Id = "hold",           Name = "hold",           Flags = ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team },
-        new() { Id = "insta_hold",     Name = "insta hold",     Flags = ModeFlags.NoItems | ModeFlags.Insta | ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team },
-        new() { Id = "effic_hold",     Name = "effic hold",     Flags = ModeFlags.NoItems | ModeFlags.Efficiency | ModeFlags.Ctf | ModeFlags.Hold | ModeFlags.Team },
-    };
+        Defaults = new GameModeInfo[]
+        {
+            new() { Id = "ffa",           Name = "ffa",           ObjectiveId = "dm",   TeamPlay = false, Mutator = "" },
+            new() { Id = "coop_edit",     Name = "coop edit",     ObjectiveId = "edit", TeamPlay = false, Mutator = "" },
+            new() { Id = "teamplay",      Name = "teamplay",      ObjectiveId = "dm",   TeamPlay = true,  Mutator = "" },
+            new() { Id = "insta",         Name = "instagib",      ObjectiveId = "dm",   TeamPlay = false, Mutator = "insta" },
+            new() { Id = "instateam",     Name = "insta team",    ObjectiveId = "dm",   TeamPlay = true,  Mutator = "insta" },
+            new() { Id = "effic",         Name = "efficiency",    ObjectiveId = "dm",   TeamPlay = false, Mutator = "effic" },
+            new() { Id = "efficteam",     Name = "effic team",    ObjectiveId = "dm",   TeamPlay = true,  Mutator = "effic" },
+            new() { Id = "tactics",       Name = "tactics",       ObjectiveId = "dm",   TeamPlay = false, Mutator = "tactics" },
+            new() { Id = "tactics_team",  Name = "tac team",      ObjectiveId = "dm",   TeamPlay = true,  Mutator = "tactics" },
+            new() { Id = "ctf",           Name = "ctf",           ObjectiveId = "ctf",  TeamPlay = true,  Mutator = "" },
+            new() { Id = "insta_ctf",     Name = "insta ctf",     ObjectiveId = "ctf",  TeamPlay = true,  Mutator = "insta" },
+            new() { Id = "effic_ctf",     Name = "effic ctf",     ObjectiveId = "ctf",  TeamPlay = true,  Mutator = "effic" },
+        };
+
+        foreach (var mode in Defaults)
+        {
+            mode.Bake();
+        }
+    }
 
     private static GameModeInfo[]? _all;
 
     /// <summary>
-    /// The active catalog, loaded from <see cref="ResourceDir"/> (falling back to
-    /// <see cref="Defaults"/>). Cached after first access; use <see cref="Override"/>
-    /// to replace it (mods/tests).
+    /// The active catalog, loaded following the 3-tier cascade.
     /// </summary>
     public static GameModeInfo[] All => _all ??= Load();
 
@@ -62,8 +68,8 @@ public static class GameModeCatalog
 
         foreach (var mode in All)
         {
-            if (string.Equals(mode.Id, id, System.StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(mode.Name, id, System.StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(mode.Id, id, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(mode.Name, id, StringComparison.OrdinalIgnoreCase))
                 return mode;
         }
 
@@ -110,60 +116,88 @@ public static class GameModeCatalog
 
     /// <summary>Look up a mode by its stable id; throws when unknown.</summary>
     public static GameModeInfo Get(string id)
-        => TryGet(id) ?? throw new System.Collections.Generic.KeyNotFoundException($"unknown game mode '{id}'");
+        => TryGet(id) ?? throw new KeyNotFoundException($"unknown game mode '{id}'");
 
     /// <summary>Default fallback game mode (<c>ffa</c>).</summary>
     public static GameModeInfo Default => Get("ffa");
 
     /// <summary>Replace the cached catalog (test/mod seam).</summary>
-    public static void Override(GameModeInfo[] modes) => _all = modes;
+    public static void Override(GameModeInfo[] modes)
+    {
+        foreach (var m in modes) m.Bake();
+        _all = modes;
+    }
+
+    /// <summary>Reload active game mode definitions following the 3-tier cascade.</summary>
+    public static void Reload(
+        string dir = ResourceDir,
+        string? modDir = ModOverrideDir,
+        string? userDir = UserOverrideDir)
+    {
+        _all = Load(dir, modDir, userDir);
+    }
 
     /// <summary>
-    /// Merge the <c>.tres</c> files in <paramref name="dir"/> onto <see cref="Defaults"/>:
-    /// a file whose <see cref="GameModeInfo.Id"/> matches a default replaces it,
-    /// anything else is added (so a mod can introduce new modes). New files are
-    /// applied in ordinal filename order for determinism; files that are missing or
-    /// do not deserialize to a <see cref="GameModeInfo"/> are ignored. Pure function
-    /// of the filesystem, so a mod can point at its own directory.
+    /// Load game mode definitions following the ADR 0010 3-tier cascade.
     /// </summary>
-    public static GameModeInfo[] Load(string dir = ResourceDir)
+    public static GameModeInfo[] Load(
+        string dir = ResourceDir,
+        string? modDir = ModOverrideDir,
+        string? userDir = UserOverrideDir)
     {
-        var modes = new System.Collections.Generic.List<GameModeInfo>(Defaults);
-        var byId = new System.Collections.Generic.Dictionary<string, int>();
+        var modes = new List<GameModeInfo>(Defaults);
+        var byId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < modes.Count; i++) byId[modes[i].Id] = i;
 
+        ApplyDirectory(dir, modes, byId);
+        ApplyDirectory(modDir, modes, byId);
+        ApplyDirectory(userDir, modes, byId);
+
+        foreach (var mode in modes)
+        {
+            mode.Bake();
+        }
+
+        return modes.ToArray();
+    }
+
+    private static void ApplyDirectory(string? dir, List<GameModeInfo> modes, Dictionary<string, int> byId)
+    {
+        if (string.IsNullOrEmpty(dir)) return;
+
         using var dirAccess = DirAccess.Open(dir);
-        if (dirAccess == null) return modes.ToArray();
+        if (dirAccess == null) return;
 
         string[] files = dirAccess.GetFiles();
-        System.Array.Sort(files, System.StringComparer.Ordinal);
+        Array.Sort(files, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (string file in files)
         {
-            // Exported PCKs replace each authored `foo.tres` with a
-            // `foo.tres.remap` sidecar, and DirAccess lists only the sidecar.
-            // Strip it so Load follows the remap to the packed resource.
-            string resource = file.EndsWith(".remap", System.StringComparison.OrdinalIgnoreCase)
+            string resource = file.EndsWith(".remap", StringComparison.OrdinalIgnoreCase)
                 ? file[..^".remap".Length]
                 : file;
-            if (!resource.EndsWith(".tres", System.StringComparison.OrdinalIgnoreCase)) continue;
-            var loaded = ResourceLoader.Load($"{dir.TrimEnd('/')}/{resource}") as GameModeInfo;
+            if (!resource.EndsWith(".tres", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!seen.Add(resource)) continue;
+
+            string fullPath = $"{dir.TrimEnd('/')}/{resource}";
+            var loaded = ResourceLoader.Load(fullPath) as GameModeInfo;
             if (loaded == null || string.IsNullOrEmpty(loaded.Id)) continue;
             if (byId.TryGetValue(loaded.Id, out int at)) modes[at] = loaded;
             else { byId[loaded.Id] = modes.Count; modes.Add(loaded); }
         }
-        return modes.ToArray();
     }
 
     /// <summary>
-    /// Engine <c>cmode ? cmode->getspawngroup(d) : 0</c> (fpsgame/fps.cpp:327, ctf.h:1052, collect.h:763).
-    /// In CTF / Protect / Collect, returns 1 for "good" team or 2 for "evil" team.
-    /// In Hold mode or non-team/FFA modes, returns 0.
+    /// Engine <c>cmode ? cmode->getspawngroup(d) : 0</c> (fpsgame/fps.cpp:327, ctf.h:1052).
+    /// In CTF, returns 1 for "good" team or 2 for "evil" team.
+    /// In Hold flag placement or non-team/FFA modes, returns 0.
     /// </summary>
     public static int GetSpawnGroup(GameModeInfo? mode, int team)
     {
-        if (mode == null) return 0;
-        if (mode.Has(ModeFlags.Hold)) return 0;
-        if (mode.Has(ModeFlags.Ctf) || mode.Has(ModeFlags.Collect))
+        if (mode == null || !mode.TeamPlay) return 0;
+        if (Ctf.FlagManager.IsHoldMode(mode)) return 0;
+        if (mode.Objective is Objectives.FlagObjectiveResource || mode.ObjectiveId == "ctf")
         {
             return team is 1 or 2 ? team : 0;
         }

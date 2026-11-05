@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Entities;
+using SauerbratenRevival.World.Game.Objectives;
 using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
@@ -38,17 +39,18 @@ public static class ModeEntityBuilder
 
     public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue = null,
                                IModelCatalog? models = null, ITextureSource? textures = null,
-                               GameModeInfo? mode = null) =>
-        Build(map.Entities, catalogue, models, textures, mode);
+                               IModeObjective? objective = null, GameModeInfo? mode = null) =>
+        Build(map.Entities, catalogue, models, textures, objective ?? mode?.CreateObjective());
 
     public static Node3D Build(IReadOnlyList<MapEntity> entities, MetadataCatalogue? catalogue = null,
                                IModelCatalog? models = null, ITextureSource? textures = null,
-                               GameModeInfo? mode = null)
+                               IModeObjective? objective = null, GameModeInfo? mode = null)
     {
+        var resolvedObjective = objective ?? mode?.CreateObjective();
         var root = new Node3D { Name = "ModeEntities" };
         var skinCache = new Dictionary<string, Material>();
 
-        foreach (var (i, e) in entities.WhereIndexed(e => IsModeEntity(e) && AppliesToMode(e, mode)))
+        foreach (var (i, e) in entities.WhereIndexed(e => IsModeEntity(e) && AppliesToMode(e, resolvedObjective)))
         {
             string? modelName = ModelName(e, catalogue);
             var info = modelName != null ? models?.Get(modelName) : null;
@@ -91,6 +93,11 @@ public static class ModeEntityBuilder
         return root;
     }
 
+    public static Node3D Build(IReadOnlyList<MapEntity> entities, MetadataCatalogue? catalogue,
+                               IModelCatalog? models, ITextureSource? textures,
+                               GameModeInfo? mode) =>
+        Build(entities, catalogue, models, textures, mode?.CreateObjective());
+
     /// <summary>The mode entity types handled here.</summary>
     public static bool IsModeEntity(MapEntity e) => e.Type switch
     {
@@ -101,26 +108,25 @@ public static class ModeEntityBuilder
     };
 
     /// <summary>
-    /// Whether an entity is drawn for the active <paramref name="mode"/>. FLAG and
-    /// BASE are not generic entities — <c>entities.cpp entmdlname</c> returns NULL
-    /// for both and they are drawn by the mode code instead. The engine picks that
-    /// code in <c>client.cpp setclientmode</c>: <c>m_capture</c> owns BASE,
-    /// <c>m_ctf</c> owns FLAG (Hold uses BASE as (invisible) hold spawns and creates
-    /// its flag dynamically, so neither map entity is drawn). Any other mode draws
-    /// neither. A null <paramref name="mode"/> is the edit/inspection view and keeps
-    /// the raw representation of every type.
+    /// Whether an entity is drawn for the active <paramref name="objective"/>.
+    /// Asks the active objective if it claims ownership of the entity. FLAG and
+    /// BASE are not generic entities — if claimed, the objective renders dynamic nodes;
+    /// if unclaimed (or in modes without flag objectives), FLAG is not rendered.
+    /// A null objective is the edit/inspection view and keeps the raw representation.
     /// </summary>
-    public static bool AppliesToMode(MapEntity e, GameModeInfo? mode)
+    public static bool AppliesToMode(MapEntity e, IModeObjective? objective)
     {
-        if (mode == null) return true;
-        return e.Type switch
-        {
-            // FlagNode renders flags for live ctf state; never duplicate them here.
-            EntityType.Flag => false,
-            EntityType.Base => mode.Has(ModeFlags.Capture),
-            _ => true,
-        };
+        if (objective == null) return true;
+        if (objective.ClaimsEntity(e)) return false;
+        if (e.Type is EntityType.Flag or EntityType.Base) return false;
+        return true;
     }
+
+    /// <summary>
+    /// Overload for checking entity applicability against a <see cref="GameModeInfo"/>.
+    /// </summary>
+    public static bool AppliesToMode(MapEntity e, GameModeInfo? mode) =>
+        AppliesToMode(e, mode?.CreateObjective());
 
     /// <summary>entities.cpp <c>entradius</c>: types that get a yaw arrow.</summary>
     public static bool DrawsFacingArrow(byte type) => type switch

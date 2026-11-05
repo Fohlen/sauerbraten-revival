@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Game.Objectives;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Weapons;
 
@@ -30,6 +31,9 @@ public interface IGameWorld : IMapSource
 
     /// <summary>Active game mode info.</summary>
     GameModeInfo? Mode { get; set; }
+
+    /// <summary>Active match objective controlling match rules and state.</summary>
+    IModeObjective? Objective { get => null; set { } }
 
     /// <summary>Registers a bouncer to be stepped by the world's physics loop.</summary>
     void RegisterBouncer(BounceBody bouncer);
