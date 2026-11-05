@@ -668,6 +668,30 @@ public class DemoTest : GoTestBase
             TestAssert.Equal(100, remote.Combat.SelectedAmmo, "Remote player has 100 rifle ammo");
             TestAssert.Equal(1, remote.PlayerId, "Remote player peer is 1");
             TestAssert.Near(3200f, remote.Entity.O.X, 1e-3f, "Remote player spawned at authentic X coordinate");
+
+            // Verify follow system: initial followed player is local player (peer 0)
+            TestAssert.True(viewer.FollowedPlayer == player, "Initially following local player (peer 0)");
+
+            // NextFollow(1) switches to remote player (peer 1)
+            viewer.NextFollow(1);
+            TestAssert.True(viewer.FollowedPlayer == remote, "NextFollow(1) switched follow target to remote player (peer 1)");
+
+            // NextFollow(1) wraps back to local player
+            viewer.NextFollow(1);
+            TestAssert.True(viewer.FollowedPlayer == player, "NextFollow(1) wrapped back to local player (peer 0)");
+
+            // NextFollow(-1) goes backwards to remote player
+            viewer.NextFollow(-1);
+            TestAssert.True(viewer.FollowedPlayer == remote, "NextFollow(-1) switched back to remote player (peer 1)");
+
+            // Test unhandled mouse input simulation
+            var leftClick = new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true };
+            viewer._UnhandledInput(leftClick);
+            TestAssert.True(viewer.FollowedPlayer == player, "Left click cycled follow to local player (peer 0)");
+
+            var rightClick = new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true };
+            viewer._UnhandledInput(rightClick);
+            TestAssert.True(viewer.FollowedPlayer == remote, "Right click cycled follow back to remote player (peer 1)");
         }
         finally
         {

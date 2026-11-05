@@ -61,6 +61,15 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Active demo replayer driving playback, if any.</summary>
     public Demo.DemoReplayer? ActiveReplayer { get; private set; }
 
+    /// <summary>Currently followed player during demo playback.</summary>
+    public Game.Players.MapPlayer? FollowedPlayer { get; private set; }
+
+    private readonly List<Game.Players.MapPlayer> _demoPlayers = new();
+    private int _followedIndex;
+    private Camera3D? _playerCamera;
+    private HudgunModel? _sharedHudgun;
+    private World.Hud.HudController? _hud;
+
     /// <summary>When true, automatically begins recording a demo on player spawn.</summary>
     [Export] public bool AutoRecordDemo { get; set; } = false;
 
@@ -367,20 +376,80 @@ public partial class OgzMapViewer : Node3D
         // the defaults from HudController.
         if (editor != null) editor.Hud = hud;
 
+        _playerCamera = player.GetNodeOrNull<Camera3D>("Camera3D") ?? player.View.Camera;
+        if (_playerCamera == null)
+        {
+            _playerCamera = new Camera3D { Name = "Camera3D" };
+            player.AddChild(_playerCamera);
+        }
+        _hud = hud;
+
         GD.Print($"[viewer] player spawned at {player.Entity.O} yaw {player.Entity.Yaw} (edit={isEdit})");
 
         if (DemoToPlay != null)
         {
+            var allPeers = new List<int>();
+            if (DemoToPlay.Peers != null)
+            {
+                foreach (var p in DemoToPlay.Peers)
+                {
+                    if (!allPeers.Contains(p.PeerId)) allPeers.Add(p.PeerId);
+                }
+            }
+            if (DemoToPlay.Commands != null)
+            {
+                foreach (var cmd in DemoToPlay.Commands)
+                {
+                    if (cmd.PeerId >= 0 && !allPeers.Contains(cmd.PeerId))
+                    {
+                        allPeers.Add(cmd.PeerId);
+                    }
+                    if (cmd.Op == WorldOp.PlayerDeath && cmd.PlayerDeath != null)
+                    {
+                        int vic = cmd.PlayerDeath.VictimPeerId;
+                        if (vic >= 0 && !allPeers.Contains(vic)) allPeers.Add(vic);
+                    }
+                }
+            }
+            allPeers.Sort();
+
+            if (allPeers.Count > 0)
+            {
+                int primaryPeerId = allPeers[0];
+                player.PlayerId = primaryPeerId;
+                Format.DemoPeerInfo? primaryPeerInfo = null;
+                if (DemoToPlay.Peers != null)
+                {
+                    foreach (var p in DemoToPlay.Peers)
+                    {
+                        if (p.PeerId == primaryPeerId) { primaryPeerInfo = p; break; }
+                    }
+                }
+                if (primaryPeerInfo != null)
+                {
+                    player.Name = primaryPeerInfo.Name;
+                    if (!string.IsNullOrWhiteSpace(primaryPeerInfo.Team)) player.TeamName = primaryPeerInfo.Team;
+                    if (primaryPeerInfo.Playermodel >= 0) player.PlayerModelIndex = primaryPeerInfo.Playermodel;
+                }
+            }
+
+            _demoPlayers.Clear();
+            _demoPlayers.Add(player);
+
             ActiveReplayer = new Demo.DemoReplayer(DemoToPlay, mapSource.Sink);
             ActiveReplayer.ApplyInitialPlacement(player);
             ActiveReplayer.Attach(player);
 
-            SpawnRemoteDemoPlayers(mapSource, player);
+            SpawnRemoteDemoPlayers(mapSource, player, allPeers);
 
             if (mapSource is IGameWorld gameWorld)
             {
                 ActiveReplayer.AttachWorld(gameWorld);
             }
+
+            _followedIndex = 0;
+            FollowPlayer(player);
+
             ActiveReplayer.Connect(
                 Demo.DemoReplayer.SignalName.PlaybackFinished,
                 Callable.From(() =>
@@ -388,7 +457,7 @@ public partial class OgzMapViewer : Node3D
                     GD.Print($"[demo] playback finished ({DemoToPlay.DurationSeconds:F1}s, {DemoToPlay.TotalTicks} ticks)");
                 }),
                 (uint)ConnectFlags.OneShot);
-            GD.Print($"[viewer] demo playback active ({DemoToPlay.TotalTicks} ticks, {DemoToPlay.TotalCommands} commands)");
+            GD.Print($"[viewer] demo playback active ({DemoToPlay.TotalTicks} ticks, {DemoToPlay.TotalCommands} commands, {_demoPlayers.Count} players)");
         }
         else if (AutoRecordDemo)
         {
@@ -396,38 +465,14 @@ public partial class OgzMapViewer : Node3D
         }
     }
 
-    private void SpawnRemoteDemoPlayers(IMapSource mapSource, Game.Players.MapPlayer localPlayer)
+    private void SpawnRemoteDemoPlayers(IMapSource mapSource, Game.Players.MapPlayer localPlayer, List<int> allPeers)
     {
         if (DemoToPlay == null || ActiveReplayer == null) return;
 
-        var remotePeerIds = new HashSet<int>();
-        if (DemoToPlay.Peers != null)
+        foreach (int peerId in allPeers)
         {
-            foreach (var p in DemoToPlay.Peers)
-            {
-                if (p.PeerId != localPlayer.PlayerId) remotePeerIds.Add(p.PeerId);
-            }
-        }
-        if (DemoToPlay.Commands != null)
-        {
-            foreach (var cmd in DemoToPlay.Commands)
-            {
-                if (cmd.PeerId != localPlayer.PlayerId && cmd.PeerId >= 0)
-                {
-                    remotePeerIds.Add(cmd.PeerId);
-                }
-                if (cmd.Op == WorldOp.PlayerDeath && cmd.PlayerDeath != null)
-                {
-                    if (cmd.PlayerDeath.VictimPeerId != localPlayer.PlayerId && cmd.PlayerDeath.VictimPeerId >= 0)
-                    {
-                        remotePeerIds.Add(cmd.PlayerDeath.VictimPeerId);
-                    }
-                }
-            }
-        }
+            if (peerId == localPlayer.PlayerId) continue;
 
-        foreach (int peerId in remotePeerIds)
-        {
             Format.DemoPeerInfo? peerInfo = null;
             if (DemoToPlay.Peers != null)
             {
@@ -462,10 +507,117 @@ public partial class OgzMapViewer : Node3D
             remotePlayer.Teleports = mapSource.Teleports;
 
             int mdlIdx = (peerInfo != null && peerInfo.Playermodel >= 0) ? peerInfo.Playermodel : (PlayerModelIndex >= 0 ? PlayerModelIndex : 0);
+            remotePlayer.PlayerModelIndex = mdlIdx;
             AttachPlayerModel(remotePlayer, mapSource, mdlIdx);
 
+            _demoPlayers.Add(remotePlayer);
             ActiveReplayer.Attach(remotePlayer);
             GD.Print($"[viewer] spawned remote demo player '{remotePlayer.Name}' (peer {peerId}, team {remotePlayer.Team}, model {mdlIdx})");
+        }
+    }
+
+    /// <summary>
+    /// Switches camera view and HUD focus to follow a specific player during demo playback.
+    /// In first person, the followed player's 3D body is hidden and hudgun is shown.
+    /// All other players in the world show their 3D body models.
+    /// </summary>
+    public void FollowPlayer(Game.Players.MapPlayer target)
+    {
+        if (target == null) return;
+        if (_playerCamera == null)
+        {
+            _playerCamera = target.GetNodeOrNull<Camera3D>("Camera3D") ?? target.View.Camera;
+            if (_playerCamera == null)
+            {
+                _playerCamera = new Camera3D { Name = "Camera3D" };
+                target.AddChild(_playerCamera);
+            }
+        }
+        FollowedPlayer = target;
+
+        for (int i = 0; i < _demoPlayers.Count; i++)
+        {
+            var p = _demoPlayers[i];
+            if (p != target)
+            {
+                p.View.Camera = null;
+                p.Hudgun = null;
+                if (p.PlayerModel != null)
+                {
+                    p.PlayerModel.Visible = true;
+                }
+            }
+        }
+
+        if (target.PlayerModel != null)
+        {
+            target.PlayerModel.Visible = false;
+        }
+
+        if (_playerCamera.GetParent() != target)
+        {
+            _playerCamera.Reparent(target);
+        }
+        _playerCamera.Position = Vector3.Zero;
+        _playerCamera.Basis = Basis.Identity;
+        _playerCamera.Current = true;
+        target.View.Camera = _playerCamera;
+
+        if (_sharedHudgun != null)
+        {
+            if (_sharedHudgun.GetParent() == null)
+            {
+                _playerCamera.AddChild(_sharedHudgun);
+            }
+            else if (_sharedHudgun.GetParent() != _playerCamera)
+            {
+                _sharedHudgun.Reparent(_playerCamera);
+            }
+            target.Hudgun = _sharedHudgun;
+            int mdlIdx = (target.PlayerModelIndex >= 0) ? target.PlayerModelIndex : (PlayerModelIndex >= 0 ? PlayerModelIndex : 0);
+            _sharedHudgun.Configure(MapSource?.Models, MapSource?.Textures, mdlIdx, WeaponCatalog.Get((Gun)target.Combat.GunSelect).File, target.Team);
+        }
+
+        target.View.SyncCamera();
+        target.View.SyncTransform();
+
+        if (_hud != null)
+        {
+            _hud.Player = target;
+            _hud.FollowingPlayerName = target.Name;
+            _hud.IsSpectator = true;
+        }
+
+        GD.Print($"[viewer] following player '{target.Name}' (peer {target.PlayerId}, team {target.Team})");
+    }
+
+    /// <summary>
+    /// Cycles to the next or previous followed player in the demo (matching engine nextfollow).
+    /// </summary>
+    public void NextFollow(int dir = 1)
+    {
+        if (_demoPlayers.Count <= 1) return;
+        _followedIndex = (_followedIndex + dir + _demoPlayers.Count) % _demoPlayers.Count;
+        FollowPlayer(_demoPlayers[_followedIndex]);
+    }
+
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (DemoToPlay != null && _demoPlayers.Count > 1)
+        {
+            if (@event is InputEventMouseButton mb && mb.Pressed)
+            {
+                if (mb.ButtonIndex == MouseButton.Left)
+                {
+                    NextFollow(1);
+                    GetViewport()?.SetInputAsHandled();
+                }
+                else if (mb.ButtonIndex == MouseButton.Right)
+                {
+                    NextFollow(-1);
+                    GetViewport()?.SetInputAsHandled();
+                }
+            }
         }
     }
 
@@ -503,6 +655,7 @@ public partial class OgzMapViewer : Node3D
             hudgun.Configure(mapSource.Models, mapSource.Textures, mdlIdx, WeaponCatalog.Get(gun).File, player.Team);
             camera.AddChild(hudgun);
             player.Hudgun = hudgun;
+            _sharedHudgun = hudgun;
         }
         player.SelectWeapon(gun);
         GD.Print($"[viewer] player model '{body.ModelPath}' (index {mdlIdx}, team {player.Team}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");

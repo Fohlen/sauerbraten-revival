@@ -225,6 +225,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Local player/client ID (default 0).</summary>
     public int PlayerId { get; set; } = 0;
 
+    /// <summary>Player model index (e.g. 0: mrfixit, 1: ironsnout, 2: ogro, etc.).</summary>
+    public int PlayerModelIndex { get; set; } = 0;
+
     /// <summary>Active jump pad trigger entities in this map/session.</summary>
     public IReadOnlyList<JumpPad>? JumpPads { get; set; }
     public IReadOnlyList<Teleport>? Teleports { get; set; }
@@ -532,6 +535,19 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (InputSource != null)
+        {
+            // During demo playback, input is driven by the recorded stream.
+            if (@event.IsActionPressed("ui_cancel"))
+                Input.MouseMode = Input.MouseModeEnum.Visible;
+            else if (@event is InputEventMouseButton mb && mb.Pressed && Input.MouseMode != Input.MouseModeEnum.Captured)
+            {
+                Input.MouseMode = Input.MouseModeEnum.Captured;
+                GetViewport()?.SetInputAsHandled();
+            }
+            return;
+        }
+
         if (@event is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
             _mouseDelta += motion.Relative;
         else if (@event.IsActionPressed("ui_cancel"))
