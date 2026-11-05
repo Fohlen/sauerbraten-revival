@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ScriptedObjectiveResource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://World/Game/Objectives/ScriptedObjectiveResource.cs" id="1_script"]
+[ext_resource type="Script" path="res://test/fixtures/koth_objective.gd" id="2_gd"]
+
+[resource]
+script = ExtResource("1_script")
+Id = "koth"
+Name = "King of the Hill"
+DefaultTeamPlay = true
+IsEditMode = false
+DefaultMapPool = 2
+DefaultSpawnArmour = 50
+ObjectiveScript = ExtResource("2_gd")
