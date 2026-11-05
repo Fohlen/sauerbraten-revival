@@ -43,7 +43,17 @@ This list is the one place these are tracked; design lives in the linked docs.
   full bake + incremental region rebake on edit. 
 - **Renderer extras** ([ADR 0007](adr/0007-world-rendering.md)) — specular maps.
 - **`movable.cpp`** (box/barrel/platform/elevator) — deliberately not ported; SP-only.
-- **Single-player / bot AI** — out of MVP scope.
+- **Single-player / bot AI** — out of MVP scope. A separate research track is
+  proposed in [tools/botlab/](../tools/botlab/README.md): PPO arena bots bootstrapped
+  by behaviour cloning on original `.dmo` demos, exported to ONNX and run
+  server-side. Staged; does not touch MVP code paths.
+  - [ ] **B1** Demo reader (`.dmo` → per-player trajectories), golden-tested.
+  - [ ] **B2** Shared C# observation/action spec + featuriser → dataset.
+  - [ ] **B3** Behaviour-cloning pretrain.
+  - [ ] **B4** Headless sim env (ported `OctaPhysics` + insta hitscan).
+  - [ ] **B5** PPO self-play with KL to the BC policy.
+  - [ ] **B6** ONNX export, parity-checked against PyTorch.
+  - [ ] **B7** Server-side `OnnxBotController` (OnnxRuntime).
 
 ---
 

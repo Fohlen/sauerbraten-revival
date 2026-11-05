@@ -67,6 +67,7 @@ scripts/sources that produce them belong in git.
 | `tools/texture-import/` | Import original textures → Godot Resources (git-ignored output) |
 | `tools/refharness/` | A1/A2 movement harness, instrumented client, [reference patches](tools/refharness/patches/README.md) |
 | `tools/ogztool/` | Classic-map [prep](tools/ogztool/convert-maps.md) + [tool](tools/ogztool/README.md): metadata export + pre-v32 → v33 conversion |
+| `tools/botlab/` | [Proposal](tools/botlab/README.md) (post-MVP): PPO bots from `.dmo` demos → ONNX (git-ignored `out/`) |
 | `tools/octaprobe/`, `tools/rayprobe/` | Engine ground-truth probes for octree / raycube |
 | `SauerbratenRevival.csproj` | C# project (Godot .NET) |
 
