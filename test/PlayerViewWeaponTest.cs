@@ -52,8 +52,10 @@ public class PlayerViewWeaponTest : GoTestBase
         TestAssert.True(anchor!.GetChildren().Contains(body.ViewWeapon),
             "weapon parented under the Weapon node");
 
-        // Rifle has its roll axis corrected by -90° on X so it stands upright.
-        TestAssert.Equal(new Vector3(-90f, 0f, 0f), body.ViewWeapon!.ModelRotationDegrees, "rifle has base -90° X rotation");
+        // View weapons carry an extra -90° X in their GLB from Assimp's Z-up to Y-up
+        // conversion; a universal +90° X base rotation cancels this duplicate transform.
+        var baseRot = new Vector3(90f, 0f, 0f);
+        TestAssert.Equal(baseRot, body.ViewWeapon!.ModelRotationDegrees, "rifle has universal +90° X base rotation");
         TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.PositionOffset, "rifle has zero position offset");
 
         // In models where `Weapon` is an unweighted tag joint (mrfixit), GetOrCreateWeaponAnchor
@@ -65,12 +67,12 @@ public class PlayerViewWeaponTest : GoTestBase
 
         body.SetViewWeapon("vwep/rocket");
         TestAssert.True(body.ViewWeapon != null, "rocket launcher view weapon attached");
-        TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.ModelRotationDegrees, "rocket launcher has zero rotation correction");
+        TestAssert.Equal(baseRot, body.ViewWeapon!.ModelRotationDegrees, "rocket launcher has universal +90° X base rotation");
         TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.PositionOffset, "rocket launcher has zero position offset");
 
         body.SetViewWeapon("vwep/shotg");
         TestAssert.True(body.ViewWeapon != null, "shotgun view weapon attached");
-        TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.ModelRotationDegrees, "shotgun has zero rotation correction");
+        TestAssert.Equal(baseRot, body.ViewWeapon!.ModelRotationDegrees, "shotgun has universal +90° X base rotation");
         TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.PositionOffset, "shotgun has zero position offset");
 
         // Verify ViewWeaponOffset property updates all cached weapons live

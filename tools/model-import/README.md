@@ -12,13 +12,13 @@ Third-person view weapons are rigid models attached to the player character skel
 
 | Weapon | ID | Engine Path | Model Scale | Base Rotation `(X, Y, Z)` | Base Offset `(X, Y, Z)` | Orientation & Joint Root Analysis |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Fist (Chainsaw)** | 0 | `vwep/fist` | 700 / 400 | `(0, 0, 0)` | `(0, 0, 0)` | Root joint `Root`; handle sits in player's right hand. |
-| **Shotgun** | 1 | `vwep/shotg` | 500 / 400 | `(0, 0, 0)` | `(0, 0, 0)` | Root joint `weapon`; barrel extends along local $+Y$ (forward). |
-| **Chaingun** | 2 | `vwep/chaing` | 700 / 400 | `(0, 0, 0)` | `(0, 0, 0)` | Root joint `Root`; barrels extend along local $+Y$ (forward). |
-| **Rocket Launcher** | 3 | `vwep/rocket` | 600 / 400 | `(0, 0, 0)` | `(0, 0, 0)` | Root joint `Root`; attaches directly to the hand/shoulder anchor without base transform. |
-| **Sniper Rifle** | 4 | `vwep/rifle` | 600 / 400 | `(-90, 0, 0)` | `(0, 0, 0)` | **Rotated $-90^\circ$ X**: The original `sniper_vwep.md5mesh` root joint has its roll axis rotated $90^\circ$ relative to the barrel. Without $-90^\circ$ pitch/roll correction, the rifle lies rotated along the X axis. |
-| **Grenade Launcher** | 5 | `vwep/gl` | 700 / 400 | `(0, 0, 0)` | `(0, 0, 0)` | Root joint `Root`; barrel extends along local $+Y$ (forward). |
-| **Pistol (Revolver)** | 6 | `vwep/pistol` | 600 / 400 | `(0, 0, 0)` | `(0, 0, 0)` | Root joint `tag_weapon`; grip sits in hand with authentic upward revolver angle. |
+| **Fist (Chainsaw)** | 0 | `vwep/fist` | 700 / 400 | `(90, 0, 0)` | `(0, 0, 0)` | Universal $+90^\circ$ X cancels duplicate `<MD5_Root>` conversion. |
+| **Shotgun** | 1 | `vwep/shotg` | 500 / 400 | `(90, 0, 0)` | `(0, 0, 0)` | Universal $+90^\circ$ X cancels duplicate `<MD5_Root>` conversion. |
+| **Chaingun** | 2 | `vwep/chaing` | 700 / 400 | `(90, 0, 0)` | `(0, 0, 0)` | Universal $+90^\circ$ X cancels duplicate `<MD5_Root>` conversion. |
+| **Rocket Launcher** | 3 | `vwep/rocket` | 600 / 400 | `(90, 0, 0)` | `(0, 0, 0)` | Universal $+90^\circ$ X cancels duplicate `<MD5_Root>` conversion. Tube runs along $-Y$, which `hold 4` (`rl_idle`) points forward. |
+| **Sniper Rifle** | 4 | `vwep/rifle` | 600 / 400 | `(90, 0, 0)` | `(0, 0, 0)` | Universal $+90^\circ$ X cancels duplicate `<MD5_Root>` conversion. |
+| **Grenade Launcher** | 5 | `vwep/gl` | 700 / 400 | `(90, 0, 0)` | `(0, 0, 0)` | Universal $+90^\circ$ X cancels duplicate `<MD5_Root>` conversion. |
+| **Pistol (Revolver)** | 6 | `vwep/pistol` | 600 / 400 | `(90, 0, 0)` | `(0, 0, 0)` | Universal $+90^\circ$ X cancels duplicate `<MD5_Root>` conversion. |
 
 ### Why Sauerbraten r6889 Does Not Store These Transforms
 
@@ -26,10 +26,10 @@ Third-person view weapons are rigid models attached to the player character skel
    In [`src/engine/skelmodel.h:1441-1456`](/Users/fohlen/Downloads/sauerbraten-code-r6889/src/engine/skelmodel.h#L1441-L1456), Sauerbraten checks `if(!skel->numframes)`. Because `vwep` models have no animation clips, the engine **never evaluates their skeletal hierarchy or joint matrices at render time**.
 2. **Pre-evaluated VBO Coordinates**:
    At map load, [`src/engine/md5.h:55-73`](/Users/fohlen/Downloads/sauerbraten-code-r6889/src/engine/md5.h#L55-L73) (`buildverts`) bakes the vertices into a static VBO using the base joints. When drawn in [`src/engine/animmodel.h:924`](/Users/fohlen/Downloads/sauerbraten-code-r6889/src/engine/animmodel.h#L924), Sauerbraten only pushes `link.matrix` (the player's hand bone).
-3. **Assimp glTF Export**:
-   When Assimp converts `.md5mesh` to `.glb` ([`import_models.py`](import_models.py)), it exports the bones as glTF nodes and links the mesh to a `skin`. When Godot imports this scene with `KeepSkeleton = true`, Godot's `Skeleton3D` evaluates each model's `Root` bone rest pose, exposing the divergent joint rest orientations present in the original asset files.
+3. **Assimp glTF Export & Root Matrices**:
+   When Assimp converts `.md5mesh` to `.glb` ([`import_models.py`](import_models.py)), it generates an `<MD5_Root>` node applying a Z-up to Y-up conversion matrix ($-90^\circ$ around X). Because a view weapon is parented inside the player body's own hierarchy (which already lives inside its own root conversion), the vwep's root matrix is applied a second time. A universal $+90^\circ$ X rotation on all view weapons in [`PlayerViewWeapon.GetBaseRotationDegrees()`](../../World/Models/PlayerViewWeapon.cs) precisely cancels this duplicate transform.
 4. **Runtime Resolution**:
-   [`PlayerViewWeapon.GetBaseRotationDegrees()`](../../World/Models/PlayerViewWeapon.cs) and [`PlayerViewWeapon.GetBaseOffset()`](../../World/Models/PlayerViewWeapon.cs) apply these rotations and position offsets in anchor space when instantiating or swapping third-person view weapons. Both can also be adjusted live via [`PlayerModel.ViewWeaponRotationDegrees`](../../World/Models/PlayerModel.cs) and [`PlayerModel.ViewWeaponOffset`](../../World/Models/PlayerModel.cs).
+   [`PlayerViewWeapon.GetBaseRotationDegrees()`](../../World/Models/PlayerViewWeapon.cs) applies `(90, 0, 0)` across all view weapons. Fine adjustments can also be made live via [`PlayerModel.ViewWeaponRotationDegrees`](../../World/Models/PlayerModel.cs) and [`PlayerModel.ViewWeaponOffset`](../../World/Models/PlayerModel.cs).
 
 ---
 

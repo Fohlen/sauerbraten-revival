@@ -49,14 +49,10 @@ public partial class PlayerViewWeapon : ModelInstance
 
     /// <summary>
     /// Model-space rotation corrections for imported third-person view weapon GLBs.
-    /// In Sauerbraten r6889, unskinned vwep meshes had no animations and were drawn
-    /// directly from pre-evaluated bind vertices without joint transforms.
-    /// The converted MD5 GLBs retain their Root bone orientations:
-    /// - <c>vwep/rifle</c> has its roll axis rotated (requiring -90° X rotation to stand upright).
+    /// Each vwep GLB carries an <c>&lt;MD5_Root&gt;</c> node with Assimp's Z-up to Y-up
+    /// rotation (-90° X). Because the weapon is parented under the body model, which
+    /// already lives inside its own root conversion, a +90° X rotation cancels the duplicate
+    /// transform across all view weapons.
     /// </summary>
-    public static Vector3 GetBaseRotationDegrees(string? modelPath) => modelPath switch
-    {
-        "vwep/rifle" or "rifle" => new Vector3(-90f, 0f, 0f),
-        _ => Vector3.Zero,
-    };
+    public static Vector3 GetBaseRotationDegrees(string? modelPath) => new(90f, 0f, 0f);
 }
