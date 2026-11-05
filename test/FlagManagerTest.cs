@@ -21,6 +21,46 @@ public partial class FlagManagerTest : TestClass
 
     private static GameModeInfo GetMode(string id) => GameModeCatalog.Get(id);
 
+    private static GameModeInfo CreateProtectMode()
+    {
+        var mode = new GameModeInfo
+        {
+            Id = "protect",
+            Name = "protect",
+            ObjectiveId = "protect",
+            TeamPlay = true,
+            Objective = new World.Game.Objectives.FlagObjectiveResource
+            {
+                Id = "protect",
+                Placement = World.Game.Objectives.FlagPlacementMode.MapTeamFlags,
+                ScoreRule = World.Game.Objectives.FlagScoreRule.TouchEnemyFlag,
+                ReturnRule = World.Game.Objectives.FlagReturnRule.DropInsideBase,
+            },
+        };
+        mode.Bake();
+        return mode;
+    }
+
+    private static GameModeInfo CreateHoldMode()
+    {
+        var mode = new GameModeInfo
+        {
+            Id = "hold",
+            Name = "hold",
+            ObjectiveId = "hold",
+            TeamPlay = true,
+            Objective = new World.Game.Objectives.FlagObjectiveResource
+            {
+                Id = "hold",
+                Placement = World.Game.Objectives.FlagPlacementMode.DynamicHoldSpawns,
+                ScoreRule = World.Game.Objectives.FlagScoreRule.HoldTimer,
+                ReturnRule = World.Game.Objectives.FlagReturnRule.RandomRespawn,
+            },
+        };
+        mode.Bake();
+        return mode;
+    }
+
     [Test]
     public void AddFlagAndHoldSpawnsBasicSetup()
     {
@@ -130,7 +170,7 @@ public partial class FlagManagerTest : TestClass
     public void ProtectModeRules()
     {
         var fm = new FlagManager();
-        var protectMode = GetMode("protect");
+        var protectMode = CreateProtectMode();
         var audioEvents = new List<FlagAudioEvent>();
         fm.OnAudioEvent += audioEvents.Add;
 
@@ -179,7 +219,7 @@ public partial class FlagManagerTest : TestClass
     public void HoldModeRulesAndCountdown()
     {
         var fm = new FlagManager();
-        var holdMode = GetMode("hold");
+        var holdMode = CreateHoldMode();
         var audioEvents = new List<FlagAudioEvent>();
         fm.OnAudioEvent += audioEvents.Add;
 

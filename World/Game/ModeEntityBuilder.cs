@@ -118,8 +118,7 @@ public static class ModeEntityBuilder
     {
         if (objective == null) return true;
         if (objective.ClaimsEntity(e)) return false;
-        if (e.Type == EntityType.Flag) return false;
-        if (e.Type == EntityType.Base) return objective is CaptureObjective;
+        if (e.Type is EntityType.Flag or EntityType.Base) return false;
         return true;
     }
 

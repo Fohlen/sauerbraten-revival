@@ -412,11 +412,11 @@ public partial class MapWorld : Node3D, IGameWorld
         if (Mode != null) Flags.Mode = Mode;
         var flagsRoot = new Node3D { Name = "Flags" };
         _flagNodes.Clear();
-        bool isFlagMode = Objective is FlagObjective || Mode?.ObjectiveId is "ctf" or "protect" or "hold" or "rugby";
+        bool isFlagMode = Objective is FlagObjective || Mode?.ObjectiveId == "ctf";
         if (Mode != null && isFlagMode)
         {
-            bool isHold = (Objective as FlagObjective)?.Resource.Placement == FlagPlacementMode.DynamicHoldSpawns || Mode.ObjectiveId == "hold";
-            bool isProtect = (Objective as FlagObjective)?.Resource.ScoreRule == FlagScoreRule.TouchEnemyFlag || Mode.ObjectiveId is "protect" or "insta_protect" or "effic_protect";
+            bool isHold = (Objective as FlagObjective)?.Resource.Placement == FlagPlacementMode.DynamicHoldSpawns;
+            bool isProtect = (Objective as FlagObjective)?.Resource.ScoreRule == FlagScoreRule.TouchEnemyFlag;
             if (isHold)
             {
                 // ctf.h:729: BASE entities are hold spawns; HOLDFLAGS neutral flags

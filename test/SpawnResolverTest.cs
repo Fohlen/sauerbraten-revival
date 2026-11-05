@@ -21,8 +21,6 @@ public class SpawnResolverTest : GoTestBase
     public void GameModeCatalog_GetSpawnGroup_MatchesEngineCmode()
     {
         var ctf = GameModeCatalog.Get("ctf");
-        var protect = GameModeCatalog.Get("protect");
-        var hold = GameModeCatalog.Get("hold");
         var ffa = GameModeCatalog.Get("ffa");
         var tdm = GameModeCatalog.Get("teamplay");
 
@@ -30,14 +28,6 @@ public class SpawnResolverTest : GoTestBase
         TestAssert.Equal(1, GameModeCatalog.GetSpawnGroup(ctf, 1), "CTF team 1 spawn tag");
         TestAssert.Equal(2, GameModeCatalog.GetSpawnGroup(ctf, 2), "CTF team 2 spawn tag");
         TestAssert.Equal(0, GameModeCatalog.GetSpawnGroup(ctf, 0), "CTF neutral team spawn tag");
-
-        // Protect: same as CTF
-        TestAssert.Equal(1, GameModeCatalog.GetSpawnGroup(protect, 1), "Protect team 1 spawn tag");
-        TestAssert.Equal(2, GameModeCatalog.GetSpawnGroup(protect, 2), "Protect team 2 spawn tag");
-
-        // Hold: m_hold ? 0 : ctfteamflag(d->team) -> always 0
-        TestAssert.Equal(0, GameModeCatalog.GetSpawnGroup(hold, 1), "Hold team 1 spawn tag is 0");
-        TestAssert.Equal(0, GameModeCatalog.GetSpawnGroup(hold, 2), "Hold team 2 spawn tag is 0");
 
         // FFA / TDM: tag 0
         TestAssert.Equal(0, GameModeCatalog.GetSpawnGroup(ffa, 1), "FFA spawn tag is 0");

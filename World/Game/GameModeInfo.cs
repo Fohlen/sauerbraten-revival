@@ -22,7 +22,7 @@ public partial class GameModeInfo : Resource
     /// <summary>Human-readable / engine name (e.g. "insta ctf").</summary>
     [Export] public string Name { get; set; } = "";
 
-    /// <summary>Objective ID resolved via <see cref="ObjectiveCatalog"/> (e.g. "dm", "edit", "ctf", "protect", "hold", "capture", "rugby", "race").</summary>
+    /// <summary>Objective ID resolved via <see cref="ObjectiveCatalog"/> (e.g. "dm", "edit", "ctf").</summary>
     [Export] public string ObjectiveId { get; set; } = "dm";
 
     /// <summary>Optional mutator preset ID resolved via <see cref="GameMutatorCatalog"/> (e.g. "insta", "effic", "tactics").</summary>
@@ -59,7 +59,7 @@ public partial class GameModeInfo : Resource
     // --- Pre-Baked Runtime Properties (Computed in Bake, O(1) Hot Path) ---
 
     /// <summary>Resolved objective resource definition.</summary>
-    public ModeObjectiveResource Objective { get; private set; } = null!;
+    public ModeObjectiveResource Objective { get; set; } = null!;
 
     /// <summary>Bitmask (1 &lt;&lt; Gun) of player guns (SG..Pistol) obtainable in this mode.</summary>
     public int WeaponPoolMask { get; private set; } = 0b111_1110;
@@ -86,10 +86,18 @@ public partial class GameModeInfo : Resource
     public void Bake()
     {
         // 1. Resolve Objective definition
-        if (!string.IsNullOrEmpty(ObjectiveId))
-            Objective = ObjectiveCatalog.TryGet(ObjectiveId) ?? ObjectiveCatalog.TryGet("dm")!;
+        if (Objective != null)
+        {
+            if (string.IsNullOrEmpty(ObjectiveId) || ObjectiveId == "dm")
+                ObjectiveId = Objective.Id;
+        }
         else
-            Objective = ObjectiveCatalog.TryGet("dm")!;
+        {
+            if (!string.IsNullOrEmpty(ObjectiveId))
+                Objective = ObjectiveCatalog.TryGet(ObjectiveId) ?? ObjectiveCatalog.TryGet("dm")!;
+            else
+                Objective = ObjectiveCatalog.TryGet("dm")!;
+        }
 
         if (Objective != null)
         {

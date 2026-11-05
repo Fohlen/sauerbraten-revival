@@ -13,15 +13,15 @@ public class GameModeCatalogTest : GoTestBase
     public GameModeCatalogTest(Node testScene) : base(testScene) { }
 
     [Test]
-    public void CatalogLoadsAllTwentyTwoModes()
+    public void CatalogLoadsAllBuiltInModes()
     {
         string[] required =
         {
             "ffa", "coop_edit", "teamplay", "insta", "instateam", "effic", "efficteam",
-            "tactics", "tactics_team", "capture", "regen_capture", "ctf", "insta_ctf",
-            "effic_ctf", "protect", "insta_protect", "effic_protect", "hold",
-            "insta_hold", "effic_hold", "rugby", "race"
+            "tactics", "tactics_team", "ctf", "insta_ctf", "effic_ctf"
         };
+
+        TestAssert.Equal(required.Length, GameModeCatalog.All.Length, "built-in mode count");
 
         foreach (var id in required)
         {
@@ -83,12 +83,13 @@ public class GameModeCatalogTest : GoTestBase
         TestAssert.False(insta.CanSpawnItem(ItemType.Health), "insta no health");
         TestAssert.False(insta.CanSpawnItem(ItemType.QuadDamage), "insta no quad");
 
-        var cap = GameModeCatalog.Get("capture");
-        TestAssert.False(cap.CanSpawnItem(ItemType.Shells), "capture disallows ammo");
-        TestAssert.False(cap.CanSpawnItem(ItemType.Rockets), "capture disallows ammo");
-        TestAssert.True(cap.CanSpawnItem(ItemType.Health), "capture allows health");
-        TestAssert.True(cap.CanSpawnItem(ItemType.YellowArmour), "capture allows armour");
-        TestAssert.True(cap.CanSpawnItem(ItemType.QuadDamage), "capture allows quad");
+        var nonAmmoMode = new GameModeInfo { Id = "custom_nonammo", AllowedItems = ItemSpawnMask.NonAmmo };
+        nonAmmoMode.Bake();
+        TestAssert.False(nonAmmoMode.CanSpawnItem(ItemType.Shells), "nonammo disallows ammo");
+        TestAssert.False(nonAmmoMode.CanSpawnItem(ItemType.Rockets), "nonammo disallows ammo");
+        TestAssert.True(nonAmmoMode.CanSpawnItem(ItemType.Health), "nonammo allows health");
+        TestAssert.True(nonAmmoMode.CanSpawnItem(ItemType.YellowArmour), "nonammo allows armour");
+        TestAssert.True(nonAmmoMode.CanSpawnItem(ItemType.QuadDamage), "nonammo allows quad");
     }
 
     [Test]
@@ -102,27 +103,8 @@ public class GameModeCatalogTest : GoTestBase
         var ffaObj = ffa.CreateObjective();
         TestAssert.True(ffaObj is DeathmatchObjective, "ffa creates DeathmatchObjective");
 
-        var race = GameModeCatalog.Get("race");
-        var raceObj = race.CreateObjective();
-        TestAssert.True(raceObj is RaceObjective, "race creates RaceObjective");
-
         var edit = GameModeCatalog.Get("coop_edit");
         var editObj = edit.CreateObjective();
         TestAssert.True(editObj is EditObjective, "coop_edit creates EditObjective");
-    }
-
-    [Test]
-    public void RugbyMode_IsConfiguredAsInstaFlagWithFriendlyHitPass()
-    {
-        var rugby = GameModeCatalog.Get("rugby");
-        TestAssert.True(rugby.TeamPlay, "rugby teamplay");
-        TestAssert.Equal("insta", rugby.Mutator, "rugby mutator insta");
-        TestAssert.Equal(1, rugby.SpawnHealth, "rugby 1 hp");
-        TestAssert.Equal(Gun.Rifle, rugby.SpawnGun, "rugby rifle");
-
-        var obj = rugby.CreateObjective();
-        TestAssert.True(obj is FlagObjective, "rugby creates FlagObjective");
-        var flagObj = (FlagObjective)obj;
-        TestAssert.True(flagObj.Resource.PassOnFriendlyHit, "rugby PassOnFriendlyHit is true");
     }
 }

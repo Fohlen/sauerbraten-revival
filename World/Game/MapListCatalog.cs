@@ -38,19 +38,19 @@ public static class MapListCatalog
         {
             Id = MapListId.Dm,
             Name = "ffa",
-            Modes = new[] { "ffa", "coop_edit", "teamplay", "insta", "instateam", "effic", "efficteam", "tactics", "tactics_team", "race" }
+            Modes = new[] { "ffa", "coop_edit", "teamplay", "insta", "instateam", "effic", "efficteam", "tactics", "tactics_team" }
         },
         new()
         {
             Id = MapListId.Capture,
             Name = "capture",
-            Modes = new[] { "capture", "regen_capture", "hold", "insta_hold", "effic_hold" }
+            Modes = Array.Empty<string>()
         },
         new()
         {
             Id = MapListId.Ctf,
             Name = "ctf",
-            Modes = new[] { "ctf", "insta_ctf", "effic_ctf", "protect", "insta_protect", "effic_protect", "rugby" }
+            Modes = new[] { "ctf", "insta_ctf", "effic_ctf" }
         },
         new() { Id = MapListId.Sp, Name = "single player" },
         new() { Id = MapListId.Concept, Name = "concept" },
