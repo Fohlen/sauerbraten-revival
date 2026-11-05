@@ -33,6 +33,7 @@ public class ScriptedObjective : IModeObjective
     public ScriptedObjectiveResource Resource { get; }
     public GameModeInfo Mode { get; }
 
+    private readonly Variant _scriptInstanceHolder;
     private readonly GodotObject? _scriptInstance;
 
     public ScriptedObjective(ScriptedObjectiveResource resource, GameModeInfo mode)
@@ -41,15 +42,33 @@ public class ScriptedObjective : IModeObjective
         Mode = mode;
         if (resource.ObjectiveScript != null)
         {
-            _scriptInstance = resource.ObjectiveScript.Call("new").AsGodotObject();
+            _scriptInstanceHolder = resource.ObjectiveScript.Call("new");
+            _scriptInstance = _scriptInstanceHolder.AsGodotObject();
         }
+    }
+
+    private int GetMethodArgCount(string methodName)
+    {
+        if (_scriptInstance == null) return -1;
+        var methodList = _scriptInstance.GetMethodList();
+        foreach (var method in methodList)
+        {
+            if (method.TryGetValue("name", out var name) && name.AsString() == methodName)
+            {
+                if (method.TryGetValue("args", out var args) && args.VariantType == Variant.Type.Array)
+                {
+                    return args.AsGodotArray().Count;
+                }
+            }
+        }
+        return -1;
     }
 
     public bool ClaimsEntity(MapEntity e)
     {
         if (_scriptInstance != null && _scriptInstance.HasMethod("claims_entity"))
         {
-            var res = _scriptInstance.Call("claims_entity", (int)e.Type);
+            var res = _scriptInstance.Call("claims_entity", e);
             return res.AsBool();
         }
         return false;
@@ -59,7 +78,22 @@ public class ScriptedObjective : IModeObjective
     {
         if (_scriptInstance != null && _scriptInstance.HasMethod("setup_world"))
         {
-            _scriptInstance.Call("setup_world", world as GodotObject, objectiveRoot);
+            var entityArray = new Godot.Collections.Array();
+            for (int i = 0; i < entities.Count; i++)
+            {
+                entityArray.Add(entities[i]);
+            }
+
+            var worldVar = world as GodotObject != null ? (Variant)(GodotObject)world : new Variant();
+            int argCount = GetMethodArgCount("setup_world");
+            if (argCount == 2)
+            {
+                _scriptInstance.Call("setup_world", worldVar, objectiveRoot);
+            }
+            else
+            {
+                _scriptInstance.Call("setup_world", worldVar, entityArray, objectiveRoot);
+            }
         }
     }
 
@@ -67,7 +101,8 @@ public class ScriptedObjective : IModeObjective
     {
         if (_scriptInstance != null && _scriptInstance.HasMethod("step"))
         {
-            _scriptInstance.Call("step", world as GodotObject, stepMillis, nowMillis);
+            var worldVar = world as GodotObject != null ? (Variant)(GodotObject)world : new Variant();
+            _scriptInstance.Call("step", worldVar, stepMillis, nowMillis);
         }
     }
 
@@ -83,7 +118,8 @@ public class ScriptedObjective : IModeObjective
     {
         if (_scriptInstance != null && _scriptInstance.HasMethod("update_visual"))
         {
-            _scriptInstance.Call("update_visual", world as GodotObject, lastMillis);
+            var worldVar = world as GodotObject != null ? (Variant)(GodotObject)world : new Variant();
+            _scriptInstance.Call("update_visual", worldVar, lastMillis);
         }
     }
 
@@ -102,6 +138,14 @@ public class ScriptedObjective : IModeObjective
         return null;
     }
 
+    public void OnPlayerSpawn(MapPlayer player)
+    {
+        if (_scriptInstance != null && _scriptInstance.HasMethod("on_player_spawn"))
+        {
+            _scriptInstance.Call("on_player_spawn", player);
+        }
+    }
+
     public bool OnBeforeDamage(
         MapPlayer? attacker,
         MapPlayer victim,
@@ -112,8 +156,45 @@ public class ScriptedObjective : IModeObjective
     {
         if (_scriptInstance != null && _scriptInstance.HasMethod("on_before_damage"))
         {
-            var res = _scriptInstance.Call("on_before_damage", attacker, victim, (int)gun, damage);
-            return res.AsBool();
+            var result = new Godot.Collections.Dictionary
+            {
+                { "damage", damage },
+                { "push", pushVel },
+                { "push_vel", pushVel }
+            };
+
+            int argCount = GetMethodArgCount("on_before_damage");
+            Variant res;
+            var attackerVar = attacker != null ? (Variant)attacker : new Variant();
+            if (argCount == 4)
+            {
+                res = _scriptInstance.Call("on_before_damage", attackerVar, victim, (int)gun, result);
+            }
+            else
+            {
+                res = _scriptInstance.Call("on_before_damage", attackerVar, victim, (int)gun, result, nowMillis);
+            }
+
+            if (result.TryGetValue("damage", out var d)) damage = d.AsInt32();
+            if (result.TryGetValue("push", out var p)) pushVel = p.AsVector3();
+            else if (result.TryGetValue("push_vel", out var pv)) pushVel = pv.AsVector3();
+
+            if (res.VariantType == Variant.Type.Dictionary)
+            {
+                var retDict = res.AsGodotDictionary();
+                if (retDict.TryGetValue("damage", out var rd)) damage = rd.AsInt32();
+                if (retDict.TryGetValue("push", out var rp)) pushVel = rp.AsVector3();
+                else if (retDict.TryGetValue("push_vel", out var rpv)) pushVel = rpv.AsVector3();
+                if (retDict.TryGetValue("cancel", out var cancel) && cancel.AsBool()) return false;
+                if (retDict.TryGetValue("allow", out var allow)) return allow.AsBool();
+                return true;
+            }
+            else if (res.VariantType == Variant.Type.Bool)
+            {
+                return res.AsBool();
+            }
+
+            return true;
         }
         return true;
     }
@@ -122,7 +203,8 @@ public class ScriptedObjective : IModeObjective
     {
         if (_scriptInstance != null && _scriptInstance.HasMethod("on_player_died"))
         {
-            _scriptInstance.Call("on_player_died", victim, killer, (int)gun, nowMillis);
+            var killerVar = killer != null ? (Variant)killer : new Variant();
+            _scriptInstance.Call("on_player_died", victim, killerVar, (int)gun, nowMillis);
         }
     }
 
