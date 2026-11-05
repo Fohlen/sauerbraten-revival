@@ -130,11 +130,15 @@ public static class GameAudio
     /// <summary>Master sound volume (engine <c>soundvol</c> 0..255; default 255).</summary>
     public static int SoundVol { get; set; } = MaxSoundVol;
 
+    /// <summary>Raised whenever audio settings are applied via <see cref="Apply"/> or changed at runtime.</summary>
+    public static event Action? SettingsChanged;
+
     /// <summary>Apply persisted user audio settings to the runtime playback state.</summary>
     public static void Apply(bool enabled, int volume)
     {
         Enabled = enabled;
         SoundVol = Mathf.Clamp(volume, 0, MaxSoundVol);
+        SettingsChanged?.Invoke();
     }
 
     private static readonly Dictionary<string, AudioStream?> LoadedStreams = new();

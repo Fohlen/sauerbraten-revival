@@ -34,8 +34,13 @@ public static class SoundBuilder
                 Size = e.Attr3,
                 Stream = file != null ? SoundFiles.Load(file, loop: true) : null,
                 MaxDistance = e.Attr2 > 0 ? e.Attr2 : 1000.0f,
-                Autoplay = true,
+                Autoplay = false,
             };
+            if (e.Attr3 > 0)
+            {
+                emitter.UnitSize = e.Attr3;
+            }
+            emitter.ApplyAudioSettings();
             root.AddChild(emitter);
             EntityMarker.Add(emitter, null);
         }
