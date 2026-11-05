@@ -282,6 +282,20 @@ public partial class ScriptedObjectiveResource : ModeObjectiveResource
 }
 ```
 
+The GDScript contract mirrors `IModeObjective`:
+| GDScript Method | Signature | Description |
+| --- | --- | --- |
+| `claims_entity` | `(entity: MapEntity) -> bool` | Receives entity data (`entity.Type`, `entity.Position`, etc.); returns `true` to claim ownership. |
+| `setup_world` | `(world, entities: Array, root: Node3D) -> void` | Receives world, all map entities, and objective 3D root node. |
+| `step` | `(world, step_millis: int, now_millis: int) -> void` | Called once per 5 ms physics substep for world timers. |
+| `step_player` | `(player: MapPlayer, now_millis: int) -> void` | Called once per alive player per 5 ms substep. |
+| `update_visual` | `(world, last_millis: int) -> void` | Called once per render frame (`_Process`). |
+| `resolve_spawn` | `(player: MapPlayer) -> Dictionary` | Optional spawn override: `{"pos": Vector3, "yaw": float}`. |
+| `on_player_spawn` | `(player: MapPlayer) -> void` | Called after player respawns. |
+| `on_before_damage` | `(attacker, victim, gun: int, result: Dictionary, now_millis: int) -> bool` | Pre-damage hook. `result` contains mutable `result.damage` and `result.push`. Return `false` to cancel. |
+| `on_player_died` | `(victim, killer, gun: int, now_millis: int) -> void` | Called when a player dies. |
+| `get_hud_state` | `(local_player, now_millis: int) -> Dictionary` | Returns HUD state: `{"primary_score": int, "secondary_score": int, "primary_is_friendly": bool, ...}`. |
+
 ---
 
 ## 2. Mutators, Loadouts & `GameModeInfo`
@@ -639,11 +653,11 @@ var scores := [0, 0]
 var tick_accum := 0
 
 func claims_entity(entity) -> bool:
-    return entity.Type == 19 # EntityType.Base
+    return entity.Type == 24 # EntityType.Base
 
 func setup_world(world, entities, root) -> void:
     for e in entities:
-        if e.Type == 19:
+        if e.Type == 24:
             hill_pos = e.Position
             break
 
@@ -655,6 +669,16 @@ func step(world, step_millis: int, now_millis: int) -> void:
     for player in world.Players:
         if player.IsAlive and player.Entity.FeetPos().distance_to(hill_pos) < 64.0:
             scores[player.Team - 1] += 1
+
+func on_before_damage(attacker, victim, gun: int, result: Dictionary, now_millis: int) -> bool:
+    # Friendly fire canceled
+    if attacker != null and attacker.Team == victim.Team:
+        return false
+    # Players defending the hill receive 50% damage and have knockback push neutralized
+    if victim.IsAlive and victim.Entity.FeetPos().distance_to(hill_pos) < 64.0:
+        result.damage = int(result.damage * 0.5)
+        result.push = Vector3.ZERO
+    return true
 
 func get_hud_state(local_player, now_millis: int) -> Dictionary:
     var my_team: int = local_player.Team

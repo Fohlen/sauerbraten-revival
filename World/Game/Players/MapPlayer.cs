@@ -55,6 +55,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     public PhysEnt CollisionEntity => Entity;
     public bool IsAlive => Entity.State == PhysEnt.CsAlive;
+    public Vector3 FeetPos => Entity.FeetPos();
+    public Vector3 GetFeetPos() => Entity.FeetPos();
     public int Weight => 100;
     public void ApplyHitPush(Vector3 pushVel) => Entity.Vel += pushVel;
     int IExplosionTarget.TakeDamage(int damage)
@@ -236,7 +238,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     }
 
     /// <summary>Local player/client ID (default 0).</summary>
-    public int PlayerId { get; set; } = 0;
+    [Export] public int PlayerId { get; set; } = 0;
 
     /// <summary>Player frags count (engine <c>fpsent::frags</c>).</summary>
     public int Frags { get; set; } = 0;
@@ -304,6 +306,17 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>The simulated entity (Sauerbraten Z-up). Read by tests/diagnostics.</summary>
     public PhysEnt Entity { get; } = new();
+
+    private PlayerEntityProxy? _entityProxy;
+    public PlayerEntityProxy EntityProxy => _entityProxy ??= new PlayerEntityProxy(this);
+
+    public override Variant _Get(StringName property)
+    {
+        if (property == "Entity") return EntityProxy;
+        if (property == "IsAlive") return IsAlive;
+        if (property == "FeetPos") return FeetPos;
+        return base._Get(property);
+    }
 
     /// <summary>Combat and weapon state (fpsgame/game.h:367 <c>fpsstate</c>).</summary>
     public PlayerState Combat { get; } = new();
@@ -1839,5 +1852,45 @@ public partial class MapPlayer : Node3D, IHitscanTarget
                 Combat.FlagPickup &= ~(1 << f.Id);
             }
         }
+    }
+}
+
+[GlobalClass]
+public partial class PlayerEntityProxy : RefCounted
+{
+    private readonly MapPlayer _player;
+
+    public PlayerEntityProxy()
+    {
+        _player = null!;
+    }
+
+    public PlayerEntityProxy(MapPlayer player)
+    {
+        _player = player;
+    }
+
+    public Vector3 FeetPos() => _player != null ? _player.Entity.FeetPos() : Vector3.Zero;
+
+    public override Variant _Get(StringName property)
+    {
+        if (_player == null) return default;
+        if (property == "O") return _player.Entity.O;
+        if (property == "Vel") return _player.Entity.Vel;
+        if (property == "Yaw") return _player.Entity.Yaw;
+        if (property == "Pitch") return _player.Entity.Pitch;
+        if (property == "State") return _player.Entity.State;
+        return base._Get(property);
+    }
+
+    public override bool _Set(StringName property, Variant value)
+    {
+        if (_player == null) return false;
+        if (property == "Vel")
+        {
+            _player.Entity.Vel = value.AsVector3();
+            return true;
+        }
+        return base._Set(property, value);
     }
 }
