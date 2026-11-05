@@ -1256,17 +1256,13 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Combat.Pickup(itemType);
     }
 
-    /// <summary>Apply damage to the player, updating health and lastpain timestamp.</summary>
-    public void TakeDamage(int damage, int? nowMillis = null) =>
-        TakeDamage(damage, attacker: null, gun: Gun.Fist, pushVel: null, nowMillis: nowMillis);
-
     /// <summary>
     /// Apply damage to the player from an optional <paramref name="attacker"/> and weapon <paramref name="gun"/>,
-    /// running objective pre-damage hooks (e.g. Rugby pass) and mode push/damage scaling.
+    /// running objective pre-damage hooks and mode push/damage scaling.
     /// </summary>
     public void TakeDamage(
         int damage,
-        MapPlayer? attacker,
+        MapPlayer? attacker = null,
         Gun gun = Gun.Fist,
         Vector3? pushVel = null,
         int? nowMillis = null)
