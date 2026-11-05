@@ -23,13 +23,42 @@ public partial class ModelInstance : Node3D
     [Export] public string? GlbOsPath { get; set; }
 
     [Export] public float ModelScale { get; set; } = 1.0f;
-    [Export] public Vector3 ModelTranslation { get; set; }
+
+    private Vector3 _modelTranslation;
+
+    /// <summary>
+    /// Cube 2 <c>mdltrans</c> translation applied to the loaded geometry.
+    /// Converted to model frame via <see cref="OffsetToModelFrame"/>.
+    /// </summary>
+    [Export]
+    public Vector3 ModelTranslation
+    {
+        get => _modelTranslation;
+        set
+        {
+            _modelTranslation = value;
+            if (GetNodeOrNull<Node3D>("Model") is { } holder)
+                holder.Position = ModelOffset();
+        }
+    }
+
+    private Vector3 _modelRotationDegrees;
 
     /// <summary>
     /// Extra rotation (degrees) applied to the loaded geometry. Used to bring an
     /// imported model's up-axis into the Z-up world frame.
     /// </summary>
-    public Vector3 ModelRotationDegrees { get; set; }
+    [Export]
+    public Vector3 ModelRotationDegrees
+    {
+        get => _modelRotationDegrees;
+        set
+        {
+            _modelRotationDegrees = value;
+            if (GetNodeOrNull<Node3D>("Model") is { } holder)
+                holder.RotationDegrees = value;
+        }
+    }
 
     /// <summary>Skin/normal material, applied to the loaded model.</summary>
     public Material? SkinMaterial { get; set; }
@@ -96,7 +125,7 @@ public partial class ModelInstance : Node3D
         new(-translation.X, translation.Z, -translation.Y);
 
     /// <summary>The holder-relative position of the model, scaled like the engine's <c>mdltrans</c>.</summary>
-    private Vector3 ModelOffset() => ModelScale * OffsetToModelFrame(ModelTranslation);
+    protected virtual Vector3 ModelOffset() => ModelScale * OffsetToModelFrame(ModelTranslation);
 
     private bool TryLoadModel()
     {

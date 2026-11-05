@@ -51,6 +51,71 @@ public class PlayerViewWeaponTest : GoTestBase
         TestAssert.True(anchor != null, "body exposes the Weapon attachment node");
         TestAssert.True(anchor!.GetChildren().Contains(body.ViewWeapon),
             "weapon parented under the Weapon node");
+
+        // Rifle has its roll axis corrected by -90° on X so it stands upright.
+        TestAssert.Equal(new Vector3(-90f, 0f, 0f), body.ViewWeapon!.ModelRotationDegrees, "rifle has base -90° X rotation");
+        TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.PositionOffset, "rifle has zero position offset");
+
+        // In models where `Weapon` is an unweighted tag joint (mrfixit), GetOrCreateWeaponAnchor
+        // reparents `Weapon` under a BoneAttachment3D bound to the parent bone (`HandGoal.R`)
+        // so third-person view weapons dynamically follow the character's hand animations.
+        TestAssert.True(anchor.GetParent() is BoneAttachment3D, "Weapon node parented under BoneAttachment3D");
+        var boneAtt = (BoneAttachment3D)anchor.GetParent()!;
+        TestAssert.Equal("HandGoal.R", boneAtt.BoneName, "BoneAttachment3D tracks HandGoal.R bone");
+
+        body.SetViewWeapon("vwep/rocket");
+        TestAssert.True(body.ViewWeapon != null, "rocket launcher view weapon attached");
+        TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.ModelRotationDegrees, "rocket launcher has zero rotation correction");
+        TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.PositionOffset, "rocket launcher has zero position offset");
+
+        body.SetViewWeapon("vwep/shotg");
+        TestAssert.True(body.ViewWeapon != null, "shotgun view weapon attached");
+        TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.ModelRotationDegrees, "shotgun has zero rotation correction");
+        TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.PositionOffset, "shotgun has zero position offset");
+
+        // Verify ViewWeaponOffset property updates all cached weapons live
+        body.ViewWeaponOffset = new Vector3(0.1f, 0.2f, 0.3f);
+        TestAssert.Equal(new Vector3(0.1f, 0.2f, 0.3f), body.ViewWeapon!.PositionOffset, "shotgun reflects custom offset");
+        body.SetViewWeapon("vwep/rocket");
+        TestAssert.Equal(new Vector3(0.1f, 0.2f, 0.3f), body.ViewWeapon!.PositionOffset, "rocket launcher combines base + custom offset");
+
+        // Reset offset
+        body.ViewWeaponOffset = Vector3.Zero;
+        TestAssert.Equal(Vector3.Zero, body.ViewWeapon!.PositionOffset, "rocket launcher restored to base offset");
+
+        holder.QueueFree();
+    }
+
+    [Test]
+    public void AttachesWeaponToOgro()
+    {
+        var catalog = LoadCatalog();
+        if (catalog == null) { GD.Print("[vwep] no converted models; skipping"); return; }
+        if (catalog.Get("vwep/rifle") == null || catalog.Get("ogro2/blue") == null)
+        {
+            GD.Print("[vwep] ogro2/blue or vwep/rifle missing; skipping");
+            return;
+        }
+
+        var holder = new Node3D();
+        TestScene.AddChild(holder);
+        var body = new PlayerModel { Name = "PlayerModel_Ogro" };
+        holder.AddChild(body);
+        // Ogro2 is playermodel index 2
+        body.Configure(catalog, null, 2, 1, viewWeapon: "vwep/rifle");
+
+        if (!body.ModelLoaded) { GD.Print("[vwep] ogro2 body glb missing; skipping"); return; }
+
+        TestAssert.True(body.ViewWeapon != null, "ogro has view weapon attached");
+        TestAssert.Equal("vwep/rifle", body.ViewWeaponPath, "ogro view weapon path recorded");
+        TestAssert.True(body.ViewWeapon!.ModelLoaded, "ogro view weapon glb loaded");
+        TestAssert.True(body.ViewWeapon!.Visible, "ogro view weapon visible");
+
+        // Can swap weapons on ogro as well
+        body.SetViewWeapon("vwep/rocket");
+        TestAssert.True(body.ViewWeapon != null, "ogro swapped to rocket");
+        TestAssert.Equal("vwep/rocket", body.ViewWeaponPath, "ogro rocket path");
+
         holder.QueueFree();
     }
 

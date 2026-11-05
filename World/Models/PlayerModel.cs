@@ -43,6 +43,29 @@ public partial class PlayerModel : ModelInstance
     /// <summary>Number of view weapon models currently cached in the bank.</summary>
     public int CachedViewWeaponCount => _viewWeapons.Count;
 
+    private Vector3 _viewWeaponOffset = Vector3.Zero;
+
+    /// <summary>
+    /// Extra position offset applied to the attached view weapon in anchor space.
+    /// Combined with <see cref="PlayerViewWeapon.GetBaseOffset"/> to align weapons with
+    /// the player character's hand and shoulder.
+    /// Exported so it can be nudged from the remote inspector (it updates live).
+    /// </summary>
+    [Export]
+    public Vector3 ViewWeaponOffset
+    {
+        get => _viewWeaponOffset;
+        set
+        {
+            _viewWeaponOffset = value;
+            foreach (var weapon in _viewWeapons.Values)
+            {
+                if (GodotObject.IsInstanceValid(weapon))
+                    weapon.PositionOffset = PlayerViewWeapon.GetBaseOffset(weapon.ModelPath) + value;
+            }
+        }
+    }
+
     private Vector3 _viewWeaponRotationDegrees = Vector3.Zero;
 
     /// <summary>
@@ -61,13 +84,16 @@ public partial class PlayerModel : ModelInstance
             foreach (var weapon in _viewWeapons.Values)
             {
                 if (GodotObject.IsInstanceValid(weapon))
-                    weapon.ModelRotationDegrees = value;
+                    weapon.ModelRotationDegrees = PlayerViewWeapon.GetBaseRotationDegrees(weapon.ModelPath) + value;
             }
         }
     }
 
     /// <summary>True once the baked glb supplied an <see cref="AnimationPlayer"/> with clips.</summary>
     public bool Animated => _player != null && _player.GetAnimationList().Length > 0;
+
+    /// <summary>The internal <see cref="AnimationPlayer"/> driving the model's baked clips.</summary>
+    public AnimationPlayer? AnimPlayer => _player;
 
     private AnimationPlayer? _player;
     private readonly Dictionary<string, float> _animSpeeds = new();
@@ -185,15 +211,72 @@ public partial class PlayerModel : ModelInstance
 
     private Node3D? GetOrCreateWeaponAnchor()
     {
-        if (Skeleton != null && Skeleton.FindBone(_weaponBone) >= 0)
+        if (Skeleton != null)
         {
-            if (Skeleton.GetNodeOrNull<BoneAttachment3D>("WeaponBone") is { } existing)
-                return existing;
-            var attachment = new BoneAttachment3D { Name = "WeaponBone", BoneName = _weaponBone };
-            Skeleton.AddChild(attachment);
-            return attachment;
+            if (Skeleton.FindBone(_weaponBone) >= 0)
+            {
+                if (Skeleton.GetNodeOrNull<BoneAttachment3D>("WeaponBone") is { } existing)
+                    return existing;
+                var attachment = new BoneAttachment3D { Name = "WeaponBone", BoneName = _weaponBone };
+                Skeleton.AddChild(attachment);
+                return attachment;
+            }
+
+            // Tag joint (e.g. "Weapon" in mrfixit) without vertex weights:
+            // Godot imported it as a plain Node3D under the parent joint node.
+            // Plain Node3D children under Skeleton3D are NOT updated by bone animations.
+            // Reparent the tag node under a BoneAttachment3D bound to the parent bone
+            // so it dynamically tracks the animated hand (e.g. hold 4, hold 2).
+            if (FindChild(_weaponBone, recursive: true, owned: false) is Node3D tagNode)
+            {
+                if (tagNode.GetParent() is BoneAttachment3D)
+                    return tagNode;
+
+                string? parentBoneName = FindAncestorBoneName(Skeleton, tagNode.GetParent());
+                if (!string.IsNullOrEmpty(parentBoneName))
+                {
+                    var boneAtt = Skeleton.GetNodeOrNull<BoneAttachment3D>("WeaponBone");
+                    if (boneAtt == null)
+                    {
+                        boneAtt = new BoneAttachment3D { Name = "WeaponBone", BoneName = parentBoneName };
+                        Skeleton.AddChild(boneAtt);
+                    }
+                    var localTransform = tagNode.Transform;
+                    tagNode.GetParent()?.RemoveChild(tagNode);
+                    boneAtt.AddChild(tagNode);
+                    tagNode.Transform = localTransform;
+                    return tagNode;
+                }
+
+                return tagNode;
+            }
         }
-        return FindChild(_weaponBone, recursive: true, owned: false) as Node3D;
+
+        if (FindChild(_weaponBone, recursive: true, owned: false) is Node3D found)
+            return found;
+
+        // Fallback for models without a tag bone (e.g. static IQM/MD2 like ogro):
+        // attach to the internal Model holder so the weapon is wired up and visible.
+        return GetNodeOrNull<Node3D>("Model") ?? this;
+    }
+
+    private static string? FindAncestorBoneName(Skeleton3D skeleton, Node? node)
+    {
+        while (node != null && node != skeleton)
+        {
+            string name = node.Name;
+            if (skeleton.FindBone(name) >= 0)
+                return name;
+
+            // Godot's glTF importer replaces '.' with '_' in node names
+            // (e.g. bone "HandGoal.R" -> node "HandGoal_R").
+            string dotName = name.Replace('_', '.');
+            if (skeleton.FindBone(dotName) >= 0)
+                return dotName;
+
+            node = node.GetParent();
+        }
+        return null;
     }
 
     /// <summary>
@@ -231,7 +314,8 @@ public partial class PlayerModel : ModelInstance
                 GlbOsPath = info.GlbOsPath,
                 ModelScale = info.Scale / bodyScale,
                 ModelTranslation = info.Translation,
-                ModelRotationDegrees = ViewWeaponRotationDegrees,
+                PositionOffset = PlayerViewWeapon.GetBaseOffset(_viewWeaponName) + ViewWeaponOffset,
+                ModelRotationDegrees = PlayerViewWeapon.GetBaseRotationDegrees(_viewWeaponName) + ViewWeaponRotationDegrees,
                 KeepSkeleton = true,
                 SkinMaterials = vwepSkins,
                 SkinMaterial = vwepSkins.Count > 0 ? vwepSkins[0] : ModelSkin.Build(info, _textures, _skinCache ?? ModelCache.SkinCache),
@@ -277,7 +361,8 @@ public partial class PlayerModel : ModelInstance
                 GlbOsPath = info.GlbOsPath,
                 ModelScale = info.Scale / bodyScale,
                 ModelTranslation = info.Translation,
-                ModelRotationDegrees = ViewWeaponRotationDegrees,
+                PositionOffset = PlayerViewWeapon.GetBaseOffset(vwep) + ViewWeaponOffset,
+                ModelRotationDegrees = PlayerViewWeapon.GetBaseRotationDegrees(vwep) + ViewWeaponRotationDegrees,
                 KeepSkeleton = true,
                 SkinMaterials = vwepSkins,
                 SkinMaterial = vwepSkins.Count > 0 ? vwepSkins[0] : ModelSkin.Build(info, _textures, _skinCache ?? ModelCache.SkinCache),
