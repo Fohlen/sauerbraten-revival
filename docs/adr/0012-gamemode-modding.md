@@ -453,6 +453,44 @@ public partial class GameModeInfo : Resource
 }
 ```
 
+### 2.4 Explicit Override & Merge Policy (`ModeOverrideMask`)
+
+To enable game modes to compose reusable mutator presets with custom inline overrides (such as an instagib mode with custom `SpawnHealth` or `DamageScale`), `GameModeInfo` implements an explicit 3-stage override and merge cascade evaluated during `Bake()`:
+
+1. **Stage 1 (Objective Defaults)**:
+   The underlying objective resource (`ModeObjectiveResource`) supplies baseline defaults (such as `DefaultSpawnArmour`, e.g. 50 in CTF, 25 in DM) when no mutator is bound.
+2. **Stage 2 (Mutator Preset)**:
+   If a `Mutator` preset ID is specified, its loadout and combat fields serve as the baseline template (e.g. `insta` sets `SpawnHealth = 1`, `SpawnGun = Rifle`, `SpawnArmour = 0`, `AllowedItems = None`).
+3. **Stage 3 (Mode-Level Inline Overrides)**:
+   Any loadout or combat fields explicitly defined or assigned on the mode (tracked via the `ModeOverrideMask` bitfield) override the mutator preset. The mutator only populates fields that have **not** been explicitly flagged on the mode.
+
+```csharp
+[Flags]
+public enum ModeOverrideMask : uint
+{
+    None                = 0,
+    SpawnHealth         = 1 << 0,
+    MaxHealth           = 1 << 1,
+    SpawnArmour         = 1 << 2,
+    SpawnArmourType     = 1 << 3,
+    SpawnGun            = 1 << 4,
+    SpawnAmmo           = 1 << 5,
+    RandomGunsCount     = 1 << 6,
+    RandomGunsAmmoScale = 1 << 7,
+    AllowedItems        = 1 << 8,
+    ItemRespawnScale    = 1 << 9,
+    InfiniteAmmo        = 1 << 10,
+    DamageScale         = 1 << 11,
+    SelfDamageScale     = 1 << 12,
+    SelfPushScale       = 1 << 13,
+    HitPushScale        = 1 << 14,
+    FriendlyFireScale   = 1 << 15,
+    All                 = 0xFFFF,
+}
+```
+
+Whenever an overridable property setter is invoked (either via C# object initializers or deserialized from a `.tres` resource), `GameModeInfo` automatically sets the corresponding bit in `Overrides`. Mod authors can also inspect `HasOverride(mask)` or invoke `ClearOverrides()` to reset the mode back to pure mutator inheritance.
+
 ---
 
 ## 3. Built-In Modes and Catalogs

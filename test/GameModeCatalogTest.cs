@@ -107,4 +107,137 @@ public class GameModeCatalogTest : GoTestBase
         var editObj = edit.CreateObjective();
         TestAssert.True(editObj is EditObjective, "coop_edit creates EditObjective");
     }
+
+    [Test]
+    public void Bake_MutatorWithSpawnHealthOverride_PreservesHealthAndInheritsMutatorLoadout()
+    {
+        var mode = new GameModeInfo
+        {
+            Id = "insta_custom_health",
+            Mutator = "insta",
+            SpawnHealth = 50,
+        };
+
+        TestAssert.True(mode.HasOverride(ModeOverrideMask.SpawnHealth), "SpawnHealth override is flagged");
+        TestAssert.False(mode.HasOverride(ModeOverrideMask.SpawnGun), "SpawnGun override is not flagged");
+
+        mode.Bake();
+
+        TestAssert.Equal(50, mode.SpawnHealth, "custom SpawnHealth override preserved");
+        TestAssert.Equal(Gun.Rifle, mode.SpawnGun, "SpawnGun inherited from insta mutator");
+        TestAssert.Equal(0, mode.SpawnArmour, "SpawnArmour inherited from insta mutator");
+        TestAssert.Equal(ItemSpawnMask.None, mode.AllowedItems, "AllowedItems inherited from insta mutator");
+        TestAssert.Equal(1 << (int)Gun.Rifle, mode.WeaponPoolMask, "WeaponPoolMask matches insta mutator");
+    }
+
+    [Test]
+    public void Bake_MutatorWithDamageScaleOverride_PreservesDamageScaleAndInheritsInstaHealth()
+    {
+        var mode = new GameModeInfo
+        {
+            Id = "insta_custom_damage",
+            Mutator = "insta",
+            DamageScale = 2.0f,
+        };
+
+        TestAssert.True(mode.HasOverride(ModeOverrideMask.DamageScale), "DamageScale override is flagged");
+        TestAssert.False(mode.HasOverride(ModeOverrideMask.SpawnHealth), "SpawnHealth override is not flagged");
+
+        mode.Bake();
+
+        TestAssert.Equal(2.0f, mode.DamageScale, "custom DamageScale override preserved");
+        TestAssert.Equal(1, mode.SpawnHealth, "SpawnHealth inherited from insta mutator");
+        TestAssert.Equal(Gun.Rifle, mode.SpawnGun, "SpawnGun inherited from insta mutator");
+    }
+
+    [Test]
+    public void Bake_MutatorWithMultipleOverrides_ComposesCorrectly()
+    {
+        var mode = new GameModeInfo
+        {
+            Id = "insta_composite",
+            Mutator = "insta",
+            SpawnHealth = 75,
+            DamageScale = 1.5f,
+            SpawnArmour = 50,
+            SpawnArmourType = ArmourType.Blue,
+            AllowedItems = ItemSpawnMask.Health,
+        };
+
+        mode.Bake();
+
+        TestAssert.Equal(75, mode.SpawnHealth, "custom SpawnHealth preserved");
+        TestAssert.Equal(1.5f, mode.DamageScale, "custom DamageScale preserved");
+        TestAssert.Equal(50, mode.SpawnArmour, "custom SpawnArmour preserved");
+        TestAssert.Equal(ArmourType.Blue, mode.SpawnArmourType, "custom SpawnArmourType preserved");
+        TestAssert.Equal(ItemSpawnMask.Health, mode.AllowedItems, "custom AllowedItems preserved");
+        TestAssert.True(mode.CanSpawnItem(ItemType.Health), "can spawn health pickup");
+        TestAssert.False(mode.CanSpawnItem(ItemType.Shells), "cannot spawn ammo pickups");
+
+        // Non-overridden properties must come from mutator
+        TestAssert.Equal(Gun.Rifle, mode.SpawnGun, "SpawnGun inherited from insta");
+        TestAssert.Equal(100, mode.MaxHealth, "MaxHealth inherited from insta");
+        TestAssert.Equal(100, mode.SpawnAmmo[(int)Gun.Rifle], "Rifle ammo inherited from insta");
+    }
+
+    [Test]
+    public void Bake_MutatorWithSpawnAmmoOverride_ExpandsWeaponPoolMask()
+    {
+        var instaAmmo = (int[])GameMutatorCatalog.Get("insta").SpawnAmmo.Clone();
+        instaAmmo[(int)Gun.Shotgun] = 10;
+
+        var mode = new GameModeInfo
+        {
+            Id = "insta_with_shotgun",
+            Mutator = "insta",
+            SpawnAmmo = instaAmmo,
+        };
+
+        TestAssert.True(mode.HasOverride(ModeOverrideMask.SpawnAmmo), "SpawnAmmo override flagged via property setter");
+
+        mode.Bake();
+
+        TestAssert.Equal(10, mode.SpawnAmmo[(int)Gun.Shotgun], "custom shotgun ammo preserved");
+        TestAssert.Equal(100, mode.SpawnAmmo[(int)Gun.Rifle], "rifle ammo preserved from custom array");
+        int expectedMask = (1 << (int)Gun.Rifle) | (1 << (int)Gun.Shotgun);
+        TestAssert.Equal(expectedMask, mode.WeaponPoolMask, "weapon pool mask includes both Rifle and Shotgun");
+    }
+
+    [Test]
+    public void Bake_ObjectiveDefaultArmour_RespectsModeOverride()
+    {
+        // CTF default spawn armour is 50
+        var ctfDefault = new GameModeInfo { Id = "test_ctf_default", ObjectiveId = "ctf" };
+        ctfDefault.Bake();
+        TestAssert.Equal(50, ctfDefault.SpawnArmour, "CTF default armour is 50");
+
+        // Custom CTF mode overriding spawn armour to 25
+        var ctfCustom = new GameModeInfo { Id = "test_ctf_custom", ObjectiveId = "ctf", SpawnArmour = 25 };
+        ctfCustom.Bake();
+        TestAssert.Equal(25, ctfCustom.SpawnArmour, "custom CTF armour override of 25 is preserved");
+
+        // Custom CTF mode overriding spawn armour to 100
+        var ctfHeavy = new GameModeInfo { Id = "test_ctf_heavy", ObjectiveId = "ctf", SpawnArmour = 100 };
+        ctfHeavy.Bake();
+        TestAssert.Equal(100, ctfHeavy.SpawnArmour, "custom CTF armour override of 100 is preserved");
+    }
+
+    [Test]
+    public void Bake_ClearOverrides_RestoresFullMutatorInheritance()
+    {
+        var mode = new GameModeInfo
+        {
+            Id = "insta_revert",
+            Mutator = "insta",
+            SpawnHealth = 200,
+        };
+        mode.Bake();
+        TestAssert.Equal(200, mode.SpawnHealth, "initial override baked");
+
+        mode.ClearOverrides();
+        TestAssert.Equal(ModeOverrideMask.None, mode.Overrides, "overrides cleared");
+
+        mode.Bake();
+        TestAssert.Equal(1, mode.SpawnHealth, "re-baked health restored to mutator default (1)");
+    }
 }
