@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.Tests;
@@ -388,5 +389,67 @@ public partial class FlagManagerTest : TestClass
         TestAssert.True(node.Visible, "node is visible");
         TestAssert.Equal(flag.SpawnLoc, node.Position, "node position matches flag position");
         node.Free();
+    }
+
+    [Test]
+    public async Task MapWorldBuildCtfContainsExactExpectedFlags()
+    {
+        var world = new MapWorld
+        {
+            OgzPath = "base/bt_falls.ogz",
+            Mode = GetMode("ctf"),
+            ComputeVisuals = false,
+        };
+        TestScene.AddChild(world);
+        try
+        {
+            await world.BuildAsync();
+
+            TestAssert.True(world.Flags != null, "world.Flags initialized");
+            TestAssert.Equal(2, world.Flags!.Flags.Count, "exactly 2 flags in FlagManager (no duplicate addition)");
+            TestAssert.Equal(2, world.FlagNodes.Count, "exactly 2 visual FlagNodes built");
+
+            var flag0 = world.Flags.Flags[0];
+            TestAssert.Equal(0, flag0.Id, "flag 0 id");
+            TestAssert.Equal(1, flag0.Team, "flag 0 team");
+
+            var flag1 = world.Flags.Flags[1];
+            TestAssert.Equal(1, flag1.Id, "flag 1 id");
+            TestAssert.Equal(2, flag1.Team, "flag 1 team");
+
+            TestAssert.Equal(0, world.FlagNodes[0].FlagId, "flagNode 0 id");
+            TestAssert.Equal(1, world.FlagNodes[0].Team, "flagNode 0 team");
+            TestAssert.Equal(1, world.FlagNodes[1].FlagId, "flagNode 1 id");
+            TestAssert.Equal(2, world.FlagNodes[1].Team, "flagNode 1 team");
+        }
+        finally
+        {
+            world.QueueFree();
+        }
+    }
+
+    [Test]
+    public async Task MapWorldBuildHoldContainsExactExpectedSpawns()
+    {
+        var world = new MapWorld
+        {
+            OgzPath = "base/bt_falls.ogz",
+            Mode = CreateHoldMode(),
+            ComputeVisuals = false,
+        };
+        TestScene.AddChild(world);
+        try
+        {
+            await world.BuildAsync();
+
+            TestAssert.True(world.Flags != null, "world.Flags initialized");
+            TestAssert.Equal(5, world.Flags!.HoldSpawns.Count, "exactly 5 hold spawns from bt_falls bases (no duplicates)");
+            TestAssert.Equal(1, world.Flags.Flags.Count, "exactly 1 hold flag spawned");
+            TestAssert.Equal(1, world.FlagNodes.Count, "exactly 1 visual FlagNode built");
+        }
+        finally
+        {
+            world.QueueFree();
+        }
     }
 }
