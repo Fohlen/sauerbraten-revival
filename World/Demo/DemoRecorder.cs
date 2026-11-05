@@ -165,10 +165,10 @@ public class DemoRecorder
     /// <summary>
     /// Records a player spawn / respawn event.
     /// </summary>
-    public void RecordSpawn(Vector3 pos, float yaw, int lifeSequence = 0, int gun = 0, int health = 100, int armour = 0, int author = 0)
+    public void RecordSpawn(Vector3 pos, float yaw, int lifeSequence = 0, int gun = 0, int health = 100, int armour = 0, System.Collections.Generic.IList<int>? ammo = null, int author = 0)
     {
         if (!IsRecording) return;
-        _commands.Add(Command.CreatePlayerSpawn(pos, yaw, lifeSequence, gun, health, armour, author));
+        _commands.Add(Command.CreatePlayerSpawn(pos, yaw, lifeSequence, gun, health, armour, ammo, author));
     }
 
     /// <summary>

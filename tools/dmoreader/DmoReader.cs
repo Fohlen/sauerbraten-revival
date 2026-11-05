@@ -125,6 +125,7 @@ public sealed class DmoSpawn
     public int SelectedGun { get; set; }
     public int Health { get; set; }
     public int Armour { get; set; }
+    public int[]? Ammo { get; set; }
 }
 
 /// <summary>
@@ -457,7 +458,9 @@ public static class DmoReader
                         int arm = p.GetInt();
                         int armtype = p.GetInt();
                         int gun = p.GetInt();
-                        for (int k = 0; k < 6; ++k) p.GetInt(); // ammo
+                        int[] ammo = new int[7];
+                        ammo[0] = 1; // Fist
+                        for (int k = 1; k <= 6; ++k) ammo[k] = p.GetInt(); // SG, CG, RL, Rifle, GL, Pistol
                         dmo.Spawns.Add(new DmoSpawn
                         {
                             Millis = millis,
@@ -465,7 +468,8 @@ public static class DmoReader
                             LifeSequence = lifeseq,
                             SelectedGun = gun,
                             Health = hp,
-                            Armour = arm
+                            Armour = arm,
+                            Ammo = ammo
                         });
                         break;
                     }
@@ -642,7 +646,8 @@ public static class DmoReader
                     LifeSequence = s.LifeSequence,
                     SelectedGun = s.SelectedGun >= 0 ? s.SelectedGun : GunRifle,
                     Health = s.Health > 0 ? s.Health : 100,
-                    Armour = s.Armour
+                    Armour = s.Armour,
+                    Ammo = s.Ammo != null ? new List<int>(s.Ammo) : null
                 })
             });
         }
@@ -778,11 +783,26 @@ public static class DmoReader
             initYaw = firstPosList[0].Yaw;
         }
 
+        var peers = new List<DemoPeerInfo>();
+        foreach (var cn in activeCns)
+        {
+            int mappedPeer = MapCn(cn);
+            var p = dmo.EnsurePlayer(cn);
+            peers.Add(new DemoPeerInfo
+            {
+                PeerId = mappedPeer,
+                Name = string.IsNullOrWhiteSpace(p.Name) ? $"Player {mappedPeer}" : p.Name,
+                Team = string.IsNullOrWhiteSpace(p.Team) ? "good" : p.Team,
+                Playermodel = p.Playermodel
+            });
+        }
+
         return new DemoPackage
         {
             FormatVersion = 1,
             MapName = dmo.MapName,
             GameMode = dmo.GameModeName,
+            Peers = peers,
             InitialSpawnPos = initPos,
             InitialSpawnYaw = initYaw,
             Commands = commands

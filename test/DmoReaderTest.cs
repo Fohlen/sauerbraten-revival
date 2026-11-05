@@ -6,6 +6,8 @@ using Godot;
 using SauerbratenRevival.Format;
 using SauerbratenRevival.Tools.DmoReader;
 using SauerbratenRevival.World.Demo;
+using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Game.Players;
 
 namespace SauerbratenRevival.Tests;
 
@@ -251,7 +253,7 @@ public class DmoReaderTest : GoTestBase
         TestAssert.Equal("instagib", package.GameMode, "Package gamemode is instagib");
         TestAssert.True(package.Commands != null && package.Commands.Count > 10000, "Package contains full expanded command sequence");
 
-        // Ensure all spawn commands have valid map geometry coordinates (NOT 0,0,0!)
+        // Ensure all spawn commands have valid map geometry coordinates (NOT 0,0,0!) and ammo
         int spawnCount = 0;
         foreach (var cmd in package.Commands!)
         {
@@ -261,9 +263,18 @@ public class DmoReaderTest : GoTestBase
                 TestAssert.True(cmd.PlayerSpawn.Pos.X > 100f, "Spawn X is in map bounds");
                 TestAssert.True(cmd.PlayerSpawn.Pos.Y > 100f, "Spawn Y is in map bounds");
                 TestAssert.True(cmd.PlayerSpawn.Pos.Z > 100f, "Spawn Z is in map bounds");
+                TestAssert.True(cmd.PlayerSpawn.Ammo != null && cmd.PlayerSpawn.Ammo.Count >= 7, "Spawn has ammo list");
+                TestAssert.Equal(100, cmd.PlayerSpawn.Ammo![4], "Instagib rifle ammo is 100");
             }
         }
         TestAssert.True(spawnCount > 0, "Spawns exist in commands");
+
+        // Verify peers are populated for multi-player demo
+        TestAssert.True(package.Peers != null && package.Peers.Count == 2, "2 peers populated in package");
+        TestAssert.Equal(0, package.Peers![0].PeerId, "Peer 0 is mapped primary");
+        TestAssert.Equal("Rexus|sp4nk|", package.Peers[0].Name, "Peer 0 name is Rexus");
+        TestAssert.Equal(1, package.Peers[1].PeerId, "Peer 1 is opponent");
+        TestAssert.Equal("Cannibal", package.Peers[1].Name, "Peer 1 name is Cannibal");
 
         // Encode to FlatBuffers binary
         byte[] packageBytes = package.Encode();
@@ -273,10 +284,19 @@ public class DmoReaderTest : GoTestBase
         var decoded = DemoPackage.Decode(packageBytes);
         TestAssert.Equal(package.Commands.Count, decoded.Commands?.Count ?? 0, "Decoded command count matches");
 
-        // Verify DemoReplayer can initialize with decoded package
+        // Verify DemoReplayer can initialize with decoded package and dispatches spawn with correct ammo
         var replayer = new DemoReplayer(decoded);
         TestAssert.False(replayer.IsFinished, "Replayer not finished");
         TestAssert.Equal(package.Commands.Count, replayer.TotalCommands, "Replayer command count matches");
+
+        var testPlayer = new MapPlayer { PlayerId = 0 };
+        testPlayer.Mode = GameModeCatalog.Get("instagib");
+        replayer.Attach(testPlayer);
+        var firstUpdate = replayer.GetUpdate(0, testPlayer);
+        TestAssert.True(firstUpdate != null, "First update received");
+        TestAssert.Equal(100, testPlayer.Combat.Ammo[4], "Player combat ammo rifle is 100");
+        TestAssert.Equal(100, testPlayer.Combat.SelectedAmmo, "Player selected ammo is 100");
+        testPlayer.Free();
     }
 
     private static void WriteString(BinaryWriter writer, string s)

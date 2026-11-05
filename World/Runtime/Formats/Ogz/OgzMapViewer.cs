@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Godot;
 using SauerbratenRevival.World.Entities;
@@ -373,6 +374,9 @@ public partial class OgzMapViewer : Node3D
             ActiveReplayer = new Demo.DemoReplayer(DemoToPlay, mapSource.Sink);
             ActiveReplayer.ApplyInitialPlacement(player);
             ActiveReplayer.Attach(player);
+
+            SpawnRemoteDemoPlayers(mapSource, player);
+
             if (mapSource is IGameWorld gameWorld)
             {
                 ActiveReplayer.AttachWorld(gameWorld);
@@ -392,6 +396,79 @@ public partial class OgzMapViewer : Node3D
         }
     }
 
+    private void SpawnRemoteDemoPlayers(IMapSource mapSource, Game.Players.MapPlayer localPlayer)
+    {
+        if (DemoToPlay == null || ActiveReplayer == null) return;
+
+        var remotePeerIds = new HashSet<int>();
+        if (DemoToPlay.Peers != null)
+        {
+            foreach (var p in DemoToPlay.Peers)
+            {
+                if (p.PeerId != localPlayer.PlayerId) remotePeerIds.Add(p.PeerId);
+            }
+        }
+        if (DemoToPlay.Commands != null)
+        {
+            foreach (var cmd in DemoToPlay.Commands)
+            {
+                if (cmd.PeerId != localPlayer.PlayerId && cmd.PeerId >= 0)
+                {
+                    remotePeerIds.Add(cmd.PeerId);
+                }
+                if (cmd.Op == WorldOp.PlayerDeath && cmd.PlayerDeath != null)
+                {
+                    if (cmd.PlayerDeath.VictimPeerId != localPlayer.PlayerId && cmd.PlayerDeath.VictimPeerId >= 0)
+                    {
+                        remotePeerIds.Add(cmd.PlayerDeath.VictimPeerId);
+                    }
+                }
+            }
+        }
+
+        foreach (int peerId in remotePeerIds)
+        {
+            Format.DemoPeerInfo? peerInfo = null;
+            if (DemoToPlay.Peers != null)
+            {
+                foreach (var p in DemoToPlay.Peers)
+                {
+                    if (p.PeerId == peerId) { peerInfo = p; break; }
+                }
+            }
+
+            var remotePlayer = new Game.Players.MapPlayer
+            {
+                Name = peerInfo?.Name ?? $"Player_{peerId}",
+                PlayerId = peerId,
+                Mode = localPlayer.Mode
+            };
+
+            if (peerInfo != null && !string.IsNullOrWhiteSpace(peerInfo.Team))
+            {
+                remotePlayer.TeamName = peerInfo.Team;
+            }
+
+            mapSource.WorldNode.AddChild(remotePlayer);
+
+            var phys = mapSource.Physics ?? new Physics.OctaPhysics(mapSource.Octa ?? new Octa(10));
+            remotePlayer.Setup(phys, Vector3.Zero, 0f);
+            mapSource.RegisterPlayer(remotePlayer);
+
+            remotePlayer.WeaponEffects = mapSource.WeaponEffects;
+            remotePlayer.Items = mapSource.Items;
+            remotePlayer.Flags = mapSource.Flags;
+            remotePlayer.JumpPads = mapSource.JumpPads;
+            remotePlayer.Teleports = mapSource.Teleports;
+
+            int mdlIdx = (peerInfo != null && peerInfo.Playermodel >= 0) ? peerInfo.Playermodel : (PlayerModelIndex >= 0 ? PlayerModelIndex : 0);
+            AttachPlayerModel(remotePlayer, mapSource, mdlIdx);
+
+            ActiveReplayer.Attach(remotePlayer);
+            GD.Print($"[viewer] spawned remote demo player '{remotePlayer.Name}' (peer {peerId}, team {remotePlayer.Team}, model {mdlIdx})");
+        }
+    }
+
     /// <summary>
     /// Attach a converted body model to the player (engine <c>playermodels</c>, see
 	/// render.cpp). Leaving <see cref="PlayerModelIndex"/> negative keeps the scene's
@@ -399,15 +476,16 @@ public partial class OgzMapViewer : Node3D
 	/// the player so <see cref="Game.Players.MapPlayer.SyncBodyModel"/> can keep it upright at the
 	/// feet, independent of the camera view pitch.
 	/// </summary>
-    private void AttachPlayerModel(Game.Players.MapPlayer player, IMapSource mapSource)
+    private void AttachPlayerModel(Game.Players.MapPlayer player, IMapSource mapSource, int modelIndex = -1)
     {
-        if (PlayerModelIndex < 0) return;
+        int mdlIdx = modelIndex >= 0 ? modelIndex : PlayerModelIndex;
+        if (mdlIdx < 0) return;
 
-        ModelCache.PreloadPlayermodel(PlayerModelIndex, mapSource.Models, mapSource.Textures, player.Team);
+        ModelCache.PreloadPlayermodel(mdlIdx, mapSource.Models, mapSource.Textures, player.Team);
 
         var gun = (Gun)player.Combat.GunSelect;
 
-        var body = new PlayerModel { Name = "PlayerModel" };
+        var body = new PlayerModel { Name = $"PlayerModel_{player.PlayerId}" };
         mapSource.WorldNode.AddChild(body);
         player.PlayerModel = body;
         player.HidePlaceholderBody = true;
@@ -416,18 +494,18 @@ public partial class OgzMapViewer : Node3D
         // <mdl.hudguns>/<guns[].file> and the third-person view weapon is vweps[]
         // (render.cpp:425, :158). SelectWeapon then keeps them in sync for the rest of
         // the session — it is the single source of truth for the equipped gun.
-        body.Configure(mapSource.Models, mapSource.Textures, PlayerModelIndex, player.Team,
+        body.Configure(mapSource.Models, mapSource.Textures, mdlIdx, player.Team,
             viewWeapon: WeaponCatalog.Vwep(gun));
         player.SyncBodyModelNow();
-        var hudgun = new HudgunModel { Name = "Hudgun" };
-        hudgun.Configure(mapSource.Models, mapSource.Textures, PlayerModelIndex, WeaponCatalog.Get(gun).File, player.Team);
         if (player.GetNodeOrNull<Camera3D>("Camera3D") is { } camera)
         {
+            var hudgun = new HudgunModel { Name = "Hudgun" };
+            hudgun.Configure(mapSource.Models, mapSource.Textures, mdlIdx, WeaponCatalog.Get(gun).File, player.Team);
             camera.AddChild(hudgun);
             player.Hudgun = hudgun;
         }
         player.SelectWeapon(gun);
-        GD.Print($"[viewer] player model '{body.ModelPath}' (index {PlayerModelIndex}, team {player.Team}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
+        GD.Print($"[viewer] player model '{body.ModelPath}' (index {mdlIdx}, team {player.Team}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
     }
 
 

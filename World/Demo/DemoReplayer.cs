@@ -5,6 +5,7 @@ using SauerbratenRevival.Format;
 using SauerbratenRevival.World.Commands;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Runtime;
+using SauerbratenRevival.World.Weapons;
 
 namespace SauerbratenRevival.World.Demo;
 
@@ -233,11 +234,29 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
                             targetPlayer.Entity.O = new Vector3(spawn.Pos.X, spawn.Pos.Y, spawn.Pos.Z);
                             targetPlayer.Entity.Yaw = spawn.Yaw;
                         }
-                        targetPlayer.Combat.Respawn();
+                        if (targetPlayer.Mode != null)
+                        {
+                            targetPlayer.Combat.Spawn(targetPlayer.Mode);
+                        }
+                        else
+                        {
+                            targetPlayer.Combat.Respawn();
+                        }
                         targetPlayer.Combat.LifeSequence = spawn.LifeSequence;
                         if (spawn.Health > 0) targetPlayer.Health = spawn.Health;
                         if (spawn.Armour > 0) targetPlayer.Combat.Armour = spawn.Armour;
-                        if (spawn.SelectedGun >= 0) targetPlayer.GunSelect = spawn.SelectedGun;
+                        if (spawn.Ammo != null && spawn.Ammo.Count > 0)
+                        {
+                            for (int i = 0; i < spawn.Ammo.Count && i < targetPlayer.Combat.Ammo.Length; i++)
+                            {
+                                targetPlayer.Combat.Ammo[i] = spawn.Ammo[i];
+                            }
+                        }
+                        if (spawn.SelectedGun >= 0)
+                        {
+                            targetPlayer.GunSelect = spawn.SelectedGun;
+                            targetPlayer.SelectWeapon((Gun)spawn.SelectedGun);
+                        }
                         targetPlayer.Entity.State = Physics.PhysEnt.CsAlive;
                         targetPlayer.SyncTransform();
                     }
@@ -294,6 +313,10 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
             player.Entity.O = new Vector3(Demo.InitialSpawnPos.X, Demo.InitialSpawnPos.Y, Demo.InitialSpawnPos.Z);
             player.Entity.Yaw = Demo.InitialSpawnYaw;
             player.SyncTransform();
+        }
+        if (player.Mode != null)
+        {
+            player.Combat.Spawn(player.Mode);
         }
     }
 }

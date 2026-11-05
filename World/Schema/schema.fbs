@@ -143,6 +143,7 @@ table PlayerSpawnCmd {
     selected_gun: int32;
     health: int32 = 100;
     armour: int32 = 0;
+    ammo: [int32];
 }
 
 table PlayerDeathCmd {
@@ -228,6 +229,13 @@ table NetworkPacket (fs_serializer) {
     commands: [Command];
 }
 
+table DemoPeerInfo {
+    peer_id: int32;
+    name: string;
+    team: string;
+    playermodel: int32;
+}
+
 table DemoPackage (fs_serializer) {
     format_version: uint32 = 1;
     map_name: string;
@@ -235,6 +243,7 @@ table DemoPackage (fs_serializer) {
     initial_spawn_pos: Vec3f;
     initial_spawn_yaw: float32;
     commands: [Command];
+    peers: [DemoPeerInfo];
 }
 
 root_type MapPackage;

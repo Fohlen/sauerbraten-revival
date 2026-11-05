@@ -218,7 +218,7 @@ public partial class Command
         Payload = new(update)
     };
 
-    public static Command CreatePlayerSpawn(Vector3 pos, float yaw, int lifeSequence = 0, int gun = 0, int health = 100, int armour = 0, int author = 0) => new()
+    public static Command CreatePlayerSpawn(Vector3 pos, float yaw, int lifeSequence = 0, int gun = 0, int health = 100, int armour = 0, System.Collections.Generic.IList<int>? ammo = null, int author = 0) => new()
     {
         Op = WorldOp.PlayerSpawn,
         PeerId = author,
@@ -229,7 +229,8 @@ public partial class Command
             LifeSequence = lifeSequence,
             SelectedGun = gun,
             Health = health,
-            Armour = armour
+            Armour = armour,
+            Ammo = ammo
         })
     };
 

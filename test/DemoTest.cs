@@ -607,4 +607,71 @@ public class DemoTest : GoTestBase
             viewer.QueueFree();
         }
     }
+
+    [Test]
+    public void OgzMapViewer_MultiplayerDemo_SpawnsRemotePlayersAndInitializesAmmo()
+    {
+        var demo = new DemoPackage
+        {
+            FormatVersion = 1,
+            MapName = "church51",
+            GameMode = "instagib",
+            InitialSpawnPos = new Vec3f { X = 3123, Y = 945, Z = 3050 },
+            InitialSpawnYaw = 135f,
+            Peers = new List<DemoPeerInfo>
+            {
+                new() { PeerId = 0, Name = "Rexus", Team = "good", Playermodel = 0 },
+                new() { PeerId = 1, Name = "Cannibal", Team = "evil", Playermodel = 1 }
+            },
+            Commands = new List<Command>
+            {
+                Command.CreatePlayerSpawn(new Vector3(3123, 945, 3050), 135f, lifeSequence: 0, gun: 4, health: 100, armour: 0, ammo: new List<int> { 1, 0, 0, 0, 100, 0, 0 }, author: 0),
+                Command.CreatePlayerSpawn(new Vector3(3200, 950, 3050), 45f, lifeSequence: 0, gun: 4, health: 100, armour: 0, ammo: new List<int> { 1, 0, 0, 0, 100, 0, 0 }, author: 1),
+                Command.CreatePlayerUpdate(tick: 0, move: 1, strafe: 0, jumping: false, yaw: 135f, pitch: 0f, attacking: false, selectedGun: 4, author: 0),
+                Command.CreatePlayerUpdate(tick: 0, move: -1, strafe: 0, jumping: false, yaw: 45f, pitch: 0f, attacking: false, selectedGun: 4, author: 1)
+            }
+        };
+
+        var viewer = new SauerbratenRevival.World.Runtime.Formats.Ogz.OgzMapViewer
+        {
+            OgzPath = "base/church51.ogz",
+            SpawnPlayer = true,
+            FrameCamera = false,
+            DemoToPlay = demo
+        };
+
+        var player = new MapPlayer { Name = "Player", PlayerId = 0 };
+        viewer.AddChild(player);
+
+        TestScene.AddChild(viewer);
+
+        try
+        {
+            TestAssert.True(viewer.ActiveReplayer != null, "ActiveReplayer initialized");
+            TestAssert.True(viewer.MapSource is SauerbratenRevival.World.Runtime.IGameWorld gw && gw.Players.Count == 2, "World contains 2 players (local + remote)");
+
+            // Step tick 0 so the spawns are dispatched
+            player.PrePhysicsStep();
+
+            MapPlayer? remote = null;
+            if (viewer.MapSource is SauerbratenRevival.World.Runtime.IGameWorld gameWorld)
+            {
+                foreach (var p in gameWorld.Players)
+                {
+                    if (p.PlayerId == 1) { remote = p; break; }
+                }
+            }
+            TestAssert.True(remote != null, "Remote player with PlayerId=1 found in world");
+            remote!.PrePhysicsStep();
+
+            TestAssert.Equal(100, player.Combat.SelectedAmmo, "Local player has 100 rifle ammo");
+            TestAssert.Equal(100, remote.Combat.SelectedAmmo, "Remote player has 100 rifle ammo");
+            TestAssert.Equal(1, remote.PlayerId, "Remote player peer is 1");
+            TestAssert.Near(3200f, remote.Entity.O.X, 1e-3f, "Remote player spawned at authentic X coordinate");
+        }
+        finally
+        {
+            viewer.QueueFree();
+        }
+    }
 }
