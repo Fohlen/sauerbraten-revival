@@ -29,7 +29,6 @@ load time; there is **no CubeScript** and no offline converter.
 | Resource-based modding | [docs/adr/0010-resource-modding.md](docs/adr/0010-resource-modding.md) | Resource-based modding architecture, 3-tier override cascade, and pre-baked flat lookup tables for zero-alloc hot paths. |
 | Model preloading & weapon caching | [docs/adr/0011-model-preloading.md](docs/adr/0011-model-preloading.md) | Two-tier model preloading, persistent `PackedScene` and skin cache, zero-cost weapon banks, and map loading progress bar. |
 | Game mode & mutator modding | [docs/adr/0012-gamemode-modding.md](docs/adr/0012-gamemode-modding.md) | Composable data-driven game modes (`GameModeInfo`, `GameMutator`, `ModeObjectiveResource`, `IModeObjective`, `ItemSpawnMask`) superseding `ModeFlags`. |
-| Physics modding & velocity models | [docs/adr/0013-physics-modding.md](docs/adr/0013-physics-modding.md) | Declarative `PhysicsConfig` (`.tres`), pre-baked `PhysicsParams` struct, and algebraic `VelocityModel` functions (Sauerbraten lerp, Quake/Source strafe-jumping, Racing anisotropic grip). |
 | Known divergences to preserve | [docs/known-bugs.md](docs/known-bugs.md) |
 
 If a design doc disagrees with `features.md` about ordering, timing or status,
