@@ -390,7 +390,7 @@ public partial class MapWorld : Node3D, IGameWorld
         AddChild(envMaps);
         radiance?.RegisterEnvMaps(envMaps);
         AddChild(PlayerStartBuilder.Build(map, textures));
-        Objective = Mode?.CreateObjective();
+        Objective ??= Mode?.CreateObjective();
         AddChild(ModeEntityBuilder.Build(map, catalogue, modelCatalog, textures, Objective));
         var objectiveRoot = new Node3D { Name = "ObjectiveEntities" };
         Objective?.SetupWorld(this, map.Entities, objectiveRoot);
@@ -405,44 +405,20 @@ public partial class MapWorld : Node3D, IGameWorld
         AddChild(Items);
 
         // Flag manager and visual flag nodes (ctf.h setup). Flags are a ctf-mode
-        // concept: the engine selects ctf/capture mode code from the flags
-        // (client.cpp setclientmode), and only m_ctf builds flag state. Other modes
-        // get an empty manager so player/HUD code can keep a stable reference.
+        // concept: Objective.SetupWorld is authoritative for configuring flag state
+        // and hold spawns. Visual nodes reflect the initialized flag state. Other
+        // modes get an empty manager so player/HUD code can keep a stable reference.
         Flags = (Objective as FlagObjective)?.Flags ?? new FlagManager();
         if (Mode != null) Flags.Mode = Mode;
         var flagsRoot = new Node3D { Name = "Flags" };
         _flagNodes.Clear();
-        bool isFlagMode = Objective is FlagObjective || Mode?.ObjectiveId == "ctf";
-        if (Mode != null && isFlagMode)
+        if (Flags != null && Objective is FlagObjective)
         {
-            bool isHold = (Objective as FlagObjective)?.Resource.Placement == FlagPlacementMode.DynamicHoldSpawns;
-            bool isProtect = (Objective as FlagObjective)?.Resource.ScoreRule == FlagScoreRule.TouchEnemyFlag;
-            if (isHold)
+            foreach (var flag in Flags.Flags)
             {
-                // ctf.h:729: BASE entities are hold spawns; HOLDFLAGS neutral flags
-                // are created dynamically, not baked from the map's FLAG entities.
-                foreach (var (_, e) in map.OfType(EntityType.Base))
-                    Flags.AddHoldSpawn(e.Position);
-                Flags.SetupHoldSpawns();
-                foreach (var flag in Flags.Flags)
-                {
-                    var flagNode = CreateFlagNode(flag.Id, flag.Team, flag.SpawnLoc, 0f, modelCatalog, textures, Mode);
-                    _flagNodes.Add(flagNode);
-                    flagsRoot.AddChild(flagNode);
-                }
-            }
-            else
-            {
-                // ctf.h:311: one flag per team-coloured map FLAG entity.
-                foreach (var (_, e) in map.OfType(EntityType.Flag))
-                {
-                    if (e.Attr2 < 1 || e.Attr2 > 2) continue;
-                    int flagId = Flags.Flags.Count;
-                    Flags.AddFlag(flagId, e.Position, e.Attr2, 0, isProtect: isProtect, spawnAngle: e.Attr1);
-                    var flagNode = CreateFlagNode(flagId, e.Attr2, e.Position, e.Attr1, modelCatalog, textures, Mode);
-                    _flagNodes.Add(flagNode);
-                    flagsRoot.AddChild(flagNode);
-                }
+                var flagNode = CreateFlagNode(flag.Id, flag.Team, flag.SpawnLoc, flag.SpawnAngle, modelCatalog, textures, Mode);
+                _flagNodes.Add(flagNode);
+                flagsRoot.AddChild(flagNode);
             }
         }
         AddChild(flagsRoot);
