@@ -3,6 +3,7 @@ using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
 using SauerbratenRevival.World.Game;
+using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 
@@ -135,5 +136,103 @@ public class RocketProjectileTest : GoTestBase
         // In Sauerbraten weapon.cpp:550, dist < 4 triggers projsplash at v.
         // With step 5ms (1.6 units) and To = 8.1, O reaches 10.8 (dist = 2.7 < 4), detonating at v.X = 9.2.
         TestAssert.Near(9.2f, proj.O.X, 0.2f, "Detonation point in step where dist < 4 triggers");
+    }
+
+    [Test]
+    public void PlayerDirectHitRoutesThroughAttributedDamagePathWithModeScaling()
+    {
+        var customMode = new GameModeInfo
+        {
+            Id = "custom_half_damage",
+            Name = "Half Damage Mode",
+            ObjectiveId = "dm",
+            DamageScale = 0.5f,
+            HitPushScale = 1.0f,
+        };
+        customMode.Bake();
+
+        var shooter = new MapPlayer { PlayerId = 1, Mode = customMode };
+        shooter.Respawn(new Vector3(0f, 0f, 0f));
+
+        var target = new MapPlayer { PlayerId = 2, Mode = customMode };
+        target.Respawn(new Vector3(80f, 0f, 0f));
+        target.Combat.Health = 100;
+        target.Combat.Armour = 0;
+
+        var rl = WeaponCatalog.Get(Gun.RocketLauncher);
+        Vector3 from = new(0f, 0f, 7.5f);
+        Vector3 to = new(200f, 0f, 7.5f);
+
+        var candidates = new List<IExplosionTarget> { shooter, target };
+        var proj = new RocketProjectile(from, to, rl, owner: shooter);
+
+        for (int i = 0; i < 60; i++)
+        {
+            if (proj.Advance(5, world: null, candidates))
+                break;
+        }
+
+        TestAssert.True(proj.Exploded, "Rocket exploded on hitting target player");
+        // Base damage is 120. With DamageScale = 0.5, damage taken is 60 -> health becomes 100 - 60 = 40.
+        TestAssert.Equal(40, target.Combat.Health, "Target player received mode-scaled attributed direct damage (60 dmg, 40 health remaining)");
+        TestAssert.True(target.Entity.Vel.X > 0f, "Target player received push along +X");
+
+        shooter.Free();
+        target.Free();
+    }
+
+    [Test]
+    public void PlayerSplashAndNonPlayerTargetSplashHandledCorrectlyInSameExplosion()
+    {
+        var customMode = new GameModeInfo
+        {
+            Id = "custom_half_damage",
+            Name = "Half Damage Mode",
+            ObjectiveId = "dm",
+            DamageScale = 0.5f,
+            HitPushScale = 1.0f,
+        };
+        customMode.Bake();
+
+        var shooter = new MapPlayer { PlayerId = 1, Mode = customMode };
+        shooter.Respawn(new Vector3(0f, 0f, 0f));
+
+        var playerTarget = new MapPlayer { PlayerId = 2, Mode = customMode };
+        playerTarget.Respawn(new Vector3(80f, 10f, 0f));
+        playerTarget.Combat.Health = 100;
+        playerTarget.Combat.Armour = 0;
+
+        var dummyTarget = new TestProjectileTarget(new Vector3(80f, 10f, 14f));
+
+        // Aim rocket to hit a wall at (80, 0, 7.5)
+        var octa = new Octa(4);
+        foreach (var cube in octa.WorldRoot) cube.EmptyFaces();
+        // Solid wall at X >= 80 (world center X=8..16)
+        // Or simply set to=(80, 0, 7.5) without world barrier so it explodes at endpoint
+        var rl = WeaponCatalog.Get(Gun.RocketLauncher);
+        Vector3 from = new(0f, 0f, 7.5f);
+        Vector3 to = new(80f, 0f, 7.5f);
+
+        var candidates = new List<IExplosionTarget> { shooter, playerTarget, dummyTarget };
+        var proj = new RocketProjectile(from, to, rl, owner: shooter);
+
+        for (int i = 0; i < 60; i++)
+        {
+            if (proj.Advance(5, world: null, candidates))
+                break;
+        }
+
+        TestAssert.True(proj.Exploded, "Rocket exploded at endpoint");
+
+        // Both targets are equidistant from (80, 0, 7.5): dist ~ 10.
+        // Base splash damage = (int)(120 * (1 - 10 / 60)) = 99.
+        // Dummy target is non-player: takes full unscaled damage (100 -> 1 health remaining).
+        TestAssert.Equal(1, dummyTarget.State.Health, "Non-player target took full unscaled 99 damage");
+
+        // Player target has DamageScale = 0.5: takes 49 damage (100 -> 51 health remaining).
+        TestAssert.Equal(51, playerTarget.Combat.Health, "Player target took mode-scaled 49 damage");
+
+        shooter.Free();
+        playerTarget.Free();
     }
 }
