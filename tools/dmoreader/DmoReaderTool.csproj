@@ -20,8 +20,4 @@
   <ItemGroup>
     <FlatSharpSchema Include="../../World/Schema/schema.fbs" />
   </ItemGroup>
-
-  <ItemGroup>
-    <Compile Include="../../World/Demo/DmoReader.cs" Link="DmoReader.cs" />
-  </ItemGroup>
 </Project>

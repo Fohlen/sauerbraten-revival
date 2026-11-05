@@ -216,7 +216,10 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
         }
 
         _players.TryGetValue(peerId, out var targetPlayer);
-        targetPlayer ??= defaultPlayer;
+        if (targetPlayer == null && defaultPlayer != null && (defaultPlayer.PlayerId == peerId || _players.Count == 0))
+        {
+            targetPlayer = defaultPlayer;
+        }
 
         switch (cmd.Op)
         {

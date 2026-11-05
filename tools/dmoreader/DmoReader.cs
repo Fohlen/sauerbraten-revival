@@ -5,7 +5,7 @@ using System.IO.Compression;
 using System.Text;
 using SauerbratenRevival.Format;
 
-namespace SauerbratenRevival.World.Demo;
+namespace SauerbratenRevival.Tools.DmoReader;
 
 /// <summary>
 /// Parsed representation of a Sauerbraten (.dmo) demo file.
@@ -64,7 +64,10 @@ public sealed class DmoPosition
 {
     public int Millis { get; set; }
     public int ClientNum { get; set; }
+    /// <summary>Eye position (Z includes +EyeHeight = 14.0f, matching Entity.O in engine).</summary>
     public Vec3f Pos { get; set; } = new();
+    /// <summary>Feet position from raw N_POS packet.</summary>
+    public Vec3f FeetPos { get; set; } = new();
     public float Yaw { get; set; }
     public float Pitch { get; set; }
     public float Roll { get; set; }
@@ -76,7 +79,7 @@ public sealed class DmoPosition
     public int LifeSequence { get; set; }
 
     public override string ToString() =>
-        $"Pos[T={Millis}ms, CN={ClientNum}, Pos=({Pos.X:F1},{Pos.Y:F1},{Pos.Z:F1}), Yaw={Yaw:F1}, Pitch={Pitch:F1}, Move={Move}, Strafe={Strafe}]";
+        $"Pos[T={Millis}ms, CN={ClientNum}, Eye=({Pos.X:F1},{Pos.Y:F1},{Pos.Z:F1}), Yaw={Yaw:F1}, Pitch={Pitch:F1}, Move={Move}, Strafe={Strafe}]";
 }
 
 public sealed class DmoShot
@@ -133,6 +136,8 @@ public static class DmoReader
     public const float Dmf = 16.0f;
     public const float DvelF = 1.0f;
     public const float Rad = (float)(Math.PI / 180.0);
+    /// <summary>Player eye height above feet in Sauerbraten and SauerbratenRevival.</summary>
+    public const float EyeHeight = 14.0f;
 
     public const int GunFist = 0;
     public const int GunShotgun = 1;
@@ -305,11 +310,16 @@ public static class DmoReader
                 var player = dmo.EnsurePlayer(cn);
                 player.PositionCount++;
 
+                // Store both feet position (from raw packet) and eye position (Z + EyeHeight)
+                var feet = new Vec3f { X = ox, Y = oy, Z = oz };
+                var eye = new Vec3f { X = ox, Y = oy, Z = oz + EyeHeight };
+
                 dmo.Positions.Add(new DmoPosition
                 {
                     Millis = millis,
                     ClientNum = cn,
-                    Pos = new Vec3f { X = ox, Y = oy, Z = oz },
+                    FeetPos = feet,
+                    Pos = eye,
                     Yaw = yaw,
                     Pitch = pitch,
                     Roll = roll,
@@ -513,7 +523,7 @@ public static class DmoReader
                 case 75: p.GetInt(); p.GetInt(); break; // N_DEMOPLAYBACK
                 case 77: break; // N_STOPDEMO
                 case 79: p.GetInt(); p.GetInt(); p.GetInt(); break; // N_TAKEFLAG
-                case 80: p.GetInt(); p.GetInt(); p.GetInt(); break; // N_RETURNFLAG
+                case 80: p.GetInt(); p.GetInt(); break; // N_RETURNFLAG
                 case 81: p.GetInt(); p.GetInt(); p.GetInt(); p.GetInt(); p.GetInt(); break; // N_RESETFLAG
                 case 84: p.GetInt(); p.GetInt(); p.GetInt(); p.GetInt(); p.GetInt(); p.GetInt(); break; // N_DROPFLAG
                 case 85: for (int k = 0; k < 9; ++k) p.GetInt(); break; // N_SCOREFLAG
@@ -542,7 +552,6 @@ public static class DmoReader
                 case 105: p.GetInt(); break; // N_SWITCHMODEL
                 case 106: p.GetString(); break; // N_SWITCHTEAM
                 default:
-                    // Unknown message token; stop parsing this packet to avoid desync
                     return;
             }
         }
@@ -550,43 +559,76 @@ public static class DmoReader
 
     /// <summary>
     /// Translates a parsed <see cref="DmoFile"/> into a revival <see cref="DemoPackage"/>.
-    /// Maps timestamps to 5 ms fixed simulation ticks, expands updates, and chronologically orders all commands.
+    /// Maps timestamps to 5 ms fixed simulation ticks, resolves authentic spawn locations,
+    /// and ensures players are placed accurately in the map geometry.
     /// </summary>
-    /// <param name="dmo">The parsed Sauerbraten demo.</param>
-    /// <param name="remapPrimaryCnToZero">If true, remaps the chosen primary player's CN to 0 (useful for local replay).</param>
-    /// <param name="primaryCn">Explicit primary CN (defaults to first active player found).</param>
-    public static DemoPackage ToDemoPackage(DmoFile dmo, bool remapPrimaryCnToZero = false, int? primaryCn = null)
+    public static DemoPackage ToDemoPackage(DmoFile dmo, bool remapActivePlayers = true, int? primaryCn = null)
     {
         var commands = new List<Command>();
 
-        // Identify active players
-        int targetPrimary = primaryCn ?? -1;
-        if (targetPrimary < 0)
+        // Group positions by player
+        var posByPlayer = new Dictionary<int, List<DmoPosition>>();
+        foreach (var pos in dmo.Positions)
         {
-            foreach (var (_, p) in dmo.Players)
+            if (!posByPlayer.TryGetValue(pos.ClientNum, out var list))
             {
-                if (p.PositionCount > 0)
-                {
-                    targetPrimary = p.ClientNum;
-                    break;
-                }
+                list = new List<DmoPosition>();
+                posByPlayer[pos.ClientNum] = list;
+            }
+            list.Add(pos);
+        }
+
+        // Identify active players
+        var activeCns = new List<int>();
+        if (primaryCn.HasValue && posByPlayer.ContainsKey(primaryCn.Value))
+        {
+            activeCns.Add(primaryCn.Value);
+        }
+        foreach (var (cn, list) in posByPlayer)
+        {
+            if (list.Count > 0 && !activeCns.Contains(cn))
+            {
+                activeCns.Add(cn);
+            }
+        }
+
+        // Mapping from original clientnum to remapped peerId
+        var cnToPeer = new Dictionary<int, int>();
+        if (remapActivePlayers)
+        {
+            for (int i = 0; i < activeCns.Count; i++)
+            {
+                cnToPeer[activeCns[i]] = i; // Primary player -> 0, secondary -> 1, etc.
             }
         }
 
         int MapCn(int cn)
         {
-            if (remapPrimaryCnToZero)
-            {
-                if (cn == targetPrimary) return 0;
-                if (cn == 0) return targetPrimary;
-            }
+            if (cnToPeer.TryGetValue(cn, out int peer)) return peer;
             return cn;
         }
 
-        // 1. Convert Spawns to PlayerSpawn commands
+        // Helper to resolve player position at or immediately following a given timestamp
+        DmoPosition? ResolvePlayerPosAtOrAfter(int cn, int millis)
+        {
+            if (!posByPlayer.TryGetValue(cn, out var list) || list.Count == 0) return null;
+            // Linear scan (or binary search)
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].Millis >= millis) return list[i];
+            }
+            return list[^1];
+        }
+
+        // 1. Convert Spawns to PlayerSpawn commands with authentic coordinates
         foreach (var s in dmo.Spawns)
         {
             int mappedCn = MapCn(s.ClientNum);
+            var spawnPos = ResolvePlayerPosAtOrAfter(s.ClientNum, s.Millis);
+
+            Vec3f pos = spawnPos != null ? spawnPos.Pos : new Vec3f { X = 0, Y = 0, Z = EyeHeight };
+            float yaw = spawnPos != null ? spawnPos.Yaw : 0f;
+
             commands.Add(new Command
             {
                 Op = WorldOp.PlayerSpawn,
@@ -595,11 +637,11 @@ public static class DmoReader
                 Sequence = (ulong)s.Millis,
                 Payload = new(new PlayerSpawnCmd
                 {
-                    Pos = new Vec3f { X = 0, Y = 0, Z = 0 }, // position populated if nearby N_POS exists
-                    Yaw = 0f,
+                    Pos = pos,
+                    Yaw = yaw,
                     LifeSequence = s.LifeSequence,
-                    SelectedGun = s.SelectedGun,
-                    Health = s.Health,
+                    SelectedGun = s.SelectedGun >= 0 ? s.SelectedGun : GunRifle,
+                    Health = s.Health > 0 ? s.Health : 100,
                     Armour = s.Armour
                 })
             });
@@ -620,7 +662,7 @@ public static class DmoReader
                 {
                     VictimPeerId = mappedVic,
                     KillerPeerId = mappedAct,
-                    Gun = GunRifle, // Default duel instagib rifle
+                    Gun = GunRifle,
                     IsSuicide = (mappedVic == mappedAct)
                 })
             });
@@ -634,19 +676,7 @@ public static class DmoReader
             shotsByClientTick.Add((shot.ClientNum, tick));
         }
 
-        // Group positions by player
-        var posByPlayer = new Dictionary<int, List<DmoPosition>>();
-        foreach (var pos in dmo.Positions)
-        {
-            if (!posByPlayer.TryGetValue(pos.ClientNum, out var list))
-            {
-                list = new List<DmoPosition>();
-                posByPlayer[pos.ClientNum] = list;
-            }
-            list.Add(pos);
-        }
-
-        // 3. For each player, generate 5ms updates between recorded positions
+        // 3. For each active player, generate 5ms updates between recorded positions
         foreach (var (cn, posList) in posByPlayer)
         {
             if (posList.Count == 0) continue;
@@ -658,26 +688,49 @@ public static class DmoReader
                 var next = (i + 1 < posList.Count) ? posList[i + 1] : null;
 
                 int startTick = cur.Millis / 5;
-                int endTick = (next != null) ? (next.Millis / 5) : (startTick + 1);
+
+                // Gap handling: If there is a large gap between positions (e.g. > 250ms),
+                // the player was dead or lagged. DO NOT interpolate across map geometry!
+                int endTick;
+                bool largeGap = (next != null && (next.Millis - cur.Millis > 250));
+
+                if (next == null)
+                {
+                    endTick = startTick + 1;
+                }
+                else if (largeGap)
+                {
+                    // Hold current position for up to 100 ms after death, then stop updating until respawn
+                    endTick = startTick + 20; // 20 * 5ms = 100ms
+                }
+                else
+                {
+                    endTick = next.Millis / 5;
+                }
+
                 if (endTick <= startTick) endTick = startTick + 1;
 
-                // Detect jump: rising vertical velocity or physstate transition
                 bool jumping = (cur.PhysState & 7) == 0 && cur.Vel.Z > 1.0f;
 
                 for (int t = startTick; t < endTick; ++t)
                 {
                     bool attacking = shotsByClientTick.Contains((cn, t));
 
-                    // Interpolate position linearly if next position is close in time
-                    float alpha = (endTick > startTick) ? (float)(t - startTick) / (endTick - startTick) : 0f;
-                    Vec3f interpPos = (next != null)
-                        ? new Vec3f
+                    Vec3f interpPos;
+                    if (next != null && !largeGap && endTick > startTick)
+                    {
+                        float alpha = (float)(t - startTick) / (endTick - startTick);
+                        interpPos = new Vec3f
                         {
                             X = cur.Pos.X + (next.Pos.X - cur.Pos.X) * alpha,
                             Y = cur.Pos.Y + (next.Pos.Y - cur.Pos.Y) * alpha,
                             Z = cur.Pos.Z + (next.Pos.Z - cur.Pos.Z) * alpha
-                        }
-                        : cur.Pos;
+                        };
+                    }
+                    else
+                    {
+                        interpPos = cur.Pos;
+                    }
 
                     var update = new PlayerUpdateCmd
                     {
@@ -707,19 +760,19 @@ public static class DmoReader
             }
         }
 
-        // Sort all commands by timestamp/sequence
+        // Sort all commands chronologically by timestamp
         commands.Sort((a, b) =>
         {
             int cmp = a.Timestamp.CompareTo(b.Timestamp);
             if (cmp != 0) return cmp;
-            // Spawns and deaths take priority over updates on the same tick
             return GetOpOrder(a.Op).CompareTo(GetOpOrder(b.Op));
         });
 
-        // Set initial spawn pos/yaw from primary player's first position
-        Vec3f initPos = new Vec3f { X = 0, Y = 0, Z = 0 };
+        // Initial spawn pos/yaw from the primary player's first valid position
+        Vec3f initPos = new Vec3f { X = 0, Y = 0, Z = EyeHeight };
         float initYaw = 0f;
-        if (posByPlayer.TryGetValue(targetPrimary, out var firstPosList) && firstPosList.Count > 0)
+        int primary = activeCns.Count > 0 ? activeCns[0] : 0;
+        if (posByPlayer.TryGetValue(primary, out var firstPosList) && firstPosList.Count > 0)
         {
             initPos = firstPosList[0].Pos;
             initYaw = firstPosList[0].Yaw;

@@ -3,7 +3,6 @@ using System.IO;
 using System.Text.Json;
 using FlatSharp;
 using SauerbratenRevival.Format;
-using SauerbratenRevival.World.Demo;
 
 namespace SauerbratenRevival.Tools.DmoReader;
 
@@ -80,7 +79,7 @@ public static class Program
             return 1;
         }
 
-        var dmo = World.Demo.DmoReader.ReadFile(filePath);
+        var dmo = DmoReader.ReadFile(filePath);
 
         if (json)
         {
@@ -158,10 +157,10 @@ public static class Program
         outPath ??= Path.ChangeExtension(filePath, ".fbs");
 
         Console.WriteLine($"Reading {filePath}...");
-        var dmo = World.Demo.DmoReader.ReadFile(filePath);
+        var dmo = DmoReader.ReadFile(filePath);
 
         Console.WriteLine($"Translating to DemoPackage (Map: {dmo.MapName}, Mode: {dmo.GameModeName}, Duration: {dmo.DurationMillis / 1000}s)...");
-        var package = World.Demo.DmoReader.ToDemoPackage(dmo, remapPrimaryCnToZero: remapPrimary, primaryCn: primaryCn);
+        var package = DmoReader.ToDemoPackage(dmo, remapActivePlayers: remapPrimary, primaryCn: primaryCn);
 
         byte[] buffer = new byte[DemoPackage.Serializer.GetMaxSize(package)];
         int bytesWritten = DemoPackage.Serializer.Write(buffer, package);
@@ -208,7 +207,7 @@ public static class Program
             return 1;
         }
 
-        var dmo = World.Demo.DmoReader.ReadFile(filePath);
+        var dmo = DmoReader.ReadFile(filePath);
         Console.WriteLine("Timestamp(ms),Tick,ClientNum,X,Y,Z,Yaw,Pitch,Move,Strafe,PhysState");
         int count = 0;
         foreach (var pos in dmo.Positions)

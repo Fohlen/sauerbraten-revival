@@ -4,6 +4,7 @@ using System.IO.Compression;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.Format;
+using SauerbratenRevival.Tools.DmoReader;
 using SauerbratenRevival.World.Demo;
 
 namespace SauerbratenRevival.Tests;
@@ -160,9 +161,10 @@ public class DmoReaderTest : GoTestBase
         TestAssert.Equal(1, parsed.Positions.Count, "1 position");
         var p0 = parsed.Positions[0];
         TestAssert.Equal(0, p0.ClientNum, "CN is 0");
-        TestAssert.Near(512f, p0.Pos.X, 1e-4f, "X matches");
-        TestAssert.Near(256f, p0.Pos.Y, 1e-4f, "Y matches");
-        TestAssert.Near(128f, p0.Pos.Z, 1e-4f, "Z matches");
+        TestAssert.Near(512f, p0.FeetPos.X, 1e-4f, "X matches");
+        TestAssert.Near(256f, p0.FeetPos.Y, 1e-4f, "Y matches");
+        TestAssert.Near(128f, p0.FeetPos.Z, 1e-4f, "Feet Z matches");
+        TestAssert.Near(142f, p0.Pos.Z, 1e-4f, "Eye Z matches (feet + 14)");
         TestAssert.Near(90f, p0.Yaw, 1e-4f, "Yaw matches");
         TestAssert.Equal(1, p0.Move, "Move is 1 (forward)");
 
@@ -238,7 +240,8 @@ public class DmoReaderTest : GoTestBase
         TestAssert.Equal(4, p4_0.ClientNum, "First position CN = 4");
         TestAssert.Near(508f, p4_0.Pos.X, 1e-3f, "P4 Pos X = 508");
         TestAssert.Near(420f, p4_0.Pos.Y, 1e-3f, "P4 Pos Y = 420");
-        TestAssert.Near(506.875f, p4_0.Pos.Z, 1e-3f, "P4 Pos Z = 506.875");
+        TestAssert.Near(506.875f, p4_0.FeetPos.Z, 1e-3f, "P4 Feet Z = 506.875");
+        TestAssert.Near(506.875f + 14.0f, p4_0.Pos.Z, 1e-3f, "P4 Eye Z = 520.875");
         TestAssert.Near(353f, p4_0.Yaw, 1e-3f, "P4 Yaw = 353");
         TestAssert.Near(0f, p4_0.Pitch, 1e-3f, "P4 Pitch = 0");
 
@@ -247,6 +250,20 @@ public class DmoReaderTest : GoTestBase
         TestAssert.Equal("duel7", package.MapName, "Package map is duel7");
         TestAssert.Equal("instagib", package.GameMode, "Package gamemode is instagib");
         TestAssert.True(package.Commands != null && package.Commands.Count > 10000, "Package contains full expanded command sequence");
+
+        // Ensure all spawn commands have valid map geometry coordinates (NOT 0,0,0!)
+        int spawnCount = 0;
+        foreach (var cmd in package.Commands!)
+        {
+            if (cmd.Op == WorldOp.PlayerSpawn && cmd.PlayerSpawn?.Pos != null)
+            {
+                spawnCount++;
+                TestAssert.True(cmd.PlayerSpawn.Pos.X > 100f, "Spawn X is in map bounds");
+                TestAssert.True(cmd.PlayerSpawn.Pos.Y > 100f, "Spawn Y is in map bounds");
+                TestAssert.True(cmd.PlayerSpawn.Pos.Z > 100f, "Spawn Z is in map bounds");
+            }
+        }
+        TestAssert.True(spawnCount > 0, "Spawns exist in commands");
 
         // Encode to FlatBuffers binary
         byte[] packageBytes = package.Encode();

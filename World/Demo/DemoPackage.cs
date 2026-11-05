@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using FlatSharp;
 using Godot;
-using SauerbratenRevival.World.Demo;
 
 namespace SauerbratenRevival.Format;
 
@@ -151,8 +150,7 @@ public partial class DemoPackage
     }
 
     /// <summary>
-    /// Loads a demo package from disk (*.fbs, *.bin, or original Sauerbraten *.dmo).
-    /// If loading a classic .dmo file, it is automatically parsed and translated to a DemoPackage.
+    /// Loads a demo package from disk (*.fbs or *.bin).
     /// </summary>
     public static DemoPackage Load(string path)
     {
@@ -161,11 +159,6 @@ public partial class DemoPackage
         if (!File.Exists(globalPath))
         {
             throw new FileNotFoundException($"Demo file not found at '{path}' (resolved '{globalPath}')");
-        }
-        if (globalPath.EndsWith(".dmo", StringComparison.OrdinalIgnoreCase))
-        {
-            var dmo = DmoReader.ReadFile(globalPath);
-            return DmoReader.ToDemoPackage(dmo, remapPrimaryCnToZero: true);
         }
         byte[] bytes = File.ReadAllBytes(globalPath);
         return Decode(bytes);
