@@ -74,7 +74,7 @@ public static class SpawnResolver
         float eyeHeight = MapPlayer.EyeHeight;
         Vector3 loc = spawn.Position with { Z = spawn.Position.Z + eyeHeight };
         bool hasNoItems = mode?.AllowedItems == ItemSpawnMask.None;
-        bool hasCmode = mode?.ObjectiveId is "ctf" or "protect" or "hold" or "rugby";
+        bool hasCmode = mode?.Objective is Game.Objectives.FlagObjectiveResource || mode?.ObjectiveId == "ctf";
         float maxRange = !hasNoItems ? 400.0f : (hasCmode ? 300.0f : 110.0f);
         float minPlayerDist = maxRange;
 

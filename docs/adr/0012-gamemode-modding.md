@@ -47,11 +47,11 @@ We replace `ModeFlags` and hardcoded `FlagManager` wiring with a **Composable Ga
 1. **First-Class Modular Objectives (`ModeObjectiveResource` & `IModeObjective`)**:
    - Objectives are not a closed enum. They are authored as `ModeObjectiveResource` assets (`res://resources/objectives/<id>.tres`) managed by `ObjectiveCatalog` using the [ADR 0010](0010-resource-modding.md) 3-tier override cascade.
    - Each `ModeObjectiveResource` instantiates a runtime `IModeObjective` controller for the active match.
-   - **Everything—Flags (`Ctf`, `Protect`, `Hold`, `Rugby`), `Deathmatch`, `Edit`, `Capture`, `Racing`, `PropHunt`, and Workshop GDScript objectives—plugs into the exact same `IModeObjective` lifecycle** across `MapWorld`, `WorldSimulation`, `MapPlayer`, `ModeEntityBuilder`, and `HudController`.
-   - `FlagObjectiveResource` parameterizes `FlagManager` with declarative rules (`Placement`, `ScoreRule`, `ReturnRule`, `PassOnFriendlyHit`, `ResetDelayMillis`, `HoldSeconds`), turning `ctf`, `protect`, `hold`, and `rugby` into four `.tres` configurations of the same modular flag objective.
+   - **Everything—built-in objectives (`ctf`, `dm`, `edit`) and upcoming/modded objectives (`rugby`, `race`, `prop_hunt`, `capture`, `protect`, `hold`, and Workshop GDScript objectives)—plugs into the exact same `IModeObjective` lifecycle** across `MapWorld`, `WorldSimulation`, `MapPlayer`, `ModeEntityBuilder`, and `HudController`.
+   - Complex/future modes (such as Rugby friendly-fire flag passing, Racing checkpoint progression, and territory Capture) will be implemented as dedicated full feature milestones per [features.md](../features.md); no incomplete stub implementations are retained in the base catalog.
 2. **Composable Loadout & Combat Mutators (`GameMutator`)**:
-   - Reusable loadout, item-filter, and combat-modifier presets (`insta`, `effic`, `tactics`, `capture_loadout`, `regen_loadout`, `rocket_arena`) live in `res://resources/mutators/<id>.tres` under `GameMutatorCatalog`.
-   - A `GameModeInfo` (`res://resources/gamemodes/<id>.tres`) binds an `ObjectiveId` (e.g. `"ctf"`, `"hold"`, `"race"`) with an optional `MutatorId` (e.g. `"insta"`, `"effic"`) and optional inline overrides.
+   - Reusable loadout, item-filter, and combat-modifier presets (`insta`, `effic`, `tactics`) live in `res://resources/mutators/<id>.tres` under `GameMutatorCatalog`.
+   - A `GameModeInfo` (`res://resources/gamemodes/<id>.tres`) binds an `ObjectiveId` (e.g. `"ctf"`, `"dm"`, `"edit"`) with an optional `MutatorId` (e.g. `"insta"`, `"effic"`, `"tactics"`) and optional inline overrides.
    - At load time (`GameModeInfo.Bake()`), the mutator and objective defaults are flattened onto `GameModeInfo` and `WeaponPoolMask` is precomputed, guaranteeing $O(1)$ zero-allocation reads on the 200 Hz simulation hot path.
 3. **Data-Driven HUD via `ObjectiveHudState` & `WeaponPoolMask`**:
    - `HudController` never queries `FlagManager` or `ModeFlags`. It reads `world.Objective.GetHudState(localPlayer, nowMillis)` for top match scores and the bottom status-bar objective icon/counter (`RedFlag`, `BlueFlag`, `NeutralFlag` + hold timer, `Token` + skull count, or race lap/checkpoint counter).
@@ -211,29 +211,29 @@ public abstract partial class ModeObjectiveResource : Resource
 
 ### 1.3 Built-In Modular Objective Implementations
 
-All classic and MVP objectives are concrete subclasses of `ModeObjectiveResource`:
+The initial architecture ships with the foundational built-in objectives, with future modes (`protect`, `hold`, `rugby`, `race`, `capture`, `collect`) scheduled for subsequent milestones per [features.md](../features.md):
 
-#### A. `FlagObjectiveResource` & `FlagObjective` (Powers `ctf`, `protect`, `hold`, `rugby`, and custom flag modes)
+#### A. `FlagObjectiveResource` & `FlagObjective` (Powers `ctf`)
 
-Instead of `FlagManager` branching on `ModeFlags.Hold` and `ModeFlags.Protect`, `FlagObjectiveResource` exposes the 5 orthogonal axes of flag gameplay as data:
+`FlagObjectiveResource` configures team-based flag gameplay without hardcoded `ModeFlags`:
 
 ```csharp
 public enum FlagPlacementMode
 {
-    MapTeamFlags = 0,      // Spawns team 1 & 2 flags at ET_FLAG entities (CTF, Protect, Rugby)
+    MapTeamFlags = 0,      // Spawns team 1 & 2 flags at ET_FLAG entities (CTF)
     DynamicHoldSpawns = 1, // Uses ET_BASE entities as spawn points for neutral flags (Hold)
 }
 
 public enum FlagScoreRule
 {
-    RelayToFriendlyBase = 0, // Carry enemy flag to home base while own flag is home (CTF, Rugby)
+    RelayToFriendlyBase = 0, // Carry enemy flag to home base while own flag is home (CTF)
     TouchEnemyFlag = 1,      // Touch enemy flag to score immediately (Protect)
     HoldTimer = 2,           // Hold flag for HoldSeconds to score (Hold)
 }
 
 public enum FlagReturnRule
 {
-    TouchDropped = 0,   // Touch dropped friendly flag to return; auto-reset after ResetDelayMillis (CTF, Rugby)
+    TouchDropped = 0,   // Touch dropped friendly flag to return; auto-reset after ResetDelayMillis (CTF)
     DropInsideBase = 1, // Drop inside own base to return; timeout deducts 1 point (Protect)
     RandomRespawn = 2,  // Timeout respawns flag at a new hold spawn (Hold)
 }
@@ -250,55 +250,23 @@ public partial class FlagObjectiveResource : ModeObjectiveResource
     [Export] public int HoldSeconds { get; set; } = 20;
     [Export] public int HoldDeathPenaltySeconds { get; set; } = 5;
 
-    /// <summary>
-    /// When true (Rugby mode), shooting a friendly teammate while carrying a flag
-    /// passes the flag directly to that teammate instead of dealing damage.
-    /// </summary>
-    [Export] public bool PassOnFriendlyHit { get; set; } = false;
-
     public override IModeObjective CreateInstance(GameModeInfo mode) => new FlagObjective(this, mode);
 }
 ```
 
 How `FlagObjective` plugs into `IModeObjective`:
-- `ClaimsEntity(e)`: Returns `true` for `EntityType.Flag` (and for `EntityType.Base` when `Placement == DynamicHoldSpawns`).
-- `SetupWorld`: Populates `FlagManager` from `ET_FLAG` or `ET_BASE` entities and attaches `FlagNode` children under `objectiveRoot`.
+- `ClaimsEntity(e)`: Returns `true` for `EntityType.Flag`.
+- `SetupWorld`: Populates `FlagManager` from `ET_FLAG` entities and attaches `FlagNode` children under `objectiveRoot`.
 - `Step` / `StepPlayer`: Advances `FlagManager.Update` and runs player flag proximity pickup/return/capture checks (`CheckFlags`).
-- `OnBeforeDamage`: When `PassOnFriendlyHit == true` and `attacker` carries a flag and hits teammate `victim`, calls `Flags.OwnFlag(carriedFlagId, victim.PlayerId, nowMillis)` and returns `false` (canceling damage/self-damage).
 - `OnPlayerDied`: Calls `Flags.OnPlayerDied`.
-- `GetHudState`: Returns team scores (`Score1`, `Score2`), carrier `StatusIcon` (`BlueFlag`, `RedFlag`, or `NeutralFlag`), and `StatusCounter` (remaining hold seconds when `ScoreRule == HoldTimer`, else `-1`).
+- `GetHudState`: Returns team scores (`Score1`, `Score2`), carrier `StatusIcon` (`BlueFlag`, `RedFlag`), and `StatusCounter`.
 
-#### B. `RaceObjectiveResource` & `RaceObjective` (MVP Mode: **Racing**)
-
-Demonstrates how **Racing** hooks into the exact same `IModeObjective` architecture without touching `MapWorld`, `MapPlayer`, or `HudController` internals:
-
-```csharp
-[Tool]
-[GlobalClass]
-public partial class RaceObjectiveResource : ModeObjectiveResource
-{
-    [Export] public int Laps { get; set; } = 1;
-    [Export] public bool RespawnAtCheckpoint { get; set; } = true;
-    [Export] public float CheckpointRadius { get; set; } = 20.0f;
-    [Export] public Script? CourseEventScript { get; set; } // Optional dynamic world command script
-
-    public override IModeObjective CreateInstance(GameModeInfo mode) => new RaceObjective(this, mode);
-}
-```
-
-How `RaceObjective` implements `IModeObjective`:
-- `ClaimsEntity(e)`: Claims `EntityType.RespawnPoint` and `EntityType.Carrot` as ordered checkpoints (`attr1` = yaw, `attr2` = checkpoint index).
-- `SetupWorld`: Builds ordered checkpoint triggers and visual markers under `objectiveRoot`.
-- `Step` & `StepPlayer`: Checks player proximity to their next checkpoint; advances player checkpoint index / lap count; executes scheduled dynamic world mutations (crumbling walls, falling floors) by submitting deterministic `DeleteCube` / `ReplaceBlock` commands into `world.Sink` ([ADR 0008](0008-command-logic.md)).
-- `ResolveSpawn(player)`: When `RespawnAtCheckpoint == true`, returns the `(Position, Yaw)` of the player's last reached checkpoint so dying in a hazard pit respawns them at their checkpoint.
-- `GetHudState`: Returns current checkpoint / lap progress in `PrimaryScore` / `SecondaryScore`.
-
-#### C. `DeathmatchObjectiveResource` & `EditObjectiveResource`
+#### B. `DeathmatchObjectiveResource` & `EditObjectiveResource`
 
 - **`DeathmatchObjectiveResource` (`dm.tres`)**: Standard frag/team-frag tallying (`OnPlayerDied` increments killer/team score; `GetHudState` returns player/team frag scores).
 - **`EditObjectiveResource` (`edit.tres`)**: Sets `IsEditMode = true` so `Main` / `OgzMapViewer` spawns the player in `CsEditing` float state with `EditorController` bound to `world.Sink`.
 
-#### D. `ScriptedObjectiveResource` (For Workshop & GDScript Mods)
+#### C. `ScriptedObjectiveResource` (For Workshop & GDScript Mods)
 
 Allows any modder to define a brand-new objective (e.g. *Prop Hunt*, *Zombie Outbreak*, *King of the Hill*, *Bomb Defusal*) in GDScript:
 
@@ -473,7 +441,7 @@ public partial class GameModeInfo : Resource
 
 ---
 
-## 3. Complete Mapping of Classic & MVP Modes
+## 3. Built-In Modes and Catalogs
 
 ### 3.1 Built-In `ModeObjectiveResource` Assets (`res://resources/objectives/`)
 
@@ -482,12 +450,8 @@ public partial class GameModeInfo : Resource
 | `dm` | `DeathmatchObjectiveResource` | `FragLimit = 0` | `25` (`Blue`) | `Dm` |
 | `edit` | `EditObjectiveResource` | `IsEditMode = true` | `25` (`Blue`) | `Dm` |
 | `ctf` | `FlagObjectiveResource` | `MapTeamFlags`, `RelayToFriendlyBase`, `TouchDropped`, `Reset = 10s` | `50` (`Blue`) | `Ctf` |
-| `protect` | `FlagObjectiveResource` | `MapTeamFlags`, `TouchEnemyFlag`, `DropInsideBase`, `Reset = 10s`, `Invis = 20s` | `50` (`Blue`) | `Ctf` |
-| `hold` | `FlagObjectiveResource` | `DynamicHoldSpawns`, `HoldTimer` (`20s`), `RandomRespawn`, `Reset = 30s` | `50` (`Blue`) | `Capture` |
-| `rugby` | `FlagObjectiveResource` | `MapTeamFlags`, `RelayToFriendlyBase`, `TouchDropped`, `PassOnFriendlyHit = true` | `50` (`Blue`) | `Ctf` |
-| `capture` | `CaptureObjectiveResource` | Claims `ET_BASE`, zone control ticks & base regen | `100` (`Green`) | `Capture` |
-| `collect` | `CollectObjectiveResource` | Frags drop skulls, bank at enemy base | `50` (`Blue`) | `Ctf` |
-| `race` | `RaceObjectiveResource` | Claims `ET_RESPAWNPOINT`/`ET_CARROT`, `RespawnAtCheckpoint = true` | `0` (`Blue`) | `Dm` |
+
+*(Note: Modes such as `rugby`, `race`, `protect`, `hold`, `capture`, and `collect` will be authored when their respective gameplay systems land).*
 
 ### 3.2 Built-In `GameMutator` Presets (`res://resources/mutators/`)
 
@@ -496,10 +460,8 @@ public partial class GameModeInfo : Resource
 | `insta` | `1 / 100` | `0` (`Blue`) | `Rifle` | `[1, 0, 0, 0, 100, 0, 0]` | `0, 1` | `None` |
 | `effic` | `100 / 100` | `100` (`Green`) | `Chaingun` | `[1, 20, 20, 10, 10, 20, 0]` | `0, 1` | `None` |
 | `tactics` | `100 / 100` | `100` (`Green`) | `Pistol` | `[1, 0, 0, 0, 0, 1, 40]` | `2, 2` | `None` |
-| `capture_loadout` | `100 / 100` | `100` (`Green`) | `Pistol` | `[1, 0, 0, 0, 0, 0, 40]` | `2, 1` | `NonAmmo` |
-| `regen_loadout` | `100 / 100` | `25` (`Blue`) | `Pistol` | `[1, 0, 0, 0, 0, 1, 40]` | `0, 1` | `None` |
 
-### 3.3 The 20 Classic Modes + MVP Modes (`res://resources/gamemodes/`)
+### 3.3 Active Built-In Game Modes (`res://resources/gamemodes/`)
 
 | Mode `Id` | `Name` | `ObjectiveId` | `TeamPlay` | `Mutator` |
 | :--- | :--- | :--- | :---: | :--- |
@@ -512,19 +474,9 @@ public partial class GameModeInfo : Resource
 | `efficteam` | `"effic team"` | `"dm"` | `true` | `"effic"` |
 | `tactics` | `"tactics"` | `"dm"` | `false` | `"tactics"` |
 | `tactics_team` | `"tac team"` | `"dm"` | `true` | `"tactics"` |
-| `capture` | `"capture"` | `"capture"` | `true` | `"capture_loadout"` |
-| `regen_capture` | `"regen capture"` | `"capture"` | `true` | `"regen_loadout"` |
 | `ctf` | `"ctf"` | `"ctf"` | `true` | `""` *(uses `ctf` base: 50 Blue, PI=40, GL=1, All)* |
 | `insta_ctf` | `"insta ctf"` | `"ctf"` | `true` | `"insta"` |
 | `effic_ctf` | `"effic ctf"` | `"ctf"` | `true` | `"effic"` |
-| `protect` | `"protect"` | `"protect"` | `true` | `""` |
-| `insta_protect` | `"insta protect"` | `"protect"` | `true` | `"insta"` |
-| `effic_protect` | `"effic protect"` | `"protect"` | `true` | `"effic"` |
-| `hold` | `"hold"` | `"hold"` | `true` | `""` |
-| `insta_hold` | `"insta hold"` | `"hold"` | `true` | `"insta"` |
-| `effic_hold` | `"effic hold"` | `"hold"` | `true` | `"effic"` |
-| `rugby` *(MVP)* | `"rugby"` | `"rugby"` | `true` | `"insta"` |
-| `race` *(MVP)* | `"race"` | `"race"` | `false` | `""` *(SelfDamageScale = 0, InfiniteAmmo = true)* |
 
 ### 3.4 Mode-to-Pool Binding on `MapList` (`res://resources/maplists/`)
 
@@ -533,8 +485,8 @@ public partial class GameModeInfo : Resource
 | MapList (`Id`) | `Name` | `Modes` (`PackedStringArray`) |
 | :--- | :--- | :--- |
 | `dm.tres` (`Dm`) | `"ffa"` | `["ffa", "coop_edit", "teamplay", "insta", "instateam", "effic", "efficteam", "tactics", "tactics_team"]` |
-| `capture.tres` (`Capture`) | `"capture"` | `["capture", "regen_capture", "hold", "insta_hold", "effic_hold"]` |
-| `ctf.tres` (`Ctf`) | `"ctf"` | `["ctf", "insta_ctf", "effic_ctf", "protect", "insta_protect", "effic_protect", "rugby"]` |
+| `capture.tres` (`Capture`) | `"capture"` | `[]` *(inactive until capture mode lands)* |
+| `ctf.tres` (`Ctf`) | `"ctf"` | `["ctf", "insta_ctf", "effic_ctf"]` |
 
 If a mode is not explicitly listed in any `MapList.Modes`, `MapListCatalog.ForMode(mode)` falls back to `mode.Objective.DefaultMapPool`.
 
@@ -637,9 +589,9 @@ public static bool CanSpawnItem(int entityType, GameModeInfo mode)
 
 ## 5. Concrete Modding Examples
 
-### Example 1: Defining a New Flag Objective Variant — "Rugby" (`res://resources/objectives/rugby.tres`)
+### Example 1: Defining a Custom Flag Objective Variant — "fast_ctf" (`res://resources/objectives/fast_ctf.tres`)
 
-Requires **zero new C# or GDScript code**—it configures `FlagObjectiveResource` with `PassOnFriendlyHit = true`:
+Requires **zero new C# or GDScript code**—it configures `FlagObjectiveResource` with a shorter reset delay and higher starting armour:
 
 ```ini
 [gd_resource type="Resource" script_class="FlagObjectiveResource" format=3]
@@ -648,19 +600,18 @@ Requires **zero new C# or GDScript code**—it configures `FlagObjectiveResource
 
 [resource]
 script = ExtResource("1_flag_obj")
-Id = "rugby"
-Name = "rugby"
+Id = "fast_ctf"
+Name = "fast ctf"
 DefaultTeamPlay = true
-DefaultMapPool = 3
-DefaultSpawnArmour = 50
+DefaultMapPool = 2
+DefaultSpawnArmour = 100
 Placement = 0
 ScoreRule = 0
 ReturnRule = 0
-ResetDelayMillis = 10000
-PassOnFriendlyHit = true
+ResetDelayMillis = 5000
 ```
 
-And `res://resources/gamemodes/rugby.tres` simply pairs `"rugby"` with the `"insta"` mutator:
+And `res://resources/gamemodes/fast_ctf.tres` pairs `"fast_ctf"` with the `"insta"` mutator:
 
 ```ini
 [gd_resource type="Resource" script_class="GameModeInfo" format=3]
@@ -669,9 +620,9 @@ And `res://resources/gamemodes/rugby.tres` simply pairs `"rugby"` with the `"ins
 
 [resource]
 script = ExtResource("1_mode")
-Id = "rugby"
-Name = "rugby"
-ObjectiveId = "rugby"
+Id = "fast_ctf"
+Name = "fast ctf"
+ObjectiveId = "fast_ctf"
 TeamPlay = true
 Mutator = "insta"
 ```
@@ -793,7 +744,7 @@ A `.pck` download is only required when a server mounts a mod pack containing ne
 Work proceeds in discrete, reviewable stages per [AGENTS.md](../../AGENTS.md):
 
 1. **Stage 1 — Modular Objectives, Mutators & Mode Catalogs**:
-   - Introduce `IModeObjective`, `ObjectiveHudState`, `ModeObjectiveResource`, `ObjectiveCatalog`, `DeathmatchObjectiveResource`, `EditObjectiveResource`, `FlagObjectiveResource` (`FlagObjective`), `CaptureObjectiveResource`, and `ScriptedObjectiveResource`.
+   - Introduce `IModeObjective`, `ObjectiveHudState`, `ModeObjectiveResource`, `ObjectiveCatalog`, `DeathmatchObjectiveResource`, `EditObjectiveResource`, `FlagObjectiveResource` (`FlagObjective`), and `ScriptedObjectiveResource`.
    - Introduce `ItemSpawnMask`, `GameMutator`, and `GameMutatorCatalog`.
    - Extend `GameModeInfo` with `ObjectiveId`, `Mutator`, declarative loadout/item/combat properties, and `Bake()`.
    - Upgrade `GameModeCatalog` to the [ADR 0010](0010-resource-modding.md) 3-tier cascade (`ResourceDir`, `ModOverrideDir`, `UserOverrideDir`) and author `.tres` files under `res://resources/objectives/`, `res://resources/mutators/`, and `res://resources/gamemodes/`.
@@ -804,17 +755,17 @@ Work proceeds in discrete, reviewable stages per [AGENTS.md](../../AGENTS.md):
 3. **Stage 3 — Wire `IModeObjective` Across World/Player, Combat Math & Remove `ModeFlags`**:
    - Wire `IGameWorld.Objective` into `MapWorld`, `MapLevel`, `EmptyMap`, `WorldSimulation`, `ModeEntityBuilder`, and `MapPlayer`.
    - Wire `InfiniteAmmo`, `SelfDamageScale`, `SelfPushScale`, `HitPushScale`, and `Objective.OnBeforeDamage` into `MapPlayer`, `WeaponHitscan`, and `WeaponExplosion`.
-   - Add `Modes` to `MapList`, remove `CaptureListModes` from `MapListCatalog`, retire `ModeFlags`, and update unit tests (`PlayerStateTest`, `FlagManagerTest`, `ItemPickupTest`, `MapListCatalogTest`) plus new modular objective tests (e.g. `Rugby` flag pass, custom objective lifecycle).
+   - Add `Modes` to `MapList`, remove `CaptureListModes` from `MapListCatalog`, retire `ModeFlags`, and update unit tests (`PlayerStateTest`, `FlagManagerTest`, `ItemPickupTest`, `MapListCatalogTest`, `GameModeCatalogTest`, `ObjectiveCatalogTest`).
 
 ---
 
 ## Consequences
 
 ### Positive
-- **Unified Objective Pipeline**: Flags (`ctf`, `protect`, `hold`, `rugby`), `dm`, `edit`, `capture`, `race`, `prop_hunt`, and Workshop GDScript objectives all share one `IModeObjective` lifecycle (`ClaimsEntity`, `SetupWorld`, `Step`, `StepPlayer`, `UpdateVisual`, `ResolveSpawn`, `OnBeforeDamage`, `OnPlayerDied`, `GetHudState`).
-- **Zero Hardcoded Loadout or Mode Branches**: `INSTA`, `EFFIC`, `TACTICS`, `NOITEMS`, `NOAMMO`, `CTF`, `HOLD`, and `PROTECT` are completely superseded by composable `ModeObjectiveResource` and `GameMutator` data.
+- **Unified Objective Pipeline**: All active match objectives (`ctf`, `dm`, `edit`, and future `rugby`, `race`, `prop_hunt`, `capture` or Workshop GDScript objectives) share one `IModeObjective` lifecycle (`ClaimsEntity`, `SetupWorld`, `Step`, `StepPlayer`, `UpdateVisual`, `ResolveSpawn`, `OnBeforeDamage`, `OnPlayerDied`, `GetHudState`).
+- **Zero Hardcoded Loadout or Mode Branches**: `INSTA`, `EFFIC`, `TACTICS`, `NOITEMS`, `NOAMMO`, and `CTF` are completely superseded by composable `ModeObjectiveResource` and `GameMutator` data.
 - **200 Hz Hot-Path Performance**: Pre-baking `GameMutator` overlays and `WeaponPoolMask` at load time preserves $O(1)$ zero-allocation reads on every physics tick, and `ObjectiveHudState` is a stack-allocated value type.
-- **100% Classic Parity**: All 20 classic Sauerbraten modes retain identical numbers, RNG sequences, flag rules, item spawn delays, and HUD layouts.
+- **No Stub Bloat**: Non-MVP / post-MVP modes (`rugby`, `race`, `collect`, `protect`, `capture`) remain cleanly omitted from base resource catalogs until their full mechanics are scheduled and implemented.
 
 ### Neutral / Trade-offs
 - Existing tests in `test/PlayerStateTest.cs` and `test/ItemPickupTest.cs` that directly assert `ModeFlags` bit positions will be updated to assert the baked `Objective`, `TeamPlay`, `AllowedItems`, `WeaponPoolMask`, and spawn loadout fields.

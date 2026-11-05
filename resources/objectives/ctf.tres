@@ -17,4 +17,3 @@ ResetDelayMillis = 10000
 InvisDelayMillis = 20000
 HoldSeconds = 20
 HoldDeathPenaltySeconds = 5
-PassOnFriendlyHit = false

@@ -62,47 +62,6 @@ public static class GameMutatorCatalog
             RandomGunsAmmoScale = 2,
             AllowedItems = ItemSpawnMask.None,
         },
-        new()
-        {
-            Id = "capture_loadout",
-            Name = "capture loadout",
-            SpawnHealth = 100,
-            MaxHealth = 100,
-            SpawnArmour = 100,
-            SpawnArmourType = ArmourType.Green,
-            SpawnGun = Gun.Pistol,
-            SpawnAmmo = new[] { 1, 0, 0, 0, 0, 0, 40 },
-            RandomGunsCount = 2,
-            RandomGunsAmmoScale = 1,
-            AllowedItems = ItemSpawnMask.NonAmmo,
-        },
-        new()
-        {
-            Id = "regen_loadout",
-            Name = "regen loadout",
-            SpawnHealth = 100,
-            MaxHealth = 100,
-            SpawnArmour = 25,
-            SpawnArmourType = ArmourType.Blue,
-            SpawnGun = Gun.Pistol,
-            SpawnAmmo = new[] { 1, 0, 0, 0, 0, 1, 40 },
-            RandomGunsCount = 0,
-            RandomGunsAmmoScale = 1,
-            AllowedItems = ItemSpawnMask.None,
-        },
-        new()
-        {
-            Id = "rocket_arena",
-            Name = "rocket arena",
-            SpawnHealth = 100,
-            MaxHealth = 100,
-            SpawnArmour = 100,
-            SpawnArmourType = ArmourType.Green,
-            SpawnGun = Gun.RocketLauncher,
-            SpawnAmmo = new[] { 1, 0, 0, 100, 0, 0, 0 },
-            InfiniteAmmo = true,
-            AllowedItems = ItemSpawnMask.None,
-        },
     };
 
     private static GameMutator[]? _all;

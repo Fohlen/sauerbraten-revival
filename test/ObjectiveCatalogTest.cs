@@ -17,7 +17,8 @@ public class ObjectiveCatalogTest : GoTestBase
     [Test]
     public void CatalogLoadsAllBuiltInObjectives()
     {
-        string[] required = { "dm", "edit", "ctf", "protect", "hold", "rugby", "capture", "collect", "race" };
+        string[] required = { "dm", "edit", "ctf" };
+        TestAssert.Equal(required.Length, ObjectiveCatalog.All.Length, "built-in objective count");
         foreach (var id in required)
         {
             var obj = ObjectiveCatalog.TryGet(id);
@@ -68,45 +69,6 @@ public class ObjectiveCatalogTest : GoTestBase
     }
 
     [Test]
-    public void FlagObjective_Rugby_PassOnFriendlyHitTransfersFlag()
-    {
-        var rugbyRes = ObjectiveCatalog.Get("rugby") as FlagObjectiveResource;
-        TestAssert.True(rugbyRes != null, "rugby is FlagObjectiveResource");
-        TestAssert.True(rugbyRes!.PassOnFriendlyHit, "PassOnFriendlyHit is true for rugby");
-
-        var mode = GameModeCatalog.Get("rugby");
-        var obj = rugbyRes.CreateInstance(mode) as FlagObjective;
-        TestAssert.True(obj != null, "created FlagObjective");
-
-        var entities = new List<MapEntity>
-        {
-            new() { Type = EntityType.Flag, Attr1 = 0, Attr2 = 1, Position = new Vector3(10, 0, 0) },
-            new() { Type = EntityType.Flag, Attr1 = 0, Attr2 = 2, Position = new Vector3(20, 0, 0) },
-        };
-        obj!.SetupWorld(null!, entities, new Node3D());
-
-        // Player 1 (Blue) carries enemy flag (flag 1)
-        int carrierId = 10;
-        int receiverId = 20;
-        obj.Flags.OwnFlag(1, carrierId, 5000);
-        TestAssert.Equal(carrierId, obj.Flags.GetCarrier(1) ?? -1, "initial carrier");
-
-        var carrier = new MapPlayer { PlayerId = carrierId, Team = 1 };
-        var receiver = new MapPlayer { PlayerId = receiverId, Team = 1 };
-
-        int damage = 100;
-        var pushVel = new Vector3(0, 0, 10);
-        bool allowDamage = obj.OnBeforeDamage(carrier, receiver, Gun.Rifle, ref damage, ref pushVel, 5100);
-
-        // Friendly hit while carrying flag must transfer flag and cancel damage
-        TestAssert.False(allowDamage, "friendly damage canceled");
-        TestAssert.Equal(0, damage, "damage zeroed");
-        TestAssert.Equal(Vector3.Zero, pushVel, "push velocity zeroed");
-        TestAssert.Equal(receiverId, obj.Flags.GetCarrier(1) ?? -1, "flag ownership transferred to receiver");
-        TestAssert.Equal(1, obj.Flags.GetCarriedFlag(receiverId) ?? -1, "receiver carried flag index");
-    }
-
-    [Test]
     public void DeathmatchObjective_ScoringAndPenalties()
     {
         var dmRes = ObjectiveCatalog.Get("dm") as DeathmatchObjectiveResource;
@@ -141,89 +103,18 @@ public class ObjectiveCatalogTest : GoTestBase
     }
 
     [Test]
-    public void RaceObjective_CheckpointsAndRespawn()
-    {
-        var raceRes = ObjectiveCatalog.Get("race") as RaceObjectiveResource;
-        TestAssert.True(raceRes != null, "race is RaceObjectiveResource");
-
-        var mode = GameModeCatalog.Get("race");
-        var obj = raceRes!.CreateInstance(mode) as RaceObjective;
-        TestAssert.True(obj != null, "created RaceObjective");
-
-        var entities = new List<MapEntity>
-        {
-            new() { Type = EntityType.RespawnPoint, Attr1 = 90, Attr2 = 0, Position = new Vector3(0, 0, 0) },
-            new() { Type = EntityType.Carrot, Attr1 = 180, Attr2 = 1, Position = new Vector3(100, 0, 0) },
-            new() { Type = EntityType.Carrot, Attr1 = 270, Attr2 = 2, Position = new Vector3(200, 0, 0) },
-        };
-        obj!.SetupWorld(null!, entities, new Node3D());
-        TestAssert.Equal(3, obj.Checkpoints.Count, "checkpoint count 3");
-
-        var player = new MapPlayer { PlayerId = 5 };
-        player.Respawn(new Vector3(0, 0, 0));
-
-        // Before any checkpoint
-        var spawn0 = obj.ResolveSpawn(player);
-        TestAssert.True(spawn0 == null, "no checkpoint reached yet");
-
-        // Trigger checkpoint 0
-        obj.StepPlayer(player, 100);
-        var spawn1 = obj.ResolveSpawn(player);
-        TestAssert.True(spawn1 != null, "reached cp 0");
-        TestAssert.Equal(new Vector3(0, 0, 0), spawn1!.Value.FeetPos, "cp 0 pos");
-        TestAssert.Equal(90f, spawn1.Value.Yaw, "cp 0 yaw");
-
-        // Move to checkpoint 1
-        player.Respawn(new Vector3(100, 0, 0));
-        obj.StepPlayer(player, 200);
-        var spawn2 = obj.ResolveSpawn(player);
-        TestAssert.True(spawn2 != null, "reached cp 1");
-        TestAssert.Equal(new Vector3(100, 0, 0), spawn2!.Value.FeetPos, "cp 1 pos");
-        TestAssert.Equal(180f, spawn2.Value.Yaw, "cp 1 yaw");
-    }
-
-    [Test]
-    public void MapPlayer_TakeDamage_RugbyPassViaFriendlyFire()
-    {
-        var rugbyMode = GameModeCatalog.Get("rugby");
-        var obj = rugbyMode.CreateObjective() as FlagObjective;
-        TestAssert.True(obj != null, "rugby FlagObjective created");
-
-        var entities = new List<MapEntity>
-        {
-            new() { Type = EntityType.Flag, Attr1 = 0, Attr2 = 1, Position = new Vector3(10, 0, 0) },
-            new() { Type = EntityType.Flag, Attr1 = 0, Attr2 = 2, Position = new Vector3(20, 0, 0) },
-        };
-        obj!.SetupWorld(null!, entities, new Node3D());
-
-        var carrier = new MapPlayer { PlayerId = 1, Team = 1, Mode = rugbyMode, Objective = obj };
-        var receiver = new MapPlayer { PlayerId = 2, Team = 1, Mode = rugbyMode, Objective = obj };
-
-        carrier.Respawn(new Vector3(10, 0, 0));
-        receiver.Respawn(new Vector3(20, 0, 0));
-
-        // Carrier carries enemy flag (flag 1)
-        obj.Flags.OwnFlag(1, carrier.PlayerId, 1000);
-        TestAssert.Equal(carrier.PlayerId, obj.Flags.GetCarrier(1) ?? -1, "carrier holds flag 1");
-
-        int initialHealth = receiver.Combat.Health;
-
-        // Carrier shoots friendly receiver to pass the flag
-        receiver.TakeDamage(100, attacker: carrier, gun: Gun.Rifle, pushVel: new Vector3(0, 0, 50), nowMillis: 1100);
-
-        // Receiver must not take damage or push, and receiver now holds flag 1
-        TestAssert.Equal(initialHealth, receiver.Combat.Health, "receiver took 0 damage");
-        TestAssert.Equal(receiver.PlayerId, obj.Flags.GetCarrier(1) ?? -1, "receiver now holds flag 1");
-        TestAssert.Equal(1, obj.Flags.GetCarriedFlag(receiver.PlayerId) ?? -1, "receiver carried flag");
-    }
-
-    [Test]
     public void MapPlayer_InfiniteAmmo_BypassesAmmoConsumption()
     {
-        var raceMode = GameModeCatalog.Get("race");
-        TestAssert.True(raceMode.InfiniteAmmo, "race has infinite ammo");
+        var infiniteMode = new GameModeInfo
+        {
+            Id = "custom_infinite",
+            Name = "Infinite Ammo Custom",
+            ObjectiveId = "dm",
+            InfiniteAmmo = true,
+        };
+        infiniteMode.Bake();
 
-        var player = new MapPlayer { Mode = raceMode };
+        var player = new MapPlayer { Mode = infiniteMode };
         player.Respawn(new Vector3(0, 0, 0));
         player.Combat.GunSelect = (int)Gun.Rifle;
         player.Combat.Ammo[(int)Gun.Rifle] = 0; // 0 ammo
