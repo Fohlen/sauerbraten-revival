@@ -47,7 +47,7 @@ This list is the one place these are tracked; design lives in the linked docs.
   proposed in [tools/botlab/](../tools/botlab/README.md): PPO arena bots bootstrapped
   by behaviour cloning on original `.dmo` demos, exported to ONNX and run
   server-side. Staged; does not touch MVP code paths.
-  - [ ] **B1** Demo reader (`.dmo` → per-player trajectories), golden-tested.
+  - [x] **B1** Demo reader (`.dmo` → per-player trajectories), golden-tested.
   - [ ] **B2** Shared C# observation/action spec + featuriser → dataset.
   - [ ] **B3** Behaviour-cloning pretrain.
   - [ ] **B4** Headless sim env (ported `OctaPhysics` + insta hitscan).
