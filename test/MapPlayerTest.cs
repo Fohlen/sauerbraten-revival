@@ -9,6 +9,7 @@ using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Weapons;
 using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
+using GameModeInfo = SauerbratenRevival.World.Game.GameModeInfo;
 using IMapSource = SauerbratenRevival.World.Runtime.IMapSource;
 using MapPlayer = SauerbratenRevival.World.Game.Players.MapPlayer;
 using SimClock = SauerbratenRevival.World.Runtime.SimClock;
@@ -1190,5 +1191,87 @@ public class MapPlayerTest : GoTestBase
 
         TestAssert.True(bounces1 > 0, "phys1 received bounce event on phys1 action");
         TestAssert.True(traces1 > 0, "phys1 received trace events on phys1 action");
+    }
+
+    [Test]
+    public void TakeDamage_AppliesFriendlyEnemyAndSelfDamageScaling()
+    {
+        var teamMode = new GameModeInfo
+        {
+            Id = "test_teamplay",
+            Name = "Test Teamplay",
+            TeamPlay = true,
+            DamageScale = 0.8f,
+            FriendlyFireScale = 0.0f,
+            SelfDamageScale = 0.25f,
+            SelfPushScale = 2.0f,
+            HitPushScale = 1.5f,
+        };
+
+        var friendlyAttacker = new MapPlayer { Mode = teamMode, Team = 1 };
+        var enemyAttacker = new MapPlayer { Mode = teamMode, Team = 2 };
+        var victim = new MapPlayer { Mode = teamMode, Team = 1 };
+
+        victim.Respawn(Vector3.Zero);
+        victim.Combat.Armour = 0; // zero armour so raw damage directly impacts health
+        victim.Entity.Vel = Vector3.Zero;
+        int maxHealth = victim.Combat.Health;
+
+        // 1. Friendly fire with FriendlyFireScale = 0.0f deals 0 damage, but push still applies
+        victim.TakeDamage(100, attacker: friendlyAttacker, pushVel: new Vector3(10, 0, 0), nowMillis: 1000);
+        TestAssert.Equal(maxHealth, victim.Combat.Health, "friendly fire deals 0 damage when scale is 0");
+        TestAssert.Equal(new Vector3(15, 0, 0), victim.Entity.Vel, "push scaled by HitPushScale (10 * 1.5 = 15)");
+
+        // 2. Friendly fire with custom FriendlyFireScale > 0.0f deals scaled damage
+        teamMode.FriendlyFireScale = 0.5f;
+        victim.Entity.Vel = Vector3.Zero;
+        victim.TakeDamage(100, attacker: friendlyAttacker, pushVel: new Vector3(10, 0, 0), nowMillis: 2000);
+        TestAssert.Equal(maxHealth - 50, victim.Combat.Health, "friendly fire deals 50% damage when scale is 0.5");
+        TestAssert.Equal(new Vector3(15, 0, 0), victim.Entity.Vel, "push scaled by HitPushScale on friendly hit");
+
+        // 3. Enemy hit deals damage scaled by DamageScale (100 * 0.8 = 80)
+        victim.Combat.Health = 100;
+        victim.Entity.Vel = Vector3.Zero;
+        victim.TakeDamage(100, attacker: enemyAttacker, pushVel: new Vector3(20, 0, 0), nowMillis: 3000);
+        TestAssert.Equal(20, victim.Combat.Health, "enemy hit scaled by DamageScale (100 * 0.8 = 80 damage)");
+        TestAssert.Equal(new Vector3(30, 0, 0), victim.Entity.Vel, "push scaled by HitPushScale (20 * 1.5 = 30)");
+
+        // 4. Self hit deals damage scaled by SelfDamageScale (100 * 0.25 = 25) and SelfPushScale (10 * 2.0 = 20)
+        victim.Combat.Health = 100;
+        victim.Entity.Vel = Vector3.Zero;
+        victim.TakeDamage(100, attacker: victim, pushVel: new Vector3(0, 10, 0), nowMillis: 4000);
+        TestAssert.Equal(75, victim.Combat.Health, "self hit scaled by SelfDamageScale (100 * 0.25 = 25 damage)");
+        TestAssert.Equal(new Vector3(0, 20, 0), victim.Entity.Vel, "push scaled by SelfPushScale (10 * 2.0 = 20)");
+
+        // 5. Non-team mode (FFA): players with same Team integer are NOT teammates
+        var ffaMode = new GameModeInfo
+        {
+            Id = "test_ffa",
+            Name = "Test FFA",
+            TeamPlay = false,
+            DamageScale = 1.0f,
+            FriendlyFireScale = 0.0f,
+        };
+        var ffaAttacker = new MapPlayer { Mode = ffaMode, Team = 1 };
+        var ffaVictim = new MapPlayer { Mode = ffaMode, Team = 1 };
+        ffaVictim.Respawn(Vector3.Zero);
+        ffaVictim.Combat.Armour = 0;
+
+        TestAssert.False(ffaVictim.IsTeammate(ffaAttacker), "FFA players are not teammates even if Team is identical");
+        ffaVictim.TakeDamage(40, attacker: ffaAttacker, nowMillis: 5000);
+        TestAssert.Equal(60, ffaVictim.Combat.Health, "FFA deals full damage because players are not teammates");
+
+        // 6. Missing/empty team in team mode: not teammates
+        var neutralVictim = new MapPlayer { Mode = teamMode, Team = 0 };
+        neutralVictim.Respawn(Vector3.Zero);
+        neutralVictim.Combat.Armour = 0;
+        TestAssert.False(neutralVictim.IsTeammate(friendlyAttacker), "Team 0 is not a teammate");
+
+        friendlyAttacker.Free();
+        enemyAttacker.Free();
+        victim.Free();
+        ffaAttacker.Free();
+        ffaVictim.Free();
+        neutralVictim.Free();
     }
 }

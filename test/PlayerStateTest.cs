@@ -219,6 +219,12 @@ public class PlayerStateTest : GoTestBase
         TestAssert.True(s.IsTeam("good", ctfMode), "is team good in ctf");
         TestAssert.True(!s.IsTeam("evil", ctfMode), "is not evil in ctf");
         TestAssert.True(!s.IsTeam("good", ffaMode), "isTeam is false in non-team mode");
+
+        s.Team = "";
+        TestAssert.True(!s.IsTeam("", ctfMode), "empty team is not a team");
+        s.Team = "good";
+        TestAssert.True(!s.IsTeam("", ctfMode), "empty other team is not a team");
+        TestAssert.True(!s.IsTeam(null, ctfMode), "null other team is not a team");
     }
 
     private sealed class SequenceRandom : Random

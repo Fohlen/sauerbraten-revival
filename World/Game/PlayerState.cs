@@ -127,6 +127,7 @@ public partial class PlayerState : RefCounted
     public bool IsTeam(string? otherTeam, GameModeInfo? mode = null)
     {
         if (mode != null && !mode.TeamPlay) return false;
+        if (string.IsNullOrEmpty(Team) || string.IsNullOrEmpty(otherTeam)) return false;
         return string.Equals(Team, otherTeam, StringComparison.OrdinalIgnoreCase);
     }
 

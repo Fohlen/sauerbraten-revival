@@ -361,6 +361,17 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         set => Combat.Team = value;
     }
 
+    /// <summary>
+    /// Returns true if <paramref name="other"/> is a teammate of this player in the active mode.
+    /// In non-team modes, or if either player has no team, returns false.
+    /// </summary>
+    public bool IsTeammate(MapPlayer? other)
+    {
+        if (other == null || other == this) return false;
+        if (Mode == null || !Mode.TeamPlay) return false;
+        return Combat.IsTeam(other.Combat.Team, Mode);
+    }
+
     /// <summary>Timestamp (ms) of the last successful hit on an enemy (engine <c>lasthit</c> in fps.cpp).</summary>
     public int LastHit
     {
@@ -1293,7 +1304,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         }
         else if (attacker != null && Mode != null)
         {
-            damage = (int)(damage * Mode.DamageScale);
+            float damageScale = IsTeammate(attacker) ? Mode.FriendlyFireScale : Mode.DamageScale;
+            damage = (int)(damage * damageScale);
             push *= Mode.HitPushScale;
         }
 
@@ -1354,7 +1366,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         }
         else if (Flags != null)
         {
-            Flags.OnPlayerDied(PlayerId, killer?.PlayerId, killer?.Team == Team, Entity.FeetPos(), now, Entity.Yaw);
+            Flags.OnPlayerDied(PlayerId, killer?.PlayerId, IsTeammate(killer), Entity.FeetPos(), now, Entity.Yaw);
         }
 
         EmitSignal(SignalName.Died);
