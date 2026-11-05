@@ -12,20 +12,20 @@ namespace SauerbratenRevival.World.Game.Objectives;
 
 public enum FlagPlacementMode
 {
-    MapTeamFlags = 0,      // Spawns team 1 & 2 flags at ET_FLAG entities (CTF, Protect, Rugby)
+    MapTeamFlags = 0,      // Spawns team 1 & 2 flags at ET_FLAG entities (CTF, Protect)
     DynamicHoldSpawns = 1, // Uses ET_BASE entities as spawn points for neutral flags (Hold)
 }
 
 public enum FlagScoreRule
 {
-    RelayToFriendlyBase = 0, // Carry enemy flag to home base while own flag is home (CTF, Rugby)
+    RelayToFriendlyBase = 0, // Carry enemy flag to home base while own flag is home (CTF)
     TouchEnemyFlag = 1,      // Touch enemy flag to score immediately (Protect)
     HoldTimer = 2,           // Hold flag for HoldSeconds to score (Hold)
 }
 
 public enum FlagReturnRule
 {
-    TouchDropped = 0,   // Touch dropped friendly flag to return; auto-reset after ResetDelayMillis (CTF, Rugby)
+    TouchDropped = 0,   // Touch dropped friendly flag to return; auto-reset after ResetDelayMillis (CTF)
     DropInsideBase = 1, // Drop inside own base to return; timeout deducts 1 point (Protect)
     RandomRespawn = 2,  // Timeout respawns flag at a new hold spawn (Hold)
 }
@@ -41,12 +41,6 @@ public partial class FlagObjectiveResource : ModeObjectiveResource
     [Export] public int InvisDelayMillis { get; set; } = 20000;
     [Export] public int HoldSeconds { get; set; } = 20;
     [Export] public int HoldDeathPenaltySeconds { get; set; } = 5;
-
-    /// <summary>
-    /// When true (Rugby mode), shooting a friendly teammate while carrying a flag
-    /// passes the flag directly to that teammate instead of dealing damage.
-    /// </summary>
-    [Export] public bool PassOnFriendlyHit { get; set; } = false;
 
     public FlagObjectiveResource()
     {
@@ -117,28 +111,6 @@ public class FlagObjective : IModeObjective
     public void StepPlayer(MapPlayer player, int nowMillis)
     {
         player.CheckFlags(nowMillis);
-    }
-
-    public bool OnBeforeDamage(
-        MapPlayer? attacker,
-        MapPlayer victim,
-        Gun gun,
-        ref int damage,
-        ref Vector3 pushVel,
-        int nowMillis)
-    {
-        if (Resource.PassOnFriendlyHit && attacker != null && attacker != victim && attacker.Team == victim.Team)
-        {
-            int? carried = Flags.GetCarriedFlag(attacker.PlayerId);
-            if (carried.HasValue)
-            {
-                Flags.OwnFlag(carried.Value, victim.PlayerId, nowMillis);
-                damage = 0;
-                pushVel = Vector3.Zero;
-                return false;
-            }
-        }
-        return true;
     }
 
     public void OnPlayerDied(MapPlayer victim, MapPlayer? killer, Gun gun, int nowMillis)

@@ -26,7 +26,7 @@ public static class GameModeCatalog
     public const string UserOverrideDir = "user://gamemodes/overrides";
 
     /// <summary>
-    /// Built-in default modes (the 20 classic Sauerbraten modes + MVP modes rugby and race).
+    /// Built-in default modes (DM, Teamplay, Coop Edit, and CTF across normal, instagib, efficiency, and tactics loadouts).
     /// </summary>
     public static readonly GameModeInfo[] Defaults;
 
@@ -34,28 +34,18 @@ public static class GameModeCatalog
     {
         Defaults = new GameModeInfo[]
         {
-            new() { Id = "ffa",           Name = "ffa",           ObjectiveId = "dm",      TeamPlay = false, Mutator = "" },
-            new() { Id = "coop_edit",     Name = "coop edit",     ObjectiveId = "edit",    TeamPlay = false, Mutator = "" },
-            new() { Id = "teamplay",      Name = "teamplay",      ObjectiveId = "dm",      TeamPlay = true,  Mutator = "" },
-            new() { Id = "insta",         Name = "instagib",      ObjectiveId = "dm",      TeamPlay = false, Mutator = "insta" },
-            new() { Id = "instateam",     Name = "insta team",    ObjectiveId = "dm",      TeamPlay = true,  Mutator = "insta" },
-            new() { Id = "effic",         Name = "efficiency",    ObjectiveId = "dm",      TeamPlay = false, Mutator = "effic" },
-            new() { Id = "efficteam",     Name = "effic team",    ObjectiveId = "dm",      TeamPlay = true,  Mutator = "effic" },
-            new() { Id = "tactics",       Name = "tactics",       ObjectiveId = "dm",      TeamPlay = false, Mutator = "tactics" },
-            new() { Id = "tactics_team",  Name = "tac team",      ObjectiveId = "dm",      TeamPlay = true,  Mutator = "tactics" },
-            new() { Id = "capture",       Name = "capture",       ObjectiveId = "capture", TeamPlay = true,  Mutator = "capture_loadout" },
-            new() { Id = "regen_capture", Name = "regen capture", ObjectiveId = "capture", TeamPlay = true,  Mutator = "regen_loadout" },
-            new() { Id = "ctf",           Name = "ctf",           ObjectiveId = "ctf",     TeamPlay = true,  Mutator = "" },
-            new() { Id = "insta_ctf",     Name = "insta ctf",     ObjectiveId = "ctf",     TeamPlay = true,  Mutator = "insta" },
-            new() { Id = "effic_ctf",     Name = "effic ctf",     ObjectiveId = "ctf",     TeamPlay = true,  Mutator = "effic" },
-            new() { Id = "protect",       Name = "protect",       ObjectiveId = "protect", TeamPlay = true,  Mutator = "" },
-            new() { Id = "insta_protect", Name = "insta protect", ObjectiveId = "protect", TeamPlay = true,  Mutator = "insta" },
-            new() { Id = "effic_protect", Name = "effic protect", ObjectiveId = "protect", TeamPlay = true,  Mutator = "effic" },
-            new() { Id = "hold",          Name = "hold",          ObjectiveId = "hold",    TeamPlay = true,  Mutator = "" },
-            new() { Id = "insta_hold",    Name = "insta hold",    ObjectiveId = "hold",    TeamPlay = true,  Mutator = "insta" },
-            new() { Id = "effic_hold",    Name = "effic hold",    ObjectiveId = "hold",    TeamPlay = true,  Mutator = "effic" },
-            new() { Id = "rugby",         Name = "rugby",         ObjectiveId = "rugby",   TeamPlay = true,  Mutator = "insta" },
-            new() { Id = "race",          Name = "race",          ObjectiveId = "race",    TeamPlay = false, Mutator = "", SelfDamageScale = 0f, InfiniteAmmo = true },
+            new() { Id = "ffa",           Name = "ffa",           ObjectiveId = "dm",   TeamPlay = false, Mutator = "" },
+            new() { Id = "coop_edit",     Name = "coop edit",     ObjectiveId = "edit", TeamPlay = false, Mutator = "" },
+            new() { Id = "teamplay",      Name = "teamplay",      ObjectiveId = "dm",   TeamPlay = true,  Mutator = "" },
+            new() { Id = "insta",         Name = "instagib",      ObjectiveId = "dm",   TeamPlay = false, Mutator = "insta" },
+            new() { Id = "instateam",     Name = "insta team",    ObjectiveId = "dm",   TeamPlay = true,  Mutator = "insta" },
+            new() { Id = "effic",         Name = "efficiency",    ObjectiveId = "dm",   TeamPlay = false, Mutator = "effic" },
+            new() { Id = "efficteam",     Name = "effic team",    ObjectiveId = "dm",   TeamPlay = true,  Mutator = "effic" },
+            new() { Id = "tactics",       Name = "tactics",       ObjectiveId = "dm",   TeamPlay = false, Mutator = "tactics" },
+            new() { Id = "tactics_team",  Name = "tac team",      ObjectiveId = "dm",   TeamPlay = true,  Mutator = "tactics" },
+            new() { Id = "ctf",           Name = "ctf",           ObjectiveId = "ctf",  TeamPlay = true,  Mutator = "" },
+            new() { Id = "insta_ctf",     Name = "insta ctf",     ObjectiveId = "ctf",  TeamPlay = true,  Mutator = "insta" },
+            new() { Id = "effic_ctf",     Name = "effic ctf",     ObjectiveId = "ctf",  TeamPlay = true,  Mutator = "effic" },
         };
 
         foreach (var mode in Defaults)
@@ -199,15 +189,15 @@ public static class GameModeCatalog
     }
 
     /// <summary>
-    /// Engine <c>cmode ? cmode->getspawngroup(d) : 0</c> (fpsgame/fps.cpp:327, ctf.h:1052, collect.h:763).
-    /// In CTF / Protect / Collect / Rugby, returns 1 for "good" team or 2 for "evil" team.
-    /// In Hold mode or non-team/FFA modes, returns 0.
+    /// Engine <c>cmode ? cmode->getspawngroup(d) : 0</c> (fpsgame/fps.cpp:327, ctf.h:1052).
+    /// In CTF, returns 1 for "good" team or 2 for "evil" team.
+    /// In Hold flag placement or non-team/FFA modes, returns 0.
     /// </summary>
     public static int GetSpawnGroup(GameModeInfo? mode, int team)
     {
         if (mode == null || !mode.TeamPlay) return 0;
         if (Ctf.FlagManager.IsHoldMode(mode)) return 0;
-        if (mode.ObjectiveId is "ctf" or "protect" or "collect" or "rugby")
+        if (mode.Objective is Objectives.FlagObjectiveResource || mode.ObjectiveId == "ctf")
         {
             return team is 1 or 2 ? team : 0;
         }

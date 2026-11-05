@@ -279,14 +279,9 @@ public class MapListCatalogTest : GoTestBase
     [Test]
     public void ForModeSelectsTheEnginePool()
     {
-        // ML_ModeType 5/6/7 -> ML_ModeMaps 2 (ctf pool).
-        foreach (string id in new[] { "ctf", "insta_ctf", "effic_ctf", "protect", "insta_protect", "effic_protect" })
+        // ML_ModeType 5 -> ML_ModeMaps 2 (ctf pool).
+        foreach (string id in new[] { "ctf", "insta_ctf", "effic_ctf" })
             TestAssert.Equal(MapListId.Ctf, MapListCatalog.ForMode(GameModeCatalog.TryGet(id))?.Id, $"{id} uses the ctf pool");
-
-        // ML_ModeType 3/4 -> ML_ModeMaps 1 (capture pool); hold is an M_CTF mode
-        // but the engine still feeds it from the capture list.
-        foreach (string id in new[] { "capture", "regen_capture", "hold", "insta_hold", "effic_hold" })
-            TestAssert.Equal(MapListId.Capture, MapListCatalog.ForMode(GameModeCatalog.TryGet(id))?.Id, $"{id} uses the capture pool");
 
         // ML_ModeType 1/2 (and edit) -> ML_ModeMaps 0; our single picker starts at dm.
         foreach (string id in new[] { "ffa", "insta", "effic", "tactics", "teamplay", "instateam", "coop_edit" })
@@ -299,18 +294,6 @@ public class MapListCatalogTest : GoTestBase
         var ctf = new GameModeInfo { Id = "my_ctf", ObjectiveId = "ctf" };
         ctf.Bake();
         TestAssert.Equal(MapListId.Ctf, MapListCatalog.ForMode(ctf)?.Id, "custom ctf mode");
-
-        var hold = new GameModeInfo { Id = "my_hold", ObjectiveId = "hold" };
-        hold.Bake();
-        TestAssert.Equal(MapListId.Capture, MapListCatalog.ForMode(hold)?.Id, "hold mode uses capture pool");
-
-        var capture = new GameModeInfo { Id = "my_capture", ObjectiveId = "capture" };
-        capture.Bake();
-        TestAssert.Equal(MapListId.Capture, MapListCatalog.ForMode(capture)?.Id, "custom capture mode");
-
-        var rugby = new GameModeInfo { Id = "my_rugby", ObjectiveId = "rugby" };
-        rugby.Bake();
-        TestAssert.Equal(MapListId.Ctf, MapListCatalog.ForMode(rugby)?.Id, "custom rugby mode uses ctf pool");
 
         var ffa = new GameModeInfo { Id = "my_ffa", ObjectiveId = "dm" };
         ffa.Bake();

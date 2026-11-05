@@ -13,7 +13,8 @@ public class GameMutatorCatalogTest : GoTestBase
     [Test]
     public void CatalogLoadsAllBuiltInMutators()
     {
-        string[] required = { "insta", "effic", "tactics", "capture_loadout", "regen_loadout", "rocket_arena" };
+        string[] required = { "insta", "effic", "tactics" };
+        TestAssert.Equal(required.Length, GameMutatorCatalog.All.Length, "built-in mutator count");
         foreach (var id in required)
         {
             var mut = GameMutatorCatalog.TryGet(id);
@@ -62,15 +63,5 @@ public class GameMutatorCatalogTest : GoTestBase
         TestAssert.Equal(2, tac.RandomGunsCount, "tac random guns 2");
         TestAssert.Equal(2, tac.RandomGunsAmmoScale, "tac random scale 2");
         TestAssert.Equal(ItemSpawnMask.None, tac.AllowedItems, "tac allowed items none");
-    }
-
-    [Test]
-    public void CaptureLoadoutAllowsNonAmmoPickups()
-    {
-        var cap = GameMutatorCatalog.Get("capture_loadout");
-        TestAssert.Equal(100, cap.SpawnHealth, "cap health");
-        TestAssert.Equal(100, cap.SpawnArmour, "cap armour");
-        TestAssert.Equal(ArmourType.Green, cap.SpawnArmourType, "cap green armour");
-        TestAssert.Equal(ItemSpawnMask.NonAmmo, cap.AllowedItems, "cap allowed nonammo");
     }
 }

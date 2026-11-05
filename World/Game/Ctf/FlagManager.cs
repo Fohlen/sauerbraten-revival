@@ -43,13 +43,11 @@ public sealed class FlagManager
 
     /// <summary>Checks whether a game mode is configured with Hold flag rules.</summary>
     public static bool IsHoldMode(GameModeInfo? mode) =>
-        (mode?.Objective as FlagObjectiveResource)?.Placement == FlagPlacementMode.DynamicHoldSpawns ||
-        mode?.ObjectiveId == "hold";
+        (mode?.Objective as FlagObjectiveResource)?.Placement == FlagPlacementMode.DynamicHoldSpawns;
 
     /// <summary>Checks whether a game mode is configured with Protect flag rules.</summary>
     public static bool IsProtectMode(GameModeInfo? mode) =>
-        (mode?.Objective as FlagObjectiveResource)?.ScoreRule == FlagScoreRule.TouchEnemyFlag ||
-        mode?.ObjectiveId is "protect" or "insta_protect" or "effic_protect";
+        (mode?.Objective as FlagObjectiveResource)?.ScoreRule == FlagScoreRule.TouchEnemyFlag;
 
     /// <summary>Invoked whenever an audio event occurs.</summary>
     public event Action<FlagAudioEvent>? OnAudioEvent;

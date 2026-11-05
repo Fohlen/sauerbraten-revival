@@ -93,30 +93,6 @@ public class EntityModeTest : GoTestBase
     }
 
     [Test]
-    public void CaptureDrawsBasesOnly()
-    {
-        var map = TestData.ReadMap("bt_falls");
-        var root = ModeEntityBuilder.Build(map, mode: GameModeCatalog.Get("capture"));
-
-        TestAssert.Equal(5, CountType(root, EntityType.Base), "bases in capture");
-        TestAssert.Equal(0, CountType(root, EntityType.Flag), "flags in capture");
-        root.Free();
-    }
-
-    [Test]
-    public void HoldDrawsNeitherBasesNorFlags()
-    {
-        // Hold turns BASE entities into (invisible) hold spawns and creates its
-        // single neutral flag dynamically (ctf.h:729).
-        var map = TestData.ReadMap("bt_falls");
-        var root = ModeEntityBuilder.Build(map, mode: GameModeCatalog.Get("hold"));
-
-        TestAssert.Equal(0, CountType(root, EntityType.Base), "bases in hold");
-        TestAssert.Equal(0, CountType(root, EntityType.Flag), "flags in hold");
-        root.Free();
-    }
-
-    [Test]
     public void ActiveModeKeepsGenericModeEntities()
     {
         var map = TestData.ReadMap("lost");
