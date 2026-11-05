@@ -203,30 +203,61 @@ public sealed class RocketProjectile
             candidates: candidates,
             safe: directHitVictim);
 
+        var attacker = Owner as MapPlayer;
+        Gun gunId = Gun != null && Gun.Id != Weapons.Gun.None ? Gun.Id : Weapons.Gun.RocketLauncher;
+        int? now = attacker?.LastMillis;
+
         // Apply radial splash damage and push to nearby targets
         for (int i = 0; i < explosionResult.Hits.Count; i++)
         {
             var hit = explosionResult.Hits[i];
-            hit.Target.ApplyHitPush(hit.PushVel);
-            hit.Target.TakeDamage(hit.Damage);
+            if (hit.Target is MapPlayer player)
+            {
+                // Route through attributed damage path on MapPlayer (mode scaling + objective hook).
+                // ResolveExplosion applied default self scales (0.5 damage / 2.5 push).
+                // For self hits, pass the unscaled base values so MapPlayer.TakeDamage applies Mode.SelfDamageScale / SelfPushScale.
+                int dmg = hit.IsSelf ? (int)Math.Round(hit.Damage / 0.5f) : hit.Damage;
+                Vector3 push = hit.IsSelf ? (hit.PushVel / WeaponExplosion.ExpSelfPush) : hit.PushVel;
+                player.TakeDamage(dmg, attacker, gunId, push, now);
+            }
+            else
+            {
+                hit.Target.ApplyHitPush(hit.PushVel);
+                hit.Target.TakeDamage(hit.Damage);
+            }
         }
 
         // If a direct hit occurred, direct victim takes full qdam and push (weapon.cpp:518-519)
         if (directHitVictim != null)
         {
-            WeaponExplosion.ProjDist(directHitVictim.CollisionEntity, impactPos, out Vector3 dir);
+            WeaponExplosion.ProjDist(directHitVictim.CollisionEntity, impactPos, out Vector3 directDir);
             int weight = Math.Max(1, directHitVictim.Weight);
             bool isSelf = (Owner != null && directHitVictim == Owner);
-            Vector3 directPush = WeaponExplosion.CalculateExplosionPush(
-                dir,
-                qdam,
-                weight,
-                Gun.HitPush,
-                Gun.ExpRad,
-                isSelf);
 
-            directHitVictim.ApplyHitPush(directPush);
-            directHitVictim.TakeDamage(qdam);
+            if (directHitVictim is MapPlayer victimPlayer)
+            {
+                int dmg = qdam;
+                Vector3 push = WeaponExplosion.CalculateExplosionPush(
+                    directDir,
+                    isSelf ? (qdam / WeaponExplosion.ExpSelfDamDiv) : qdam,
+                    weight,
+                    Gun.HitPush,
+                    Gun.ExpRad,
+                    isSelf: false);
+                victimPlayer.TakeDamage(dmg, attacker, gunId, push, now);
+            }
+            else
+            {
+                Vector3 directPush = WeaponExplosion.CalculateExplosionPush(
+                    directDir,
+                    isSelf ? (qdam / WeaponExplosion.ExpSelfDamDiv) : qdam,
+                    weight,
+                    Gun.HitPush,
+                    Gun.ExpRad,
+                    isSelf: isSelf);
+                directHitVictim.ApplyHitPush(directPush);
+                directHitVictim.TakeDamage(isSelf ? (qdam / WeaponExplosion.ExpSelfDamDiv) : qdam);
+            }
         }
 
         if (Owner is MapPlayer ownerPlayer)
