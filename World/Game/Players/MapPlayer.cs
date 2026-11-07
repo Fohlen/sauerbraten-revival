@@ -173,6 +173,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             if (_mode == value) return;
             _mode = value;
+            if (_mode.Has(ModeFlags.Insta) && Combat.GunSelect != (int)Gun.Rifle)
+            {
+                SelectWeapon(Gun.Rifle);
+            }
             EmitSignal(SignalName.ModeChanged, value);
         }
     }
@@ -314,6 +318,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         get => Combat.GunSelect;
         set
         {
+            if (Mode?.Has(ModeFlags.Insta) == true && value != (int)Gun.Rifle) return;
             if (Guns.IsPlayerSelectable(value))
             {
                 SelectWeapon((Gun)value);
@@ -968,11 +973,17 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// Select a weapon (engine <c>gunselect</c>, weapon.cpp). Updates combat state,
     /// swaps third-person view weapon, switches the first-person hudgun, and emits
     /// <see cref="Game.Players.MapPlayer.SignalName.WeaponChanged"/>.
+    /// In instagib modes, changing away from the rifle is disallowed (weapon.cpp, fps.cpp).
     /// </summary>
     public void SelectWeapon(Gun gun)
     {
         int g = (int)gun;
         if (!Guns.IsPlayerSelectable(g)) return;
+        if (Mode?.Has(ModeFlags.Insta) == true && gun != Gun.Rifle)
+        {
+            PlaySound(GameSound.NoAmmo);
+            return;
+        }
         Combat.GunSelect = g;
         PlayerModel?.SetViewWeapon(WeaponCatalog.Vwep(gun));
         Hudgun?.SetGun(WeaponCatalog.Get(gun).File);
@@ -983,6 +994,11 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public void NextWeapon(int dir = 1)
     {
         if (!IsAlive) return;
+        if (Mode?.Has(ModeFlags.Insta) == true)
+        {
+            PlaySound(GameSound.NoAmmo);
+            return;
+        }
         int step = dir < 0 ? -1 : 1;
         int current = Combat.GunSelect;
         int count = Guns.Last - Guns.First + 1;

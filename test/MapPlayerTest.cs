@@ -1191,4 +1191,42 @@ public class MapPlayerTest : GoTestBase
         TestAssert.True(bounces1 > 0, "phys1 received bounce event on phys1 action");
         TestAssert.True(traces1 > 0, "phys1 received trace events on phys1 action");
     }
+
+    [Test]
+    public void CannotChangeWeaponsInInstaMode()
+    {
+        var player = new MapPlayer();
+        var instaMode = World.Game.GameModeCatalog.Get("insta");
+        player.Mode = instaMode;
+        player.Respawn();
+
+        TestAssert.Equal((int)Gun.Rifle, player.Combat.GunSelect, "Player in insta spawns with Rifle");
+
+        // Attempting to select other weapons via SelectWeapon should fail and keep Rifle
+        player.SelectWeapon(Gun.Shotgun);
+        TestAssert.Equal((int)Gun.Rifle, player.Combat.GunSelect, "SelectWeapon(Shotgun) ignored in insta");
+
+        player.SelectWeapon(Gun.Fist);
+        TestAssert.Equal((int)Gun.Rifle, player.Combat.GunSelect, "SelectWeapon(Fist) ignored in insta");
+
+        player.SelectWeapon(Gun.RocketLauncher);
+        TestAssert.Equal((int)Gun.Rifle, player.Combat.GunSelect, "SelectWeapon(RocketLauncher) ignored in insta");
+
+        // Attempting to select Rifle succeeds (re-affirms current weapon)
+        player.SelectWeapon(Gun.Rifle);
+        TestAssert.Equal((int)Gun.Rifle, player.Combat.GunSelect, "SelectWeapon(Rifle) permitted in insta");
+
+        // NextWeapon cycling should do nothing in insta
+        player.NextWeapon(1);
+        TestAssert.Equal((int)Gun.Rifle, player.Combat.GunSelect, "NextWeapon(1) ignored in insta");
+
+        player.NextWeapon(-1);
+        TestAssert.Equal((int)Gun.Rifle, player.Combat.GunSelect, "NextWeapon(-1) ignored in insta");
+
+        // Setting GunSelect property directly to another gun should also be ignored
+        player.GunSelect = (int)Gun.Chaingun;
+        TestAssert.Equal((int)Gun.Rifle, player.Combat.GunSelect, "GunSelect = Chaingun ignored in insta");
+
+        player.Free();
+    }
 }
