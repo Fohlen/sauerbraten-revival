@@ -31,6 +31,21 @@ public sealed class ModelInfo
     /// <summary>True to cull backfaces, false to disable backface culling for 2-sided geometry (Cube2 <c>mdlcullface</c>).</summary>
     public bool? CullFace;
 
+    /// <summary>True if players and entities collide with this model (Cube2 <c>mdlcollide</c>, default true).</summary>
+    public bool Collide = true;
+
+    /// <summary>True for cylindrical/ellipse collision, false for oriented bounding box (Cube2 <c>mdlellipsecollide</c>).</summary>
+    public bool EllipseCollide;
+
+    /// <summary>Center offset of the collision box in Sauerbraten model coordinates.</summary>
+    public Vector3 CollideCenter;
+
+    /// <summary>Half-extents (radius) of the collision box in Sauerbraten model coordinates.</summary>
+    public Vector3 CollideRadius;
+
+    /// <summary>Radial rejection distance for coarse broadphase bounding test.</summary>
+    public float RejectRadius;
+
     /// <summary>Reference-dump-relative source geometry (e.g. <c>models/mrfixit/mrfixit.md5mesh</c>), or null.</summary>
     public string? Source;
 
@@ -241,6 +256,48 @@ public sealed class ModelCatalog : IModelCatalog
             else if (cf.ValueKind == JsonValueKind.Number)
                 info.CullFace = cf.GetInt32() != 0;
         }
+        if (v.TryGetProperty("collide", out var col))
+        {
+            if (col.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                info.Collide = col.GetBoolean();
+            else if (col.ValueKind == JsonValueKind.Number)
+                info.Collide = col.GetInt32() != 0;
+        }
+        if (v.TryGetProperty("ellipsecollide", out var ec))
+        {
+            if (ec.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                info.EllipseCollide = ec.GetBoolean();
+            else if (ec.ValueKind == JsonValueKind.Number)
+                info.EllipseCollide = ec.GetInt32() != 0;
+        }
+        if (v.TryGetProperty("collidecenter", out var cc) && cc.ValueKind == JsonValueKind.Array)
+        {
+            int idx = 0;
+            float cx = 0, cy = 0, cz = 0;
+            foreach (var elem in cc.EnumerateArray())
+            {
+                if (idx == 0) cx = (float)elem.GetDouble();
+                else if (idx == 1) cy = (float)elem.GetDouble();
+                else if (idx == 2) cz = (float)elem.GetDouble();
+                idx++;
+            }
+            if (idx >= 3) info.CollideCenter = new Vector3(cx, cy, cz);
+        }
+        if (v.TryGetProperty("collideradius", out var cr) && cr.ValueKind == JsonValueKind.Array)
+        {
+            int idx = 0;
+            float rx = 0, ry = 0, rz = 0;
+            foreach (var elem in cr.EnumerateArray())
+            {
+                if (idx == 0) rx = (float)elem.GetDouble();
+                else if (idx == 1) ry = (float)elem.GetDouble();
+                else if (idx == 2) rz = (float)elem.GetDouble();
+                idx++;
+            }
+            if (idx >= 3) info.CollideRadius = new Vector3(rx, ry, rz);
+        }
+        if (v.TryGetProperty("rejectradius", out var rr) && rr.ValueKind == JsonValueKind.Number)
+            info.RejectRadius = (float)rr.GetDouble();
         if (v.TryGetProperty("source", out var src) && src.ValueKind == JsonValueKind.String)
             info.Source = src.GetString();
         if (v.TryGetProperty("skeleton", out var skel) && skel.ValueKind == JsonValueKind.True)

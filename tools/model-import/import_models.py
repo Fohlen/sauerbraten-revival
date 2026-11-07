@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import shlex
@@ -46,6 +47,7 @@ def parse_cfg(path: str) -> dict:
     params: dict = {"scale": 1.0, "trans": [0.0, 0.0, 0.0], "glow": None, "spec": None,
                     "skin": None, "bump": None, "source": None, "objdir": None,
                     "md5dir": None, "alphatest": None, "alphablend": None, "cullface": None,
+                    "collide": None, "ellipsecollide": None, "mdlbb": None, "extendbb": None,
                     "execs": [], "cfgs": [], "skins": [], "bumpmaps": [], "anims": [], "tags": [],
                     "animparts": [], "pitches": [], "adjusts": [], "links": []}
     if not os.path.isfile(path):
@@ -91,6 +93,29 @@ def parse_cfg(path: str) -> dict:
             elif cmd in ("mdlcullface", "cullface", "objcullface", "md2cullface", "md3cullface", "md5cullface", "iqmcullface") and args:
                 try:
                     params["cullface"] = int(float(args[-1])) != 0
+                except ValueError:
+                    pass
+            elif cmd == "mdlcollide" and args:
+                try:
+                    params["collide"] = int(float(args[0])) != 0
+                except ValueError:
+                    pass
+            elif cmd == "mdlellipsecollide" and args:
+                try:
+                    params["ellipsecollide"] = int(float(args[0])) != 0
+                except ValueError:
+                    pass
+            elif cmd == "mdlbb" and args:
+                try:
+                    rad = float(args[0])
+                    h = float(args[1]) if len(args) > 1 else 0.0
+                    eye = float(args[2]) if len(args) > 2 else 0.0
+                    params["mdlbb"] = [rad, h, eye]
+                except ValueError:
+                    pass
+            elif cmd == "mdlextendbb" and len(args) >= 3:
+                try:
+                    params["extendbb"] = [float(args[0]), float(args[1]), float(args[2])]
                 except ValueError:
                     pass
             elif cmd in ("objdir",) and args:
@@ -213,7 +238,7 @@ def _execute_cfg(params: dict, models_root: str, packages_root: str) -> None:
         for key in ("source", "objdir"):
             if not params.get(key) and sub.get(key):
                 params[key] = sub[key]
-        for key in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir", "alphatest", "alphablend", "cullface"):
+        for key in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir", "alphatest", "alphablend", "cullface", "collide", "ellipsecollide", "mdlbb", "extendbb"):
             if params.get(key) in (None, 1.0, [0.0, 0.0, 0.0]) and sub.get(key) not in (None, 1.0, [0.0, 0.0, 0.0]):
                 params[key] = sub[key]
         # List-valued directives accumulate across the exec chain (md5.cfg execs
@@ -316,7 +341,7 @@ def _merge_cfg_params(params: dict, base: str) -> None:
             if path in seen:
                 continue
             other = parse_cfg(path)
-            for k in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir", "alphatest", "alphablend", "cullface"):
+            for k in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir", "alphatest", "alphablend", "cullface", "collide", "ellipsecollide", "mdlbb", "extendbb"):
                 if params.get(k) in (None, 1.0, [0.0, 0.0, 0.0]) and other.get(k) not in (None, 1.0, [0.0, 0.0, 0.0]):
                     params[k] = other[k]
             part_offset = len(params.setdefault("animparts", []))
@@ -963,6 +988,99 @@ def resolve_mesh_skins(mesh_parts: list[str], raw_skins: list[dict], raw_bumps: 
     return skins
 
 
+def read_md2_bounds(path: str) -> tuple[list[float], list[float]] | None:
+    try:
+        with open(path, "rb") as f:
+            hdr = f.read(68)
+            if len(hdr) < 68:
+                return None
+            fields = struct.unpack("<17i", hdr)
+            nverts, off_frames = fields[6], fields[14]
+            f.seek(off_frames)
+            frame = f.read(40)
+            if len(frame) < 40:
+                return None
+            sx, sy, sz, tx, ty, tz = struct.unpack("<6f", frame[:24])
+            raw_verts = f.read(nverts * 4)
+            if len(raw_verts) < nverts * 4:
+                return None
+            xs, ys, zs = [], [], []
+            for i in range(nverts):
+                b = raw_verts[i * 4 : i * 4 + 4]
+                xs.append(b[0] * sx + tx)
+                ys.append(-(b[1] * sy + ty))
+                zs.append(b[2] * sz + tz)
+            return [min(xs), min(ys), min(zs)], [max(xs), max(ys), max(zs)]
+    except (OSError, struct.error):
+        return None
+
+
+def read_md3_bounds(path: str) -> tuple[list[float], list[float]] | None:
+    try:
+        with open(path, "rb") as f:
+            hdr_bytes = f.read(108)
+            if len(hdr_bytes) < 108:
+                return None
+            hdr = struct.unpack("<2i64s9i", hdr_bytes)
+            nmeshes, ofs_meshes = hdr[6], hdr[10]
+            xs, ys, zs = [], [], []
+            mesh_offset = ofs_meshes
+            for _ in range(nmeshes):
+                f.seek(mesh_offset)
+                mhdr_bytes = f.read(108)
+                if len(mhdr_bytes) < 108:
+                    break
+                mhdr = struct.unpack("<2i64s9i", mhdr_bytes)
+                nverts, ofs_verts, meshsize = mhdr[6], mhdr[9], mhdr[11]
+                f.seek(mesh_offset + ofs_verts)
+                raw = f.read(nverts * 8)
+                if len(raw) < nverts * 8:
+                    break
+                for i in range(nverts):
+                    vx, vy, vz, _ = struct.unpack_from("<4h", raw, i * 8)
+                    xs.append(vx / 64.0)
+                    ys.append(-vy / 64.0)
+                    zs.append(vz / 64.0)
+                mesh_offset += meshsize
+            if not xs:
+                return None
+            return [min(xs), min(ys), min(zs)], [max(xs), max(ys), max(zs)]
+    except (OSError, struct.error):
+        return None
+
+
+def read_obj_bounds(path: str) -> tuple[list[float], list[float]] | None:
+    try:
+        xs, ys, zs = [], [], []
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                toks = line.strip().split()
+                if len(toks) >= 4 and toks[0] == "v":
+                    try:
+                        x, y, z = float(toks[1]), float(toks[2]), float(toks[3])
+                        xs.append(z)
+                        ys.append(-x)
+                        zs.append(y)
+                    except ValueError:
+                        pass
+        if not xs:
+            return None
+        return [min(xs), min(ys), min(zs)], [max(xs), max(ys), max(zs)]
+    except OSError:
+        return None
+
+
+def compute_model_bounds(source: str) -> tuple[list[float], list[float]] | None:
+    ext = os.path.splitext(source)[1].lower()
+    if ext == ".md2":
+        return read_md2_bounds(source)
+    if ext == ".md3":
+        return read_md3_bounds(source)
+    if ext == ".obj":
+        return read_obj_bounds(source)
+    return None
+
+
 def parse_linked_parts(model_name: str, models_root: str, packages_root: str) -> tuple[list[dict], dict]:
     """Parse a multi-part (``md5link``) model into its per-mesh parts, in cfg order.
 
@@ -1429,6 +1547,48 @@ def main(argv: list[str] | None = None) -> int:
                     record["skins"] = skins
         else:
             print(f"MISS  {name}: no source geometry")
+
+        # Collision properties (physics.cpp / model.h)
+        collide = params.get("collide")
+        if collide is None:
+            collide = True
+        record["collide"] = collide
+
+        ellipsecollide = params.get("ellipsecollide")
+        if ellipsecollide is None:
+            ellipsecollide = False
+        record["ellipsecollide"] = ellipsecollide
+
+        raw_bounds = compute_model_bounds(source) if source and os.path.isfile(source) else None
+        if raw_bounds is not None:
+            raw_min, raw_max = raw_bounds
+            model_scale = record["scale"]
+            trans = record.get("trans") or [0.0, 0.0, 0.0]
+            bbmin = [raw_min[i] * model_scale + trans[i] for i in range(3)]
+            bbmax = [raw_max[i] * model_scale + trans[i] for i in range(3)]
+            bbcenter = [(bbmin[i] + bbmax[i]) * 0.5 for i in range(3)]
+            bbradius = [(bbmax[i] - bbmin[i]) * 0.5 for i in range(3)]
+            extendbb = params.get("extendbb")
+            if extendbb and len(extendbb) >= 3:
+                bbradius = [bbradius[i] + extendbb[i] for i in range(3)]
+
+            collidecenter = list(bbcenter)
+            collideradius = list(bbradius)
+            mdlbb = params.get("mdlbb")
+            if mdlbb:
+                rad, h, _ = mdlbb
+                if rad > 0:
+                    collidecenter[0] = collidecenter[1] = 0.0
+                    collideradius[0] = collideradius[1] = rad
+                if h > 0:
+                    collidecenter[2] = collideradius[2] = h / 2.0
+
+            rejectradius = math.sqrt(sum((abs(collidecenter[i]) + collideradius[i]) ** 2 for i in range(3)))
+
+            record["collidecenter"] = [round(c, 4) for c in collidecenter]
+            record["collideradius"] = [round(r, 4) for r in collideradius]
+            record["rejectradius"] = round(rejectradius, 4)
+
         manifest["models"][name] = record
 
     # Merge into any existing manifest so converting map B doesn't drop map A's models.

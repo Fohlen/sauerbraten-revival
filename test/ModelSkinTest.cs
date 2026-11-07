@@ -84,6 +84,66 @@ public class ModelSkinTest : GoTestBase
     }
 
     [Test]
+    public void ModelCatalogReadsCollisionParams()
+    {
+        const string json = """
+        {
+          "models": {
+            "objects/lantern01": {
+              "collide": true,
+              "ellipsecollide": false,
+              "collidecenter": [0.0, 0.0, 12.4687],
+              "collideradius": [2.0, 2.0, 13.2408],
+              "rejectradius": 25.8647
+            },
+            "objects/lamp01": {
+              "collide": false,
+              "ellipsecollide": false,
+              "collidecenter": [-0.1173, 0.0199, -5.5892],
+              "collideradius": [7.1952, 2.2301, 10.6876],
+              "rejectradius": 17.9852
+            },
+            "vegetation/tree05": {
+              "collide": true,
+              "ellipsecollide": true,
+              "collidecenter": [0.0, 0.0, 25.957],
+              "collideradius": [4.0, 4.0, 28.5059],
+              "rejectradius": 54.7559
+            }
+          }
+        }
+        """;
+
+        string path = Path.GetTempFileName();
+        File.WriteAllText(path, json);
+        try
+        {
+            var catalog = ModelCatalog.Load(path, "/tmp", "res://models")!;
+            var lantern = catalog.Get("objects/lantern01")!;
+            TestAssert.True(lantern.Collide, "lantern is collidable");
+            TestAssert.False(lantern.EllipseCollide, "lantern uses box collision");
+            TestAssert.Equal(new Vector3(0f, 0f, 12.4687f), lantern.CollideCenter, "lantern CollideCenter");
+            TestAssert.Equal(new Vector3(2f, 2f, 13.2408f), lantern.CollideRadius, "lantern CollideRadius");
+            TestAssert.True(Mathf.IsEqualApprox(25.8647f, lantern.RejectRadius), "lantern RejectRadius");
+
+            var lamp = catalog.Get("objects/lamp01")!;
+            TestAssert.False(lamp.Collide, "lamp01 is walk-through");
+            TestAssert.False(lamp.EllipseCollide, "lamp01 ellipsecollide is false");
+
+            var tree = catalog.Get("vegetation/tree05")!;
+            TestAssert.True(tree.Collide, "tree05 is collidable");
+            TestAssert.True(tree.EllipseCollide, "tree05 uses ellipse collision");
+            TestAssert.Equal(new Vector3(0f, 0f, 25.957f), tree.CollideCenter, "tree CollideCenter");
+            TestAssert.Equal(new Vector3(4f, 4f, 28.5059f), tree.CollideRadius, "tree CollideRadius");
+            TestAssert.True(Mathf.IsEqualApprox(54.7559f, tree.RejectRadius), "tree RejectRadius");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
     public void CutoutModelUsesAlphaScissor()
     {
         var textures = new DummyTextureSource();
