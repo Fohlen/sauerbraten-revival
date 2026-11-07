@@ -22,12 +22,6 @@ and a canonical FNV-1a checksum).
 | `lost.json` | 1723 entities (mode-entity tests). |
 | `crnsp1.json` | 8192-unit map (chunk/mesh tests). |
 
-Only the maps the **tests** exercise are committed. A full catalogue is one
-`tools/ogztool/export-all-maps.sh` run away (see below); we deliberately do not
-carry 335 entries, because the exporter is still gaining fields and stale
-entries (old `geometry` checksums) are noise. Add a map here only when a test
-needs it.
-
 The exporter only emits what the map actually uses (geometry-referenced
 textures, entity-referenced mapmodels and sounds). See
 [ADR 0006](../docs/adr/0006-ogz-import.md).
