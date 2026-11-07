@@ -252,4 +252,99 @@ public class ObjectiveCatalogTest : GoTestBase
         // Push is scaled by 2.0 -> (0, 20, 0)
         TestAssert.Equal(initialVel + new Vector3(0, 20, 0), player.Entity.Vel, "push scaled by SelfPushScale");
     }
+
+    [Test]
+    public void FlagObjective_Step_ZeroAllocationHotPath()
+    {
+        var ctfRes = ObjectiveCatalog.Get("ctf") as FlagObjectiveResource;
+        TestAssert.True(ctfRes != null, "ctf is FlagObjectiveResource");
+        var mode = GameModeCatalog.Get("ctf");
+        var obj = ctfRes!.CreateInstance(mode) as FlagObjective;
+        TestAssert.True(obj != null, "created FlagObjective");
+
+        var emptyMap = new SauerbratenRevival.World.Editor.EmptyMap { WorldScale = 10, ChunkSize = 128 };
+        obj!.SetupWorld(emptyMap, new List<MapEntity>
+        {
+            new() { Type = EntityType.Flag, Attr1 = 0, Attr2 = 1, Position = new Vector3(10, 0, 0) },
+            new() { Type = EntityType.Flag, Attr1 = 0, Attr2 = 2, Position = new Vector3(20, 0, 0) },
+        }, new Node3D());
+
+        // Warm up JIT and cache
+        obj.Step(emptyMap, 5, 1000);
+
+        // 1. Hot-path CTF check (1000 consecutive 5 ms simulation steps = 5 seconds)
+        long beforeAlloc = System.GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+        {
+            obj.Step(emptyMap, 5, 1000 + i * 5);
+        }
+        long afterAlloc = System.GC.GetAllocatedBytesForCurrentThread();
+        long ctfAllocated = afterAlloc - beforeAlloc;
+        TestAssert.Equal(0L, ctfAllocated, "CTF FlagObjective.Step allocates zero bytes on 200 Hz hot path");
+
+        // 2. Hot-path Hold check while flag is held (1000 steps before expiration)
+        var holdRes = new FlagObjectiveResource
+        {
+            Id = "hold",
+            Placement = FlagPlacementMode.DynamicHoldSpawns,
+            ScoreRule = FlagScoreRule.HoldTimer,
+            ReturnRule = FlagReturnRule.RandomRespawn,
+            HoldSeconds = 20,
+        };
+        var holdMode = new GameModeInfo { Id = "hold", Objective = holdRes };
+        var holdObj = holdRes.CreateInstance(holdMode) as FlagObjective;
+        holdObj!.Flags.AddHoldSpawn(new Vector3(10, 10, 0));
+        holdObj.Flags.SetupHoldSpawns();
+        holdObj.Flags.TakeFlag(1, 1, Vector3.Zero, 0, holdObj.Flags.Flags[0].Version, 1000);
+
+        // Warm up hold step
+        holdObj.Step(emptyMap, 5, 1005);
+
+        beforeAlloc = System.GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+        {
+            holdObj.Step(emptyMap, 5, 1010 + i * 5);
+        }
+        afterAlloc = System.GC.GetAllocatedBytesForCurrentThread();
+        long holdAllocated = afterAlloc - beforeAlloc;
+        TestAssert.Equal(0L, holdAllocated, "Hold FlagObjective.Step allocates zero bytes on 200 Hz hot path before score");
+
+        emptyMap.Free();
+    }
+
+    [Test]
+    public void FlagObjective_Step_HoldScoring_UsesBoundWorldLookup()
+    {
+        var holdRes = new FlagObjectiveResource
+        {
+            Id = "hold_score_test",
+            Placement = FlagPlacementMode.DynamicHoldSpawns,
+            ScoreRule = FlagScoreRule.HoldTimer,
+            ReturnRule = FlagReturnRule.RandomRespawn,
+            HoldSeconds = 20,
+        };
+        var holdMode = new GameModeInfo { Id = "hold_score_test", Objective = holdRes };
+        var holdObj = holdRes.CreateInstance(holdMode) as FlagObjective;
+
+        var emptyMap = new SauerbratenRevival.World.Editor.EmptyMap { WorldScale = 10, ChunkSize = 128 };
+        var player = new MapPlayer { PlayerId = 42, Team = 1 };
+        emptyMap.RegisterPlayer(player);
+
+        holdObj!.SetupWorld(emptyMap, new List<MapEntity>
+        {
+            new() { Type = EntityType.Base, Position = new Vector3(5, 5, 0) },
+        }, new Node3D());
+
+        holdObj.Flags.TakeFlag(42, 1, Vector3.Zero, 0, holdObj.Flags.Flags[0].Version, 1000);
+
+        // 19995 ms elapsed: hold timer (20s) not reached yet
+        holdObj.Step(emptyMap, 5, 1000 + 19995);
+        TestAssert.Equal(0, holdObj.Flags.GetScore(1), "team 1 not scored before hold threshold");
+
+        // 20000 ms elapsed: hold timer reached -> Step provides bound lookup -> scores!
+        holdObj.Step(emptyMap, 5, 1000 + 20000);
+        TestAssert.Equal(1, holdObj.Flags.GetScore(1), "team 1 scored using bound world lookup");
+
+        emptyMap.Free();
+    }
 }

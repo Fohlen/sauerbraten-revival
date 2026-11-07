@@ -81,6 +81,9 @@ public class FlagObjective : IModeObjective
     public GameModeInfo Mode { get; }
     public FlagManager Flags { get; set; }
 
+    private IGameWorld? _cachedWorld;
+    private readonly Func<int, (int team, Vector3 pos)?> _playerLookup;
+
     public FlagObjective(FlagObjectiveResource resource, GameModeInfo mode, FlagManager? flags = null)
     {
         Resource = resource;
@@ -92,6 +95,39 @@ public class FlagObjective : IModeObjective
         Flags = flags ?? new FlagManager { Mode = Mode, Resource = resource };
         Flags.Mode = Mode;
         Flags.Resource = resource;
+        _playerLookup = GetPlayerInfo;
+    }
+
+    private (int team, Vector3 pos)? GetPlayerInfo(int pid)
+    {
+        if (_cachedWorld == null) return null;
+        var players = _cachedWorld.Players;
+        for (int i = 0; i < players.Count; i++)
+        {
+            var p = players[i];
+            if (p.PlayerId == pid) return (p.Team, p.Entity.FeetPos());
+        }
+        return null;
+    }
+
+    private bool IsHoldMode => Resource.Placement == FlagPlacementMode.DynamicHoldSpawns
+        || Resource.ScoreRule == FlagScoreRule.HoldTimer
+        || FlagManager.IsHoldMode(Mode);
+
+    private bool NeedsHoldScoring(int nowMillis)
+    {
+        if (!IsHoldMode) return false;
+        var flags = Flags.Flags;
+        int threshold = (Resource?.HoldSeconds ?? FlagManager.HoldSecs) * 1000;
+        for (int i = 0; i < flags.Count; i++)
+        {
+            var f = flags[i];
+            if (f.HasOwner && nowMillis - f.HoldTime >= threshold)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     public bool ClaimsEntity(MapEntity e)
@@ -103,6 +139,7 @@ public class FlagObjective : IModeObjective
 
     public void SetupWorld(IGameWorld world, IReadOnlyList<MapEntity> entities, Node3D objectiveRoot)
     {
+        _cachedWorld = world;
         Flags.ResetFlags();
         if (Resource.Placement == FlagPlacementMode.DynamicHoldSpawns)
         {
@@ -131,17 +168,13 @@ public class FlagObjective : IModeObjective
 
     public void Step(IGameWorld world, int stepMillis, int nowMillis)
     {
-        Func<int, (int team, Vector3 pos)?>? getPlayerInfo = world != null ? pid =>
+        _cachedWorld = world;
+
+        Func<int, (int team, Vector3 pos)?>? getPlayerInfo = null;
+        if (world != null && NeedsHoldScoring(nowMillis))
         {
-            var players = world.Players;
-            for (int i = 0; i < players.Count; i++)
-            {
-                var p = players[i];
-                if (p.PlayerId == pid) return (p.Team, p.Entity.FeetPos());
-            }
-            return null;
+            getPlayerInfo = _playerLookup;
         }
-        : null;
 
         Flags.Update(Resource, Mode, nowMillis, getPlayerInfo);
     }
