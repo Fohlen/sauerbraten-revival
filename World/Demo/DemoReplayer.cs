@@ -114,6 +114,12 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
         _peerQueues.Clear();
         _globalQueue.Clear();
 
+        foreach (var (_, p) in _players)
+        {
+            p.Frags = 0;
+            p.Deaths = 0;
+        }
+
         if (Demo.Commands == null) return;
 
         for (int i = 0; i < Demo.Commands.Count; i++)
@@ -271,6 +277,31 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
                         if (death.Impulse != null)
                         {
                             targetPlayer.ApplyHitPush(new Vector3(death.Impulse.X, death.Impulse.Y, death.Impulse.Z));
+                        }
+
+                        // Update frags matching engine client.cpp:1560-1576 (N_DIED) and server.cpp:2278
+                        if (death.IsSuicide || death.KillerPeerId < 0 || death.KillerPeerId == targetPlayer.PlayerId)
+                        {
+                            targetPlayer.Frags--;
+                        }
+                        else
+                        {
+                            _players.TryGetValue(death.KillerPeerId, out var killerPlayer);
+                            killerPlayer ??= (defaultPlayer != null && defaultPlayer.PlayerId == death.KillerPeerId) ? defaultPlayer : null;
+                            if (killerPlayer != null)
+                            {
+                                bool isTeam = targetPlayer.Mode != null &&
+                                              targetPlayer.Mode.Has(Game.ModeFlags.Team) &&
+                                              killerPlayer.Team == targetPlayer.Team;
+                                if (isTeam)
+                                {
+                                    killerPlayer.Frags--;
+                                }
+                                else
+                                {
+                                    killerPlayer.Frags++;
+                                }
+                            }
                         }
                     }
                     break;

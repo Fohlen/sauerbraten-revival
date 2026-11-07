@@ -216,6 +216,14 @@ public partial class HudController : Control
         set => _isEfficiency = value;
     }
 
+    private bool? _isCtf;
+    /// <summary>Whether current mode is CTF/Protect/Hold mode. Derived from <see cref="Player.Mode"/> by default.</summary>
+    public bool IsCtf
+    {
+        get => _isCtf ?? (Player?.Mode.Has(Game.ModeFlags.Ctf) ?? false);
+        set => _isCtf = value;
+    }
+
     /// <summary>Whether quick weapon cycling HUD is enabled (VARP ammohud in fps.cpp).</summary>
     public bool AmmoHud { get; set; } = true;
 
@@ -328,6 +336,12 @@ public partial class HudController : Control
 
     /// <summary>Whether Score1 is the local player's / friendly team's score.</summary>
     public bool Score1IsPlayer { get; set; } = true;
+
+    /// <summary>Delegate supplying the active list of players for match score ranking.</summary>
+    public Func<IReadOnlyList<MapPlayer>?>? PlayersProvider { get; set; }
+
+    /// <summary>Direct list of players for match score ranking.</summary>
+    public IReadOnlyList<MapPlayer>? Players { get; set; }
 
     // --- Spectator & Edit Mode HUD ---
 
@@ -1311,17 +1325,151 @@ public partial class HudController : Control
     {
         if (_hudScoreLabel1 == null || _hudScoreLabel2 == null) return;
 
-        if (Player?.Flags != null)
+        // In Sauerbraten: if(!m_edit && !m_sp) if(hudscore) drawhudscore(w, h);
+        if (CurrentEditMode || !HudScore)
         {
-            int playerTeam = Player.Team;
-            int enemyTeam = playerTeam == 1 ? 2 : 1;
-            Score1 = Player.Flags.GetScore(playerTeam);
-            Score2 = Player.Flags.GetScore(enemyTeam);
-            Score1IsPlayer = true;
+            if (_hudScoreLabel1.Visible || _hudScoreLabel2.Visible)
+            {
+                _hudScoreLabel1.Visible = false;
+                _hudScoreLabel2.Visible = false;
+                _lastScore1 = int.MinValue;
+                _lastScore2 = int.MinValue;
+            }
+            return;
         }
 
-        // In Sauerbraten: if(!m_edit && !m_sp) if(hudscore) drawhudscore(w, h);
-        if (CurrentEditMode || !HudScore || Score1 == int.MinValue)
+        if (IsCtf && Player?.Flags != null)
+        {
+            // CTF modes: show team flag scores
+            int playerTeam = Player.Team;
+            int enemyTeam = playerTeam == 1 ? 2 : 1;
+            int myScore = Player.Flags.GetScore(playerTeam);
+            int enemyScore = Player.Flags.GetScore(enemyTeam);
+
+            if (myScore >= enemyScore)
+            {
+                Score1 = myScore;
+                Score2 = enemyScore;
+                Score1IsPlayer = true;
+            }
+            else
+            {
+                Score1 = enemyScore;
+                Score2 = myScore;
+                Score1IsPlayer = false;
+            }
+        }
+        else
+        {
+            // DM modes (FFA, instagib, tactics, teamplay, etc.):
+            var players = PlayersProvider?.Invoke() ?? Players;
+            if (players == null || players.Count == 0)
+            {
+                if (Player != null)
+                {
+                    Score1 = Player.Frags;
+                    Score2 = int.MinValue;
+                    Score1IsPlayer = true;
+                }
+            }
+            else if (IsTeamPlay)
+            {
+                // Teamplay DM: aggregate frags by team
+                int myTeam = Player?.Team ?? 1;
+                int enemyTeam = myTeam == 1 ? 2 : 1;
+                int myTeamFrags = 0;
+                int enemyTeamFrags = 0;
+
+                for (int i = 0; i < players.Count; i++)
+                {
+                    var p = players[i];
+                    if (p.Team == myTeam) myTeamFrags += p.Frags;
+                    else if (p.Team == enemyTeam) enemyTeamFrags += p.Frags;
+                }
+
+                if (myTeamFrags >= enemyTeamFrags)
+                {
+                    Score1 = myTeamFrags;
+                    Score2 = enemyTeamFrags;
+                    Score1IsPlayer = true;
+                }
+                else
+                {
+                    Score1 = enemyTeamFrags;
+                    Score2 = myTeamFrags;
+                    Score1IsPlayer = false;
+                }
+            }
+            else
+            {
+                // FFA / non-team DM:
+                // Find leader (highest frags; tie-break: followed player preferred or by name/id)
+                MapPlayer? leader = null;
+                for (int i = 0; i < players.Count; i++)
+                {
+                    var p = players[i];
+                    if (leader == null)
+                    {
+                        leader = p;
+                    }
+                    else if (p.Frags > leader.Frags)
+                    {
+                        leader = p;
+                    }
+                    else if (p.Frags == leader.Frags)
+                    {
+                        if (Player != null && p.PlayerId == Player.PlayerId)
+                        {
+                            leader = p;
+                        }
+                    }
+                }
+
+                if (leader != null)
+                {
+                    bool isLeader = Player != null && (leader.PlayerId == Player.PlayerId || ReferenceEquals(leader, Player));
+                    int leaderFrags = leader.Frags;
+
+                    if (isLeader)
+                    {
+                        Score1 = leaderFrags;
+                        Score1IsPlayer = true;
+
+                        MapPlayer? second = null;
+                        for (int i = 0; i < players.Count; i++)
+                        {
+                            var p = players[i];
+                            if (p.PlayerId == leader.PlayerId || ReferenceEquals(p, leader)) continue;
+                            if (second == null || p.Frags > second.Frags)
+                            {
+                                second = p;
+                            }
+                        }
+
+                        Score2 = second != null ? second.Frags : int.MinValue;
+                    }
+                    else
+                    {
+                        Score1 = leaderFrags;
+                        Score1IsPlayer = false;
+                        Score2 = Player?.Frags ?? 0;
+
+                        if (Score1 == Score2)
+                        {
+                            Score1IsPlayer = true;
+                        }
+                    }
+                }
+                else if (Player != null)
+                {
+                    Score1 = Player.Frags;
+                    Score2 = int.MinValue;
+                    Score1IsPlayer = true;
+                }
+            }
+        }
+
+        if (Score1 == int.MinValue)
         {
             if (_hudScoreLabel1.Visible || _hudScoreLabel2.Visible)
             {
@@ -1340,7 +1488,8 @@ public partial class HudController : Control
             Score2 == _lastScore2 &&
             Score1IsPlayer == _lastScore1IsPlayer &&
             viewportSize == _lastScoreViewportSize &&
-            _hudScoreLabel1.Visible)
+            _hudScoreLabel1.Visible &&
+            ((Score2 != int.MinValue) == _hudScoreLabel2.Visible))
         {
             return;
         }

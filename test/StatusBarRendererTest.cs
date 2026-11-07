@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using System.IO;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.World;
+using SauerbratenRevival.World.Demo;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Ctf;
 using SauerbratenRevival.World.Hud;
@@ -886,6 +888,202 @@ public class StatusBarRendererTest : GoTestBase
                             Mathf.PosMod(region.Position.Y, 64f) == 0f,
                 $"{icon} maps to a 64x64 atlas cell, got {region}");
         }
+    }
+
+    [Test]
+    public void HudScore_DisplaysPlayerFragsInFfaDmMode()
+    {
+        var player1 = new MapPlayer { PlayerId = 0, Name = "Player1", Frags = 10 };
+        var player2 = new MapPlayer { PlayerId = 1, Name = "Player2", Frags = 5 };
+        var players = new List<MapPlayer> { player1, player2 };
+
+        var hud = new HudController
+        {
+            Player = player1,
+            Players = players,
+            IsCtf = false,
+            IsTeamPlay = false,
+            HudScore = true
+        };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        hud.UpdateHudScore();
+        var label1 = hud.GetNodeOrNull<Label>("HudScoreLabel1");
+        var label2 = hud.GetNodeOrNull<Label>("HudScoreLabel2");
+        TestAssert.True(label1 != null && label2 != null, "Score labels exist");
+
+        // Player 1 leading: Score1 = 10 (player, blue), Score2 = 5 (enemy, red)
+        TestAssert.Equal(10, hud.Score1, "Player 1 leading frags on Score1");
+        TestAssert.Equal(5, hud.Score2, "Player 2 frags on Score2");
+        TestAssert.True(hud.Score1IsPlayer, "Score1 is player color when leading");
+        TestAssert.True(label1!.Visible && label1.Text == "10", $"label1 shows 10, got {label1.Text}");
+        TestAssert.True(label2!.Visible && label2.Text == "5", $"label2 shows 5, got {label2.Text}");
+
+        // Now follow Player 2 (trailing): Score1 = 10 (leader enemy, red), Score2 = 5 (player, blue)
+        hud.Player = player2;
+        hud.UpdateHudScore();
+        TestAssert.Equal(10, hud.Score1, "Leader frags on Score1");
+        TestAssert.Equal(5, hud.Score2, "Player 2 frags on Score2");
+        TestAssert.False(hud.Score1IsPlayer, "Score1 is enemy color when trailing");
+        TestAssert.True(label1.Visible && label1.Text == "10", $"label1 shows leader 10, got {label1.Text}");
+        TestAssert.True(label2.Visible && label2.Text == "5", $"label2 shows player 5, got {label2.Text}");
+
+        // Single player in FFA: only 1 score shown, Score2 hidden
+        hud.Players = new List<MapPlayer> { player1 };
+        hud.Player = player1;
+        hud.UpdateHudScore();
+        TestAssert.Equal(10, hud.Score1, "Single player frags on Score1");
+        TestAssert.Equal(int.MinValue, hud.Score2, "Score2 is MinValue for single player");
+        TestAssert.True(label1.Visible && label1.Text == "10", "label1 shows 10");
+        TestAssert.False(label2.Visible, "label2 hidden for single player");
+
+        canvas.Free();
+        player1.Free();
+        player2.Free();
+    }
+
+    [Test]
+    public void HudScore_DisplaysTeamFragsInTeamplayDmMode()
+    {
+        // Good team: player 1 (7 frags) + player 2 (5 frags) = 12 team frags
+        // Evil team: player 3 (9 frags) = 9 team frags
+        var p1 = new MapPlayer { PlayerId = 0, Team = 1, Frags = 7 };
+        var p2 = new MapPlayer { PlayerId = 1, Team = 1, Frags = 5 };
+        var p3 = new MapPlayer { PlayerId = 2, Team = 2, Frags = 9 };
+        var players = new List<MapPlayer> { p1, p2, p3 };
+
+        var hud = new HudController
+        {
+            Player = p1,
+            Players = players,
+            IsCtf = false,
+            IsTeamPlay = true,
+            HudScore = true
+        };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        hud.UpdateHudScore();
+        var label1 = hud.GetNodeOrNull<Label>("HudScoreLabel1");
+        var label2 = hud.GetNodeOrNull<Label>("HudScoreLabel2");
+
+        // Good team leading (12 vs 9): Score1 = 12 (player), Score2 = 9 (enemy)
+        TestAssert.Equal(12, hud.Score1, "Good team leading frags on Score1");
+        TestAssert.Equal(9, hud.Score2, "Evil team frags on Score2");
+        TestAssert.True(hud.Score1IsPlayer, "Score1 is player color for friendly leading team");
+
+        // Follow Evil team player: Evil team trailing (12 vs 9): Score1 = 12 (enemy), Score2 = 9 (player)
+        hud.Player = p3;
+        hud.UpdateHudScore();
+        TestAssert.Equal(12, hud.Score1, "Leading team frags on Score1");
+        TestAssert.Equal(9, hud.Score2, "Player team frags on Score2");
+        TestAssert.False(hud.Score1IsPlayer, "Score1 is enemy color for trailing team");
+
+        canvas.Free();
+        p1.Free();
+        p2.Free();
+        p3.Free();
+    }
+
+    [Test]
+    public void HudScore_DisplaysFlagScoresInCtfMode()
+    {
+        var player = new MapPlayer { PlayerId = 0, Team = 1, Frags = 25 };
+        var flags = new FlagManager();
+        flags.SetScore(1, 3); // Good team has 3 flag captures
+        flags.SetScore(2, 1); // Evil team has 1 flag capture
+        player.Flags = flags;
+
+        var hud = new HudController
+        {
+            Player = player,
+            IsCtf = true,
+            HudScore = true
+        };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        hud.UpdateHudScore();
+        // In CTF mode, flags score is displayed (3 vs 1), NOT player frags (25)
+        TestAssert.Equal(3, hud.Score1, "CTF flag score on Score1");
+        TestAssert.Equal(1, hud.Score2, "CTF enemy flag score on Score2");
+        TestAssert.True(hud.Score1IsPlayer, "Score1 is friendly team flag score");
+
+        canvas.Free();
+        player.Free();
+    }
+
+    [Test]
+    public void DemoReplayer_UpdatesPlayerFragsAndDeathsOnPlayerDeath()
+    {
+        var killer = new MapPlayer { PlayerId = 0, Team = 1 };
+        var victim = new MapPlayer { PlayerId = 1, Team = 2 };
+        var teammate = new MapPlayer { PlayerId = 2, Team = 1 };
+
+        var demo = new DemoPackage();
+        var replayer = new DemoReplayer(demo);
+        replayer.RegisterPlayer(killer);
+        replayer.RegisterPlayer(victim);
+        replayer.RegisterPlayer(teammate);
+
+        // 1. Regular enemy frag: killer frags victim
+        var fragCmd = new Command
+        {
+            Op = WorldOp.PlayerDeath,
+            PeerId = victim.PlayerId,
+            Payload = new(new PlayerDeathCmd
+            {
+                VictimPeerId = victim.PlayerId,
+                KillerPeerId = killer.PlayerId,
+                IsSuicide = false
+            })
+        };
+        replayer.DispatchCommand(fragCmd, victim);
+        TestAssert.Equal(1, killer.Frags, "Killer gets 1 frag");
+        TestAssert.Equal(1, victim.Deaths, "Victim gets 1 death");
+
+        // 2. Suicide: victim suicides
+        var suicideCmd = new Command
+        {
+            Op = WorldOp.PlayerDeath,
+            PeerId = victim.PlayerId,
+            Payload = new(new PlayerDeathCmd
+            {
+                VictimPeerId = victim.PlayerId,
+                KillerPeerId = victim.PlayerId,
+                IsSuicide = true
+            })
+        };
+        replayer.DispatchCommand(suicideCmd, victim);
+        TestAssert.Equal(-1, victim.Frags, "Suicide loses 1 frag");
+        TestAssert.Equal(2, victim.Deaths, "Victim deaths increment to 2");
+
+        // 3. Teamkill in team mode: killer kills teammate
+        var teamMode = GameModeCatalog.Get("teamplay");
+        killer.Mode = teamMode;
+        teammate.Mode = teamMode;
+        var tkCmd = new Command
+        {
+            Op = WorldOp.PlayerDeath,
+            PeerId = teammate.PlayerId,
+            Payload = new(new PlayerDeathCmd
+            {
+                VictimPeerId = teammate.PlayerId,
+                KillerPeerId = killer.PlayerId,
+                IsSuicide = false
+            })
+        };
+        replayer.DispatchCommand(tkCmd, teammate);
+        TestAssert.Equal(0, killer.Frags, "Teamkill reduces killer frags from 1 to 0");
+        TestAssert.Equal(1, teammate.Deaths, "Teammate deaths increment to 1");
+
+        killer.Free();
+        victim.Free();
+        teammate.Free();
     }
 
     /// <summary>

@@ -225,6 +225,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Local player/client ID (default 0).</summary>
     public int PlayerId { get; set; } = 0;
 
+    /// <summary>Player frags count (engine <c>fpsent::frags</c>).</summary>
+    public int Frags { get; set; } = 0;
+
+    /// <summary>Player deaths count (engine <c>fpsent::deaths</c>).</summary>
+    public int Deaths { get; set; } = 0;
+
     /// <summary>Player model index (e.g. 0: mrfixit, 1: ironsnout, 2: ogro, etc.).</summary>
     public int PlayerModelIndex { get; set; } = 0;
 
@@ -1279,6 +1285,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     /// <summary>Kill the player (engine <c>deathstate</c>, fpsgame/fps.cpp:425).</summary>
     public void Die(int? nowMillis = null)
     {
+        Deaths++;
         int now = nowMillis ?? LastMillis;
         Health = 0;
         Combat.LastPain = now;
