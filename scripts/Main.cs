@@ -75,7 +75,16 @@ public partial class Main : Node
         GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
         InputBindings.Load().Apply();
 
-        string[] rawArgs = OS.GetCmdlineUserArgs().Length > 0 ? OS.GetCmdlineUserArgs() : OS.GetCmdlineArgs();
+        string[] userArgs = OS.GetCmdlineUserArgs();
+        if (userArgs.Length > 0 && (userArgs[0] is "info" or "convert" or "dump" or "dmoreader" or "demo"))
+        {
+            string[] converterArgs = userArgs[0] == "dmoreader" ? userArgs[1..] : userArgs;
+            int exitCode = SauerbratenRevival.World.Demo.Formats.Dmo.DmoConverter.Run(converterArgs);
+            GetTree().Quit(exitCode);
+            return;
+        }
+
+        string[] rawArgs = userArgs.Length > 0 ? userArgs : OS.GetCmdlineArgs();
         var cli = SauerbratenRevival.World.Demo.DemoCommandLine.Parse(rawArgs);
         if (!string.IsNullOrEmpty(cli.DemoPath))
         {

@@ -1,10 +1,11 @@
 using System.CommandLine;
+using SauerbratenRevival.World.Demo.Formats.Dmo;
 
 namespace SauerbratenRevival.World.Demo;
 
 /// <summary>
-/// CLI argument parser for demo recording and playback flags using System.CommandLine.
-/// Exposes strictly <c>--demo</c>, <c>--record</c>, <c>--map</c>, and <c>--mode</c>.
+/// CLI argument parser for demo recording, playback, and converter flags using System.CommandLine.
+/// Supports top-level options (--demo, --record, --map, --mode) and subcommands (demo info/convert/dump).
 /// </summary>
 public static class DemoCommandLine
 {
@@ -36,6 +37,16 @@ public static class DemoCommandLine
         cmd.Add(RecordOption);
         cmd.Add(MapOption);
         cmd.Add(ModeOption);
+
+        // Subcommands for demo operations (info, convert, dump) under `demo`
+        var demoSub = DmoConverter.CreateDemoSubcommand();
+        cmd.Subcommands.Add(demoSub);
+
+        // Also expose first-level subcommands directly on the root
+        cmd.Subcommands.Add(DmoConverter.CreateInfoCommand());
+        cmd.Subcommands.Add(DmoConverter.CreateConvertCommand());
+        cmd.Subcommands.Add(DmoConverter.CreateDumpCommand());
+
         return cmd;
     }
 

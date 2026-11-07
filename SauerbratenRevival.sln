@@ -3,12 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SauerbratenRevival", "SauerbratenRevival.csproj", "{8EC55378-4E3F-4DF6-8B65-E0E8C7806D14}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E-EAC7-C090-1BA3-A61EC2A24D84}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "dmoreader", "dmoreader", "{506A819F-C9CF-3B1A-E944-567D99FA48C0}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DmoReaderTool", "tools\dmoreader\DmoReaderTool.csproj", "{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -49,36 +43,8 @@ Global
 		{8EC55378-4E3F-4DF6-8B65-E0E8C7806D14}.Release|x64.Build.0 = Release|Any CPU
 		{8EC55378-4E3F-4DF6-8B65-E0E8C7806D14}.Release|x86.ActiveCfg = Release|Any CPU
 		{8EC55378-4E3F-4DF6-8B65-E0E8C7806D14}.Release|x86.Build.0 = Release|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Debug|x64.Build.0 = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Debug|x86.Build.0 = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportDebug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportDebug|Any CPU.Build.0 = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportDebug|x64.ActiveCfg = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportDebug|x64.Build.0 = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportDebug|x86.ActiveCfg = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportDebug|x86.Build.0 = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportRelease|Any CPU.ActiveCfg = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportRelease|Any CPU.Build.0 = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportRelease|x64.ActiveCfg = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportRelease|x64.Build.0 = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportRelease|x86.ActiveCfg = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.ExportRelease|x86.Build.0 = Debug|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Release|x64.ActiveCfg = Release|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Release|x64.Build.0 = Release|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Release|x86.ActiveCfg = Release|Any CPU
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{506A819F-C9CF-3B1A-E944-567D99FA48C0} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
-		{A9CCDF39-A97B-4A2C-B4DD-ADD847478D87} = {506A819F-C9CF-3B1A-E944-567D99FA48C0}
 	EndGlobalSection
 EndGlobal

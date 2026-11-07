@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# Wrapper to run dmoreader CLI tool via dotnet run
-set -euo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"
-dotnet run --project "$HERE/DmoReaderTool.csproj" -c Release --no-launch-profile -- "$@"

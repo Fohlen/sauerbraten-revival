@@ -9,18 +9,15 @@ namespace SauerbratenRevival.World.Demo.Formats.Dmo;
 
 /// <summary>
 /// CLI tool and converter for Sauerbraten .dmo demo files using System.CommandLine.
-/// Provides info, convert (.dmo -> .fbs), and trajectory dump commands.
+/// Provides info, convert (.dmo -> .fbs), and trajectory dump subcommands.
 /// </summary>
 public static class DmoConverter
 {
-    public static System.CommandLine.Command CreateCommand(TextWriter? outWriter = null, TextWriter? errorWriter = null)
+    public static System.CommandLine.Command CreateInfoCommand(TextWriter? outWriter = null, TextWriter? errorWriter = null)
     {
         var outW = outWriter ?? Console.Out;
         var errW = errorWriter ?? Console.Error;
 
-        var root = new System.CommandLine.Command("dmoreader", "dmoreader — Sauerbraten .dmo demo reader & .fbs converter");
-
-        // info command
         var infoCmd = new System.CommandLine.Command("info", "Print demo metadata, player scores, frags, and statistics.");
         var infoFileArg = new Argument<string>("file") { Description = "Path to .dmo demo file." };
         var infoJsonOpt = new Option<bool>("--json") { Description = "Output summary as JSON." };
@@ -32,8 +29,14 @@ public static class DmoConverter
             bool json = parseResult.GetValue(infoJsonOpt);
             return RunInfo(file, json, outW, errW);
         });
+        return infoCmd;
+    }
 
-        // convert command
+    public static System.CommandLine.Command CreateConvertCommand(TextWriter? outWriter = null, TextWriter? errorWriter = null)
+    {
+        var outW = outWriter ?? Console.Out;
+        var errW = errorWriter ?? Console.Error;
+
         var convertCmd = new System.CommandLine.Command("convert", "Convert .dmo into revival FlatBuffers .fbs demo package for engine playback.");
         var convertFileArg = new Argument<string>("file") { Description = "Path to .dmo demo file." };
         var outOpt = new Option<string?>("-o", "--output") { Description = "Output .fbs file path." };
@@ -51,8 +54,14 @@ public static class DmoConverter
             int? primaryCn = parseResult.GetValue(primaryCnOpt);
             return RunConvert(file, output, !noRemap, primaryCn, outW, errW);
         });
+        return convertCmd;
+    }
 
-        // dump command
+    public static System.CommandLine.Command CreateDumpCommand(TextWriter? outWriter = null, TextWriter? errorWriter = null)
+    {
+        var outW = outWriter ?? Console.Out;
+        var errW = errorWriter ?? Console.Error;
+
         var dumpCmd = new System.CommandLine.Command("dump", "Dump trajectory position updates as CSV.");
         var dumpFileArg = new Argument<string>("file") { Description = "Path to .dmo demo file." };
         var playerOpt = new Option<int?>("--player") { Description = "Filter by player client number." };
@@ -71,11 +80,26 @@ public static class DmoConverter
             int limit = parseResult.GetValue(limitOpt);
             return RunDump(file, player, limit, outW, errW);
         });
+        return dumpCmd;
+    }
 
-        root.Add(infoCmd);
-        root.Add(convertCmd);
-        root.Add(dumpCmd);
+    public static System.CommandLine.Command CreateDemoSubcommand(TextWriter? outWriter = null, TextWriter? errorWriter = null)
+    {
+        var demoCmd = new System.CommandLine.Command("demo", "Demo inspection, conversion, and playback utilities.");
+        demoCmd.Subcommands.Add(CreateInfoCommand(outWriter, errorWriter));
+        demoCmd.Subcommands.Add(CreateConvertCommand(outWriter, errorWriter));
+        demoCmd.Subcommands.Add(CreateDumpCommand(outWriter, errorWriter));
+        return demoCmd;
+    }
 
+    public static System.CommandLine.Command CreateCommand(TextWriter? outWriter = null, TextWriter? errorWriter = null)
+    {
+        var root = new System.CommandLine.Command("dmoreader", "dmoreader — Sauerbraten .dmo demo reader & .fbs converter");
+        var demoSub = CreateDemoSubcommand(outWriter, errorWriter);
+        root.Subcommands.Add(demoSub);
+        root.Subcommands.Add(CreateInfoCommand(outWriter, errorWriter));
+        root.Subcommands.Add(CreateConvertCommand(outWriter, errorWriter));
+        root.Subcommands.Add(CreateDumpCommand(outWriter, errorWriter));
         return root;
     }
 
@@ -91,9 +115,9 @@ public static class DmoConverter
             return 0;
         }
 
-        // Direct file invocation shorthand: e.g. "dmoreader demo.dmo" or "dmoreader demo.dmo --json"
+        // Direct file invocation shorthand: e.g. "dmoreader demo.dmo" or "demo.dmo --json"
         string first = args[0];
-        if (first is not "info" and not "convert" and not "dump" and not "-h" and not "--help" and not "-?" and not "/?")
+        if (first is not "info" and not "convert" and not "dump" and not "demo" and not "-h" and not "--help" and not "-?" and not "/?")
         {
             if (File.Exists(first) || first.EndsWith(".dmo", StringComparison.OrdinalIgnoreCase))
             {

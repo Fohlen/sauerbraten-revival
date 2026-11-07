@@ -312,7 +312,7 @@ public class DmoReaderTest : GoTestBase
             return;
         }
 
-        // Test info command
+        // Test info command via direct subcommand
         using var infoOut = new StringWriter();
         using var infoErr = new StringWriter();
         int infoExit = DmoConverter.Run(new[] { "info", demoPath }, infoOut, infoErr);
@@ -320,6 +320,13 @@ public class DmoReaderTest : GoTestBase
         string infoText = infoOut.ToString();
         TestAssert.True(infoText.Contains("duel7"), "Info output contains map name");
         TestAssert.True(infoText.Contains("Rexus|sp4nk|"), "Info output contains player name");
+
+        // Test info command via nested subcommand: "demo info <file>"
+        using var demoInfoOut = new StringWriter();
+        using var demoInfoErr = new StringWriter();
+        int demoInfoExit = DmoConverter.Run(new[] { "demo", "info", demoPath }, demoInfoOut, demoInfoErr);
+        TestAssert.Equal(0, demoInfoExit, "DmoConverter 'demo info' exit code is 0");
+        TestAssert.True(demoInfoOut.ToString().Contains("duel7"), "'demo info' output contains map name");
 
         // Test info --json
         using var jsonOut = new StringWriter();
