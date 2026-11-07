@@ -271,7 +271,7 @@ How `FlagObjective` plugs into `IModeObjective`:
 Allows any modder to define a brand-new objective (e.g. *Prop Hunt*, *Zombie Outbreak*, *King of the Hill*, *Bomb Defusal*) in GDScript without dragging GDScript invocation or Variant marshalling onto the 200 Hz simulation hot path:
 
 1. **Native Spatial Trigger Zones**: `ObjectiveContext` in C# provides native spatial trigger zones (`add_sphere_zone`, `add_cylinder_zone`, `add_box_zone`) backed by squared-distance calculations and per-zone occupancy tracking supporting arbitrary player IDs (with strict 0–63 validation documented for 64-bit single-bit masks), updating per-team occupant counts in $O(1)$. Player removal and live team transitions are synchronized so zone team counts never remain stale. GDScript is notified **only on transition** via `on_zone_event`, eliminating per-player polling across the Variant bridge.
-2. **Bounded, Opt-In Objective Tick (`TickIntervalMillis`)**: Rules requiring periodic logic execute at a configurable rate (default 10 Hz / 100 ms) via `on_objective_tick`, leaving 95% of 5 ms physics substeps allocation-free and C#-only.
+2. **Bounded, Opt-In Objective Tick (`TickIntervalMillis`)**: Rules requiring periodic logic execute at a configurable rate (default 10 Hz / 100 ms) via `on_objective_tick`, leaving 95% of 5 ms physics substeps allocation-free and C#-only. Positive tick intervals are validated and clamped to `MinTickIntervalMillis` (5 ms, matching `Phys.PhysFrameTime`), preventing mods from scheduling sub-step intervals that would trigger multiple GDScript calls per 5 ms physics step. If `stepMillis` exceeds the interval (e.g. frame catch-up), ticks catch up accumulated time. Setting `TickIntervalMillis` to 0 or negative explicitly disables periodic ticking.
 3. **Push-Based HUD & Spawn Overrides**: Scores and HUD indicators are pushed into `ObjectiveContext` (`set_team_score`, `set_player_status`), allowing `GetHudState` at 144+ FPS to be a zero-allocation, $O(1)$ C# struct read without querying scripts or allocating `Dictionary` objects.
 4. **Pre-Allocated Synchronous Combat Hook (`ObjectiveDamageContext`)**: When `on_damage` is implemented, a single reusable `ObjectiveDamageContext : RefCounted` instance is passed with zone query helpers (`is_victim_in_zone`), eliminating per-hit dictionary allocations.
 
@@ -283,7 +283,10 @@ public partial class ScriptedObjectiveResource : ModeObjectiveResource
     /// <summary>GDScript implementing setup_world, on_zone_event, on_objective_tick, on_damage, on_player_died.</summary>
     [Export] public Script? ObjectiveScript { get; set; }
 
-    /// <summary>Period (ms) for bounded on_objective_tick calls. Defaults to 100 ms (10 Hz). &lt;= 0 disables ticking.</summary>
+    /// <summary>Minimum allowed tick interval in milliseconds (5 ms, matching Phys.PhysFrameTime).</summary>
+    public const int MinTickIntervalMillis = Phys.PhysFrameTime;
+
+    /// <summary>Period (ms) for bounded on_objective_tick calls. Defaults to 100 ms (10 Hz). &lt;= 0 disables ticking. Positive values clamped to MinTickIntervalMillis (5 ms).</summary>
     [Export] public int TickIntervalMillis { get; set; } = 100;
 
     public override IModeObjective CreateInstance(GameModeInfo mode) => new ScriptedObjective(this, mode);

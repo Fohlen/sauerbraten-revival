@@ -398,4 +398,78 @@ public class ScriptedObjectiveTest : GoTestBase
         player2.Free();
         root.Free();
     }
+
+    [Test]
+    public void ScriptedObjective_TickInterval_ClampingAndValidation()
+    {
+        var res = new ScriptedObjectiveResource();
+        TestAssert.Equal(100, res.TickIntervalMillis, "default 100 ms");
+        TestAssert.Equal(5, ScriptedObjectiveResource.MinTickIntervalMillis, "min tick interval is 5 ms");
+        TestAssert.Equal(5, ScriptedObjective.MinTickIntervalMillis, "ScriptedObjective.MinTickIntervalMillis matches resource");
+
+        // Positive values below 5 are clamped to 5
+        res.TickIntervalMillis = 1;
+        TestAssert.Equal(5, res.TickIntervalMillis, "1 ms clamped to 5 ms");
+        res.TickIntervalMillis = 4;
+        TestAssert.Equal(5, res.TickIntervalMillis, "4 ms clamped to 5 ms");
+
+        // Positive values >= 5 remain untouched
+        res.TickIntervalMillis = 5;
+        TestAssert.Equal(5, res.TickIntervalMillis, "5 ms preserved");
+        res.TickIntervalMillis = 50;
+        TestAssert.Equal(50, res.TickIntervalMillis, "50 ms preserved");
+
+        // 0 or negative values disable ticking and are preserved
+        res.TickIntervalMillis = 0;
+        TestAssert.Equal(0, res.TickIntervalMillis, "0 ms preserved (disabled)");
+        res.TickIntervalMillis = -1;
+        TestAssert.Equal(-1, res.TickIntervalMillis, "-1 ms preserved (disabled)");
+    }
+
+    [Test]
+    public void ScriptedObjective_Step_ClampsInterval_PreventsMultipleTicksPerPhysicsStep()
+    {
+        var res = GD.Load<ScriptedObjectiveResource>("res://test/fixtures/koth.tres");
+        TestAssert.True(res != null, "loaded koth.tres");
+
+        // Set sub-physics-step interval (1 ms), clamped to 5 ms
+        res!.TickIntervalMillis = 1;
+        TestAssert.Equal(ScriptedObjectiveResource.MinTickIntervalMillis, res.TickIntervalMillis, "clamped to MinTickIntervalMillis");
+
+        var mode = GameModeCatalog.Get("teamplay");
+        var obj = (ScriptedObjective)res.CreateInstance(mode);
+
+        var entities = new List<MapEntity>
+        {
+            new() { Type = EntityType.Base, Position = new Vector3(0, 0, 0) }
+        };
+        var root = new Node3D();
+        obj.SetupWorld(null!, entities, root);
+
+        var player = new MapPlayer { PlayerId = 1, Team = 1, Objective = obj };
+        player.Entity.O = new Vector3(0, 0, 0);
+        player.Entity.State = PhysEnt.CsAlive;
+        obj.StepPlayer(player, 0);
+
+        // One 5 ms physics step
+        obj.Step(null!, 5, 5);
+
+        // Score must increment by exactly 1 tick, NOT 5 ticks
+        var hud = obj.GetHudState(player, 5);
+        TestAssert.Equal(1, hud.PrimaryScore, "score incremented once in 5 ms step, not 5 times");
+
+        // Second 5 ms physics step
+        obj.Step(null!, 5, 10);
+        hud = obj.GetHudState(player, 10);
+        TestAssert.Equal(2, hud.PrimaryScore, "score incremented once in second 5 ms step");
+
+        // Reset and test disabled interval (0 ms)
+        res.TickIntervalMillis = 0;
+        obj.Step(null!, 5, 15);
+        hud = obj.GetHudState(player, 15);
+        TestAssert.Equal(2, hud.PrimaryScore, "score does not advance when TickIntervalMillis is 0");
+
+        player.Free();
+        root.Free();
+    }
 }

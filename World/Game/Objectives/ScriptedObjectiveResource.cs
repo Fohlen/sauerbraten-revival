@@ -5,6 +5,7 @@ using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Hud;
+using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Runtime;
 using SauerbratenRevival.World.Weapons;
 using Vector3 = Godot.Vector3;
@@ -522,10 +523,25 @@ public partial class ScriptedObjectiveResource : ModeObjectiveResource
     [Export] public Script? ObjectiveScript { get; set; }
 
     /// <summary>
+    /// Minimum allowed tick interval in milliseconds when periodic script ticking is enabled (5 ms, matching <see cref="Phys.PhysFrameTime"/>).
+    /// Prevents mods from scheduling sub-frame ticks that would invoke GDScript multiple times within a single 5 ms physics step.
+    /// </summary>
+    public const int MinTickIntervalMillis = Phys.PhysFrameTime;
+
+    private int _tickIntervalMillis = 100;
+
+    /// <summary>
     /// Period (in milliseconds) for the bounded <c>on_objective_tick</c> callback.
     /// Defaults to 100 ms (10 Hz). Set to 0 or negative to disable periodic script ticking.
+    /// Positive values are clamped to a minimum of <see cref="MinTickIntervalMillis"/> (5 ms)
+    /// to avoid invoking GDScript multiple times per 5 ms simulation step.
     /// </summary>
-    [Export] public int TickIntervalMillis { get; set; } = 100;
+    [Export]
+    public int TickIntervalMillis
+    {
+        get => _tickIntervalMillis;
+        set => _tickIntervalMillis = value > 0 ? Math.Max(MinTickIntervalMillis, value) : value;
+    }
 
     public ScriptedObjectiveResource()
     {
@@ -541,6 +557,11 @@ public partial class ScriptedObjectiveResource : ModeObjectiveResource
 
 public class ScriptedObjective : IModeObjective
 {
+    /// <summary>
+    /// Minimum allowed tick interval in milliseconds when periodic script ticking is enabled (5 ms, matching <see cref="Phys.PhysFrameTime"/>).
+    /// </summary>
+    public const int MinTickIntervalMillis = ScriptedObjectiveResource.MinTickIntervalMillis;
+
     private static readonly StringName MethodClaimsEntity = "claims_entity";
     private static readonly StringName MethodSetupWorld = "setup_world";
     private static readonly StringName MethodOnZoneEvent = "on_zone_event";
@@ -627,6 +648,15 @@ public class ScriptedObjective : IModeObjective
         }
     }
 
+    /// <summary>
+    /// Advances objective logic for a simulation step.
+    /// Evaluates native spatial trigger zones for all world players and invokes <c>on_objective_tick</c>
+    /// if the accumulated step time reaches or exceeds <see cref="ScriptedObjectiveResource.TickIntervalMillis"/>.
+    /// The tick interval is clamped to a minimum of <see cref="MinTickIntervalMillis"/> (5 ms) to prevent
+    /// multiple GDScript callbacks within a single 5 ms simulation step. Note that if <paramref name="stepMillis"/>
+    /// exceeds the configured interval (e.g., during frame catch-up), <c>on_objective_tick</c> may be called multiple
+    /// times within this method to catch up accumulated time.
+    /// </summary>
     public void Step(IGameWorld world, int stepMillis, int nowMillis)
     {
         if (world != null)
@@ -637,6 +667,7 @@ public class ScriptedObjective : IModeObjective
         int interval = Resource.TickIntervalMillis;
         if (interval > 0 && _hasOnObjectiveTick && _scriptInstance != null)
         {
+            interval = Math.Max(MinTickIntervalMillis, interval);
             _tickAccum += stepMillis;
             while (_tickAccum >= interval)
             {
