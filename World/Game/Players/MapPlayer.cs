@@ -641,8 +641,15 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             if (update != null)
             {
                 ApplyUpdate(update);
-                return;
             }
+            else
+            {
+                Entity.Move = 0;
+                Entity.Strafe = 0;
+                Entity.Jumping = false;
+                Combat.Attacking = false;
+            }
+            return;
         }
 
         // Mouse: the whole frame's accumulated delta is applied once, before stepping
@@ -821,6 +828,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>
     /// Applies a player update command directly to movement and combat state.
+    /// Reconciles authoritative kinematic state (Pos, Vel, PhysState) when present.
     /// </summary>
     public void ApplyUpdate(PlayerUpdateCmd update)
     {
@@ -829,6 +837,19 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.Jumping = update.Jumping;
         Entity.Yaw = update.Yaw;
         Pitch = update.Pitch;
+        if (update.Pos != null)
+        {
+            Entity.O = new Vector3(update.Pos.X, update.Pos.Y, update.Pos.Z);
+            SyncTransform();
+        }
+        if (update.Vel != null)
+        {
+            Entity.Vel = new Vector3(update.Vel.X, update.Vel.Y, update.Vel.Z);
+        }
+        if (update.PhysState != 0)
+        {
+            Entity.PhysState = update.PhysState & 7;
+        }
         if (Combat.GunSelect != update.SelectedGun && Guns.IsPlayerSelectable(update.SelectedGun))
         {
             SelectWeapon((Gun)update.SelectedGun);

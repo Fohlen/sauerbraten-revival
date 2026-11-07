@@ -194,6 +194,8 @@ public partial class Command
         {
             Op = WorldOp.PlayerUpdate,
             PeerId = author,
+            Timestamp = (uint)(tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime),
+            Sequence = (ulong)(tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime),
             Payload = new(new PlayerUpdateCmd
             {
                 Tick = tick,
@@ -215,6 +217,8 @@ public partial class Command
     {
         Op = WorldOp.PlayerUpdate,
         PeerId = author,
+        Timestamp = (uint)(update.Tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime),
+        Sequence = (ulong)(update.Tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime),
         Payload = new(update)
     };
 

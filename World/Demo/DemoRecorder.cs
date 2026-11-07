@@ -49,11 +49,11 @@ public class DemoRecorder
         Action<PlayerUpdateCmd> updateCb = update => RecordUpdate(update, player.PlayerId);
         MapPlayer.DiedEventHandler diedCb = () =>
         {
-            RecordDeath(player.PlayerId, killerPeerId: -1, gun: -1, isSuicide: true, deathPos: player.Entity.O, impulse: Vector3.Zero, author: player.PlayerId);
+            RecordDeath(player.PlayerId, killerPeerId: -1, gun: -1, isSuicide: true, deathPos: player.Entity.O, impulse: Vector3.Zero, author: player.PlayerId, timestamp: (uint)player.LastMillis);
         };
         MapPlayer.RespawnedEventHandler respawnedCb = () =>
         {
-            RecordSpawn(player.Entity.O, player.Entity.Yaw, lifeSequence: player.Combat.LifeSequence, gun: player.Combat.GunSelect, health: player.Health, armour: player.Combat.Armour, author: player.PlayerId);
+            RecordSpawn(player.Entity.O, player.Entity.Yaw, lifeSequence: player.Combat.LifeSequence, gun: player.Combat.GunSelect, health: player.Health, armour: player.Combat.Armour, author: player.PlayerId, timestamp: (uint)player.LastMillis);
         };
 
         _attachedPlayers[player.PlayerId] = player;
@@ -150,7 +150,8 @@ public class DemoRecorder
     public void RecordUpdate(PlayerUpdateCmd update, int author = 0)
     {
         if (!IsRecording) return;
-        _commands.Add(Command.CreatePlayerUpdate(update, author));
+        var cmd = Command.CreatePlayerUpdate(update, author);
+        _commands.Add(cmd);
     }
 
     /// <summary>
@@ -159,16 +160,23 @@ public class DemoRecorder
     public void RecordPlayer(MapPlayer player, int? tick = null)
     {
         if (!IsRecording) return;
-        _commands.Add(Command.CreatePlayerUpdate(player.CaptureUpdate(tick), player.PlayerId));
+        int t = tick ?? (player.LastMillis / SauerbratenRevival.World.Physics.Phys.PhysFrameTime);
+        var update = player.CaptureUpdate(t);
+        var cmd = Command.CreatePlayerUpdate(update, player.PlayerId);
+        _commands.Add(cmd);
     }
 
     /// <summary>
     /// Records a player spawn / respawn event.
     /// </summary>
-    public void RecordSpawn(Vector3 pos, float yaw, int lifeSequence = 0, int gun = 0, int health = 100, int armour = 0, System.Collections.Generic.IList<int>? ammo = null, int author = 0)
+    public void RecordSpawn(Vector3 pos, float yaw, int lifeSequence = 0, int gun = 0, int health = 100, int armour = 0, System.Collections.Generic.IList<int>? ammo = null, int author = 0, uint? timestamp = null)
     {
         if (!IsRecording) return;
-        _commands.Add(Command.CreatePlayerSpawn(pos, yaw, lifeSequence, gun, health, armour, ammo, author));
+        uint ts = timestamp ?? (_commands.Count > 0 ? _commands[^1].Timestamp : 0);
+        var cmd = Command.CreatePlayerSpawn(pos, yaw, lifeSequence, gun, health, armour, ammo, author);
+        cmd.Timestamp = ts;
+        cmd.Sequence = ts;
+        _commands.Add(cmd);
     }
 
     /// <summary>
@@ -181,28 +189,41 @@ public class DemoRecorder
         bool isSuicide = false,
         Vector3 deathPos = default,
         Vector3 impulse = default,
-        int author = 0)
+        int author = 0,
+        uint? timestamp = null)
     {
         if (!IsRecording) return;
-        _commands.Add(Command.CreatePlayerDeath(victimPeerId, killerPeerId, gun, isSuicide, deathPos, impulse, author));
+        uint ts = timestamp ?? (_commands.Count > 0 ? _commands[^1].Timestamp : 0);
+        var cmd = Command.CreatePlayerDeath(victimPeerId, killerPeerId, gun, isSuicide, deathPos, impulse, author);
+        cmd.Timestamp = ts;
+        cmd.Sequence = ts;
+        _commands.Add(cmd);
     }
 
     /// <summary>
     /// Records a teleport event.
     /// </summary>
-    public void RecordTeleport(int teleportId, Vector3 destPos, float destYaw, int author = 0)
+    public void RecordTeleport(int teleportId, Vector3 destPos, float destYaw, int author = 0, uint? timestamp = null)
     {
         if (!IsRecording) return;
-        _commands.Add(Command.CreatePlayerTeleport(teleportId, destPos, destYaw, author));
+        uint ts = timestamp ?? (_commands.Count > 0 ? _commands[^1].Timestamp : 0);
+        var cmd = Command.CreatePlayerTeleport(teleportId, destPos, destYaw, author);
+        cmd.Timestamp = ts;
+        cmd.Sequence = ts;
+        _commands.Add(cmd);
     }
 
     /// <summary>
     /// Records a jump pad launch event.
     /// </summary>
-    public void RecordJumpPad(int padId, Vector3 impulse, int author = 0)
+    public void RecordJumpPad(int padId, Vector3 impulse, int author = 0, uint? timestamp = null)
     {
         if (!IsRecording) return;
-        _commands.Add(Command.CreatePlayerJumpPad(padId, impulse, author));
+        uint ts = timestamp ?? (_commands.Count > 0 ? _commands[^1].Timestamp : 0);
+        var cmd = Command.CreatePlayerJumpPad(padId, impulse, author);
+        cmd.Timestamp = ts;
+        cmd.Sequence = ts;
+        _commands.Add(cmd);
     }
 
     /// <summary>

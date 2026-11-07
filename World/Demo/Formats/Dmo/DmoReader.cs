@@ -33,6 +33,8 @@ public sealed class DmoFile
     public List<DmoDamage> DamageEvents { get; } = new();
     public List<DmoDeath> Deaths { get; } = new();
     public List<DmoSpawn> Spawns { get; } = new();
+    public List<DmoTeleport> Teleports { get; } = new();
+    public List<DmoJumpPad> JumpPads { get; } = new();
 
     public DmoPlayer EnsurePlayer(int clientNum)
     {
@@ -55,6 +57,9 @@ public sealed class DmoPlayer
     public int Deaths { get; set; }
     public int Shots { get; set; }
     public int PositionCount { get; set; }
+    public int LifeSequence { get; set; } = -1;
+    public int State { get; set; } = 0; // 0 = CS_ALIVE, 1 = CS_DEAD
+    public int CurrentGun { get; set; } = 4; // GunRifle default
 
     public override string ToString() =>
         $"Player[CN={ClientNum}, Name='{Name}', Team='{Team}', Frags={Frags}, Deaths={Deaths}, Shots={Shots}, Pos={PositionCount}]";
@@ -77,6 +82,7 @@ public sealed class DmoPosition
     public int Strafe { get; set; }
     public byte PhysState { get; set; }
     public int LifeSequence { get; set; }
+    public int SelectedGun { get; set; } = 4;
 
     public override string ToString() =>
         $"Pos[T={Millis}ms, CN={ClientNum}, Eye=({Pos.X:F1},{Pos.Y:F1},{Pos.Z:F1}), Yaw={Yaw:F1}, Pitch={Pitch:F1}, Move={Move}, Strafe={Strafe}]";
@@ -126,6 +132,21 @@ public sealed class DmoSpawn
     public int Health { get; set; }
     public int Armour { get; set; }
     public int[]? Ammo { get; set; }
+}
+
+public sealed class DmoTeleport
+{
+    public int Millis { get; set; }
+    public int ClientNum { get; set; }
+    public int TeleportId { get; set; }
+    public int DestId { get; set; }
+}
+
+public sealed class DmoJumpPad
+{
+    public int Millis { get; set; }
+    public int ClientNum { get; set; }
+    public int JumpPadId { get; set; }
 }
 
 /// <summary>
@@ -328,16 +349,23 @@ public static class DmoReader
                     Falling = fall,
                     Move = move,
                     Strafe = strafe,
-                    PhysState = physstate
+                    PhysState = physstate,
+                    LifeSequence = player.LifeSequence,
+                    SelectedGun = player.CurrentGun
                 });
             }
             else if (type == 28) // N_TELEPORT
             {
-                p.GetInt(); p.GetInt(); p.GetInt();
+                int tpCn = p.GetInt();
+                int tp = p.GetInt();
+                int td = p.GetInt();
+                dmo.Teleports.Add(new DmoTeleport { Millis = millis, ClientNum = tpCn, TeleportId = tp, DestId = td });
             }
             else if (type == 29) // N_JUMPPAD
             {
-                p.GetInt(); p.GetInt();
+                int jpCn = p.GetInt();
+                int jp = p.GetInt();
+                dmo.JumpPads.Add(new DmoJumpPad { Millis = millis, ClientNum = jpCn, JumpPadId = jp });
             }
             else
             {
@@ -393,6 +421,7 @@ public static class DmoReader
                         killer.Frags = frags;
                         var victim = dmo.EnsurePlayer(vcn);
                         victim.Deaths++;
+                        victim.State = 1; // CS_DEAD
                         dmo.Deaths.Add(new DmoDeath
                         {
                             Millis = millis,
@@ -436,7 +465,9 @@ public static class DmoReader
                         float tx = p.GetInt() / Dmf;
                         float ty = p.GetInt() / Dmf;
                         float tz = p.GetInt() / Dmf;
-                        dmo.EnsurePlayer(scn).Shots++;
+                        var shooter = dmo.EnsurePlayer(scn);
+                        shooter.Shots++;
+                        shooter.CurrentGun = gun;
                         dmo.Shots.Add(new DmoShot
                         {
                             Millis = millis,
@@ -448,6 +479,12 @@ public static class DmoReader
                         });
                         break;
                     }
+                case 15: // N_EXPLODEFX
+                    p.GetInt(); p.GetInt(); p.GetInt();
+                    break;
+                case 16: // N_ITEMSPAWN
+                    p.GetInt();
+                    break;
                 case 17: // N_SPAWNSTATE
                 case 18: // N_SPAWN
                     {
@@ -461,6 +498,10 @@ public static class DmoReader
                         int[] ammo = new int[7];
                         ammo[0] = 1; // Fist
                         for (int k = 1; k <= 6; ++k) ammo[k] = p.GetInt(); // SG, CG, RL, Rifle, GL, Pistol
+                        var sp = dmo.EnsurePlayer(scn);
+                        sp.LifeSequence = lifeseq;
+                        sp.State = 0; // CS_ALIVE
+                        sp.CurrentGun = gun;
                         dmo.Spawns.Add(new DmoSpawn
                         {
                             Millis = millis,
@@ -474,7 +515,12 @@ public static class DmoReader
                         break;
                     }
                 case 19: p.GetInt(); break; // N_FORCEDEATH
-                case 20: p.GetInt(); break; // N_GUNSELECT
+                case 20: // N_GUNSELECT
+                    {
+                        int gun = p.GetInt();
+                        if (cnContext >= 0) dmo.EnsurePlayer(cnContext).CurrentGun = gun;
+                        break;
+                    }
                 case 21: break; // N_TAUNT
                 case 22: // N_MAPCHANGE
                     {
@@ -484,6 +530,7 @@ public static class DmoReader
                         p.GetInt(); // hasitems
                         break;
                     }
+                case 23: p.GetString(); p.GetInt(); break; // N_MAPVOTE
                 case 24: // N_TEAMINFO
                     for (; ; )
                     {
@@ -492,8 +539,18 @@ public static class DmoReader
                         p.GetInt(); // frags
                     }
                     break;
-                case 28: p.GetInt(); p.GetInt(); p.GetInt(); break; // N_TELEPORT
-                case 29: p.GetInt(); p.GetInt(); break; // N_JUMPPAD
+                case 28: // N_TELEPORT
+                    {
+                        int tpCn = p.GetInt(); int tp = p.GetInt(); int td = p.GetInt();
+                        dmo.Teleports.Add(new DmoTeleport { Millis = millis, ClientNum = tpCn, TeleportId = tp, DestId = td });
+                        break;
+                    }
+                case 29: // N_JUMPPAD
+                    {
+                        int jpCn = p.GetInt(); int jp = p.GetInt();
+                        dmo.JumpPads.Add(new DmoJumpPad { Millis = millis, ClientNum = jpCn, JumpPadId = jp });
+                        break;
+                    }
                 case 30: p.GetInt(); break; // N_PING
                 case 31: p.GetInt(); break; // N_PONG
                 case 32: p.GetInt(); break; // N_CLIENTPING
@@ -510,7 +567,10 @@ public static class DmoReader
                         for (int k = 0; k < 17; ++k) p.GetInt();
                     }
                     break;
+                case 38: p.GetInt(); p.GetInt(); break; // N_ITEMACC
+                case 48: p.GetInt(); p.GetInt(); break; // N_ITEMPICKUP
                 case 58: p.GetInt(); break; // N_MASTERMODE
+                case 59: p.GetInt(); break; // N_EDITMODE
                 case 61: // N_CURRENTMASTER
                     p.GetInt();
                     while (p.GetInt() >= 0) p.GetInt();
@@ -527,8 +587,9 @@ public static class DmoReader
                 case 75: p.GetInt(); p.GetInt(); break; // N_DEMOPLAYBACK
                 case 77: break; // N_STOPDEMO
                 case 79: p.GetInt(); p.GetInt(); p.GetInt(); break; // N_TAKEFLAG
-                case 80: p.GetInt(); p.GetInt(); break; // N_RETURNFLAG
+                case 80: p.GetInt(); p.GetInt(); p.GetInt(); break; // N_RETURNFLAG
                 case 81: p.GetInt(); p.GetInt(); p.GetInt(); p.GetInt(); p.GetInt(); break; // N_RESETFLAG
+                case 82: p.GetInt(); p.GetInt(); break; // N_INVISFLAG
                 case 84: p.GetInt(); p.GetInt(); p.GetInt(); p.GetInt(); p.GetInt(); p.GetInt(); break; // N_DROPFLAG
                 case 85: for (int k = 0; k < 9; ++k) p.GetInt(); break; // N_SCOREFLAG
                 case 86: // N_INITFLAGS
@@ -555,6 +616,7 @@ public static class DmoReader
                 case 104: p.GetString(); break; // N_SWITCHNAME
                 case 105: p.GetInt(); break; // N_SWITCHMODEL
                 case 106: p.GetString(); break; // N_SWITCHTEAM
+                case 113: p.GetString(); break; // N_SERVCMD
                 default:
                     return;
             }
@@ -625,6 +687,7 @@ public static class DmoReader
         }
 
         // 1. Convert Spawns to PlayerSpawn commands with authentic coordinates
+        var firstSpawnSeen = new HashSet<int>();
         foreach (var s in dmo.Spawns)
         {
             int mappedCn = MapCn(s.ClientNum);
@@ -633,12 +696,15 @@ public static class DmoReader
             Vec3f pos = spawnPos != null ? spawnPos.Pos : new Vec3f { X = 0, Y = 0, Z = EyeHeight };
             float yaw = spawnPos != null ? spawnPos.Yaw : 0f;
 
+            bool isInitialSpawn = firstSpawnSeen.Add(s.ClientNum);
+            uint spawnTimestamp = (isInitialSpawn && s.Millis < 500) ? 0u : (uint)s.Millis;
+
             commands.Add(new Command
             {
                 Op = WorldOp.PlayerSpawn,
                 PeerId = mappedCn,
-                Timestamp = (uint)s.Millis,
-                Sequence = (ulong)s.Millis,
+                Timestamp = spawnTimestamp,
+                Sequence = spawnTimestamp,
                 Payload = new(new PlayerSpawnCmd
                 {
                     Pos = pos,
@@ -673,6 +739,44 @@ public static class DmoReader
             });
         }
 
+        // 3. Convert Teleports to PlayerTeleport commands
+        foreach (var tp in dmo.Teleports)
+        {
+            int mappedCn = MapCn(tp.ClientNum);
+            var destPos = ResolvePlayerPosAtOrAfter(tp.ClientNum, tp.Millis);
+            commands.Add(new Command
+            {
+                Op = WorldOp.PlayerTeleport,
+                PeerId = mappedCn,
+                Timestamp = (uint)tp.Millis,
+                Sequence = (ulong)tp.Millis,
+                Payload = new(new PlayerTeleportCmd
+                {
+                    TeleportId = tp.TeleportId,
+                    DestPos = destPos?.Pos ?? new Vec3f(),
+                    DestYaw = destPos?.Yaw ?? 0f
+                })
+            });
+        }
+
+        // 4. Convert JumpPads to PlayerJumpPad commands
+        foreach (var jp in dmo.JumpPads)
+        {
+            int mappedCn = MapCn(jp.ClientNum);
+            commands.Add(new Command
+            {
+                Op = WorldOp.PlayerJumpPad,
+                PeerId = mappedCn,
+                Timestamp = (uint)jp.Millis,
+                Sequence = (ulong)jp.Millis,
+                Payload = new(new PlayerJumpPadCmd
+                {
+                    PadId = jp.JumpPadId,
+                    Impulse = new Vec3f()
+                })
+            });
+        }
+
         // Group shots by client and tick (5 ms)
         var shotsByClientTick = new HashSet<(int cn, int tick)>();
         foreach (var shot in dmo.Shots)
@@ -681,18 +785,53 @@ public static class DmoReader
             shotsByClientTick.Add((shot.ClientNum, tick));
         }
 
-        // 3. For each active player, generate 5ms updates between recorded positions
+        // 5. For each active player, generate 5ms updates between recorded positions
         foreach (var (cn, posList) in posByPlayer)
         {
             if (posList.Count == 0) continue;
             int mappedCn = MapCn(cn);
+
+            var firstPos = posList[0];
+            int firstTick = firstPos.Millis / 5;
+
+            // Populate stationary updates from tick 0 to firstTick
+            for (int t = 0; t < firstTick; ++t)
+            {
+                bool attacking = shotsByClientTick.Contains((cn, t));
+                var initUpdate = new PlayerUpdateCmd
+                {
+                    Tick = t,
+                    Move = 0,
+                    Strafe = 0,
+                    Jumping = false,
+                    Yaw = firstPos.Yaw,
+                    Pitch = firstPos.Pitch,
+                    Attacking = attacking,
+                    SelectedGun = firstPos.SelectedGun,
+                    Pos = firstPos.Pos,
+                    Vel = new Vec3f { X = 0, Y = 0, Z = 0 },
+                    PhysState = firstPos.PhysState,
+                    LifeSequence = firstPos.LifeSequence
+                };
+
+                commands.Add(new Command
+                {
+                    Op = WorldOp.PlayerUpdate,
+                    PeerId = mappedCn,
+                    Timestamp = (uint)(t * 5),
+                    Sequence = (ulong)(t * 5),
+                    Payload = new(initUpdate)
+                });
+            }
+
+            int lastEmittedTick = firstTick - 1;
 
             for (int i = 0; i < posList.Count; ++i)
             {
                 var cur = posList[i];
                 var next = (i + 1 < posList.Count) ? posList[i + 1] : null;
 
-                int startTick = cur.Millis / 5;
+                int startTick = Math.Max(cur.Millis / 5, lastEmittedTick + 1);
 
                 // Gap handling: If there is a large gap between positions (e.g. > 250ms),
                 // the player was dead or lagged. DO NOT interpolate across map geometry!
@@ -705,20 +844,19 @@ public static class DmoReader
                 }
                 else if (largeGap)
                 {
-                    // Hold current position for up to 100 ms after death, then stop updating until respawn
-                    endTick = startTick + 20; // 20 * 5ms = 100ms
+                    // Hold current position for up to 100 ms after death/pause, then stop updating until respawn
+                    endTick = Math.Max(startTick + 1, (cur.Millis + 100) / 5);
                 }
                 else
                 {
-                    endTick = next.Millis / 5;
+                    endTick = Math.Max(startTick + 1, next.Millis / 5);
                 }
-
-                if (endTick <= startTick) endTick = startTick + 1;
 
                 bool jumping = (cur.PhysState & 7) == 0 && cur.Vel.Z > 1.0f;
 
                 for (int t = startTick; t < endTick; ++t)
                 {
+                    lastEmittedTick = t;
                     bool attacking = shotsByClientTick.Contains((cn, t));
 
                     Vec3f interpPos;
@@ -746,7 +884,7 @@ public static class DmoReader
                         Yaw = cur.Yaw,
                         Pitch = cur.Pitch,
                         Attacking = attacking,
-                        SelectedGun = GunRifle,
+                        SelectedGun = cur.SelectedGun,
                         Pos = interpPos,
                         Vel = cur.Vel,
                         PhysState = cur.PhysState,
@@ -814,8 +952,8 @@ public static class DmoReader
         WorldOp.PlayerSpawn => 0,
         WorldOp.PlayerTeleport => 1,
         WorldOp.PlayerJumpPad => 2,
-        WorldOp.PlayerUpdate => 3,
-        WorldOp.PlayerDeath => 4,
+        WorldOp.PlayerDeath => 3,
+        WorldOp.PlayerUpdate => 4,
         _ => 5
     };
 

@@ -384,6 +384,219 @@ public class DmoReaderTest : GoTestBase
         TestAssert.True(loaded.Commands != null && loaded.Commands.Count > 0, "Contains converted commands");
     }
 
+    [Test]
+    public void SynthesizedDemo_MultiDeathTimelinePreservation_NoDivergence()
+    {
+        // Synthesize a demo with a death gap between t=1000ms (tick 200) and t=3000ms (tick 600)
+        var parsed = new DmoFile
+        {
+            MapName = "test_arena",
+            GameMode = 3,
+            GameModeName = "instagib",
+            DurationMillis = 4000
+        };
+
+        var p0 = parsed.EnsurePlayer(0);
+        p0.Name = "Tester";
+        p0.Team = "good";
+
+        // Initial spawn at millis 0
+        parsed.Spawns.Add(new DmoSpawn
+        {
+            Millis = 0,
+            ClientNum = 0,
+            LifeSequence = 0,
+            SelectedGun = 4,
+            Health = 100,
+            Armour = 0,
+            Ammo = new[] { 1, 0, 0, 0, 100, 0, 0 }
+        });
+
+        // Movement before death: 0ms -> 1000ms (every 100ms)
+        for (int m = 0; m <= 1000; m += 100)
+        {
+            parsed.Positions.Add(new DmoPosition
+            {
+                Millis = m,
+                ClientNum = 0,
+                Pos = new Vec3f { X = 100f + m, Y = 200f, Z = 50f + DmoReader.EyeHeight },
+                FeetPos = new Vec3f { X = 100f + m, Y = 200f, Z = 50f },
+                Yaw = 90f,
+                Move = 1,
+                PhysState = 1,
+                LifeSequence = 0,
+                SelectedGun = 4
+            });
+        }
+
+        // Death at millis 1000
+        parsed.Deaths.Add(new DmoDeath
+        {
+            Millis = 1000,
+            VictimCn = 0,
+            ActorCn = 1,
+            Frags = 1,
+            TeamFrags = 1
+        });
+
+        // Respawn 2 seconds later at millis 3000
+        parsed.Spawns.Add(new DmoSpawn
+        {
+            Millis = 3000,
+            ClientNum = 0,
+            LifeSequence = 1,
+            SelectedGun = 4,
+            Health = 100,
+            Armour = 0,
+            Ammo = new[] { 1, 0, 0, 0, 100, 0, 0 }
+        });
+
+        // Movement after respawn: 3000ms -> 4000ms
+        for (int m = 3000; m <= 4000; m += 100)
+        {
+            parsed.Positions.Add(new DmoPosition
+            {
+                Millis = m,
+                ClientNum = 0,
+                Pos = new Vec3f { X = 500f, Y = 600f + (m - 3000), Z = 100f + DmoReader.EyeHeight },
+                FeetPos = new Vec3f { X = 500f, Y = 600f + (m - 3000), Z = 100f },
+                Yaw = 0f,
+                Move = 1,
+                PhysState = 1,
+                LifeSequence = 1,
+                SelectedGun = 4
+            });
+        }
+
+        var package = DmoReader.ToDemoPackage(parsed);
+        TestAssert.True(package.Commands != null, "Package commands present");
+
+        // Encode to FBS and decode back to verify 1:1 roundtrip
+        byte[] fbsBytes = package.Encode();
+        var decoded = DemoPackage.Decode(fbsBytes);
+
+        var player = new MapPlayer { PlayerId = 0 };
+        var replayer = new DemoReplayer(decoded);
+        replayer.Attach(player);
+
+        // Tick 0..199: Player is alive and moving
+        for (int tick = 0; tick < 200; tick++)
+        {
+            player.LastMillis = tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+            player.PrePhysicsStep();
+            TestAssert.False(player.Entity.Dead, $"Tick {tick}: player is alive before death");
+            player.Advance(SauerbratenRevival.World.Physics.Phys.PhysFrameTime / 1000.0);
+        }
+
+        // Tick 200 (1000 ms): Death command executes
+        player.LastMillis = 200 * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+        player.PrePhysicsStep();
+        TestAssert.True(player.Entity.Dead, "Tick 200: player dies at exact death timestamp (1000ms)");
+
+        // Ticks 201..599 (1005ms -> 2995ms): Player MUST remain dead throughout the 2-second death gap!
+        // Future spawn command at 3000ms must NOT be dequeued prematurely!
+        for (int tick = 201; tick < 600; tick++)
+        {
+            player.LastMillis = tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+            player.PrePhysicsStep();
+            TestAssert.True(player.Entity.Dead, $"Tick {tick}: player remains dead during 2000ms death gap");
+            TestAssert.False(replayer.IsFinished, $"Tick {tick}: replayer is not finished during death gap");
+            player.Advance(SauerbratenRevival.World.Physics.Phys.PhysFrameTime / 1000.0);
+        }
+
+        // Tick 600 (3000 ms): Respawn command executes at authentic respawn timestamp!
+        player.LastMillis = 600 * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+        player.PrePhysicsStep();
+        TestAssert.False(player.Entity.Dead, "Tick 600: player respawns at exact respawn timestamp (3000ms)");
+        TestAssert.Near(500f, player.Entity.O.X, 1e-2f, "Respawned at authentic X");
+        TestAssert.Near(600f, player.Entity.O.Y, 1e-2f, "Respawned at authentic Y");
+
+        // Ticks 601..800: Player moves post-respawn
+        for (int tick = 601; tick <= 800; tick++)
+        {
+            player.LastMillis = tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+            player.PrePhysicsStep();
+            TestAssert.False(player.Entity.Dead, $"Tick {tick}: player moves post-respawn");
+            player.Advance(SauerbratenRevival.World.Physics.Phys.PhysFrameTime / 1000.0);
+        }
+
+        // Final step past tick 800 drains queue
+        player.LastMillis = 801 * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+        player.PrePhysicsStep();
+        TestAssert.True(replayer.IsFinished, "Replayer finishes cleanly after all ticks complete");
+
+        player.Free();
+    }
+
+    [Test]
+    public void RealWorldDemo_1To1Translation_AndLongPlaybackSynchronization()
+    {
+        string demoPath = Path.Combine(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+            "Downloads",
+            "cannibal_vs_rexus_finals_duel7_game1.dmo");
+
+        if (!File.Exists(demoPath))
+        {
+            return;
+        }
+
+        var dmo = DmoReader.ReadFile(demoPath);
+        var package = DmoReader.ToDemoPackage(dmo);
+
+        // Verify 1:1 translation into FBS representation
+        byte[] fbsBytes = package.Encode();
+        var decoded = DemoPackage.Decode(fbsBytes);
+
+        // 1. All players, names, and team info are preserved 1:1
+        TestAssert.Equal(2, decoded.Peers?.Count ?? 0, "2 peers in decoded FBS");
+        TestAssert.Equal("Rexus|sp4nk|", decoded.Peers![0].Name, "Peer 0 name matches");
+        TestAssert.Equal("Cannibal", decoded.Peers[1].Name, "Peer 1 name matches");
+
+        // 2. All 171 deaths are translated into PlayerDeath commands
+        int deathCommandCount = 0;
+        foreach (var cmd in decoded.Commands!)
+        {
+            if (cmd.Op == WorldOp.PlayerDeath) deathCommandCount++;
+        }
+        TestAssert.Equal(171, deathCommandCount, "171 PlayerDeath commands in decoded FBS");
+
+        // 3. Play back 15 seconds (3000 ticks) with 2 players concurrently
+        var player0 = new MapPlayer { PlayerId = 0 };
+        var player1 = new MapPlayer { PlayerId = 1 };
+
+        var replayer = new DemoReplayer(decoded);
+        replayer.RegisterPlayer(player0);
+        replayer.RegisterPlayer(player1);
+
+        for (int tick = 0; tick < 3000; tick++)
+        {
+            player0.LastMillis = tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+            player1.LastMillis = tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+
+            player0.PrePhysicsStep();
+            player1.PrePhysicsStep();
+
+            player0.Advance(SauerbratenRevival.World.Physics.Phys.PhysFrameTime / 1000.0);
+            player1.Advance(SauerbratenRevival.World.Physics.Phys.PhysFrameTime / 1000.0);
+        }
+
+        // After 15 seconds, assert that both players' timelines have NOT drifted
+        // (At 15s = 15000ms = tick 3000, next update is for tick 3000)
+        player0.LastMillis = 3000 * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+        player1.LastMillis = 3000 * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+        var p0Update = replayer.GetUpdate(3000, player0);
+        var p1Update = replayer.GetUpdate(3000, player1);
+
+        TestAssert.True(p0Update != null, "Player 0 has active update at 15s without timeline desync");
+        TestAssert.True(p1Update != null, "Player 1 has active update at 15s without timeline desync");
+        TestAssert.Near(3000, p0Update!.Tick, 2, "Player 0 update tick is synchronized with 15s wall clock");
+        TestAssert.Near(3000, p1Update!.Tick, 2, "Player 1 update tick is synchronized with 15s wall clock");
+
+        player0.Free();
+        player1.Free();
+    }
+
     private static void WriteString(BinaryWriter writer, string s)
     {
         foreach (char c in s)

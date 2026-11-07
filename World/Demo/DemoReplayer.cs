@@ -160,13 +160,16 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
     };
 
     /// <summary>
-    /// Fetches the next player update for the specific player.
-    /// Dispatches any interleaved lifecycle commands (spawns, deaths, teleports) before returning the update.
+    /// Fetches the next player update for the specific player at the specified simulation tick.
+    /// Dispatches any interleaved lifecycle commands (spawns, deaths, teleports) whose timestamp has arrived.
+    /// Returns null if the next update belongs to a future tick (e.g. death gap or lag pause).
     /// </summary>
     public PlayerUpdateCmd? GetUpdate(int tick, MapPlayer player)
     {
-        // Drain any pending global/world commands
-        DrainGlobalQueue();
+        uint currentMillis = (uint)(tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime);
+
+        // Drain any pending global/world commands up to current time
+        DrainGlobalQueue(currentMillis);
 
         int peerId = player.PlayerId;
         if (!_peerQueues.TryGetValue(peerId, out var q))
@@ -177,15 +180,28 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
 
         while (q.Count > 0)
         {
-            var cmd = q.Dequeue();
+            var cmd = q.Peek();
 
             if (cmd.Op == WorldOp.PlayerUpdate && cmd.PlayerUpdate != null)
             {
+                // If update belongs to a future tick or timestamp, hold playback until simulation catches up
+                if (cmd.PlayerUpdate.Tick > tick || (cmd.Timestamp > 0 && cmd.Timestamp > currentMillis))
+                {
+                    return null;
+                }
+
+                q.Dequeue();
                 CheckFinished();
                 return cmd.PlayerUpdate;
             }
 
-            // Dispatch lifecycle commands (spawn, death, teleport, jump pad)
+            // For lifecycle commands (spawn, death, teleport, jump pad), wait until their timestamp has arrived
+            if (cmd.Timestamp > 0 && cmd.Timestamp > currentMillis)
+            {
+                return null;
+            }
+
+            q.Dequeue();
             DispatchCommand(cmd, player);
         }
 
@@ -193,11 +209,16 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
         return null;
     }
 
-    private void DrainGlobalQueue()
+    private void DrainGlobalQueue(uint currentMillis)
     {
         while (_globalQueue.Count > 0)
         {
-            var cmd = _globalQueue.Dequeue();
+            var cmd = _globalQueue.Peek();
+            if (cmd.Timestamp > 0 && cmd.Timestamp > currentMillis)
+            {
+                break;
+            }
+            _globalQueue.Dequeue();
             _commandSink?.Apply(cmd);
         }
     }
