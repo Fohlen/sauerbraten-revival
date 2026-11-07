@@ -181,4 +181,221 @@ public class ScriptedObjectiveTest : GoTestBase
         enemy.Free();
         root.Free();
     }
+
+    [Test]
+    public void ObjectiveContext_GetPlayerBit_StrictRangeValidation()
+    {
+        // Valid 0-63 range
+        TestAssert.Equal(1UL, ObjectiveContext.GetPlayerBit(0), "bit 0");
+        TestAssert.Equal(2UL, ObjectiveContext.GetPlayerBit(1), "bit 1");
+        TestAssert.Equal(1UL << 63, ObjectiveContext.GetPlayerBit(63), "bit 63");
+
+        // Negative IDs throw ArgumentOutOfRangeException
+        bool threwNegative = false;
+        try
+        {
+            ObjectiveContext.GetPlayerBit(-1);
+        }
+        catch (System.ArgumentOutOfRangeException)
+        {
+            threwNegative = true;
+        }
+        TestAssert.True(threwNegative, "negative player ID throws ArgumentOutOfRangeException");
+
+        // IDs >= 64 throw ArgumentOutOfRangeException (no silent modulo folding)
+        bool threw64 = false;
+        try
+        {
+            ObjectiveContext.GetPlayerBit(64);
+        }
+        catch (System.ArgumentOutOfRangeException)
+        {
+            threw64 = true;
+        }
+        TestAssert.True(threw64, "player ID 64 throws ArgumentOutOfRangeException");
+
+        bool threw65 = false;
+        try
+        {
+            ObjectiveContext.GetPlayerBit(65);
+        }
+        catch (System.ArgumentOutOfRangeException)
+        {
+            threw65 = true;
+        }
+        TestAssert.True(threw65, "player ID 65 throws ArgumentOutOfRangeException");
+
+        bool threw100 = false;
+        try
+        {
+            ObjectiveContext.GetPlayerBit(100);
+        }
+        catch (System.ArgumentOutOfRangeException)
+        {
+            threw100 = true;
+        }
+        TestAssert.True(threw100, "player ID 100 throws ArgumentOutOfRangeException");
+    }
+
+    [Test]
+    public void ObjectiveContext_ZoneOccupancy_ArbitraryPlayerIds_NoModuloCollisions()
+    {
+        var res = GD.Load<ScriptedObjectiveResource>("res://test/fixtures/koth.tres");
+        var mode = GameModeCatalog.Get("teamplay");
+        var obj = (ScriptedObjective)res!.CreateInstance(mode);
+
+        var entities = new List<MapEntity>
+        {
+            new() { Type = EntityType.Base, Position = new Vector3(0, 0, 0) }
+        };
+        var root = new Node3D();
+        obj.SetupWorld(null!, entities, root);
+
+        // Player 0 and Player 64 differ by exactly 64 (would collide with 64-bit mask folding)
+        var player0 = new MapPlayer { PlayerId = 0, Team = 1 };
+        var player64 = new MapPlayer { PlayerId = 64, Team = 1 };
+        var player1000 = new MapPlayer { PlayerId = 1000, Team = 2 };
+
+        player0.Entity.O = new Vector3(0, 0, 0);
+        player64.Entity.O = new Vector3(500, 500, 500); // Outside
+        player1000.Entity.O = new Vector3(500, 500, 500); // Outside
+
+        obj.StepPlayer(player0, 100);
+        obj.StepPlayer(player64, 100);
+        obj.StepPlayer(player1000, 100);
+
+        TestAssert.True(obj.Context.is_player_in_zone(0, 0), "player 0 is in zone");
+        TestAssert.False(obj.Context.is_player_in_zone(64, 0), "player 64 is NOT in zone (no collision with 0)");
+        TestAssert.False(obj.Context.is_player_in_zone(1000, 0), "player 1000 is NOT in zone");
+        TestAssert.Equal(1, obj.Context.get_zone_player_count(0), "zone player count is 1");
+        TestAssert.Equal(1, obj.Context.get_zone_team_count(0, 1), "team 1 count is 1");
+
+        // Move player 64 into the zone as well
+        player64.Entity.O = new Vector3(10, 10, 0);
+        obj.StepPlayer(player64, 105);
+
+        TestAssert.True(obj.Context.is_player_in_zone(0, 0), "player 0 remains in zone");
+        TestAssert.True(obj.Context.is_player_in_zone(64, 0), "player 64 is in zone");
+        TestAssert.Equal(2, obj.Context.get_zone_player_count(0), "zone player count is 2");
+        TestAssert.Equal(2, obj.Context.get_zone_team_count(0, 1), "team 1 count is 2");
+
+        // Move player 0 out; player 64 must remain inside
+        player0.Entity.O = new Vector3(500, 500, 500);
+        obj.StepPlayer(player0, 110);
+
+        TestAssert.False(obj.Context.is_player_in_zone(0, 0), "player 0 exited zone");
+        TestAssert.True(obj.Context.is_player_in_zone(64, 0), "player 64 remains in zone");
+        TestAssert.Equal(1, obj.Context.get_zone_player_count(0), "zone player count is 1");
+        TestAssert.Equal(1, obj.Context.get_zone_team_count(0, 1), "team 1 count is 1");
+
+        // Move high-ID player 1000 into the zone
+        player1000.Entity.O = new Vector3(0, 0, 0);
+        obj.StepPlayer(player1000, 115);
+
+        TestAssert.True(obj.Context.is_player_in_zone(1000, 0), "arbitrary player ID 1000 is in zone");
+        TestAssert.Equal(2, obj.Context.get_zone_player_count(0), "zone player count is 2");
+        TestAssert.Equal(1, obj.Context.get_zone_team_count(0, 1), "team 1 count is 1");
+        TestAssert.Equal(1, obj.Context.get_zone_team_count(0, 2), "team 2 count is 1");
+
+        player0.Free();
+        player64.Free();
+        player1000.Free();
+        root.Free();
+    }
+
+    [Test]
+    public void ObjectiveContext_ZoneTeamCounts_UpdateOnTeamChange()
+    {
+        var res = GD.Load<ScriptedObjectiveResource>("res://test/fixtures/koth.tres");
+        var mode = GameModeCatalog.Get("teamplay");
+        var obj = (ScriptedObjective)res!.CreateInstance(mode);
+
+        var entities = new List<MapEntity>
+        {
+            new() { Type = EntityType.Base, Position = new Vector3(0, 0, 0) }
+        };
+        var root = new Node3D();
+        obj.SetupWorld(null!, entities, root);
+
+        var player = new MapPlayer { PlayerId = 5, Team = 1, Objective = obj };
+        player.Entity.O = new Vector3(0, 0, 0);
+
+        // Step player inside the zone
+        obj.StepPlayer(player, 100);
+        TestAssert.True(obj.Context.is_player_in_zone(5, 0), "player in zone");
+        TestAssert.Equal(1, obj.Context.get_zone_team_count(0, 1), "team 1 count is 1");
+        TestAssert.Equal(0, obj.Context.get_zone_team_count(0, 2), "team 2 count is 0");
+
+        // 1. Change team to Team 2 via player.Team property while remaining in the zone
+        player.Team = 2;
+        TestAssert.Equal(0, obj.Context.get_zone_team_count(0, 1), "team 1 count immediately 0 after team change");
+        TestAssert.Equal(1, obj.Context.get_zone_team_count(0, 2), "team 2 count immediately 1 after team change");
+
+        // Step player again - should maintain accurate team counts
+        obj.StepPlayer(player, 105);
+        TestAssert.Equal(0, obj.Context.get_zone_team_count(0, 1), "team 1 count stays 0 after step");
+        TestAssert.Equal(1, obj.Context.get_zone_team_count(0, 2), "team 2 count stays 1 after step");
+
+        // 2. Change team via ObjectiveContext.set_player_team
+        obj.Context.set_player_team(player.PlayerId, 1);
+        TestAssert.Equal(1, obj.Context.get_zone_team_count(0, 1), "team 1 count is 1 after set_player_team");
+        TestAssert.Equal(0, obj.Context.get_zone_team_count(0, 2), "team 2 count is 0 after set_player_team");
+
+        // 3. Player exits zone: team count drops to 0 without going negative
+        player.Entity.O = new Vector3(500, 500, 500);
+        obj.StepPlayer(player, 110);
+        TestAssert.False(obj.Context.is_player_in_zone(5, 0), "player exited zone");
+        TestAssert.Equal(0, obj.Context.get_zone_team_count(0, 1), "team 1 count is 0 on exit");
+        TestAssert.Equal(0, obj.Context.get_zone_team_count(0, 2), "team 2 count is 0 on exit");
+
+        player.Free();
+        root.Free();
+    }
+
+    [Test]
+    public void ObjectiveContext_PlayerRemoval_CleansUpZonesAndStaleTeamCounts()
+    {
+        var res = GD.Load<ScriptedObjectiveResource>("res://test/fixtures/koth.tres");
+        var mode = GameModeCatalog.Get("teamplay");
+        var obj = (ScriptedObjective)res!.CreateInstance(mode);
+
+        var entities = new List<MapEntity>
+        {
+            new() { Type = EntityType.Base, Position = new Vector3(0, 0, 0) }
+        };
+        var root = new Node3D();
+        obj.SetupWorld(null!, entities, root);
+
+        var player1 = new MapPlayer { PlayerId = 10, Team = 1, Objective = obj };
+        var player2 = new MapPlayer { PlayerId = 20, Team = 1, Objective = obj };
+
+        player1.Entity.O = new Vector3(0, 0, 0);
+        player2.Entity.O = new Vector3(0, 0, 0);
+
+        obj.StepPlayer(player1, 100);
+        obj.StepPlayer(player2, 100);
+
+        TestAssert.Equal(2, obj.Context.get_zone_player_count(0), "2 players in zone");
+        TestAssert.Equal(2, obj.Context.get_zone_team_count(0, 1), "team 1 count is 2");
+
+        // Player 1 removed via objective OnPlayerRemoved
+        obj.OnPlayerRemoved(player1);
+
+        TestAssert.False(obj.Context.is_player_in_zone(10, 0), "player 1 removed from zone");
+        TestAssert.True(obj.Context.is_player_in_zone(20, 0), "player 2 remains in zone");
+        TestAssert.Equal(1, obj.Context.get_zone_player_count(0), "zone player count is 1");
+        TestAssert.Equal(1, obj.Context.get_zone_team_count(0, 1), "team 1 count is 1 (not stale)");
+        TestAssert.Equal(0, obj.Context.get_player_team(10), "player 1 snapshot removed");
+
+        // Player 2 removed via context remove_player
+        obj.Context.remove_player(20);
+
+        TestAssert.False(obj.Context.is_player_in_zone(20, 0), "player 2 removed from zone");
+        TestAssert.Equal(0, obj.Context.get_zone_player_count(0), "zone player count is 0");
+        TestAssert.Equal(0, obj.Context.get_zone_team_count(0, 1), "team 1 count is 0 (not stale)");
+
+        player1.Free();
+        player2.Free();
+        root.Free();
+    }
 }

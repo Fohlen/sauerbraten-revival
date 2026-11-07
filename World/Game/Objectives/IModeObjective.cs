@@ -54,6 +54,12 @@ public interface IModeObjective
     /// <summary>Called after <paramref name="player"/> respawns and receives their mode loadout.</summary>
     void OnPlayerSpawn(MapPlayer player) { }
 
+    /// <summary>Called when <paramref name="player"/> changes teams.</summary>
+    void OnPlayerTeamChanged(MapPlayer player) { }
+
+    /// <summary>Called when <paramref name="player"/> is unregistered or removed from the world.</summary>
+    void OnPlayerRemoved(MapPlayer player) { }
+
     /// <summary>
     /// Pre-damage hook invoked before hitscan or explosion damage/push is applied.
     /// Return false to cancel standard damage (e.g. friendly rifle shot passing the flag in Rugby).

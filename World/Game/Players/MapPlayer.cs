@@ -376,8 +376,13 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         get => PlayerState.TeamFlag(Combat.Team);
         set
         {
+            int oldTeam = Team;
             Combat.Team = PlayerState.FlagTeam(value);
             if (Hudgun != null) Hudgun.Team = value;
+            if (oldTeam != value)
+            {
+                Objective?.OnPlayerTeamChanged(this);
+            }
         }
     }
 
@@ -385,7 +390,17 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public string TeamName
     {
         get => Combat.Team;
-        set => Combat.Team = value;
+        set
+        {
+            int oldTeam = Team;
+            Combat.Team = value;
+            int newTeam = Team;
+            if (oldTeam != newTeam)
+            {
+                if (Hudgun != null) Hudgun.Team = newTeam;
+                Objective?.OnPlayerTeamChanged(this);
+            }
+        }
     }
 
     /// <summary>

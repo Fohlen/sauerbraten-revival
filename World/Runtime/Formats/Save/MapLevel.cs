@@ -114,7 +114,11 @@ public partial class MapLevel : Node3D, IGameWorld
 
     public void UnregisterPlayer(MapPlayer player)
     {
-        if (_players.Remove(player)) player.DetachClock();
+        if (_players.Remove(player))
+        {
+            player.DetachClock();
+            Objective?.OnPlayerRemoved(player);
+        }
         if (ReferenceEquals(LocalPlayer, player)) LocalPlayer = null;
     }
 

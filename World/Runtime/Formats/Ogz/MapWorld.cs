@@ -135,7 +135,11 @@ public partial class MapWorld : Node3D, IGameWorld
     /// <summary>Unregisters a player from the world's physics loop.</summary>
     public void UnregisterPlayer(Game.Players.MapPlayer player)
     {
-        if (_players.Remove(player)) player.DetachClock();
+        if (_players.Remove(player))
+        {
+            player.DetachClock();
+            Objective?.OnPlayerRemoved(player);
+        }
         if (ReferenceEquals(LocalPlayer, player)) LocalPlayer = null;
     }
 

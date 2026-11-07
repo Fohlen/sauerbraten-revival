@@ -26,7 +26,7 @@ public enum ObjectiveZoneShape
 /// </summary>
 public partial class ObjectiveContext : RefCounted
 {
-    internal struct ZoneEntry
+    internal sealed class ZoneEntry
     {
         public int Id;
         public ObjectiveZoneShape Shape;
@@ -35,10 +35,11 @@ public partial class ObjectiveContext : RefCounted
         public float HalfHeight;
         public Vector3 HalfExtents;
         public ulong OccupiedMask;
+        public readonly Dictionary<int, int> Occupants = new();
         public int Team1Count;
         public int Team2Count;
 
-        public readonly bool Contains(Vector3 pos)
+        public bool Contains(Vector3 pos)
         {
             Vector3 d = pos - Center;
             return Shape switch
@@ -85,6 +86,13 @@ public partial class ObjectiveContext : RefCounted
 
     public void clear_zones()
     {
+        for (int i = 0; i < _zoneCount; i++)
+        {
+            _zones[i].Occupants.Clear();
+            _zones[i].Team1Count = 0;
+            _zones[i].Team2Count = 0;
+            _zones[i].OccupiedMask = 0;
+        }
         _zoneCount = 0;
     }
 
@@ -141,11 +149,10 @@ public partial class ObjectiveContext : RefCounted
 
     public bool is_player_in_zone(int playerId, int zoneId)
     {
-        ulong bit = GetPlayerBit(playerId);
         for (int i = 0; i < _zoneCount; i++)
         {
             if (_zones[i].Id == zoneId)
-                return (_zones[i].OccupiedMask & bit) != 0;
+                return _zones[i].Occupants.ContainsKey(playerId);
         }
         return false;
     }
@@ -172,7 +179,7 @@ public partial class ObjectiveContext : RefCounted
         for (int i = 0; i < _zoneCount; i++)
         {
             if (_zones[i].Id == zoneId)
-                return BitOperations.PopCount(_zones[i].OccupiedMask);
+                return _zones[i].Occupants.Count;
         }
         return 0;
     }
@@ -237,10 +244,86 @@ public partial class ObjectiveContext : RefCounted
     public void clear_player_spawn_override(int playerId) =>
         _playerSpawnOverrides.Remove(playerId);
 
+    // --- Player Removal & Team Change API ---
+
+    /// <summary>
+    /// Updates the team for a player and immediately refreshes any zone team counts
+    /// they currently occupy, ensuring team counts cannot remain stale.
+    /// </summary>
+    public void UpdatePlayerTeam(int playerId, int newTeam)
+    {
+        if (_players.TryGetValue(playerId, out var snap))
+        {
+            snap.Team = newTeam;
+            _players[playerId] = snap;
+        }
+
+        for (int i = 0; i < _zoneCount; i++)
+        {
+            ZoneEntry z = _zones[i];
+            if (z.Occupants.TryGetValue(playerId, out int oldTeam) && oldTeam != newTeam)
+            {
+                z.Occupants[playerId] = newTeam;
+                if (oldTeam == 1 && z.Team1Count > 0) z.Team1Count--;
+                else if (oldTeam == 2 && z.Team2Count > 0) z.Team2Count--;
+
+                if (newTeam == 1) z.Team1Count++;
+                else if (newTeam == 2) z.Team2Count++;
+            }
+        }
+    }
+
+    public void set_player_team(int playerId, int newTeam) => UpdatePlayerTeam(playerId, newTeam);
+
+    /// <summary>
+    /// Removes a player from the context, evacuating all occupied zones,
+    /// updating zone team counts, and optionally notifying the script owner of zone exit events.
+    /// </summary>
+    public void RemovePlayer(int playerId, ScriptedObjective? owner = null, int nowMillis = 0)
+    {
+        for (int i = 0; i < _zoneCount; i++)
+        {
+            ZoneEntry z = _zones[i];
+            if (z.Occupants.Remove(playerId, out int oldTeam))
+            {
+                if (playerId is >= 0 and <= 63)
+                    z.OccupiedMask &= ~(1UL << playerId);
+
+                if (oldTeam == 1 && z.Team1Count > 0) z.Team1Count--;
+                else if (oldTeam == 2 && z.Team2Count > 0) z.Team2Count--;
+
+                owner?.NotifyZoneTransition(z.Id, playerId, false, nowMillis);
+            }
+        }
+
+        _players.Remove(playerId);
+        _playerScores.Remove(playerId);
+        _playerStatus.Remove(playerId);
+        _playerSpawnOverrides.Remove(playerId);
+    }
+
+    public void remove_player(int playerId) => RemovePlayer(playerId);
+
     // --- Internal Native Hot-Path Evaluators (C#) ---
 
-    internal static ulong GetPlayerBit(int playerId) =>
-        1UL << (playerId & 63);
+    /// <summary>
+    /// Returns the 64-bit single-bit mask for the given player ID.
+    /// Enforces a strict 0–63 ID limit; player IDs outside this range throw <see cref="ArgumentOutOfRangeException"/>
+    /// to prevent bit folding and mask collisions.
+    /// </summary>
+    /// <param name="playerId">Player ID in the range [0, 63].</param>
+    /// <returns>A 64-bit bitmask with bit <paramref name="playerId"/> set.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="playerId"/> is less than 0 or greater than 63.</exception>
+    internal static ulong GetPlayerBit(int playerId)
+    {
+        if (playerId is < 0 or > 63)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(playerId),
+                $"Player ID {playerId} is outside the strict 0–63 limit. Player IDs must be between 0 and 63 to avoid 64-bit mask collisions.");
+        }
+        return 1UL << playerId;
+    }
 
     internal void SyncPlayerSnapshot(MapPlayer player)
     {
@@ -257,36 +340,53 @@ public partial class ObjectiveContext : RefCounted
         int nowMillis,
         ScriptedObjective owner)
     {
+        int playerId = player.PlayerId;
+        int team = player.Team;
+        bool alive = player.IsAlive;
+        Vector3 feet = player.Entity.FeetPos();
+
         SyncPlayerSnapshot(player);
         if (_zoneCount == 0) return;
 
-        ulong bit = GetPlayerBit(player.PlayerId);
-        bool alive = player.IsAlive;
-        Vector3 feet = player.Entity.FeetPos();
-        int team = player.Team;
-
         for (int i = 0; i < _zoneCount; i++)
         {
-            ref ZoneEntry z = ref _zones[i];
-            bool wasIn = (z.OccupiedMask & bit) != 0;
+            ZoneEntry z = _zones[i];
+            bool wasIn = z.Occupants.TryGetValue(playerId, out int oldTeam);
             bool nowIn = alive && z.Contains(feet);
 
             if (wasIn != nowIn)
             {
                 if (nowIn)
                 {
-                    z.OccupiedMask |= bit;
+                    z.Occupants[playerId] = team;
+                    if (playerId is >= 0 and <= 63)
+                        z.OccupiedMask |= (1UL << playerId);
+
                     if (team == 1) z.Team1Count++;
                     else if (team == 2) z.Team2Count++;
                 }
                 else
                 {
-                    z.OccupiedMask &= ~bit;
-                    if (team == 1 && z.Team1Count > 0) z.Team1Count--;
-                    else if (team == 2 && z.Team2Count > 0) z.Team2Count--;
+                    z.Occupants.Remove(playerId);
+                    if (playerId is >= 0 and <= 63)
+                        z.OccupiedMask &= ~(1UL << playerId);
+
+                    if (oldTeam == 1 && z.Team1Count > 0) z.Team1Count--;
+                    else if (oldTeam == 2 && z.Team2Count > 0) z.Team2Count--;
                 }
 
-                owner.NotifyZoneTransition(z.Id, player.PlayerId, nowIn, nowMillis);
+                owner.NotifyZoneTransition(z.Id, playerId, nowIn, nowMillis);
+            }
+            else if (wasIn && oldTeam != team)
+            {
+                // Player remained inside the zone, but their team changed.
+                // Update team counts and occupant record so counts never remain stale.
+                z.Occupants[playerId] = team;
+                if (oldTeam == 1 && z.Team1Count > 0) z.Team1Count--;
+                else if (oldTeam == 2 && z.Team2Count > 0) z.Team2Count--;
+
+                if (team == 1) z.Team1Count++;
+                else if (team == 2) z.Team2Count++;
             }
         }
     }
@@ -296,6 +396,35 @@ public partial class ObjectiveContext : RefCounted
         int nowMillis,
         ScriptedObjective owner)
     {
+        if (_players.Count > players.Count)
+        {
+            List<int>? staleIds = null;
+            foreach (var kvp in _players)
+            {
+                bool found = false;
+                for (int i = 0; i < players.Count; i++)
+                {
+                    if (players[i].PlayerId == kvp.Key)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                {
+                    staleIds ??= new List<int>();
+                    staleIds.Add(kvp.Key);
+                }
+            }
+            if (staleIds != null)
+            {
+                for (int i = 0; i < staleIds.Count; i++)
+                {
+                    RemovePlayer(staleIds[i], owner, nowMillis);
+                }
+            }
+        }
+
         for (int i = 0; i < players.Count; i++)
         {
             EvaluatePlayerZones(players[i], nowMillis, owner);
@@ -589,6 +718,16 @@ public class ScriptedObjective : IModeObjective
         {
             _scriptInstance.Call(MethodOnPlayerDied, _context, victim.PlayerId, killer?.PlayerId ?? -1, (int)gun, nowMillis);
         }
+    }
+
+    public void OnPlayerTeamChanged(MapPlayer player)
+    {
+        _context.UpdatePlayerTeam(player.PlayerId, player.Team);
+    }
+
+    public void OnPlayerRemoved(MapPlayer player)
+    {
+        _context.RemovePlayer(player.PlayerId, this, player.LastMillis);
     }
 
     public ObjectiveHudState GetHudState(MapPlayer localPlayer, int nowMillis) =>

@@ -141,7 +141,11 @@ public partial class EmptyMap : Node3D, IGameWorld
     /// <summary>Unregisters a player from the world's physics loop.</summary>
     public void UnregisterPlayer(MapPlayer player)
     {
-        if (_players.Remove(player)) player.DetachClock();
+        if (_players.Remove(player))
+        {
+            player.DetachClock();
+            Objective?.OnPlayerRemoved(player);
+        }
     }
 
     /// <summary>
