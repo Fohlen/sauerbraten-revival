@@ -1,7 +1,9 @@
 using Chickensoft.GoDotTest;
 using Godot;
+using SauerbratenRevival.World.Materials;
 using SauerbratenRevival.World.Models;
 using SauerbratenRevival.World.Physics;
+using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 namespace SauerbratenRevival.Tests;
 
@@ -163,5 +165,57 @@ public class MapModelCollisionTest : GoTestBase
         float diagDistHit = 7.5f;
         var playerHit = NewPlayer(new Vector3(256 + diagDistHit * 0.7071f, 256 + diagDistHit * 0.7071f, 535));
         TestAssert.True(phys.Collide(playerHit, Vector3.Zero), "player inside cylinder radius hits");
+    }
+
+    [Test]
+    public void CampoMapLampPostsHaveCollisions()
+    {
+        var map = TestData.ReadMap("campo");
+        var catalogue = MetadataCatalogue.Load(TestData.CataloguePathFor("campo"));
+        var modelCatalog = ModelCatalog.LoadFromProject();
+
+        var octa = map.ToOcta();
+        var phys = new OctaPhysics(octa);
+
+        var root = MapModelBuilder.Build(map, catalogue, modelCatalog, null, phys);
+
+        // Verify that collidable models (like objects/lantern01) were registered in phys.MapModels
+        // while walk-through models (like objects/lamp01) were excluded.
+        bool hasLanternCollider = false;
+        for (int i = 0; i < phys.MapModels.Count; i++)
+        {
+            if (phys.MapModels[i].Radius.X == 2.0f && phys.MapModels[i].Collide)
+                hasLanternCollider = true;
+        }
+        TestAssert.True(hasLanternCollider, "campo lamp-posts (objects/lantern01) registered as colliders");
+
+        // Entity 121 in campo: objects/lantern01 at pos (409.3, 544.505, 216.878), yaw 75
+        var lanternEnt = map.Entities[121];
+        var info = modelCatalog?.Get("objects/lantern01");
+        TestAssert.True(info != null, "lantern01 info loaded");
+        TestAssert.True(info!.Collide, "lantern01 is collidable");
+
+        float topZ = lanternEnt.Position.Z + info.CollideCenter.Z + info.CollideRadius.Z;
+
+        // Player placed standing on top of entity 121's lantern post
+        var standingPlayer = NewPlayer(new Vector3(lanternEnt.Position.X, lanternEnt.Position.Y, topZ + 14.0f));
+        bool slide = false;
+        Vector3 floor = Vector3.Zero;
+        bool found = phys.FindFloor(standingPlayer, false, Vector3.Zero, ref slide, ref floor);
+        TestAssert.True(found, "standing on top of campo lamp-post detects floor");
+        TestAssert.Equal(new Vector3(0, 0, 1), floor, "lamp-post floor normal is upward (0, 0, 1)");
+        TestAssert.True(floor.Z >= Phys.FloorZ, "lamp-post acts as valid standing floor");
+
+        // Player walking into the side of the lantern post
+        var sidePlayer = NewPlayer(new Vector3(lanternEnt.Position.X, lanternEnt.Position.Y - 5.0f, lanternEnt.Position.Z + 14.0f));
+        bool hit = phys.Collide(sidePlayer, new Vector3(0, 1, 0));
+        TestAssert.True(hit, "player moving into lamp-post is blocked by collision");
+
+        // Entity 115 in campo: objects/lamp01 (wall lamp) at pos (199.415, 533.357, 305.726)
+        var lampInfo = modelCatalog?.Get("objects/lamp01");
+        TestAssert.True(lampInfo != null, "lamp01 info loaded");
+        TestAssert.False(lampInfo!.Collide, "lamp01 is walk-through (Collide = false)");
+
+        root.Free();
     }
 }
