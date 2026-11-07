@@ -1521,7 +1521,9 @@ public partial class HudController : Control
             _lastScoreFontSize = fontSize;
         }
 
-        uint rgb1 = Score1IsPlayer ? HudScorePlayerColour : HudScoreEnemyColour;
+        uint rgb1 = (!IsTeamPlay && !IsCtf)
+            ? 0xFFFFFF
+            : (Score1IsPlayer ? HudScorePlayerColour : HudScoreEnemyColour);
         Color col1 = StatusBarRenderer.GetHudScoreColor(rgb1, HudScoreAlpha);
         _hudScoreLabel1.Visible = true;
         _hudScoreLabel1.Text = text1;
@@ -1533,7 +1535,9 @@ public partial class HudController : Control
 
         if (Score2 != int.MinValue)
         {
-            uint rgb2 = !Score1IsPlayer ? HudScorePlayerColour : HudScoreEnemyColour;
+            uint rgb2 = (!IsTeamPlay && !IsCtf)
+                ? 0xFFFFFF
+                : (!Score1IsPlayer ? HudScorePlayerColour : HudScoreEnemyColour);
             Color col2 = StatusBarRenderer.GetHudScoreColor(rgb2, HudScoreAlpha);
             _hudScoreLabel2.Visible = true;
             _hudScoreLabel2.Text = text2;

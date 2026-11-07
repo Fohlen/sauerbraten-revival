@@ -719,20 +719,26 @@ public class StatusBarRendererTest : GoTestBase
         // 1920x1080 resolution
         // scale = 1080 / 1800 = 0.6
         // refW = 1920 / 0.6 = 3200
-        // pw = 60, ph = 64
+        // pw = 120 (4 char widths for safe right margin), ph = 64
         // tw = 9 * 30 = 270, th = 64
         // target = "unnamed" (7 chars) -> fw = 7 * 30 = 210, fh = 64
-        // specX = (3200 - 270 - 60) * 0.6 = 2870 * 0.6 = 1722
+        // specX = (3200 - 270 - 120) * 0.6 = 2810 * 0.6 = 1686
         // specY = (1650 - 64 - 64) * 0.6 = 1522 * 0.6 = 913.2
-        // followX = (3200 - 210 - 60) * 0.6 = 2930 * 0.6 = 1758
+        // followX = (3200 - 210 - 120) * 0.6 = 2870 * 0.6 = 1722
         // followY = (1650 - 64) * 0.6 = 1586 * 0.6 = 951.6
         var (specPos, specSize, followPos, followSize) = StatusBarRenderer.LayoutSpectatorOverlay(
             1920f, 1080f, "unnamed");
 
-        TestAssert.Near(1722f, specPos.X, 0.05f, "specPos.X is 1722");
+        TestAssert.Near(1686f, specPos.X, 0.05f, "specPos.X is 1686 with safe right margin");
         TestAssert.Near(913.2f, specPos.Y, 0.05f, "specPos.Y is 913.2");
-        TestAssert.Near(1758f, followPos.X, 0.05f, "followPos.X is 1758");
+        TestAssert.Near(1722f, followPos.X, 0.05f, "followPos.X is 1722 with safe right margin");
         TestAssert.Near(951.6f, followPos.Y, 0.05f, "followPos.Y is 951.6");
+
+        // Custom right margin (e.g. 60 units)
+        var (cSpecPos, _, cFollowPos, _) = StatusBarRenderer.LayoutSpectatorOverlay(
+            1920f, 1080f, "unnamed", rightMargin: 60f);
+        TestAssert.Near(1722f, cSpecPos.X, 0.05f, "custom specPos.X is 1722");
+        TestAssert.Near(1758f, cFollowPos.X, 0.05f, "custom followPos.X is 1758");
     }
 
     [Test]
@@ -914,21 +920,24 @@ public class StatusBarRendererTest : GoTestBase
         var label2 = hud.GetNodeOrNull<Label>("HudScoreLabel2");
         TestAssert.True(label1 != null && label2 != null, "Score labels exist");
 
-        // Player 1 leading: Score1 = 10 (player, blue), Score2 = 5 (enemy, red)
+        // Player 1 leading: Score1 = 10, Score2 = 5
         TestAssert.Equal(10, hud.Score1, "Player 1 leading frags on Score1");
         TestAssert.Equal(5, hud.Score2, "Player 2 frags on Score2");
-        TestAssert.True(hud.Score1IsPlayer, "Score1 is player color when leading");
         TestAssert.True(label1!.Visible && label1.Text == "10", $"label1 shows 10, got {label1.Text}");
         TestAssert.True(label2!.Visible && label2.Text == "5", $"label2 shows 5, got {label2.Text}");
+        // In DM non-team, score colors are white
+        TestAssert.Equal(Colors.White, label1.Modulate, "Score1 color is white in DM non-team");
+        TestAssert.Equal(Colors.White, label2.Modulate, "Score2 color is white in DM non-team");
 
-        // Now follow Player 2 (trailing): Score1 = 10 (leader enemy, red), Score2 = 5 (player, blue)
+        // Now follow Player 2 (trailing): Score1 = 10 (leader), Score2 = 5 (player)
         hud.Player = player2;
         hud.UpdateHudScore();
         TestAssert.Equal(10, hud.Score1, "Leader frags on Score1");
         TestAssert.Equal(5, hud.Score2, "Player 2 frags on Score2");
-        TestAssert.False(hud.Score1IsPlayer, "Score1 is enemy color when trailing");
         TestAssert.True(label1.Visible && label1.Text == "10", $"label1 shows leader 10, got {label1.Text}");
         TestAssert.True(label2.Visible && label2.Text == "5", $"label2 shows player 5, got {label2.Text}");
+        TestAssert.Equal(Colors.White, label1.Modulate, "Score1 color remains white in DM non-team");
+        TestAssert.Equal(Colors.White, label2.Modulate, "Score2 color remains white in DM non-team");
 
         // Single player in FFA: only 1 score shown, Score2 hidden
         hud.Players = new List<MapPlayer> { player1 };

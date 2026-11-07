@@ -449,13 +449,15 @@ public static class StatusBarRenderer
         float screenW,
         float screenH,
         string targetPlayerName,
-        float refHeight = ReferenceHeight)
+        float refHeight = ReferenceHeight,
+        float rightMargin = 4.0f * DefaultFontCharWidth)
     {
         float scale = screenH / refHeight;
         float refW = screenW / scale;
 
-        // pw, ph = text_bounds("  ") -> 2 spaces = 2 * 30 = 60, height = 64
-        float pw = 2.0f * DefaultFontCharWidth;
+        // pw = right margin/padding from the screen edge (engine pw = text_bounds("  "))
+        // 4 character widths (120 units) gives comfortable breathing room from the right viewport edge.
+        float pw = rightMargin;
         float ph = DefaultFontHeight;
 
         float tw = "SPECTATOR".Length * DefaultFontCharWidth;
