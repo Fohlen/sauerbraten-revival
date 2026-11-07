@@ -209,6 +209,9 @@ public partial class HudController : Control
         set => _isHoldMode = value;
     }
 
+    private int HoldSeconds =>
+        (Player?.Flags?.Resource ?? Player?.Mode?.Objective as FlagObjectiveResource)?.HoldSeconds ?? FlagManager.HoldSecs;
+
     private bool? _isEfficiency;
     /// <summary>Whether current mode is efficiency mode (no pistol). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsEfficiency
@@ -812,7 +815,7 @@ public partial class HudController : Control
                 currentStatusIcon = StatusBarRenderer.GetFlagIcon(IsHoldMode, carried.Team, _player.Team);
                 if (IsHoldMode)
                 {
-                    currentStatusCounter = Math.Max(0, FlagManager.HoldSecs - carried.HoldCounter(_player.LastMillis) / 1000);
+                    currentStatusCounter = Math.Max(0, HoldSeconds - carried.HoldCounter(_player.LastMillis) / 1000);
                 }
             }
         }
@@ -1038,7 +1041,7 @@ public partial class HudController : Control
                     if (IsHoldMode)
                     {
                         int now = Player.LastMillis;
-                        statusCounter = Math.Max(0, FlagManager.HoldSecs - carriedFlag.HoldCounter(now) / 1000);
+                        statusCounter = Math.Max(0, HoldSeconds - carriedFlag.HoldCounter(now) / 1000);
                     }
                 }
             }
@@ -1118,7 +1121,7 @@ public partial class HudController : Control
             _lastCarriedFlagVersion = carried?.Version ?? 0;
             _lastCarriedFlagTeam = carried?.Team ?? 0;
             _lastHoldRemaining = (carried != null && IsHoldMode)
-                ? Math.Max(0, FlagManager.HoldSecs - carried.HoldCounter(Player.LastMillis) / 1000)
+                ? Math.Max(0, HoldSeconds - carried.HoldCounter(Player.LastMillis) / 1000)
                 : -1;
         }
         else

@@ -34,7 +34,20 @@ public enum FlagReturnRule
 [GlobalClass]
 public partial class FlagObjectiveResource : ModeObjectiveResource
 {
-    [Export] public FlagPlacementMode Placement { get; set; } = FlagPlacementMode.MapTeamFlags;
+    private FlagPlacementMode _placement = FlagPlacementMode.MapTeamFlags;
+    [Export]
+    public FlagPlacementMode Placement
+    {
+        get => _placement;
+        set
+        {
+            _placement = value;
+            if (value == FlagPlacementMode.DynamicHoldSpawns && ResetDelayMillis == 10000)
+            {
+                ResetDelayMillis = 30000;
+            }
+        }
+    }
     [Export] public FlagScoreRule ScoreRule { get; set; } = FlagScoreRule.RelayToFriendlyBase;
     [Export] public FlagReturnRule ReturnRule { get; set; } = FlagReturnRule.TouchDropped;
     [Export] public int ResetDelayMillis { get; set; } = 10000;
@@ -51,7 +64,14 @@ public partial class FlagObjectiveResource : ModeObjectiveResource
         DefaultSpawnArmour = 50;
     }
 
-    public override IModeObjective CreateInstance(GameModeInfo mode) => new FlagObjective(this, mode);
+    public override IModeObjective CreateInstance(GameModeInfo mode)
+    {
+        if (mode != null && mode.Objective == null)
+        {
+            mode.Objective = this;
+        }
+        return new FlagObjective(this, mode);
+    }
 }
 
 public class FlagObjective : IModeObjective
@@ -64,8 +84,14 @@ public class FlagObjective : IModeObjective
     public FlagObjective(FlagObjectiveResource resource, GameModeInfo mode, FlagManager? flags = null)
     {
         Resource = resource;
-        Mode = mode;
-        Flags = flags ?? new FlagManager { Mode = mode };
+        Mode = mode ?? GameModeCatalog.Get("ctf");
+        if (mode != null && mode.Objective == null)
+        {
+            mode.Objective = resource;
+        }
+        Flags = flags ?? new FlagManager { Mode = Mode, Resource = resource };
+        Flags.Mode = Mode;
+        Flags.Resource = resource;
     }
 
     public bool ClaimsEntity(MapEntity e)
@@ -105,7 +131,19 @@ public class FlagObjective : IModeObjective
 
     public void Step(IGameWorld world, int stepMillis, int nowMillis)
     {
-        Flags.Update(nowMillis);
+        Func<int, (int team, Vector3 pos)?>? getPlayerInfo = world != null ? pid =>
+        {
+            var players = world.Players;
+            for (int i = 0; i < players.Count; i++)
+            {
+                var p = players[i];
+                if (p.PlayerId == pid) return (p.Team, p.Entity.FeetPos());
+            }
+            return null;
+        }
+        : null;
+
+        Flags.Update(Resource, Mode, nowMillis, getPlayerInfo);
     }
 
     public void StepPlayer(MapPlayer player, int nowMillis)
@@ -115,7 +153,8 @@ public class FlagObjective : IModeObjective
 
     public void OnPlayerDied(MapPlayer victim, MapPlayer? killer, Gun gun, int nowMillis)
     {
-        Flags.OnPlayerDied(victim.PlayerId, null, false, victim.Entity.FeetPos(), nowMillis, victim.Entity.Yaw);
+        bool isTeammate = killer != null && killer.Team == victim.Team;
+        Flags.OnPlayerDied(victim.PlayerId, killer?.PlayerId, isTeammate, victim.Entity.FeetPos(), Mode, nowMillis, victim.Entity.Yaw);
     }
 
     public ObjectiveHudState GetHudState(MapPlayer localPlayer, int nowMillis)
@@ -136,7 +175,7 @@ public class FlagObjective : IModeObjective
 
             if (Resource.ScoreRule == FlagScoreRule.HoldTimer && carried.HoldTime > 0)
             {
-                int remaining = Math.Max(0, (carried.HoldTime - nowMillis + 999) / 1000);
+                int remaining = Math.Max(0, Resource.HoldSeconds - carried.HoldCounter(nowMillis) / 1000);
                 counter = remaining;
             }
         }

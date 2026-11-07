@@ -56,6 +56,7 @@ public partial class FlagManagerTest : TestClass
                 Placement = World.Game.Objectives.FlagPlacementMode.DynamicHoldSpawns,
                 ScoreRule = World.Game.Objectives.FlagScoreRule.HoldTimer,
                 ReturnRule = World.Game.Objectives.FlagReturnRule.RandomRespawn,
+                ResetDelayMillis = FlagManager.HoldResetFlagTime,
             },
         };
         mode.Bake();

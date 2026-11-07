@@ -190,7 +190,10 @@ public partial class MapWorld : Node3D, IGameWorld
         {
             _objective = value;
             if (value is FlagObjective fo)
+            {
                 Flags = fo.Flags;
+                Flags.Resource = fo.Resource;
+            }
         }
     }
 
@@ -204,7 +207,10 @@ public partial class MapWorld : Node3D, IGameWorld
         {
             _flags = value;
             if (_objective is FlagObjective fo && value != null)
+            {
                 fo.Flags = value;
+                value.Resource = fo.Resource;
+            }
         }
     }
 
@@ -224,7 +230,11 @@ public partial class MapWorld : Node3D, IGameWorld
             {
                 Objective = value.CreateObjective();
                 if (Items != null) Items.Mode = value;
-                if (Flags != null) Flags.Mode = value;
+                if (Flags != null)
+                {
+                    Flags.Mode = value;
+                    if (Objective is FlagObjective fo) Flags.Resource = fo.Resource;
+                }
                 for (int i = 0; i < _players.Count; i++) _players[i].Mode = value;
                 foreach (var child in GetChildren())
                 {
@@ -410,6 +420,7 @@ public partial class MapWorld : Node3D, IGameWorld
         // modes get an empty manager so player/HUD code can keep a stable reference.
         Flags = (Objective as FlagObjective)?.Flags ?? new FlagManager();
         if (Mode != null) Flags.Mode = Mode;
+        if (Objective is FlagObjective flagObj) Flags.Resource = flagObj.Resource;
         var flagsRoot = new Node3D { Name = "Flags" };
         _flagNodes.Clear();
         if (Flags != null && Objective is FlagObjective)

@@ -69,6 +69,107 @@ public class ObjectiveCatalogTest : GoTestBase
     }
 
     [Test]
+    public void FlagObjective_DataDrivenRuleParametersAffectRuntimeBehavior()
+    {
+        // ADR 0012 Example 1: fast_ctf data-driven flag variant with ResetDelayMillis = 5000
+        var fastCtfRes = new FlagObjectiveResource
+        {
+            Id = "fast_ctf",
+            Name = "fast ctf",
+            ResetDelayMillis = 5000,
+            InvisDelayMillis = 15000,
+            HoldSeconds = 12,
+            HoldDeathPenaltySeconds = 3,
+        };
+
+        var fastMode = new GameModeInfo
+        {
+            Id = "fast_ctf",
+            Name = "fast ctf",
+            Objective = fastCtfRes,
+        };
+
+        var obj = fastCtfRes.CreateInstance(fastMode) as FlagObjective;
+        TestAssert.True(obj != null, "created fast_ctf FlagObjective");
+
+        // 1. ResetDelayMillis: dropped flag resets after 5000ms instead of default 10000ms
+        obj!.Flags.AddFlag(0, new Vector3(0, 0, 0), 1, 0, false);
+        obj.Flags.DropFlag(0, new Vector3(50, 50, 0), 1000);
+        TestAssert.True(obj.Flags.Flags[0].DropTime > 0, "flag is dropped");
+
+        // Step at 4999ms elapsed (1000 + 4999 = 5999ms): not reset yet
+        obj.Step(null!, 5, 5999);
+        TestAssert.Equal(1000, obj.Flags.Flags[0].DropTime, "flag not reset before 5000ms delay");
+
+        // Step at 5000ms elapsed (1000 + 5000 = 6000ms): reset occurs!
+        obj.Step(null!, 5, 6000);
+        TestAssert.Equal(0, obj.Flags.Flags[0].DropTime, "flag resets at exactly 5000ms ResetDelayMillis");
+
+        // 2. InvisDelayMillis: protect touch cooldown uses custom 12000ms instead of 20000ms
+        var protectRes = new FlagObjectiveResource
+        {
+            Id = "custom_protect",
+            ScoreRule = FlagScoreRule.TouchEnemyFlag,
+            ReturnRule = FlagReturnRule.DropInsideBase,
+            InvisDelayMillis = 12000,
+        };
+        var protectMode = new GameModeInfo
+        {
+            Id = "custom_protect",
+            Objective = protectRes,
+        };
+        var protectObj = protectRes.CreateInstance(protectMode) as FlagObjective;
+        protectObj!.Flags.AddFlag(0, new Vector3(0, 0, 0), 1, 0, isProtect: true);
+        protectObj.Flags.Flags[0].InvisTime = 1000;
+
+        // Player 2 attempts to touch enemy flag before 12000ms has elapsed: fails
+        bool scoredEarly = protectObj.Flags.TakeFlag(2, 2, new Vector3(0, 0, 0), 0, protectObj.Flags.Flags[0].Version, 1000 + 11999);
+        TestAssert.False(scoredEarly, "cannot score during custom 12s InvisDelayMillis cooldown");
+
+        // Step clears invis cooldown after 12000ms
+        protectObj.Step(null!, 5, 1000 + 12000);
+        bool scored = protectObj.Flags.TakeFlag(2, 2, new Vector3(0, 0, 0), 0, protectObj.Flags.Flags[0].Version, 1000 + 12000);
+        TestAssert.True(scored, "touch enemy flag scores once custom InvisDelayMillis expires");
+
+        // 3. HoldSeconds: scores after 12 seconds instead of default 20 seconds
+        var holdRes = new FlagObjectiveResource
+        {
+            Id = "custom_hold",
+            Placement = FlagPlacementMode.DynamicHoldSpawns,
+            ScoreRule = FlagScoreRule.HoldTimer,
+            ReturnRule = FlagReturnRule.RandomRespawn,
+            HoldSeconds = 12,
+            HoldDeathPenaltySeconds = 3,
+        };
+        var holdMode = new GameModeInfo
+        {
+            Id = "custom_hold",
+            Objective = holdRes,
+        };
+        var holdObj = holdRes.CreateInstance(holdMode) as FlagObjective;
+        holdObj!.Flags.AddHoldSpawn(new Vector3(10, 10, 0));
+        holdObj.Flags.SetupHoldSpawns();
+        holdObj.Flags.TakeFlag(1, 1, Vector3.Zero, 0, holdObj.Flags.Flags[0].Version, 1000);
+
+        // Step at 11s elapsed: no score
+        int p1Score = 0;
+        holdObj.Flags.Update(1000 + 11000, pid => (1, Vector3.Zero), (pid, s) => p1Score += s);
+        TestAssert.Equal(0, p1Score, "not scored yet after 11s of 12s hold");
+
+        // Step at 12s elapsed: scores!
+        holdObj.Flags.Update(1000 + 12000, pid => (1, Vector3.Zero), (pid, s) => p1Score += s);
+        TestAssert.Equal(1, p1Score, "scored after 12s HoldSeconds");
+
+        // 4. HoldDeathPenaltySeconds: carrier dies, penalty is 3s instead of default 5s
+        holdObj.Flags.TakeFlag(1, 1, Vector3.Zero, 0, holdObj.Flags.Flags[0].Version, 20000);
+        var victim = new MapPlayer { PlayerId = 1, Team = 1, Mode = holdMode };
+        victim.Flags = holdObj.Flags;
+        holdObj.OnPlayerDied(victim, null, Gun.Pistol, 25000);
+        // Prior to death, holdtime was 20000. 3s penalty adds 3000 -> 23000
+        TestAssert.Equal(23000, holdObj.Flags.Flags[0].HoldTime, "holdtime incremented by custom 3s HoldDeathPenaltySeconds");
+    }
+
+    [Test]
     public void DeathmatchObjective_ScoringAndPenalties()
     {
         var dmRes = ObjectiveCatalog.Get("dm") as DeathmatchObjectiveResource;

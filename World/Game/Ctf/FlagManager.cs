@@ -41,6 +41,12 @@ public sealed class FlagManager
     /// <summary>Active game mode info governing flag rules.</summary>
     public GameModeInfo Mode { get; set; } = GameModeCatalog.Get("ctf");
 
+    /// <summary>Active flag objective resource governing flag rules, if any.</summary>
+    public FlagObjectiveResource? Resource { get; set; }
+
+    /// <summary>Resolved active flag objective resource (from <see cref="Resource"/> or <see cref="Mode"/>).</summary>
+    public FlagObjectiveResource? ObjectiveResource => Resource ?? Mode?.Objective as FlagObjectiveResource;
+
     /// <summary>Checks whether a game mode is configured with Hold flag rules.</summary>
     public static bool IsHoldMode(GameModeInfo? mode) =>
         (mode?.Objective as FlagObjectiveResource)?.Placement == FlagPlacementMode.DynamicHoldSpawns;
@@ -225,14 +231,17 @@ public sealed class FlagManager
         f.InvisTime = invisTime;
     }
 
-    public void DeadFlag(int flagId, int nowMillis)
+    public void DeadFlag(int flagId, int nowMillis, int? penaltySeconds = null)
     {
         if (flagId < 0 || flagId >= _flags.Count) return;
         var f = _flags[flagId];
         if (f.HoldTime > 0)
         {
+            int penaltySecs = penaltySeconds
+                ?? ObjectiveResource?.HoldDeathPenaltySeconds
+                ?? HoldDeathPenalty;
             int limit = !f.HasOwner && f.DropTime > 0 && f.DropTime >= f.HoldTime ? f.DropTime : nowMillis;
-            f.HoldTime += HoldDeathPenalty * 1000;
+            f.HoldTime += penaltySecs * 1000;
             if (f.HoldTime >= limit) f.HoldTime = 0;
         }
     }
@@ -253,8 +262,13 @@ public sealed class FlagManager
         if (flagId < 0 || flagId >= _flags.Count || playerTeam is < 1 or > 2) return false;
         var f = _flags[flagId];
 
-        bool isHold = IsHoldMode(mode);
-        bool isProtect = IsProtectMode(mode);
+        var flagResource = mode?.Objective as FlagObjectiveResource ?? Resource;
+        bool isHold = flagResource != null
+            ? flagResource.Placement == FlagPlacementMode.DynamicHoldSpawns
+            : IsHoldMode(mode);
+        bool isProtect = flagResource != null
+            ? flagResource.ScoreRule == FlagScoreRule.TouchEnemyFlag
+            : IsProtectMode(mode);
 
         if ((isHold ? f.SpawnIndex < 0 : f.Team is < 1 or > 2) ||
             f.Owner.HasValue ||
@@ -277,7 +291,8 @@ public sealed class FlagManager
         else if (isProtect)
         {
             // Protect: touch enemy flag to score and reset it
-            if (f.InvisTime == 0 || nowMillis >= f.InvisTime + InvisFlagTime)
+            int invisDelay = flagResource?.InvisDelayMillis ?? InvisFlagTime;
+            if (f.InvisTime == 0 || nowMillis >= f.InvisTime + invisDelay)
             {
                 ScoreFlag(playerId, playerTeam, flagId, -1, mode, nowMillis, onPlayerScore, rng);
                 return true;
@@ -388,15 +403,20 @@ public sealed class FlagManager
     /// </summary>
     public void OnPlayerDied(int victimId, int? actorId, bool isTeammate, Vector3 victimPos, GameModeInfo mode, int nowMillis, float dropAngle = 0f)
     {
-        bool isHold = IsHoldMode(mode);
+        var flagResource = mode?.Objective as FlagObjectiveResource ?? Resource;
+        bool isHold = flagResource != null
+            ? flagResource.Placement == FlagPlacementMode.DynamicHoldSpawns
+            : IsHoldMode(mode);
+
         if (isHold && GetCarriedFlag(victimId) is int heldFlagId)
         {
-            DeadFlag(heldFlagId, nowMillis);
+            int penaltySecs = flagResource?.HoldDeathPenaltySeconds ?? HoldDeathPenalty;
+            DeadFlag(heldFlagId, nowMillis, penaltySecs);
         }
 
         bool tkPenalty = actorId.HasValue && actorId.Value != victimId && isTeammate;
         int dropper = tkPenalty ? actorId!.Value : victimId;
-        DropPlayerFlag(victimId, victimPos, mode, nowMillis, dropper, tkPenalty, dropAngle);
+        DropPlayerFlag(victimId, victimPos, mode ?? Mode, nowMillis, dropper, tkPenalty, dropAngle);
 
         foreach (var f in _flags)
         {
@@ -409,26 +429,53 @@ public sealed class FlagManager
     }
 
     /// <summary>
-    /// Regular tick update for flags using active <see cref="Mode"/>.
+    /// Regular tick update for flags using active <see cref="Resource"/> and <see cref="Mode"/>.
     /// </summary>
     public void Update(int nowMillis, Func<int, (int team, Vector3 pos)?>? getPlayerInfo = null, Action<int, int>? onPlayerScore = null, Random? rng = null)
-        => Update(Mode, nowMillis, getPlayerInfo, onPlayerScore, rng);
+        => Update(Resource, Mode, nowMillis, getPlayerInfo, onPlayerScore, rng);
 
     /// <summary>
-    /// Regular tick update for flags: handles drop reset timeouts, invis timeouts, and hold 20s score countdown.
+    /// Regular tick update for flags using specified <paramref name="mode"/>.
     /// </summary>
     public void Update(GameModeInfo mode, int nowMillis, Func<int, (int team, Vector3 pos)?>? getPlayerInfo = null, Action<int, int>? onPlayerScore = null, Random? rng = null)
+        => Update(mode?.Objective as FlagObjectiveResource ?? Resource, mode, nowMillis, getPlayerInfo, onPlayerScore, rng);
+
+    /// <summary>
+    /// Regular tick update for flags using specified <paramref name="resource"/>.
+    /// </summary>
+    public void Update(FlagObjectiveResource? resource, int nowMillis, Func<int, (int team, Vector3 pos)?>? getPlayerInfo = null, Action<int, int>? onPlayerScore = null, Random? rng = null)
+        => Update(resource, Mode, nowMillis, getPlayerInfo, onPlayerScore, rng);
+
+    /// <summary>
+    /// Regular tick update for flags: handles drop reset timeouts, invis timeouts, and hold score countdown.
+    /// Uses parameters from <paramref name="resource"/> (<see cref="FlagObjectiveResource.ResetDelayMillis"/>,
+    /// <see cref="FlagObjectiveResource.InvisDelayMillis"/>, <see cref="FlagObjectiveResource.HoldSeconds"/>)
+    /// when present, falling back to mode or defaults.
+    /// </summary>
+    public void Update(FlagObjectiveResource? resource, GameModeInfo? mode, int nowMillis, Func<int, (int team, Vector3 pos)?>? getPlayerInfo = null, Action<int, int>? onPlayerScore = null, Random? rng = null)
     {
-        bool isHold = IsHoldMode(mode);
-        bool isProtect = IsProtectMode(mode);
+        resource ??= mode?.Objective as FlagObjectiveResource ?? Resource;
+        mode ??= Mode;
+
+        bool isHold = resource != null
+            ? resource.Placement == FlagPlacementMode.DynamicHoldSpawns
+            : IsHoldMode(mode);
+        bool isProtect = resource != null
+            ? resource.ScoreRule == FlagScoreRule.TouchEnemyFlag
+            : IsProtectMode(mode);
+
+        int resetTimeout = resource != null
+            ? resource.ResetDelayMillis
+            : (isHold ? HoldResetFlagTime : ResetFlagTime);
+        int invisTimeout = resource?.InvisDelayMillis ?? InvisFlagTime;
+        int holdSeconds = resource?.HoldSeconds ?? HoldSecs;
 
         for (int i = 0; i < _flags.Count; i++)
         {
             var f = _flags[i];
-            int timeout = isHold ? HoldResetFlagTime : ResetFlagTime;
 
             // Reset dropped flag after timeout
-            if (!f.HasOwner && f.DropTime > 0 && nowMillis - f.DropTime >= timeout)
+            if (!f.HasOwner && f.DropTime > 0 && nowMillis - f.DropTime >= resetTimeout)
             {
                 ReturnFlag(i, isProtect ? nowMillis : 0);
                 if (isHold)
@@ -447,19 +494,19 @@ public sealed class FlagManager
             }
 
             // Clear invis time after INVISFLAGTIME (protect score cooldown)
-            if (f.InvisTime > 0 && nowMillis - f.InvisTime >= InvisFlagTime)
+            if (f.InvisTime > 0 && nowMillis - f.InvisTime >= invisTimeout)
             {
                 f.InvisTime = 0;
             }
 
-            // Hold mode 20s score check
-            if (isHold && f.HasOwner && nowMillis - f.HoldTime >= HoldSecs * 1000)
+            // Hold mode score check
+            if (isHold && f.HasOwner && nowMillis - f.HoldTime >= holdSeconds * 1000)
             {
                 int ownerId = f.Owner!.Value;
                 var pinfo = getPlayerInfo?.Invoke(ownerId);
                 if (pinfo.HasValue)
                 {
-                    ScoreFlag(ownerId, pinfo.Value.team, i, -1, mode, nowMillis, onPlayerScore, rng);
+                    ScoreFlag(ownerId, pinfo.Value.team, i, -1, mode ?? Mode, nowMillis, onPlayerScore, rng);
                 }
                 else
                 {

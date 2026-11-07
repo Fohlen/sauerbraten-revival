@@ -175,6 +175,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             if (_mode == value) return;
             _mode = value;
+            if (_flags != null && value != null)
+            {
+                _flags.Mode = value;
+                if (value.Objective is Objectives.FlagObjectiveResource res)
+                    _flags.Resource = res;
+            }
             EmitSignal(SignalName.ModeChanged, value);
         }
     }
@@ -205,7 +211,10 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             _objective = value;
             if (value is Objectives.FlagObjective fo)
+            {
                 Flags = fo.Flags;
+                Flags.Resource = fo.Resource;
+            }
         }
     }
 
@@ -218,7 +227,16 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             if (ReferenceEquals(_flags, value)) return;
             if (_flags != null) _flags.OnAudioEvent -= OnFlagAudioEvent;
             _flags = value;
-            if (_flags != null) _flags.OnAudioEvent += OnFlagAudioEvent;
+            if (_flags != null)
+            {
+                _flags.OnAudioEvent += OnFlagAudioEvent;
+                if (Mode != null)
+                {
+                    _flags.Mode = Mode;
+                    if (Mode.Objective is Objectives.FlagObjectiveResource res)
+                        _flags.Resource = res;
+                }
+            }
         }
     }
 
