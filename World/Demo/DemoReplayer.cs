@@ -312,7 +312,7 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
                             if (killerPlayer != null)
                             {
                                 bool isTeam = targetPlayer.Mode != null &&
-                                              targetPlayer.Mode.Has(Game.ModeFlags.Team) &&
+                                              targetPlayer.Mode.TeamPlay &&
                                               killerPlayer.Team == targetPlayer.Team;
                                 if (isTeam)
                                 {

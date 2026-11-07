@@ -224,7 +224,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is CTF/Protect/Hold mode. Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsCtf
     {
-        get => _isCtf ?? (Player?.Mode.Has(Game.ModeFlags.Ctf) ?? false);
+        get => _isCtf ?? (Player?.Mode?.Objective is FlagObjectiveResource || Player?.Mode?.ObjectiveId == "ctf");
         set => _isCtf = value;
     }
 
