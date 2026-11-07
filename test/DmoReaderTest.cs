@@ -193,13 +193,12 @@ public class DmoReaderTest : GoTestBase
     public void RealWorldDemo_CannibalVsRexus_MatchesGroundTruth()
     {
         string demoPath = Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-            "Downloads",
-            "cannibal_vs_rexus_finals_duel7_game1.dmo");
+            ProjectSettings.GlobalizePath("res://"),
+            "test", "golden", "demos", "cannibal_vs_rexus_finals_duel7_game1.dmo");
 
         if (!File.Exists(demoPath))
         {
-            // If file is not in ~/Downloads, pass conditionally
+            // Guard against a missing golden fixture
             return;
         }
 
@@ -303,9 +302,8 @@ public class DmoReaderTest : GoTestBase
     public void DmoConverter_CommandLineCommands_WorkViaSystemCommandLine()
     {
         string demoPath = Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-            "Downloads",
-            "cannibal_vs_rexus_finals_duel7_game1.dmo");
+            ProjectSettings.GlobalizePath("res://"),
+            "test", "golden", "demos", "cannibal_vs_rexus_finals_duel7_game1.dmo");
 
         if (!File.Exists(demoPath))
         {
@@ -367,9 +365,8 @@ public class DmoReaderTest : GoTestBase
     public void DemoPackage_Load_AutomaticallyParsesAndTranslatesDmoFile()
     {
         string demoPath = Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-            "Downloads",
-            "cannibal_vs_rexus_finals_duel7_game1.dmo");
+            ProjectSettings.GlobalizePath("res://"),
+            "test", "golden", "demos", "cannibal_vs_rexus_finals_duel7_game1.dmo");
 
         if (!File.Exists(demoPath))
         {
@@ -532,9 +529,8 @@ public class DmoReaderTest : GoTestBase
     public void RealWorldDemo_1To1Translation_AndLongPlaybackSynchronization()
     {
         string demoPath = Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-            "Downloads",
-            "cannibal_vs_rexus_finals_duel7_game1.dmo");
+            ProjectSettings.GlobalizePath("res://"),
+            "test", "golden", "demos", "cannibal_vs_rexus_finals_duel7_game1.dmo");
 
         if (!File.Exists(demoPath))
         {

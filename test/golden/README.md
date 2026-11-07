@@ -30,7 +30,7 @@ headless, so this needs a display.)
 
 ## LFS
 
-The `*.png` under `test/golden/**` are tracked by **git-lfs** (see
-`.gitattributes`). A fresh clone needs `git lfs install` once; otherwise the files
+The `*.png` and `*.dmo` files under `test/golden/**` are tracked by **git-lfs**
+(see `.gitattributes`). A fresh clone needs `git lfs install` once; otherwise the files
 check out as small pointer text and the tests fail. Run `git lfs pull` if clones
 were made without LFS.
