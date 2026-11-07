@@ -71,9 +71,9 @@ flowchart TD
     subgraph Runtime["Phase 2: Match Lifecycle & 200 Hz Simulation"]
         BakedMode -->|"CreateObjective()"| ObjInst["Active IModeObjective Instance\nFlagObjective, RaceObjective, DeathmatchObjective, ScriptedObjective"]
         ObjInst -->|"ClaimsEntity & SetupWorld"| WorldBuild["MapWorld / MapLevel Build"]
-        ObjInst -->|"Step & StepPlayer - 5 ms"| SimLoop["WorldSimulation 200 Hz Loop"]
+        ObjInst -->|"Step (5 ms C#) / Native Zones & Bounded Tick"| SimLoop["WorldSimulation 200 Hz Loop"]
         ObjInst -->|"ResolveSpawn / OnBeforeDamage / OnPlayerDied"| PlayerHooks["MapPlayer Combat & Spawns"]
-        ObjInst -->|"UpdateVisual & GetHudState"| Presentation["3D Objective Nodes & HudController"]
+        ObjInst -->|"UpdateVisual & Cached GetHudState O(1)"| Presentation["3D Objective Nodes & HudController"]
     end
 ```
 
@@ -268,33 +268,39 @@ How `FlagObjective` plugs into `IModeObjective`:
 
 #### C. `ScriptedObjectiveResource` (For Workshop & GDScript Mods)
 
-Allows any modder to define a brand-new objective (e.g. *Prop Hunt*, *Zombie Outbreak*, *King of the Hill*, *Bomb Defusal*) in GDScript:
+Allows any modder to define a brand-new objective (e.g. *Prop Hunt*, *Zombie Outbreak*, *King of the Hill*, *Bomb Defusal*) in GDScript without dragging GDScript invocation or Variant marshalling onto the 200 Hz simulation hot path:
+
+1. **Native Spatial Trigger Zones**: `ObjectiveContext` in C# provides native spatial trigger zones (`add_sphere_zone`, `add_cylinder_zone`, `add_box_zone`) backed by squared-distance calculations and a 64-bit `OccupiedMask` bitfield per zone, updating per-team occupant counts in $O(1)$. GDScript is notified **only on transition** via `on_zone_event`, eliminating per-player polling across the Variant bridge.
+2. **Bounded, Opt-In Objective Tick (`TickIntervalMillis`)**: Rules requiring periodic logic execute at a configurable rate (default 10 Hz / 100 ms) via `on_objective_tick`, leaving 95% of 5 ms physics substeps allocation-free and C#-only.
+3. **Push-Based HUD & Spawn Overrides**: Scores and HUD indicators are pushed into `ObjectiveContext` (`set_team_score`, `set_player_status`), allowing `GetHudState` at 144+ FPS to be a zero-allocation, $O(1)$ C# struct read without querying scripts or allocating `Dictionary` objects.
+4. **Pre-Allocated Synchronous Combat Hook (`ObjectiveDamageContext`)**: When `on_damage` is implemented, a single reusable `ObjectiveDamageContext : RefCounted` instance is passed with zone query helpers (`is_victim_in_zone`), eliminating per-hit dictionary allocations.
 
 ```csharp
 [Tool]
 [GlobalClass]
 public partial class ScriptedObjectiveResource : ModeObjectiveResource
 {
-    /// <summary>GDScript implementing setup_world, step, step_player, on_before_damage, on_player_died, get_hud_state.</summary>
+    /// <summary>GDScript implementing setup_world, on_zone_event, on_objective_tick, on_damage, on_player_died.</summary>
     [Export] public Script? ObjectiveScript { get; set; }
+
+    /// <summary>Period (ms) for bounded on_objective_tick calls. Defaults to 100 ms (10 Hz). &lt;= 0 disables ticking.</summary>
+    [Export] public int TickIntervalMillis { get; set; } = 100;
 
     public override IModeObjective CreateInstance(GameModeInfo mode) => new ScriptedObjective(this, mode);
 }
 ```
 
-The GDScript contract mirrors `IModeObjective`:
+The GDScript contract is event-driven and bounded:
 | GDScript Method | Signature | Description |
 | --- | --- | --- |
 | `claims_entity` | `(entity: MapEntity) -> bool` | Receives entity data (`entity.Type`, `entity.Position`, etc.); returns `true` to claim ownership. |
-| `setup_world` | `(world, entities: Array, root: Node3D) -> void` | Receives world, all map entities, and objective 3D root node. |
-| `step` | `(world, step_millis: int, now_millis: int) -> void` | Called once per 5 ms physics substep for world timers. |
-| `step_player` | `(player: MapPlayer, now_millis: int) -> void` | Called once per alive player per 5 ms substep. |
-| `update_visual` | `(world, last_millis: int) -> void` | Called once per render frame (`_Process`). |
-| `resolve_spawn` | `(player: MapPlayer) -> Dictionary` | Optional spawn override: `{"pos": Vector3, "yaw": float}`. |
-| `on_player_spawn` | `(player: MapPlayer) -> void` | Called after player respawns. |
-| `on_before_damage` | `(attacker, victim, gun: int, result: Dictionary, now_millis: int) -> bool` | Pre-damage hook. `result` contains mutable `result.damage` and `result.push`. Return `false` to cancel. |
-| `on_player_died` | `(victim, killer, gun: int, now_millis: int) -> void` | Called when a player dies. |
-| `get_hud_state` | `(local_player, now_millis: int) -> Dictionary` | Returns HUD state: `{"primary_score": int, "secondary_score": int, "primary_is_friendly": bool, ...}`. |
+| `setup_world` | `(ctx: ObjectiveContext, entities: Array, root: Node3D) -> void` | Initializes zones (`ctx.add_sphere_zone`), spawn overrides, initial scores, and attaches dynamic nodes. |
+| `on_zone_event` | `(ctx: ObjectiveContext, zone_id: int, player_id: int, entered: bool, now_millis: int) -> void` | **Transition event**: called only when a player enters or exits a registered trigger zone. |
+| `on_objective_tick` | `(ctx: ObjectiveContext, tick_millis: int, now_millis: int) -> void` | **Bounded update**: called periodically at `TickIntervalMillis` (e.g. 10 Hz) for periodic scoring or timers. |
+| `update_visual` | `(ctx: ObjectiveContext, last_millis: int) -> void` | Called once per render frame (`_Process`) for visual node animation. |
+| `on_player_spawn` | `(ctx: ObjectiveContext, player_id: int) -> void` | Called after a player respawns. |
+| `on_damage` | `(ctx: ObjectiveContext, dmg: ObjectiveDamageContext) -> void` | Synchronous combat hook. Mutates `dmg.damage`, `dmg.push`, or sets `dmg.cancelled = true` (zero allocs). |
+| `on_player_died` | `(ctx: ObjectiveContext, victim_id: int, killer_id: int, gun: int, now_millis: int) -> void` | Called when a player dies. |
 
 ---
 
@@ -686,46 +692,53 @@ A Workshop modder creates `res://resources/objectives/overrides/koth.tres` (`Scr
 ```gdscript
 extends RefCounted
 
-var hill_pos := Vector3.ZERO
+const HILL_ZONE := 0
 var scores := [0, 0]
-var tick_accum := 0
 
 func claims_entity(entity) -> bool:
     return entity.Type == 24 # EntityType.Base
 
-func setup_world(world, entities, root) -> void:
+func setup_world(ctx, entities, root) -> void:
+    ctx.clear_zones()
     for e in entities:
         if e.Type == 24:
-            hill_pos = e.Position
+            # Register native sphere trigger (zone_id = 0, radius = 64.0)
+            ctx.add_sphere_zone(HILL_ZONE, e.Position, 64.0)
             break
+    ctx.set_default_spawn_override(Vector3(10, 20, 30), 180.0)
+    ctx.set_team_score(1, 0)
+    ctx.set_team_score(2, 0)
 
-func step(world, step_millis: int, now_millis: int) -> void:
-    tick_accum += step_millis
-    if tick_accum < 1000:
-        return
-    tick_accum -= 1000
-    for player in world.Players:
-        if player.IsAlive and player.Entity.FeetPos().distance_to(hill_pos) < 64.0:
-            scores[player.Team - 1] += 1
+# Fired only when a player crosses the zone boundary (0 calls/sec steady state)
+func on_zone_event(ctx, zone_id: int, player_id: int, entered: bool, now_millis: int) -> void:
+    if zone_id == HILL_ZONE:
+        var team: int = ctx.get_player_team(player_id)
+        var current_score: int = scores[team - 1] if team >= 1 and team <= 2 else 0
+        if entered:
+            ctx.set_player_status(player_id, 3, current_score) # HudIcon.Health = 3
+        else:
+            ctx.clear_player_status(player_id)
 
-func on_before_damage(attacker, victim, gun: int, result: Dictionary, now_millis: int) -> bool:
+# Fired at bounded rate (e.g. 10 Hz) rather than 200 Hz
+func on_objective_tick(ctx, tick_millis: int, now_millis: int) -> void:
+    for team in [1, 2]:
+        if ctx.get_zone_team_count(HILL_ZONE, team) > 0:
+            scores[team - 1] += 1
+            ctx.set_team_score(team, scores[team - 1])
+
+# Synchronous pre-damage hook using pre-allocated ObjectiveDamageContext (0 allocs)
+func on_damage(ctx, dmg) -> void:
     # Friendly fire canceled
-    if attacker != null and attacker.Team == victim.Team:
-        return false
+    if dmg.attacker_id >= 0 and dmg.attacker_team == dmg.victim_team:
+        dmg.cancelled = true
+        return
     # Players defending the hill receive 50% damage and have knockback push neutralized
-    if victim.IsAlive and victim.Entity.FeetPos().distance_to(hill_pos) < 64.0:
-        result.damage = int(result.damage * 0.5)
-        result.push = Vector3.ZERO
-    return true
+    if dmg.is_victim_in_zone(HILL_ZONE):
+        dmg.damage = int(dmg.damage * 0.5)
+        dmg.push = Vector3.ZERO
 
-func get_hud_state(local_player, now_millis: int) -> Dictionary:
-    var my_team: int = local_player.Team
-    var enemy_team: int = 2 if my_team == 1 else 1
-    return {
-        "primary_score": scores[my_team - 1],
-        "secondary_score": scores[enemy_team - 1],
-        "primary_is_friendly": true
-    }
+func on_player_died(ctx, victim_id: int, killer_id: int, gun: int, now_millis: int) -> void:
+    pass
 ```
 
 ---
