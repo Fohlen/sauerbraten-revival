@@ -5,7 +5,7 @@ using System.IO.Compression;
 using System.Text;
 using SauerbratenRevival.Format;
 
-namespace SauerbratenRevival.Tools.DmoReader;
+namespace SauerbratenRevival.World.Demo.Formats.Dmo;
 
 /// <summary>
 /// Parsed representation of a Sauerbraten (.dmo) demo file.

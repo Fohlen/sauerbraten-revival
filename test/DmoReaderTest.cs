@@ -4,7 +4,7 @@ using System.IO.Compression;
 using Chickensoft.GoDotTest;
 using Godot;
 using SauerbratenRevival.Format;
-using SauerbratenRevival.Tools.DmoReader;
+using SauerbratenRevival.World.Demo.Formats.Dmo;
 using SauerbratenRevival.World.Demo;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Players;
@@ -297,6 +297,84 @@ public class DmoReaderTest : GoTestBase
         TestAssert.Equal(100, testPlayer.Combat.Ammo[4], "Player combat ammo rifle is 100");
         TestAssert.Equal(100, testPlayer.Combat.SelectedAmmo, "Player selected ammo is 100");
         testPlayer.Free();
+    }
+
+    [Test]
+    public void DmoConverter_CommandLineCommands_WorkViaSystemCommandLine()
+    {
+        string demoPath = Path.Combine(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+            "Downloads",
+            "cannibal_vs_rexus_finals_duel7_game1.dmo");
+
+        if (!File.Exists(demoPath))
+        {
+            return;
+        }
+
+        // Test info command
+        using var infoOut = new StringWriter();
+        using var infoErr = new StringWriter();
+        int infoExit = DmoConverter.Run(new[] { "info", demoPath }, infoOut, infoErr);
+        TestAssert.Equal(0, infoExit, "DmoConverter info exit code is 0");
+        string infoText = infoOut.ToString();
+        TestAssert.True(infoText.Contains("duel7"), "Info output contains map name");
+        TestAssert.True(infoText.Contains("Rexus|sp4nk|"), "Info output contains player name");
+
+        // Test info --json
+        using var jsonOut = new StringWriter();
+        using var jsonErr = new StringWriter();
+        int jsonExit = DmoConverter.Run(new[] { "info", demoPath, "--json" }, jsonOut, jsonErr);
+        TestAssert.Equal(0, jsonExit, "DmoConverter info --json exit code is 0");
+        TestAssert.True(jsonOut.ToString().Contains("\"map\": \"duel7\""), "Json info contains map property");
+
+        // Test dump command
+        using var dumpOut = new StringWriter();
+        using var dumpErr = new StringWriter();
+        int dumpExit = DmoConverter.Run(new[] { "dump", demoPath, "--limit", "5" }, dumpOut, dumpErr);
+        TestAssert.Equal(0, dumpExit, "DmoConverter dump exit code is 0");
+        TestAssert.True(dumpOut.ToString().Contains("Timestamp(ms),Tick,ClientNum"), "Dump output contains CSV header");
+
+        // Test convert command to temp fbs file
+        string tempFbs = Path.Combine(Path.GetTempPath(), $"dmo_convert_test_{Guid.NewGuid():N}.fbs");
+        try
+        {
+            using var convertOut = new StringWriter();
+            using var convertErr = new StringWriter();
+            int convertExit = DmoConverter.Run(new[] { "convert", demoPath, "-o", tempFbs }, convertOut, convertErr);
+            TestAssert.Equal(0, convertExit, "DmoConverter convert exit code is 0");
+            TestAssert.True(File.Exists(tempFbs), "Converted .fbs file exists");
+
+            // Verify converted file loads via DemoPackage.Load
+            var loaded = DemoPackage.Load(tempFbs);
+            TestAssert.Equal("duel7", loaded.MapName, "Loaded converted package map matches");
+            TestAssert.Equal("instagib", loaded.GameMode, "Loaded converted package mode matches");
+        }
+        finally
+        {
+            if (File.Exists(tempFbs)) File.Delete(tempFbs);
+        }
+    }
+
+    [Test]
+    public void DemoPackage_Load_AutomaticallyParsesAndTranslatesDmoFile()
+    {
+        string demoPath = Path.Combine(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+            "Downloads",
+            "cannibal_vs_rexus_finals_duel7_game1.dmo");
+
+        if (!File.Exists(demoPath))
+        {
+            return;
+        }
+
+        // DemoPackage.Load on a raw .dmo file transparently converts it
+        var loaded = DemoPackage.Load(demoPath);
+        TestAssert.True(loaded != null, "DemoPackage.Load succeeded on raw .dmo");
+        TestAssert.Equal("duel7", loaded.MapName, "MapName matches");
+        TestAssert.Equal("instagib", loaded.GameMode, "GameMode matches");
+        TestAssert.True(loaded.Commands != null && loaded.Commands.Count > 0, "Contains converted commands");
     }
 
     private static void WriteString(BinaryWriter writer, string s)

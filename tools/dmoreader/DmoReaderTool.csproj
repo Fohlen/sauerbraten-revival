@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../../World/Demo/Formats/Dmo/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <FlatSharpSchema Include="../../World/Schema/schema.fbs" />
   </ItemGroup>
 </Project>

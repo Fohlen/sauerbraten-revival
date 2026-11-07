@@ -4,6 +4,11 @@ CLI tool for reading classic Cube 2: Sauerbraten `.dmo` demo files, inspecting
 player trajectories, and translating them into revival FlatBuffers `.fbs` demo
 packages for deterministic playback in engine.
 
+The core format parsing and translation logic lives in `World/Demo/Formats/Dmo/`
+(`DmoReader.cs`, `DmoConverter.cs`), built with `System.CommandLine`, and is directly
+available both in-engine and via the standalone `DmoReaderTool.csproj` console project
+linked in `SauerbratenRevival.sln`.
+
 ## Usage
 
 ```sh

@@ -14,9 +14,6 @@
     <Compile Remove="tools/**" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(Configuration)' != 'ExportRelease'">
-    <Compile Include="tools/dmoreader/DmoReader.cs" Link="test/DmoReader.cs" />
-  </ItemGroup>
 
   <ItemGroup>
     <!-- GoDotTest runs the unit tests inside the Godot runtime (see test/). -->
