@@ -287,7 +287,7 @@ public partial class MapLevel : Node3D, IGameWorld
         AddChild(Items);
         AddChild(ParticleBuilder.Build(Entities, _textures));
         AddChild(SoundBuilder.Build(Entities, null));
-        var mapModels = MapModelBuilder.Build(Entities, null, modelCatalog, _textures);
+        var mapModels = MapModelBuilder.Build(Entities, null, modelCatalog, _textures, Physics);
         AddChild(mapModels);
 
         // Hand the world to any child editor controller (same contract as EmptyMap).

@@ -15,4 +15,7 @@ public partial class MapModel : ModelInstance
 
     /// <summary>attr1: facing yaw in degrees (Sauerbraten convention).</summary>
     [Export] public float Yaw { get; set; }
+
+    /// <summary>Resolved model manifest and collision properties.</summary>
+    public ModelInfo? Info { get; set; }
 }

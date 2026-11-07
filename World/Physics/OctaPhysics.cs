@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using Godot;
+using SauerbratenRevival.World.Models;
 
 namespace SauerbratenRevival.World.Physics;
 
@@ -121,6 +123,27 @@ public sealed class OctaPhysics
     public Vector3 CollideWall;
     public int CollideInside;
 
+    /// <summary>Static mapmodels registered for collision (physics.cpp <c>mmcollide</c>).</summary>
+    public readonly List<MapModelCollider> MapModels = new();
+
+    /// <summary>
+    /// Register a mapmodel's collision volume in the physics world.
+    /// </summary>
+    public void AddMapModel(Vector3 pos, float yaw, ModelInfo? info)
+    {
+        if (info == null || !info.Collide) return;
+        MapModels.Add(new MapModelCollider
+        {
+            O = pos,
+            Yaw = yaw,
+            Collide = info.Collide,
+            EllipseCollide = info.EllipseCollide,
+            Center = info.CollideCenter,
+            Radius = info.CollideRadius,
+            RejectRadius = info.RejectRadius > 0 ? info.RejectRadius : info.CollideRadius.Length(),
+        });
+    }
+
     /// <summary>engine <c>collideplayer</c>: the dynent the last collide() hit, or null.
     /// Only set when a collide() is called with <c>playercol = true</c>. No dynent
     /// cache is ported yet, so <see cref="CollidePlayer"/> stays null (see <see cref="PlCollide"/>).</summary>
@@ -143,7 +166,9 @@ public sealed class OctaPhysics
         var bs = new Vector3I((int)(d.O.X + d.Radius), (int)(d.O.Y + d.Radius), (int)(d.O.Z + d.AboveEye));
         bs += Vector3I.One; // guard space (physics.cpp:1055)
         bool hit = OctaCollide(d, dir, cutoff, bo, bs, _octa.WorldRoot, Vector3I.Zero, _octa.WorldSize >> 1);
-        return hit || (playercol && PlCollide(d, dir, insideplayercol));
+        if (hit) return true;
+        if (MmCollide(d, dir)) return true;
+        return playercol && PlCollide(d, dir, insideplayercol);
     }
 
     /// <summary>
@@ -287,6 +312,92 @@ public sealed class OctaPhysics
         return false;
     }
 
+    /// <summary>physics.cpp:480 <c>ellipseboxcollide</c> (COLLIDE_ELLIPSE against oriented bounding box).</summary>
+    public bool EllipseBoxCollide(PhysEnt d, Vector3 dir, Vector3 o, Vector3 center, float yaw, float xr, float yr, float hi, float lo)
+    {
+        float below = (o.Z + center.Z - lo) - (d.O.Z + d.AboveEye),
+              above = (d.O.Z - d.EyeHeight) - (o.Z + center.Z + hi);
+        if (below >= 0 || above >= 0) return false;
+
+        Vector3 yo = d.O - o;
+        yo = RotateAroundZ(yo, -yaw * (Mathf.Pi / 180f));
+        yo -= center;
+
+        float dx = Mathf.Clamp(yo.X, -xr, xr) - yo.X,
+              dy = Mathf.Clamp(yo.Y, -yr, yr) - yo.Y,
+              dist = Mathf.Sqrt(dx * dx + dy * dy) - d.Radius;
+
+        if (dist < 0)
+        {
+            int sx = yo.X <= -xr ? -1 : (yo.X >= xr ? 1 : 0),
+                sy = yo.Y <= -yr ? -1 : (yo.Y >= yr ? 1 : 0);
+
+            if (dist > (yo.Z < 0 ? below : above) && (sx != 0 || sy != 0))
+            {
+                Vector3 ydir = RotateAroundZ(dir, -yaw * (Mathf.Pi / 180f));
+                if (sx * yo.X - xr > sy * yo.Y - yr)
+                {
+                    if (dir == Vector3.Zero || sx * ydir.X < -1e-6f)
+                    {
+                        CollideWall = RotateAroundZ(new Vector3(sx, 0, 0), yaw * (Mathf.Pi / 180f));
+                        return true;
+                    }
+                }
+                else if (dir == Vector3.Zero || sy * ydir.Y < -1e-6f)
+                {
+                    CollideWall = RotateAroundZ(new Vector3(0, sy, 0), yaw * (Mathf.Pi / 180f));
+                    return true;
+                }
+            }
+
+            if (yo.Z < 0)
+            {
+                if (dir == Vector3.Zero || (dir.Z > 0 && (d.Type >= Phys.EntInanimate || below >= d.Zmargin - (d.EyeHeight + d.AboveEye) / 4.0f)))
+                {
+                    CollideWall = new Vector3(0, 0, -1);
+                    return true;
+                }
+            }
+            else if (dir == Vector3.Zero || (dir.Z < 0 && (d.Type >= Phys.EntInanimate || above >= d.Zmargin - (d.EyeHeight + d.AboveEye) / 3.0f)))
+            {
+                CollideWall = new Vector3(0, 0, 1);
+                return true;
+            }
+
+            CollideInside++;
+        }
+        return false;
+    }
+
+    /// <summary>physics.cpp:738 <c>mmcollide</c> — collide with a mapmodel.</summary>
+    public bool MmCollide(PhysEnt d, Vector3 dir)
+    {
+        for (int i = 0; i < MapModels.Count; i++)
+        {
+            var m = MapModels[i];
+            if (!m.Collide) continue;
+            if (Reject(d.O, m.O, d.Radius + m.RejectRadius)) continue;
+
+            float yaw = m.Yaw;
+            switch (d.CollideType)
+            {
+                case Phys.CollideEllipse:
+                case Phys.CollideEllipsePrecise:
+                    if (m.EllipseCollide)
+                    {
+                        if (EllipseCollide(d, dir, m.O, m.Center, yaw, m.Radius.X, m.Radius.Y, m.Radius.Z, m.Radius.Z))
+                            return true;
+                    }
+                    else if (EllipseBoxCollide(d, dir, m.O, m.Center, yaw, m.Radius.X, m.Radius.Y, m.Radius.Z, m.Radius.Z))
+                    {
+                        return true;
+                    }
+                    break;
+            }
+        }
+        return false;
+    }
+
     /// <summary>geom.h <c>vec::rotate_around_z</c> (the engine's clockwise-around-Z form).</summary>
     private static Vector3 RotateAroundZ(Vector3 v, float radians)
     {
@@ -294,8 +405,9 @@ public sealed class OctaPhysics
         return new Vector3(c * v.X - s * v.Y, s * v.X + c * v.Y, v.Z);
     }
 
-    /// <summary>geom.h <c>vec::reject</c> — <c>|v-o| >= radius</c> means no possible overlap.</summary>
-    private static bool Reject(Vector3 v, Vector3 o, float radius) => v.DistanceSquaredTo(o) > radius * radius;
+    /// <summary>geom.h:139 <c>vec::reject</c> — 2D XY bounding box reject.</summary>
+    private static bool Reject(Vector3 v, Vector3 o, float r) =>
+        v.X > o.X + r || v.X < o.X - r || v.Y > o.Y + r || v.Y < o.Y - r;
 
     // ---- dynent cache (physics.cpp:587) ----------------------------------
 
@@ -1119,4 +1231,18 @@ public sealed class OctaPhysics
         if (mag != 0) v *= Mathf.Sqrt(Mathf.Max(m - k * k, 0f)) / mag;
         return v;
     }
+}
+
+/// <summary>
+/// A static mapmodel collider instance (physics.cpp <c>mmcollide</c>).
+/// </summary>
+public sealed class MapModelCollider
+{
+    public Vector3 O;
+    public float Yaw;
+    public bool Collide = true;
+    public bool EllipseCollide;
+    public Vector3 Center;
+    public Vector3 Radius;
+    public float RejectRadius;
 }

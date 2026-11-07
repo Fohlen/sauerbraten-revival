@@ -416,7 +416,7 @@ public partial class MapWorld : Node3D, IGameWorld
 
         AddChild(ParticleBuilder.Build(map, textures));
         AddChild(SoundBuilder.Build(map, catalogue));
-        var mapModels = MapModelBuilder.Build(map, catalogue, modelCatalog, textures);
+        var mapModels = MapModelBuilder.Build(map, catalogue, modelCatalog, textures, Physics);
         AddChild(mapModels);
         int loadedModels = 0, totalModels = 0;
         foreach (var child in mapModels.GetChildren())

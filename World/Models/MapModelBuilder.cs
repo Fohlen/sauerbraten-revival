@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Runtime.Formats.Ogz;
 
 namespace SauerbratenRevival.World.Models;
@@ -15,11 +16,13 @@ namespace SauerbratenRevival.World.Models;
 public static class MapModelBuilder
 {
     public static Node3D Build(OgzMap map, MetadataCatalogue? catalogue,
-                               IModelCatalog? models = null, ITextureSource? textures = null) =>
-        Build(map.Entities, catalogue, models, textures);
+                               IModelCatalog? models = null, ITextureSource? textures = null,
+                               OctaPhysics? phys = null) =>
+        Build(map.Entities, catalogue, models, textures, phys);
 
     public static Node3D Build(IReadOnlyList<MapEntity> entities, MetadataCatalogue? catalogue,
-                               IModelCatalog? models = null, ITextureSource? textures = null)
+                               IModelCatalog? models = null, ITextureSource? textures = null,
+                               OctaPhysics? phys = null)
     {
         var root = new Node3D { Name = "MapModels" };
         var skinCache = new Dictionary<string, Material>();
@@ -28,6 +31,7 @@ public static class MapModelBuilder
         {
             string name = catalogue?.MapModelPath(e.Attr2) ?? $"mapmodel#{e.Attr2}";
             var info = models?.Get(name);
+            phys?.AddMapModel(e.Position, e.Attr1, info);
 
             var skinMaterials = ModelSkin.BuildSkins(info, textures, skinCache);
             var model = new MapModel
@@ -36,6 +40,7 @@ public static class MapModelBuilder
                 Position = e.Position,
                 Yaw = e.Attr1,
                 ModelPath = name,
+                Info = info,
                 GlbPath = info?.GlbPath,
                 GlbOsPath = info?.GlbOsPath,
                 ModelScale = info?.Scale ?? 1.0f,
