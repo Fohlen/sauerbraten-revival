@@ -1,6 +1,10 @@
 using Chickensoft.GoDotTest;
 using Godot;
+using SauerbratenRevival.Format;
+using SauerbratenRevival.World;
+using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Network.Interpolation;
+using SauerbratenRevival.World.Physics;
 
 namespace SauerbratenRevival.Tests;
 
@@ -255,5 +259,144 @@ public class PlayerInterpolationTest : GoTestBase
         // Final pos.X = 105 - 3.6267 = 101.3733.
         TestAssert.Near(105f, interp.NewPos.X, 1e-4f, "NewPos advanced by dead reckoning to 105");
         TestAssert.Near(101.3733f, pos.X, 1e-3f, "Visual pos includes dead reckoning + decayed residual");
+    }
+
+    [Test]
+    public void MapPlayer_SmoothMoveZero_SnapsDirectly()
+    {
+        var octa = new Octa(10);
+        var player = new MapPlayer();
+        player.Setup(octa, new Vector3(100f, 200f, 300f), 0f);
+        player.SmoothMove = 0;
+
+        // Apply update with new position and angle
+        player.ApplyUpdate(new PlayerUpdateCmd
+        {
+            Pos = new Vec3f { X = 110f, Y = 205f, Z = 302f + MapPlayer.EyeHeight },
+            Yaw = 90f,
+            Pitch = 15f
+        });
+
+        // With SmoothMove = 0, state snaps directly to packet
+        TestAssert.Near(110f, player.Entity.O.X, 1e-3f, "Pos X snapped directly");
+        TestAssert.Near(205f, player.Entity.O.Y, 1e-3f, "Pos Y snapped directly");
+        TestAssert.Near(90f, player.Entity.Yaw, 1e-3f, "Yaw snapped directly");
+        TestAssert.Near(15f, player.Pitch, 1e-3f, "Pitch snapped directly");
+
+        player.Free();
+    }
+
+    [Test]
+    public void MapPlayer_SmoothMove75_SmoothsPacketTrajectoryAndYaw()
+    {
+        var octa = new Octa(10);
+        var player = new MapPlayer();
+        player.Setup(octa, new Vector3(100f, 200f, 300f), 350f);
+        player.SmoothMove = 75;
+        player.LastMillis = 0;
+
+        // Packet 1 establishes baseline at t = 0
+        player.ApplyUpdate(new PlayerUpdateCmd
+        {
+            Pos = new Vec3f { X = 100f, Y = 200f, Z = 300f + MapPlayer.EyeHeight },
+            Yaw = 350f,
+            Pitch = -10f
+        });
+
+        TestAssert.Near(100f, player.Entity.O.X, 1e-3f, "Initial pos X established");
+        TestAssert.Near(350f, player.Entity.Yaw, 1e-3f, "Initial yaw established");
+
+        // Advance simulation clock to t = 35 ms
+        player.LastMillis = 35;
+
+        // Packet 2 arrives at t = 35: target moved to (105, 202, 301), yaw crossed 0 to 10 deg
+        player.ApplyUpdate(new PlayerUpdateCmd
+        {
+            Pos = new Vec3f { X = 105f, Y = 202f, Z = 301f + MapPlayer.EyeHeight },
+            Yaw = 10f,
+            Pitch = 5f
+        });
+
+        // Instantaneous arrival check: at t = 35 ms, visual position does NOT snap!
+        // It remains at the previous visual position (zero visual pop)
+        TestAssert.Near(100f, player.Entity.O.X, 1e-3f, "No instantaneous pop on packet arrival");
+        TestAssert.Near(350f, player.Entity.Yaw, 1e-3f, "No instantaneous yaw snap on arrival");
+
+        // Step physics forward: at t = 75 ms (40 ms into smoothmove window)
+        // Advance clock and step
+        player.LastMillis = 75;
+        player.Step(5);
+
+        // Yaw should have decayed smoothly across 0 deg towards 10 deg (shortest-arc: ~350 -> ~359/1 deg)
+        // NOT spinning backwards by 340 deg!
+        TestAssert.True(player.Entity.Yaw >= 350f || player.Entity.Yaw <= 10f, "Yaw interpolated across shortest arc");
+        TestAssert.True(player.Entity.O.X > 100f && player.Entity.O.X <= 105f, "Pos X smoothly advancing towards target");
+
+        // Advance past the 75 ms smoothmove window (t = 120 ms > 35 + 75)
+        player.LastMillis = 120;
+        player.Step(5);
+
+        // Residual has fully decayed; visual state has fully converged to authoritative base
+        TestAssert.Near(105f, player.Entity.O.X, 1e-2f, "Pos converged to target");
+        TestAssert.Near(10f, player.Entity.Yaw, 1e-2f, "Yaw converged to target");
+        TestAssert.Near(5f, player.Pitch, 1e-2f, "Pitch converged to target");
+
+        player.Free();
+    }
+
+    [Test]
+    public void MapPlayer_Teleport_SnapsWithoutSmoothing()
+    {
+        var octa = new Octa(10);
+        var player = new MapPlayer();
+        player.Setup(octa, new Vector3(100f, 100f, 100f), 0f);
+        player.SmoothMove = 75;
+        player.LastMillis = 500;
+
+        // Packet 1 baseline at t=500
+        player.ApplyUpdate(new PlayerUpdateCmd
+        {
+            Pos = new Vec3f { X = 100f, Y = 100f, Z = 100f + MapPlayer.EyeHeight },
+            Yaw = 0f,
+            Pitch = 0f
+        });
+
+        // Large jump exceeding SmoothDist (32 units) at t=533: distance = 50 >= 32
+        player.LastMillis = 533;
+        player.ApplyUpdate(new PlayerUpdateCmd
+        {
+            Pos = new Vec3f { X = 150f, Y = 100f, Z = 100f + MapPlayer.EyeHeight },
+            Yaw = 180f,
+            Pitch = 0f
+        });
+
+        // Bypasses smoothing immediately
+        TestAssert.Near(150f, player.Entity.O.X, 1e-3f, "Teleport snapped immediately to target X");
+        TestAssert.Near(180f, player.Entity.Yaw, 1e-3f, "Teleport snapped immediately to target Yaw");
+        TestAssert.Equal(0, player.Interpolation.SmoothMillis, "SmoothMillis reset to 0");
+
+        player.Free();
+    }
+
+    [Test]
+    public void MapPlayer_Die_ResetsInterpolationImmediately()
+    {
+        var octa = new Octa(10);
+        var player = new MapPlayer();
+        player.Setup(octa, new Vector3(100f, 100f, 100f), 0f);
+        player.SmoothMove = 75;
+        player.LastMillis = 1000;
+
+        player.ApplyUpdate(new PlayerUpdateCmd
+        {
+            Pos = new Vec3f { X = 100f, Y = 100f, Z = 100f + MapPlayer.EyeHeight },
+            Yaw = 90f
+        });
+
+        player.Die();
+        TestAssert.True(player.Entity.Dead, "Player is dead");
+        TestAssert.Equal(0, player.Interpolation.SmoothMillis, "SmoothMillis is 0 on death");
+
+        player.Free();
     }
 }

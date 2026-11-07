@@ -29,6 +29,11 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
     public DemoPackage Demo { get; }
     public int TotalCommands => Demo.Commands?.Count ?? 0;
 
+    /// <summary>
+    /// Smoothing window in milliseconds to apply to registered players (default 0 for raw playback, 75 for smooth demo playback).
+    /// </summary>
+    public int SmoothMove { get; set; } = 0;
+
     public bool IsFinished
     {
         get
@@ -60,6 +65,10 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
     {
         _players[player.PlayerId] = player;
         player.InputSource = this;
+        if (SmoothMove > 0)
+        {
+            player.SmoothMove = SmoothMove;
+        }
     }
 
     /// <summary>

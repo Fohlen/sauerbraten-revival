@@ -437,7 +437,10 @@ public partial class OgzMapViewer : Node3D
             _demoPlayers.Clear();
             _demoPlayers.Add(player);
 
-            ActiveReplayer = new Demo.DemoReplayer(DemoToPlay, mapSource.Sink);
+            ActiveReplayer = new Demo.DemoReplayer(DemoToPlay, mapSource.Sink)
+            {
+                SmoothMove = Network.Interpolation.PlayerInterpolation.DefaultSmoothMove
+            };
             ActiveReplayer.ApplyInitialPlacement(player);
             ActiveReplayer.Attach(player);
 

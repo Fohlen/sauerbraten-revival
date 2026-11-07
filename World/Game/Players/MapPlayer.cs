@@ -12,6 +12,7 @@ using BounceBody = SauerbratenRevival.World.Weapons.BounceBody;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
 using ItemManager = SauerbratenRevival.World.Game.Items.ItemManager;
 using PlayerModel = SauerbratenRevival.World.Models.PlayerModel;
+using SauerbratenRevival.World.Network.Interpolation;
 
 namespace SauerbratenRevival.World.Game.Players;
 
@@ -237,6 +238,32 @@ public partial class MapPlayer : Node3D, IHitscanTarget
 
     /// <summary>Player model index (e.g. 0: mrfixit, 1: ironsnout, 2: ogro, etc.).</summary>
     public int PlayerModelIndex { get; set; } = 0;
+
+    /// <summary>Network and demo playback position/angle interpolation controller.</summary>
+    public PlayerInterpolation Interpolation { get; } = new() { SmoothMove = 0 };
+
+    /// <summary>
+    /// Smoothing window in milliseconds (engine smoothmove cvar).
+    /// 0 disables smoothing (hard snap to incoming packet values). Default 0 on raw MapPlayer;
+    /// set to 75 (DefaultSmoothMove) for smooth remote player or demo playback.
+    /// </summary>
+    [Export]
+    public int SmoothMove
+    {
+        get => Interpolation.SmoothMove;
+        set => Interpolation.SmoothMove = value;
+    }
+
+    /// <summary>
+    /// Maximum distance threshold for smoothing in Sauerbraten units (engine smoothdist cvar).
+    /// Exceeding this threshold snaps immediately without smoothing (e.g. teleports).
+    /// </summary>
+    [Export]
+    public float SmoothDist
+    {
+        get => Interpolation.SmoothDist;
+        set => Interpolation.SmoothDist = value;
+    }
 
     /// <summary>Active jump pad trigger entities in this map/session.</summary>
     public IReadOnlyList<JumpPad>? JumpPads { get; set; }
@@ -505,6 +532,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.Yaw = yawDegrees;
         Pitch = 0f;
         Initialized = true;
+        Interpolation.Reset();
         _phys.DynEnts.Add(Entity);
         Combat.Spawn(Mode);
         SelectWeapon(Combat.GunSelect >= Guns.First && Combat.GunSelect <= Guns.Last ? (Gun)Combat.GunSelect : DefaultGun);
@@ -647,7 +675,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             {
                 ApplyUpdate(update);
             }
-            else
+            else if (!IsAlive)
             {
                 Entity.Move = 0;
                 Entity.Strafe = 0;
@@ -840,12 +868,45 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.Move = update.Move;
         Entity.Strafe = update.Strafe;
         Entity.Jumping = update.Jumping;
-        Entity.Yaw = update.Yaw;
-        Pitch = update.Pitch;
         if (update.Pos != null)
         {
-            Entity.O = new Vector3(update.Pos.X, update.Pos.Y, update.Pos.Z);
+            Vector3 packetPos = new Vector3(update.Pos.X, update.Pos.Y, update.Pos.Z);
+            float packetYaw = update.Yaw;
+            float packetPitch = update.Pitch;
+            float packetRoll = 0f;
+
+            if (Interpolation.SmoothMove > 0 && IsAlive)
+            {
+                Vector3 curPos = Entity.O;
+                float curYaw = Entity.Yaw;
+                float curPitch = Pitch;
+                float curRoll = 0f;
+
+                Interpolation.OnRemotePosition(
+                    ref curPos, ref curYaw, ref curPitch, ref curRoll,
+                    packetPos, packetYaw, packetPitch, packetRoll,
+                    LastMillis);
+
+                Entity.O = curPos;
+                Entity.Yaw = curYaw;
+                Pitch = curPitch;
+            }
+            else
+            {
+                Entity.O = packetPos;
+                Entity.Yaw = packetYaw;
+                Pitch = packetPitch;
+                Interpolation.ResetInterp(packetPos, packetYaw, packetPitch);
+            }
             SyncTransform();
+        }
+        else
+        {
+            if (Interpolation.SmoothMove == 0 || !IsAlive)
+            {
+                Entity.Yaw = update.Yaw;
+                Pitch = update.Pitch;
+            }
         }
         if (update.Vel != null)
         {
@@ -1331,6 +1392,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.Move = 0;
         Entity.Strafe = 0;
         Entity.Jumping = false;
+        Interpolation.ResetInterp(Entity.O, Entity.Yaw, Pitch);
 
         PlaySound(Random.Shared.Next(2) == 0 ? GameSound.Die1 : GameSound.Die2);
         UpdateBodyAnim();
@@ -1398,6 +1460,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Entity.TimeInAir = 0;
         Entity.State = PhysEnt.CsAlive;
         Entity.Blocked = false;
+        Interpolation.Reset();
 
         Combat.Spawn(Mode);
         View.ResetAnimState();
@@ -1417,10 +1480,37 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     {
         if (!Initialized || _phys == null) return;
         bool wasDead = Entity.Dead;
-        _phys.MovePlayer(Entity, Phys.MoveRes, stepMillis);
-        // The world advances the shared clock once per substep; only a standalone
-        // player owns and advances its private clock.
-        if (Clock == null) _standaloneClock.Advance(stepMillis);
+
+        if (!Entity.Dead && Interpolation.SmoothMove > 0 && Interpolation.SmoothMillis > 0)
+        {
+            // Restore un-smoothed authoritative base state before physics movement (fpsgame/fps.cpp:174-177)
+            Entity.O = Interpolation.NewPos;
+            Entity.Yaw = Interpolation.NewYaw;
+            Pitch = Interpolation.NewPitch;
+
+            // Dead-reckoning physics step (fpsgame/fps.cpp:180)
+            _phys.MovePlayer(Entity, Phys.MoveRes, stepMillis);
+            Interpolation.NewPos = Entity.O;
+
+            if (Clock == null) _standaloneClock.Advance(stepMillis);
+
+            // Superimpose decaying residual for rendering / presentation (fpsgame/fps.cpp:183-193)
+            Vector3 pos = Entity.O;
+            float yaw = Entity.Yaw;
+            float pitch = Pitch;
+            float roll = 0f;
+            Interpolation.Predict(ref pos, ref yaw, ref pitch, ref roll, LastMillis);
+            Entity.O = pos;
+            Entity.Yaw = yaw;
+            Pitch = pitch;
+        }
+        else
+        {
+            _phys.MovePlayer(Entity, Phys.MoveRes, stepMillis);
+            // The world advances the shared clock once per substep; only a standalone
+            // player owns and advances its private clock.
+            if (Clock == null) _standaloneClock.Advance(stepMillis);
+        }
 
         if (!wasDead && Entity.Dead)
         {
@@ -1689,6 +1779,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
             Entity.Vel = Vector3.Zero;
         }
 
+        Interpolation.ResetInterp(Entity.O, Entity.Yaw, Pitch);
         SyncTransform();
         return true;
     }

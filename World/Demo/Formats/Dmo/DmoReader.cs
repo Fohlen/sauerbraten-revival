@@ -808,8 +808,8 @@ public static class DmoReader
                     Pitch = firstPos.Pitch,
                     Attacking = attacking,
                     SelectedGun = firstPos.SelectedGun,
-                    Pos = firstPos.Pos,
-                    Vel = new Vec3f { X = 0, Y = 0, Z = 0 },
+                    Pos = (t == 0) ? firstPos.Pos : null,
+                    Vel = (t == 0) ? new Vec3f { X = 0, Y = 0, Z = 0 } : null,
                     PhysState = firstPos.PhysState,
                     LifeSequence = firstPos.LifeSequence
                 };
@@ -858,22 +858,7 @@ public static class DmoReader
                 {
                     lastEmittedTick = t;
                     bool attacking = shotsByClientTick.Contains((cn, t));
-
-                    Vec3f interpPos;
-                    if (next != null && !largeGap && endTick > startTick)
-                    {
-                        float alpha = (float)(t - startTick) / (endTick - startTick);
-                        interpPos = new Vec3f
-                        {
-                            X = cur.Pos.X + (next.Pos.X - cur.Pos.X) * alpha,
-                            Y = cur.Pos.Y + (next.Pos.Y - cur.Pos.Y) * alpha,
-                            Z = cur.Pos.Z + (next.Pos.Z - cur.Pos.Z) * alpha
-                        };
-                    }
-                    else
-                    {
-                        interpPos = cur.Pos;
-                    }
+                    bool isPacketTick = (t == startTick);
 
                     var update = new PlayerUpdateCmd
                     {
@@ -885,8 +870,8 @@ public static class DmoReader
                         Pitch = cur.Pitch,
                         Attacking = attacking,
                         SelectedGun = cur.SelectedGun,
-                        Pos = interpPos,
-                        Vel = cur.Vel,
+                        Pos = isPacketTick ? cur.Pos : null,
+                        Vel = isPacketTick ? cur.Vel : null,
                         PhysState = cur.PhysState,
                         LifeSequence = cur.LifeSequence
                     };
