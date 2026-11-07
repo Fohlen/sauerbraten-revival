@@ -73,7 +73,8 @@ def parse_cfg(path: str) -> dict:
             if cmd == "exec" and args:
                 params["execs"].append((args[0], cfg_dir))
             elif cmd == "mdlscale" and args:
-                params["scale"] = int(float(args[0])) / 100.0
+                pct = int(float(args[0]))
+                params["scale"] = pct / 100.0 if pct > 0 else 1.0
             elif cmd == "mdltrans" and len(args) >= 3:
                 params["trans"] = [float(args[0]), float(args[1]), float(args[2])]
             elif cmd == "mdlglow" and len(args) >= 3:
@@ -238,8 +239,12 @@ def _execute_cfg(params: dict, models_root: str, packages_root: str) -> None:
         for key in ("source", "objdir"):
             if not params.get(key) and sub.get(key):
                 params[key] = sub[key]
-        for key in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir", "alphatest", "alphablend", "cullface", "collide", "ellipsecollide", "mdlbb", "extendbb"):
-            if params.get(key) in (None, 1.0, [0.0, 0.0, 0.0]) and sub.get(key) not in (None, 1.0, [0.0, 0.0, 0.0]):
+        if params.get("scale") == 1.0 and sub.get("scale") not in (None, 1.0):
+            params["scale"] = sub["scale"]
+        if params.get("trans") == [0.0, 0.0, 0.0] and sub.get("trans") not in (None, [0.0, 0.0, 0.0]):
+            params["trans"] = sub["trans"]
+        for key in ("glow", "spec", "skin", "bump", "md5dir", "alphatest", "alphablend", "cullface", "collide", "ellipsecollide", "mdlbb", "extendbb"):
+            if params.get(key) is None and sub.get(key) is not None:
                 params[key] = sub[key]
         # List-valued directives accumulate across the exec chain (md5.cfg execs
         # anims.cfg, which holds the md5anim table). An exec'd file numbers its own
@@ -341,8 +346,12 @@ def _merge_cfg_params(params: dict, base: str) -> None:
             if path in seen:
                 continue
             other = parse_cfg(path)
-            for k in ("scale", "trans", "glow", "spec", "skin", "bump", "md5dir", "alphatest", "alphablend", "cullface", "collide", "ellipsecollide", "mdlbb", "extendbb"):
-                if params.get(k) in (None, 1.0, [0.0, 0.0, 0.0]) and other.get(k) not in (None, 1.0, [0.0, 0.0, 0.0]):
+            if params.get("scale") == 1.0 and other.get("scale") not in (None, 1.0):
+                params["scale"] = other["scale"]
+            if params.get("trans") == [0.0, 0.0, 0.0] and other.get("trans") not in (None, [0.0, 0.0, 0.0]):
+                params["trans"] = other["trans"]
+            for k in ("glow", "spec", "skin", "bump", "md5dir", "alphatest", "alphablend", "cullface", "collide", "ellipsecollide", "mdlbb", "extendbb"):
+                if params.get(k) is None and other.get(k) is not None:
                     params[k] = other[k]
             part_offset = len(params.setdefault("animparts", []))
             for anim in other.get("anims", []):
@@ -1030,8 +1039,8 @@ def read_md3_bounds(path: str) -> tuple[list[float], list[float]] | None:
                 mhdr_bytes = f.read(108)
                 if len(mhdr_bytes) < 108:
                     break
-                mhdr = struct.unpack("<2i64s9i", mhdr_bytes)
-                nverts, ofs_verts, meshsize = mhdr[6], mhdr[9], mhdr[11]
+                mhdr = struct.unpack("<4s64s10i", mhdr_bytes)
+                nverts, ofs_verts, meshsize = mhdr[5], mhdr[10], mhdr[11]
                 f.seek(mesh_offset + ofs_verts)
                 raw = f.read(nverts * 8)
                 if len(raw) < nverts * 8:
@@ -1070,6 +1079,104 @@ def read_obj_bounds(path: str) -> tuple[list[float], list[float]] | None:
         return None
 
 
+def read_md5_bounds(path: str) -> tuple[list[float], list[float]] | None:
+    try:
+        joints: list[tuple[tuple[float, float, float], tuple[float, float, float, float]]] = []
+        xs, ys, zs = [], [], []
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        i = 0
+        n = len(lines)
+        while i < n:
+            s = lines[i].strip()
+            if s.startswith("joints {"):
+                i += 1
+                while i < n and not lines[i].strip().startswith("}"):
+                    line = lines[i].split("//", 1)[0].strip()
+                    if line:
+                        # Remove quoted bone name first
+                        q2 = line.rfind('"')
+                        rest = line[q2 + 1 :] if q2 >= 0 else line
+                        vals = _floats(rest)
+                        if len(vals) >= 7:
+                            px, py, pz = vals[1], -vals[2], vals[3]
+                            qx, qy, qz = -vals[4], vals[5], -vals[6]
+                            qw = _restorew(qx, qy, qz)
+                            joints.append(((px, py, pz), (qx, qy, qz, qw)))
+                    i += 1
+            elif s.startswith("mesh {"):
+                i += 1
+                verts: dict[int, tuple[int, int]] = {}
+                weights: dict[int, tuple[int, float, tuple[float, float, float]]] = {}
+                while i < n and not lines[i].strip().startswith("}"):
+                    line = lines[i].split("//", 1)[0].strip()
+                    if line.startswith("vert "):
+                        vals = _floats(line[5:])
+                        if len(vals) >= 5:
+                            verts[int(vals[0])] = (int(vals[3]), int(vals[4]))
+                    elif line.startswith("weight "):
+                        vals = _floats(line[7:])
+                        if len(vals) >= 6:
+                            weights[int(vals[0])] = (
+                                int(vals[1]),
+                                vals[2],
+                                (vals[3], -vals[4], vals[5]),
+                            )
+                    i += 1
+                for start, count in verts.values():
+                    vx = vy = vz = 0.0
+                    for k in range(count):
+                        w = weights.get(start + k)
+                        if w is None:
+                            continue
+                        j_idx, bias, w_pos = w
+                        if 0 <= j_idx < len(joints):
+                            j_pos, j_orient = joints[j_idx]
+                            rx, ry, rz = _qrotate(j_orient, w_pos)
+                            vx += (rx + j_pos[0]) * bias
+                            vy += (ry + j_pos[1]) * bias
+                            vz += (rz + j_pos[2]) * bias
+                    xs.append(vx)
+                    ys.append(vy)
+                    zs.append(vz)
+            i += 1
+        if not xs:
+            return None
+        return [min(xs), min(ys), min(zs)], [max(xs), max(ys), max(zs)]
+    except (OSError, ValueError):
+        return None
+
+
+def read_iqm_bounds(path: str) -> tuple[list[float], list[float]] | None:
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        if len(data) < 124 or data[:16] != b"INTERQUAKEMODEL\0":
+            return None
+        num_va, num_verts, ofs_va = struct.unpack_from("<3I", data, 44)
+        if num_verts <= 0:
+            return None
+        pos_ofs = None
+        for i in range(num_va):
+            va_type, _flags, va_fmt, va_size, va_ofs = struct.unpack_from(
+                "<5I", data, ofs_va + i * 20
+            )
+            if va_type == 0 and va_fmt == 7 and va_size == 3:
+                pos_ofs = va_ofs
+                break
+        if pos_ofs is None or pos_ofs + num_verts * 12 > len(data):
+            return None
+        xs, ys, zs = [], [], []
+        for j in range(num_verts):
+            vx, vy, vz = struct.unpack_from("<3f", data, pos_ofs + j * 12)
+            xs.append(vx)
+            ys.append(-vy)
+            zs.append(vz)
+        return [min(xs), min(ys), min(zs)], [max(xs), max(ys), max(zs)]
+    except (OSError, struct.error):
+        return None
+
+
 def compute_model_bounds(source: str) -> tuple[list[float], list[float]] | None:
     ext = os.path.splitext(source)[1].lower()
     if ext == ".md2":
@@ -1078,6 +1185,10 @@ def compute_model_bounds(source: str) -> tuple[list[float], list[float]] | None:
         return read_md3_bounds(source)
     if ext == ".obj":
         return read_obj_bounds(source)
+    if ext == ".md5mesh":
+        return read_md5_bounds(source)
+    if ext == ".iqm":
+        return read_iqm_bounds(source)
     return None
 
 
@@ -1564,8 +1675,11 @@ def main(argv: list[str] | None = None) -> int:
             raw_min, raw_max = raw_bounds
             model_scale = record["scale"]
             trans = record.get("trans") or [0.0, 0.0, 0.0]
-            bbmin = [raw_min[i] * model_scale + trans[i] for i in range(3)]
-            bbmax = [raw_max[i] * model_scale + trans[i] for i in range(3)]
+            ext = os.path.splitext(source)[1].lower()
+            flipy = ext in (".md2", ".md3", ".obj")
+            trans_vec = [trans[0], -trans[1] if flipy else trans[1], trans[2]]
+            bbmin = [(raw_min[i] + trans_vec[i]) * model_scale for i in range(3)]
+            bbmax = [(raw_max[i] + trans_vec[i]) * model_scale for i in range(3)]
             bbcenter = [(bbmin[i] + bbmax[i]) * 0.5 for i in range(3)]
             bbradius = [(bbmax[i] - bbmin[i]) * 0.5 for i in range(3)]
             extendbb = params.get("extendbb")

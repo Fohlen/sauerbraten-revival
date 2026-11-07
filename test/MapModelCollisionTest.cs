@@ -216,6 +216,36 @@ public class MapModelCollisionTest : GoTestBase
         TestAssert.True(lampInfo != null, "lamp01 info loaded");
         TestAssert.False(lampInfo!.Collide, "lamp01 is walk-through (Collide = false)");
 
+        // objects/oillamp is an MD3 model on campo; ensure its MD3 mesh bounds are small and not corrupted
+        var oilLampInfo = modelCatalog?.Get("objects/oillamp");
+        TestAssert.True(oilLampInfo != null, "oillamp info loaded");
+        TestAssert.True(oilLampInfo!.CollideRadius.X > 0f && oilLampInfo.CollideRadius.X < 5f,
+            $"oillamp X radius is small ({oilLampInfo.CollideRadius.X}), not corrupted");
+        TestAssert.True(oilLampInfo.CollideRadius.Y > 0f && oilLampInfo.CollideRadius.Y < 5f,
+            $"oillamp Y radius is small ({oilLampInfo.CollideRadius.Y}), not corrupted");
+
         root.Free();
+    }
+
+    [Test]
+    public void ZeroRadiusModelIsIgnoredByPhysics()
+    {
+        var octa = new World.Octa();
+        octa.EmptyMap(10);
+        var phys = new OctaPhysics(octa);
+
+        var uninitializedInfo = new ModelInfo
+        {
+            Name = "missing_bounds",
+            Collide = true,
+            CollideRadius = Vector3.Zero,
+        };
+
+        var modelPos = new Vector3(256, 256, 512);
+        phys.AddMapModel(modelPos, 0f, uninitializedInfo);
+        TestAssert.Equal(0, phys.MapModels.Count, "zero-radius model is not registered as a collider");
+
+        var player = NewPlayer(new Vector3(256, 256, 526));
+        TestAssert.False(phys.Collide(player, new Vector3(1, 0, 0)), "no phantom collision at origin of zero-radius model");
     }
 }

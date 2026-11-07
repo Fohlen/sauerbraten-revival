@@ -126,13 +126,22 @@ public sealed class OctaPhysics
     /// <summary>Static mapmodels registered for collision (physics.cpp <c>mmcollide</c>).</summary>
     public readonly List<MapModelCollider> MapModels = new();
 
+    private const int MmGridShift = 6; // 64-unit spatial cells for static mapmodels
+    private List<MapModelCollider>?[]? _mmGrid;
+    private int _mmGridDim;
+    private int _mmGridWorldSize;
+    private int _mmIndexedCount;
+    private uint _mmQueryStamp;
+
     /// <summary>
     /// Register a mapmodel's collision volume in the physics world.
     /// </summary>
     public void AddMapModel(Vector3 pos, float yaw, ModelInfo? info)
     {
         if (info == null || !info.Collide) return;
-        MapModels.Add(new MapModelCollider
+        if (info.CollideRadius.X <= 0f && info.CollideRadius.Y <= 0f && info.CollideRadius.Z <= 0f) return;
+
+        var collider = new MapModelCollider
         {
             O = pos,
             Yaw = yaw,
@@ -140,8 +149,51 @@ public sealed class OctaPhysics
             EllipseCollide = info.EllipseCollide,
             Center = info.CollideCenter,
             Radius = info.CollideRadius,
-            RejectRadius = info.RejectRadius > 0 ? info.RejectRadius : info.CollideRadius.Length(),
-        });
+            RejectRadius = info.RejectRadius > 0 ? info.RejectRadius : (info.CollideCenter.Abs() + info.CollideRadius).Length(),
+        };
+        MapModels.Add(collider);
+        if (_mmGrid != null && _mmGridWorldSize == _octa.WorldSize && _mmIndexedCount == MapModels.Count - 1)
+        {
+            InsertMapModelIntoGrid(collider);
+            _mmIndexedCount = MapModels.Count;
+        }
+    }
+
+    private void RebuildMapModelGrid()
+    {
+        _mmGridWorldSize = _octa.WorldSize;
+        _mmGridDim = Mathf.Max(1, _mmGridWorldSize >> MmGridShift);
+        _mmGrid = new List<MapModelCollider>?[_mmGridDim * _mmGridDim];
+        for (int i = 0; i < MapModels.Count; i++)
+        {
+            InsertMapModelIntoGrid(MapModels[i]);
+        }
+        _mmIndexedCount = MapModels.Count;
+    }
+
+    private void InsertMapModelIntoGrid(MapModelCollider m)
+    {
+        if (_mmGrid == null || !m.Collide) return;
+        if (m.Radius.X <= 0f && m.Radius.Y <= 0f && m.Radius.Z <= 0f) return;
+        int maxCell = _mmGridDim - 1;
+        int sx = Mathf.Clamp((int)Mathf.Floor(m.O.X - m.RejectRadius) >> MmGridShift, 0, maxCell);
+        int ex = Mathf.Clamp((int)Mathf.Floor(m.O.X + m.RejectRadius) >> MmGridShift, 0, maxCell);
+        int sy = Mathf.Clamp((int)Mathf.Floor(m.O.Y - m.RejectRadius) >> MmGridShift, 0, maxCell);
+        int ey = Mathf.Clamp((int)Mathf.Floor(m.O.Y + m.RejectRadius) >> MmGridShift, 0, maxCell);
+        for (int y = sy; y <= ey; y++)
+        {
+            int rowOffset = y * _mmGridDim;
+            for (int x = sx; x <= ex; x++)
+            {
+                var bucket = _mmGrid[rowOffset + x];
+                if (bucket == null)
+                {
+                    bucket = new List<MapModelCollider>(2);
+                    _mmGrid[rowOffset + x] = bucket;
+                }
+                bucket.Add(m);
+            }
+        }
     }
 
     /// <summary>engine <c>collideplayer</c>: the dynent the last collide() hit, or null.
@@ -165,8 +217,7 @@ public sealed class OctaPhysics
         var bo = new Vector3I((int)(d.O.X - d.Radius), (int)(d.O.Y - d.Radius), (int)(d.O.Z - d.EyeHeight));
         var bs = new Vector3I((int)(d.O.X + d.Radius), (int)(d.O.Y + d.Radius), (int)(d.O.Z + d.AboveEye));
         bs += Vector3I.One; // guard space (physics.cpp:1055)
-        bool hit = OctaCollide(d, dir, cutoff, bo, bs, _octa.WorldRoot, Vector3I.Zero, _octa.WorldSize >> 1);
-        if (hit) return true;
+        if (OctaCollide(d, dir, cutoff, bo, bs)) return true;
         if (MmCollide(d, dir)) return true;
         return playercol && PlCollide(d, dir, insideplayercol);
     }
@@ -372,27 +423,70 @@ public sealed class OctaPhysics
     /// <summary>physics.cpp:738 <c>mmcollide</c> — collide with a mapmodel.</summary>
     public bool MmCollide(PhysEnt d, Vector3 dir)
     {
-        for (int i = 0; i < MapModels.Count; i++)
+        if (MapModels.Count == 0) return false;
+        if (_mmGrid == null || _mmIndexedCount != MapModels.Count || _mmGridWorldSize != _octa.WorldSize)
         {
-            var m = MapModels[i];
-            if (!m.Collide) continue;
-            if (Reject(d.O, m.O, d.Radius + m.RejectRadius)) continue;
+            RebuildMapModelGrid();
+        }
 
-            float yaw = m.Yaw;
-            switch (d.CollideType)
+        int maxCell = _mmGridDim - 1;
+        int startx = Mathf.Clamp((int)Mathf.Floor(d.O.X - d.Radius) >> MmGridShift, 0, maxCell);
+        int endx = Mathf.Clamp((int)Mathf.Floor(d.O.X + d.Radius) >> MmGridShift, 0, maxCell);
+        int starty = Mathf.Clamp((int)Mathf.Floor(d.O.Y - d.Radius) >> MmGridShift, 0, maxCell);
+        int endy = Mathf.Clamp((int)Mathf.Floor(d.O.Y + d.Radius) >> MmGridShift, 0, maxCell);
+
+        bool multiCell = startx != endx || starty != endy;
+        uint stamp = 0;
+        if (multiCell)
+        {
+            stamp = ++_mmQueryStamp;
+            if (stamp == 0)
             {
-                case Phys.CollideEllipse:
-                case Phys.CollideEllipsePrecise:
-                    if (m.EllipseCollide)
+                for (int i = 0; i < MapModels.Count; i++) MapModels[i].LastQueryStamp = 0;
+                stamp = ++_mmQueryStamp;
+            }
+        }
+
+        float dTop = d.O.Z + d.AboveEye;
+        float dBottom = d.O.Z - d.EyeHeight;
+
+        for (int y = starty; y <= endy; y++)
+        {
+            int rowOffset = y * _mmGridDim;
+            for (int x = startx; x <= endx; x++)
+            {
+                var bucket = _mmGrid![rowOffset + x];
+                if (bucket == null) continue;
+                for (int i = 0; i < bucket.Count; i++)
+                {
+                    var m = bucket[i];
+                    if (multiCell)
                     {
-                        if (EllipseCollide(d, dir, m.O, m.Center, yaw, m.Radius.X, m.Radius.Y, m.Radius.Z, m.Radius.Z))
-                            return true;
+                        if (m.LastQueryStamp == stamp) continue;
+                        m.LastQueryStamp = stamp;
                     }
-                    else if (EllipseBoxCollide(d, dir, m.O, m.Center, yaw, m.Radius.X, m.Radius.Y, m.Radius.Z, m.Radius.Z))
+                    if (!m.Collide) continue;
+                    float mCenterZ = m.O.Z + m.Center.Z;
+                    if (mCenterZ - m.Radius.Z >= dTop || dBottom >= mCenterZ + m.Radius.Z) continue;
+                    if (Reject(d.O, m.O, d.Radius + m.RejectRadius)) continue;
+
+                    float yaw = m.Yaw;
+                    switch (d.CollideType)
                     {
-                        return true;
+                        case Phys.CollideEllipse:
+                        case Phys.CollideEllipsePrecise:
+                            if (m.EllipseCollide)
+                            {
+                                if (EllipseCollide(d, dir, m.O, m.Center, yaw, m.Radius.X, m.Radius.Y, m.Radius.Z, m.Radius.Z))
+                                    return true;
+                            }
+                            else if (EllipseBoxCollide(d, dir, m.O, m.Center, yaw, m.Radius.X, m.Radius.Y, m.Radius.Z, m.Radius.Z))
+                            {
+                                return true;
+                            }
+                            break;
                     }
-                    break;
+                }
             }
         }
         return false;
@@ -505,7 +599,40 @@ public sealed class OctaPhysics
         return false;
     }
 
-    /// <summary>physics.cpp:1014 <c>octacollide</c> (the readable recursive form).</summary>
+    /// <summary>physics.cpp:1019 <c>octacollide</c> (top-level fast descent when box stays in one octant).</summary>
+    private bool OctaCollide(PhysEnt d, Vector3 dir, float cutoff, Vector3I bo, Vector3I bs)
+    {
+        int diff = (bo.X ^ bs.X) | (bo.Y ^ bs.Y) | (bo.Z ^ bs.Z);
+        int scale = _octa.WorldScale - 1;
+        if ((diff & ~((1 << scale) - 1)) != 0 || (uint)(bo.X | bo.Y | bo.Z | bs.X | bs.Y | bs.Z) >= (uint)_octa.WorldSize)
+            return OctaCollide(d, dir, cutoff, bo, bs, _octa.WorldRoot, Vector3I.Zero, _octa.WorldSize >> 1);
+        Cube c = _octa.WorldRoot[Octa.OctaStep(bo.X, bo.Y, bo.Z, scale)];
+        scale--;
+        while (c.Children != null && (diff & (1 << scale)) == 0)
+        {
+            c = c.Children[Octa.OctaStep(bo.X, bo.Y, bo.Z, scale)];
+            scale--;
+        }
+        if (c.Children != null)
+        {
+            int mask = ~((2 << scale) - 1);
+            return OctaCollide(d, dir, cutoff, bo, bs, c.Children, new Vector3I(bo.X & mask, bo.Y & mask, bo.Z & mask), 1 << scale);
+        }
+        bool solid = false;
+        switch (c.Material & Phys.MatFClip)
+        {
+            case Phys.MatNoClip: return false;
+            case Phys.MatGameClip: if (d.Type == Phys.EntAi) solid = true; break;
+            case Phys.MatClip:
+                if (Phys.IsClipped(c.Material) || d.Type < Phys.EntCamera) solid = true;
+                break;
+        }
+        if (!solid && c.IsEmpty()) return false;
+        int csize = 2 << scale, cmask = ~(csize - 1);
+        return CubeCollide(d, dir, cutoff, c, new Vector3I(bo.X & cmask, bo.Y & cmask, bo.Z & cmask), csize, solid);
+    }
+
+    /// <summary>physics.cpp:993 <c>octacollide</c> (the readable recursive form).</summary>
     private bool OctaCollide(PhysEnt d, Vector3 dir, float cutoff, Vector3I bo, Vector3I bs, Cube[] c, Vector3I cor, int size)
     {
         int possible = OctaBoxOverlap(cor, size, bo, bs);
@@ -1245,4 +1372,5 @@ public sealed class MapModelCollider
     public Vector3 Center;
     public Vector3 Radius;
     public float RejectRadius;
+    internal uint LastQueryStamp;
 }
