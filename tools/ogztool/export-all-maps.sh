@@ -51,7 +51,7 @@ CONVERTED="$REPO/assets/packages"
 # committed in metadata-catalogue/ (see its README); a full catalogue is a plain
 # `export-all-maps.sh` run. Keep this list in sync with the tests that call
 # TestData.ReadMap("<map>") / TestData.CataloguePathFor("<map>").
-TEST_MAPS=(church51 bt_falls crnsp1 earthstation lost)
+TEST_MAPS=(church51 bt_falls crnsp1 earthstation lost tortuga)
 
 DRY_RUN=0
 FORCE=0

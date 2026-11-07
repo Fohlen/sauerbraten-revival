@@ -168,11 +168,17 @@ public class MapModelCollisionTest : GoTestBase
     }
 
     [Test]
-    public void CampoMapLampPostsHaveCollisions()
+    public void TortugaMapLampPostsHaveCollisions()
     {
-        var map = TestData.ReadMap("campo");
-        var catalogue = MetadataCatalogue.Load(TestData.CataloguePathFor("campo"));
         var modelCatalog = ModelCatalog.LoadFromProject();
+        if (modelCatalog == null)
+        {
+            GD.Print("[mapmodel] no converted models; skipping");
+            return;
+        }
+
+        var map = TestData.ReadMap("tortuga");
+        var catalogue = MetadataCatalogue.Load(TestData.CataloguePathFor("tortuga"));
 
         var octa = map.ToOcta();
         var phys = new OctaPhysics(octa);
@@ -187,22 +193,22 @@ public class MapModelCollisionTest : GoTestBase
             if (phys.MapModels[i].Radius.X == 2.0f && phys.MapModels[i].Collide)
                 hasLanternCollider = true;
         }
-        TestAssert.True(hasLanternCollider, "campo lamp-posts (objects/lantern01) registered as colliders");
+        TestAssert.True(hasLanternCollider, "tortuga lamp-posts (objects/lantern01) registered as colliders");
 
-        // Entity 121 in campo: objects/lantern01 at pos (409.3, 544.505, 216.878), yaw 75
-        var lanternEnt = map.Entities[121];
-        var info = modelCatalog?.Get("objects/lantern01");
+        // Entity 370 in tortuga: objects/lantern01 at pos (659, 781.188, 876.562), yaw 330
+        var lanternEnt = map.Entities[370];
+        var info = modelCatalog.Get("objects/lantern01");
         TestAssert.True(info != null, "lantern01 info loaded");
         TestAssert.True(info!.Collide, "lantern01 is collidable");
 
         float topZ = lanternEnt.Position.Z + info.CollideCenter.Z + info.CollideRadius.Z;
 
-        // Player placed standing on top of entity 121's lantern post
+        // Player placed standing on top of entity 370's lantern post
         var standingPlayer = NewPlayer(new Vector3(lanternEnt.Position.X, lanternEnt.Position.Y, topZ + 14.0f));
         bool slide = false;
         Vector3 floor = Vector3.Zero;
         bool found = phys.FindFloor(standingPlayer, false, Vector3.Zero, ref slide, ref floor);
-        TestAssert.True(found, "standing on top of campo lamp-post detects floor");
+        TestAssert.True(found, "standing on top of tortuga lamp-post detects floor");
         TestAssert.Equal(new Vector3(0, 0, 1), floor, "lamp-post floor normal is upward (0, 0, 1)");
         TestAssert.True(floor.Z >= Phys.FloorZ, "lamp-post acts as valid standing floor");
 
@@ -211,13 +217,13 @@ public class MapModelCollisionTest : GoTestBase
         bool hit = phys.Collide(sidePlayer, new Vector3(0, 1, 0));
         TestAssert.True(hit, "player moving into lamp-post is blocked by collision");
 
-        // Entity 115 in campo: objects/lamp01 (wall lamp) at pos (199.415, 533.357, 305.726)
-        var lampInfo = modelCatalog?.Get("objects/lamp01");
+        // Entity 30 in tortuga: objects/lamp01 (wall lamp) at pos (1456, 1497, 975)
+        var lampInfo = modelCatalog.Get("objects/lamp01");
         TestAssert.True(lampInfo != null, "lamp01 info loaded");
         TestAssert.False(lampInfo!.Collide, "lamp01 is walk-through (Collide = false)");
 
-        // objects/oillamp is an MD3 model on campo; ensure its MD3 mesh bounds are small and not corrupted
-        var oilLampInfo = modelCatalog?.Get("objects/oillamp");
+        // objects/oillamp is an MD3 model; ensure its MD3 mesh bounds are small and not corrupted
+        var oilLampInfo = modelCatalog.Get("objects/oillamp");
         TestAssert.True(oilLampInfo != null, "oillamp info loaded");
         TestAssert.True(oilLampInfo!.CollideRadius.X > 0f && oilLampInfo.CollideRadius.X < 5f,
             $"oillamp X radius is small ({oilLampInfo.CollideRadius.X}), not corrupted");
