@@ -1,0 +1,599 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://scripts/SettingsMenu.cs" id="1_settings"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
+bg_color = Color(0.0470588, 0.054902, 0.0705882, 0.960784)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn"]
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+bg_color = Color(0.129412, 0.145098, 0.180392, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.219608, 0.243137, 0.301961, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_hover"]
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+bg_color = Color(0.180392, 0.2, 0.247059, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.301961, 0.333333, 0.407843, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_pressed"]
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+bg_color = Color(0.239216, 0.203922, 0.164706, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.862745, 0.45098, 0.160784, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_focus"]
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.862745, 0.45098, 0.160784, 0.8)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab_active"]
+content_margin_left = 22.0
+content_margin_top = 10.0
+content_margin_right = 22.0
+content_margin_bottom = 10.0
+bg_color = Color(0.156863, 0.176471, 0.227451, 1)
+border_width_bottom = 3
+border_color = Color(0.862745, 0.45098, 0.160784, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab_inactive"]
+content_margin_left = 22.0
+content_margin_top = 10.0
+content_margin_right = 22.0
+content_margin_bottom = 10.0
+bg_color = Color(0.0901961, 0.101961, 0.129412, 0.6)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tooltip_panel"]
+content_margin_left = 16.0
+content_margin_top = 10.0
+content_margin_right = 16.0
+content_margin_bottom = 10.0
+bg_color = Color(0.0627451, 0.0705882, 0.0901961, 0.95)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.180392, 0.203922, 0.258824, 0.8)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_separator"]
+color = Color(0.2, 0.223529, 0.282353, 1)
+
+[sub_resource type="Theme" id="Theme_settings"]
+Button/styles/disabled = SubResource("StyleBoxFlat_btn")
+Button/styles/focus = SubResource("StyleBoxFlat_focus")
+Button/styles/hover = SubResource("StyleBoxFlat_btn_hover")
+Button/styles/normal = SubResource("StyleBoxFlat_btn")
+Button/styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+
+[node name="SettingsMenu" type="CanvasLayer"]
+process_mode = 3
+layer = 15
+visible = false
+script = ExtResource("1_settings")
+
+[node name="Background" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0470588, 0.054902, 0.0705882, 0.96)
+
+[node name="RootMargin" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_settings")
+theme_override_constants/margin_left = 50
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 50
+theme_override_constants/margin_bottom = 24
+
+[node name="MainLayout" type="VBoxContainer" parent="RootMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="HeaderArea" type="VBoxContainer" parent="RootMargin/MainLayout"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="BreadcrumbLabel" type="Label" parent="RootMargin/MainLayout/HeaderArea"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.478431, 0.517647, 0.6, 1)
+theme_override_font_sizes/font_size = 12
+text = "MAIN MENU /"
+
+[node name="TitleLabel" type="Label" parent="RootMargin/MainLayout/HeaderArea"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.94, 0.96, 1)
+theme_override_font_sizes/font_size = 26
+text = "# SETTINGS"
+
+[node name="TabsBar" type="HBoxContainer" parent="RootMargin/MainLayout"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ControlsTab" type="Button" parent="RootMargin/MainLayout/TabsBar"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_tab_active")
+text = "CONTROLS"
+
+[node name="VideoTab" type="Button" parent="RootMargin/MainLayout/TabsBar"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_tab_inactive")
+text = "VIDEO"
+
+[node name="AudioTab" type="Button" parent="RootMargin/MainLayout/TabsBar"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_tab_inactive")
+text = "AUDIO"
+
+[node name="TopSeparator" type="HSeparator" parent="RootMargin/MainLayout"]
+layout_mode = 2
+theme_override_styles/separator = SubResource("StyleBoxLine_separator")
+
+[node name="SettingsScroll" type="ScrollContainer" parent="RootMargin/MainLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+follow_focus = true
+
+[node name="ContentVBox" type="VBoxContainer" parent="RootMargin/MainLayout/SettingsScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 16
+
+[node name="ControlsSection" type="VBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ControlsHeader" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.862745, 0.45098, 0.160784, 1)
+theme_override_font_sizes/font_size = 14
+text = "CONTROLS"
+
+[node name="Row_Sensitivity" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_Sensitivity"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="SensitivityLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_Sensitivity/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Mouse Sensitivity"
+
+[node name="SensitivityValue" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_Sensitivity/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(55, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "3.00"
+horizontal_alignment = 2
+
+[node name="SensitivitySlider" type="HSlider" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_Sensitivity/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+size_flags_vertical = 4
+min_value = 0.1
+max_value = 20.0
+step = 0.05
+value = 3.0
+
+[node name="Row_SensitivityScale" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_SensitivityScale"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="SensitivityScaleLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_SensitivityScale/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Sensitivity Scale"
+
+[node name="SensitivityScaleValue" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_SensitivityScale/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(55, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "1.00"
+horizontal_alignment = 2
+
+[node name="SensitivityScaleSlider" type="HSlider" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_SensitivityScale/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+size_flags_vertical = 4
+min_value = 0.1
+max_value = 5.0
+step = 0.05
+value = 1.0
+
+[node name="Row_MouseAccel" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_MouseAccel"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="MouseAccelLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_MouseAccel/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Mouse Acceleration"
+
+[node name="MouseAccelValue" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_MouseAccel/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(55, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "0.00"
+horizontal_alignment = 2
+
+[node name="MouseAccelSlider" type="HSlider" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_MouseAccel/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+size_flags_vertical = 4
+min_value = 0.0
+max_value = 5.0
+step = 0.05
+value = 0.0
+
+[node name="Row_InvertMouse" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_InvertMouse"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="InvertMouseLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_InvertMouse/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Invert Mouse"
+
+[node name="InvertMouseStatus" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_InvertMouse/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(45, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "Off"
+horizontal_alignment = 2
+
+[node name="InvertMouseCheck" type="CheckBox" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/ControlsSection/Row_InvertMouse/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="VideoSection" type="VBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="VideoHeader" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.862745, 0.45098, 0.160784, 1)
+theme_override_font_sizes/font_size = 14
+text = "VIDEO"
+
+[node name="Row_DisplayMode" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_DisplayMode"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="DisplayModeLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_DisplayMode/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Display Mode"
+
+[node name="ScreenModeOption" type="OptionButton" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_DisplayMode/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+
+[node name="Row_Resolution" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Resolution"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="ResolutionLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Resolution/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Resolution"
+
+[node name="ResolutionOption" type="OptionButton" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Resolution/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+
+[node name="Row_Vsync" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Vsync"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="VsyncLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Vsync/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  V-Sync"
+
+[node name="VsyncStatus" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Vsync/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(45, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "Off"
+horizontal_alignment = 2
+
+[node name="VsyncCheck" type="CheckBox" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Vsync/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Row_MaxFps" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_MaxFps"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="MaxFpsLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_MaxFps/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Max Frame Rate"
+
+[node name="MaxFpsValue" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_MaxFps/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(75, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "200 FPS"
+horizontal_alignment = 2
+
+[node name="MaxFpsSlider" type="HSlider" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_MaxFps/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+size_flags_vertical = 4
+min_value = 0.0
+max_value = 360.0
+step = 1.0
+value = 200.0
+
+[node name="Row_Fov" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Fov"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="FovLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Fov/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Field of View"
+
+[node name="FovValue" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Fov/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(55, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "100°"
+horizontal_alignment = 2
+
+[node name="FovSlider" type="HSlider" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Fov/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+size_flags_vertical = 4
+min_value = 60.0
+max_value = 140.0
+step = 1.0
+value = 100.0
+
+[node name="Row_Lighting" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Lighting"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="LightingLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Lighting/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Lighting Quality"
+
+[node name="LightingModeOption" type="OptionButton" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Lighting/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+
+[node name="AudioSection" type="VBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="AudioHeader" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.862745, 0.45098, 0.160784, 1)
+theme_override_font_sizes/font_size = 14
+text = "AUDIO"
+
+[node name="Row_SoundEnabled" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection/Row_SoundEnabled"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="SoundEnabledLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection/Row_SoundEnabled/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Sound Enabled"
+
+[node name="SoundEnabledStatus" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection/Row_SoundEnabled/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(45, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "On"
+horizontal_alignment = 2
+
+[node name="SoundEnabledCheck" type="CheckBox" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection/Row_SoundEnabled/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Row_SoundVolume" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection/Row_SoundVolume"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="SoundVolumeLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection/Row_SoundVolume/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Master Volume"
+
+[node name="SoundVolumeValue" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection/Row_SoundVolume/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(55, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "100%"
+horizontal_alignment = 2
+
+[node name="SoundVolumeSlider" type="HSlider" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/AudioSection/Row_SoundVolume/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+size_flags_vertical = 4
+min_value = 0.0
+max_value = 255.0
+step = 1.0
+value = 255.0
+
+[node name="BottomSeparator" type="HSeparator" parent="RootMargin/MainLayout"]
+layout_mode = 2
+theme_override_styles/separator = SubResource("StyleBoxLine_separator")
+
+[node name="TooltipPanel" type="PanelContainer" parent="RootMargin/MainLayout"]
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_tooltip_panel")
+
+[node name="TooltipLabel" type="Label" parent="RootMargin/MainLayout/TooltipPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.721569, 0.756863, 0.835294, 1)
+theme_override_font_sizes/font_size = 13
+text = "Hover or select a setting to view details."
+autowrap_mode = 3
+
+[node name="BottomBar" type="HBoxContainer" parent="RootMargin/MainLayout"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="BackButton" type="Button" parent="RootMargin/MainLayout/BottomBar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "BACK"
+
+[node name="RestoreDefaultsButton" type="Button" parent="RootMargin/MainLayout/BottomBar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "RESTORE DEFAULTS"
+
+[node name="Spacer" type="Control" parent="RootMargin/MainLayout/BottomBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ProfileButton" type="Button" parent="RootMargin/MainLayout/BottomBar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "PROFILE"

@@ -90,9 +90,7 @@ public partial class MainMenu : CanvasLayer
     //private Label _netStatus = null!;
     private Button _settingsButton = null!;
     private Button _quitButton = null!;
-    private Button _settingsBackButton = null!;
-    private Button _soundToggle = null!;
-    private PanelContainer _settingsPanel = null!;
+    private SettingsMenu _settingsMenu = null!;
 
     private Button _resumeButton = null!;
     private Button _quickJoinButton = null!;
@@ -136,9 +134,7 @@ public partial class MainMenu : CanvasLayer
         //_netStatus = GetNode<Label>("%NetStatusLabel");
         _settingsButton = GetNode<Button>("%SettingsButton");
         _quitButton = GetNode<Button>("%QuitButton");
-        _settingsPanel = GetNode<PanelContainer>("%SettingsPanel");
-        _settingsBackButton = GetNode<Button>("%SettingsBackButton");
-        _soundToggle = GetNode<Button>("%SoundToggle");
+        _settingsMenu = GetNode<SettingsMenu>("%SettingsMenu");
 
         _resumeButton = GetNode<Button>("%ResumeButton");
         _quickJoinButton = GetNode<Button>("%QuickJoinButton");
@@ -204,9 +200,8 @@ public partial class MainMenu : CanvasLayer
 
         _dragCatcher.GuiInput += OnStageInput;
 
-        _settingsButton.Pressed += ToggleSettings;
-        _settingsBackButton.Pressed += ToggleSettings;
-        _soundToggle.Pressed += ToggleSound;
+        _settingsButton.Pressed += () => _settingsMenu.Open();
+        _settingsMenu.CloseRequested += () => _settingsButton.GrabFocus();
         _quitButton.Pressed += () => EmitSignal(SignalName.QuitRequested);
     }
 
@@ -238,7 +233,7 @@ public partial class MainMenu : CanvasLayer
         {
             _stageSubViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
         }
-        _settingsPanel.Visible = false;
+        _settingsMenu.Close();
     }
 
     // ---- selection ---------------------------------------------------------
@@ -476,19 +471,6 @@ public partial class MainMenu : CanvasLayer
         }
     }
 
-    // ---- settings ---------------------------------------------------------
-
-    private void ToggleSettings() => _settingsPanel.Visible = !_settingsPanel.Visible;
-
-    private void ToggleSound()
-    {
-        UserSettings settings = UserSettings.Load();
-        settings = settings with { SoundEnabled = !settings.SoundEnabled };
-        settings.Save();
-        GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
-        RefreshSound();
-    }
-
     // ---- refresh ----------------------------------------------------------
 
     private void RefreshAll()
@@ -498,7 +480,6 @@ public partial class MainMenu : CanvasLayer
         RefreshMode();
         RefreshTeam();
         RefreshModel();
-        RefreshSound();
     }
 
     private void RefreshObjectives()
@@ -585,11 +566,6 @@ public partial class MainMenu : CanvasLayer
         _teamNeutralButton.ButtonPressed = _team == 0;
         _teamBlueButton.ButtonPressed = _team == 1;
         _teamRedButton.ButtonPressed = _team == 2;
-    }
-
-    private void RefreshSound()
-    {
-        _soundToggle.Text = UserSettings.Load().SoundEnabled ? "SOUND: ON" : "SOUND: OFF";
     }
 
     /// <summary>Load the map's shipped screenshot, preferring the imported resource.</summary>
