@@ -78,6 +78,7 @@ public partial class SettingsMenu : CanvasLayer
     private Label _fovValue = null!;
     private HSlider _brightnessSlider = null!;
     private Label _brightnessValue = null!;
+    private OptionButton _antialiasingOption = null!;
     private CheckBox _globalIlluminationCheck = null!;
     private Label _globalIlluminationStatus = null!;
 
@@ -208,6 +209,7 @@ public partial class SettingsMenu : CanvasLayer
         _fovValue = GetNode<Label>("%FovValue");
         _brightnessSlider = GetNode<HSlider>("%BrightnessSlider");
         _brightnessValue = GetNode<Label>("%BrightnessValue");
+        _antialiasingOption = GetNode<OptionButton>("%AntialiasingOption");
         _globalIlluminationCheck = GetNode<CheckBox>("%GlobalIlluminationCheck");
         _globalIlluminationStatus = GetNode<Label>("%GlobalIlluminationStatus");
 
@@ -231,6 +233,15 @@ public partial class SettingsMenu : CanvasLayer
         _screenModeOption.AddItem("WINDOWED", (int)ScreenMode.Windowed);
         _screenModeOption.AddItem("EXCLUSIVE FULLSCREEN", (int)ScreenMode.ExclusiveFullscreen);
         _screenModeOption.AddItem("BORDERLESS FULLSCREEN", (int)ScreenMode.BorderlessFullscreen);
+
+        // Anti-Aliasing
+        _antialiasingOption.Clear();
+        _antialiasingOption.AddItem("OFF", (int)AntialiasingMode.Off);
+        _antialiasingOption.AddItem("FXAA", (int)AntialiasingMode.Fxaa);
+        _antialiasingOption.AddItem("SMAA 1X", (int)AntialiasingMode.Smaa);
+        _antialiasingOption.AddItem("MSAA 2X", (int)AntialiasingMode.Msaa2X);
+        _antialiasingOption.AddItem("MSAA 4X", (int)AntialiasingMode.Msaa4X);
+        _antialiasingOption.AddItem("MSAA 8X", (int)AntialiasingMode.Msaa8X);
     }
 
     private void WireSignals()
@@ -319,6 +330,13 @@ public partial class SettingsMenu : CanvasLayer
             MutateSettings(s => s with { Brightness = (float)val });
         };
 
+        _antialiasingOption.ItemSelected += idx =>
+        {
+            if (_suppressEvents) return;
+            var mode = (AntialiasingMode)_antialiasingOption.GetItemId((int)idx);
+            MutateSettings(s => s with { Antialiasing = mode });
+        };
+
         _globalIlluminationCheck.Toggled += pressed =>
         {
             if (_suppressEvents) return;
@@ -391,6 +409,10 @@ public partial class SettingsMenu : CanvasLayer
         SetupRow(GetNode<PanelContainer>("%Row_Brightness"), GetNode<Label>("%BrightnessLabel"),
             "Brightness", "Adjust overall display brightness and gamma exposure.",
             _brightnessSlider);
+
+        SetupRow(GetNode<PanelContainer>("%Row_Antialiasing"), GetNode<Label>("%AntialiasingLabel"),
+            "Anti-Aliasing", "3D edge smoothing: Off, FXAA (fast blur), SMAA 1x (subpixel edges), or MSAA (geometry multisampling).",
+            _antialiasingOption);
 
         SetupRow(GetNode<PanelContainer>("%Row_GlobalIllumination"), GetNode<Label>("%GlobalIlluminationLabel"),
             "Global Illumination", "Dynamic radiance hints global illumination (sun, sky, bounce, and entity lights). Disable for flat ambient competitive lighting.",
@@ -525,6 +547,16 @@ public partial class SettingsMenu : CanvasLayer
             _brightnessSlider.Value = s.Brightness;
             _brightnessValue.Text = $"{Mathf.RoundToInt(s.Brightness * 100f)}%";
 
+            // Video - Anti-Aliasing
+            for (int i = 0; i < _antialiasingOption.ItemCount; i++)
+            {
+                if (_antialiasingOption.GetItemId(i) == (int)s.Antialiasing)
+                {
+                    _antialiasingOption.Select(i);
+                    break;
+                }
+            }
+
             // Video - Global Illumination
             bool giOn = s.LightingMode == LightingQualityMode.RadianceHints;
             _globalIlluminationCheck.ButtonPressed = giOn;
@@ -582,6 +614,7 @@ public partial class SettingsMenu : CanvasLayer
     {
         ScreenSettings.Apply(s);
         ScreenSettings.ApplyBrightness(GetTree(), s.Brightness);
+        ScreenSettings.ApplyAntialiasing(GetTree(), s.Antialiasing);
         GameAudio.Apply(s.SoundEnabled, s.SoundVolume);
 
         // If MapPlayer exists in tree, push updated look settings

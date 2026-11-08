@@ -73,6 +73,7 @@ public partial class Main : Node
         UserSettings settings = UserSettings.Load();
         ScreenSettings.Apply(settings);
         ScreenSettings.ApplyBrightness(GetTree(), settings.Brightness);
+        ScreenSettings.ApplyAntialiasing(GetTree(), settings.Antialiasing);
         GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
         InputBindings.Load().Apply();
 

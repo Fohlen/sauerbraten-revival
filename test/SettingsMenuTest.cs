@@ -37,6 +37,7 @@ public class SettingsMenuTest : GoTestBase
             TestAssert.True(menu.GetNodeOrNull("%SensitivitySlider") != null, "SensitivitySlider resolved");
             TestAssert.True(menu.GetNodeOrNull("%ScreenModeOption") != null, "ScreenModeOption resolved");
             TestAssert.True(menu.GetNodeOrNull("%BrightnessSlider") != null, "BrightnessSlider resolved");
+            TestAssert.True(menu.GetNodeOrNull("%AntialiasingOption") != null, "AntialiasingOption resolved");
             TestAssert.True(menu.GetNodeOrNull("%GlobalIlluminationCheck") != null, "GlobalIlluminationCheck resolved");
             TestAssert.True(menu.GetNodeOrNull("%SoundVolumeSlider") != null, "SoundVolumeSlider resolved");
             TestAssert.True(menu.GetNodeOrNull("%TooltipLabel") != null, "TooltipLabel resolved");
@@ -65,6 +66,7 @@ public class SettingsMenuTest : GoTestBase
                 MaxFps = 144,
                 Fov = 110f,
                 Brightness = 1.25f,
+                Antialiasing = AntialiasingMode.Smaa,
                 LightingMode = LightingQualityMode.StaticAmbient,
                 SoundEnabled = false,
                 SoundVolume = 120,
@@ -91,6 +93,9 @@ public class SettingsMenuTest : GoTestBase
 
             var brightnessSlider = menu.GetNode<HSlider>("%BrightnessSlider");
             TestAssert.Near(1.25f, (float)brightnessSlider.Value, 1e-3f, "brightness matches disk");
+
+            var aaOption = menu.GetNode<OptionButton>("%AntialiasingOption");
+            TestAssert.Equal((int)AntialiasingMode.Smaa, aaOption.GetSelectedId(), "anti-aliasing matches disk");
 
             var giCheck = menu.GetNode<CheckBox>("%GlobalIlluminationCheck");
             TestAssert.False(giCheck.ButtonPressed, "GI check is false for StaticAmbient");
@@ -134,6 +139,23 @@ public class SettingsMenuTest : GoTestBase
 
             saved = UserSettings.Load();
             TestAssert.Near(1.15f, saved.Brightness, 1e-3f, "mutated brightness persisted");
+
+            var aaOption = menu.GetNode<OptionButton>("%AntialiasingOption");
+            // Select MSAA 4X
+            int msaaIndex = -1;
+            for (int i = 0; i < aaOption.ItemCount; i++)
+            {
+                if (aaOption.GetItemId(i) == (int)AntialiasingMode.Msaa4X)
+                {
+                    msaaIndex = i;
+                    break;
+                }
+            }
+            TestAssert.True(msaaIndex >= 0, "msaa 4x item found in dropdown");
+            aaOption.EmitSignal(OptionButton.SignalName.ItemSelected, (long)msaaIndex);
+
+            saved = UserSettings.Load();
+            TestAssert.Equal(AntialiasingMode.Msaa4X, saved.Antialiasing, "mutated anti-aliasing persisted");
 
             var giCheck = menu.GetNode<CheckBox>("%GlobalIlluminationCheck");
             giCheck.ButtonPressed = false;

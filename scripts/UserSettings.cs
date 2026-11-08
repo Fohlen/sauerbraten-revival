@@ -37,6 +37,7 @@ public sealed record UserSettings
     private const string VsyncKey = "vsync";
     private const string MaxFpsKey = "max_fps";
     private const string BrightnessKey = "brightness";
+    private const string AntialiasingKey = "antialiasing";
 
     // Engine value ranges (rendergl.cpp / main.cpp VARPs).
     private const float MinSensitivity = 0.001f;
@@ -105,6 +106,9 @@ public sealed record UserSettings
     /// <summary>Display brightness / gamma multiplier (original engine <c>gamma</c>; default 1.0 = 100%).</summary>
     public float Brightness { get; init; } = DefaultBrightness;
 
+    /// <summary>3D anti-aliasing mode (Off, FXAA, SMAA 1x, MSAA 2x/4x/8x).</summary>
+    public AntialiasingMode Antialiasing { get; init; } = AntialiasingMode.Off;
+
     /// <summary>Read the settings file; a missing file or key keeps the field defaults.</summary>
     public static UserSettings Load()
     {
@@ -126,6 +130,7 @@ public sealed record UserSettings
             Vsync = cfg.GetValue(Section, VsyncKey, ScreenSettings.DefaultVsync).AsBool(),
             MaxFps = Mathf.Clamp(cfg.GetValue(Section, MaxFpsKey, ScreenSettings.DefaultMaxFps).AsInt32(), 0, ScreenSettings.MaxFpsLimit),
             Brightness = Mathf.Clamp(cfg.GetValue(Section, BrightnessKey, DefaultBrightness).AsSingle(), MinBrightness, MaxBrightness),
+            Antialiasing = ParseAntialiasing(cfg.GetValue(Section, AntialiasingKey, "off").AsString()),
         };
     }
 
@@ -150,6 +155,7 @@ public sealed record UserSettings
         cfg.SetValue(Section, VsyncKey, Vsync);
         cfg.SetValue(Section, MaxFpsKey, Mathf.Clamp(MaxFps, 0, ScreenSettings.MaxFpsLimit));
         cfg.SetValue(Section, BrightnessKey, Mathf.Clamp(Brightness, MinBrightness, MaxBrightness));
+        cfg.SetValue(Section, AntialiasingKey, AntialiasingToken(Antialiasing));
         cfg.Save(SettingsPath);
     }
 
@@ -179,6 +185,52 @@ public sealed record UserSettings
         BorderlessToken => ScreenMode.BorderlessFullscreen,
         _ => ScreenMode.Windowed,
     };
+
+    /// <summary>Config-file token for an anti-aliasing mode.</summary>
+    public static string AntialiasingToken(AntialiasingMode mode) => mode switch
+    {
+        AntialiasingMode.Fxaa => "fxaa",
+        AntialiasingMode.Smaa => "smaa",
+        AntialiasingMode.Msaa2X => "msaa_2x",
+        AntialiasingMode.Msaa4X => "msaa_4x",
+        AntialiasingMode.Msaa8X => "msaa_8x",
+        _ => "off",
+    };
+
+    /// <summary>Parse an anti-aliasing token; unknown/empty falls back to <see cref="AntialiasingMode.Off"/>.</summary>
+    public static AntialiasingMode ParseAntialiasing(string? token) => token?.Trim().ToLowerInvariant() switch
+    {
+        "fxaa" => AntialiasingMode.Fxaa,
+        "smaa" or "smaa_1x" or "smaa1x" => AntialiasingMode.Smaa,
+        "msaa" or "msaa_4x" or "msaa4x" => AntialiasingMode.Msaa4X,
+        "msaa_2x" or "msaa2x" => AntialiasingMode.Msaa2X,
+        "msaa_8x" or "msaa8x" => AntialiasingMode.Msaa8X,
+        _ => AntialiasingMode.Off,
+    };
+}
+
+/// <summary>
+/// 3D anti-aliasing technique chosen by the user: Off, FXAA, SMAA 1x, or MSAA (2x/4x/8x).
+/// </summary>
+public enum AntialiasingMode
+{
+    /// <summary>Anti-aliasing disabled.</summary>
+    Off = 0,
+
+    /// <summary>Fast Approximate Anti-Aliasing (screen-space blur).</summary>
+    Fxaa = 1,
+
+    /// <summary>Subpixel Morphological Anti-Aliasing (SMAA 1x, crisp edge reconstruction).</summary>
+    Smaa = 2,
+
+    /// <summary>Multi-Sample Anti-Aliasing (2 samples per pixel).</summary>
+    Msaa2X = 3,
+
+    /// <summary>Multi-Sample Anti-Aliasing (4 samples per pixel).</summary>
+    Msaa4X = 4,
+
+    /// <summary>Multi-Sample Anti-Aliasing (8 samples per pixel).</summary>
+    Msaa8X = 5,
 }
 
 /// <summary>
@@ -311,6 +363,57 @@ public static class ScreenSettings
                 env.AdjustmentEnabled = true;
                 env.AdjustmentBrightness = b;
             }
+        }
+    }
+
+    /// <summary>
+    /// Apply 3D anti-aliasing mode to the root viewport and any active <see cref="SubViewport"/> nodes.
+    /// </summary>
+    public static void ApplyAntialiasing(SceneTree tree, AntialiasingMode mode)
+    {
+        if (tree?.Root == null) return;
+        ApplyAntialiasingToViewport(tree.Root, mode);
+        foreach (Node node in tree.Root.FindChildren("*", nameof(SubViewport), true, false))
+        {
+            if (node is Viewport vp)
+            {
+                ApplyAntialiasingToViewport(vp, mode);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Configure 3D anti-aliasing on a single viewport.
+    /// </summary>
+    public static void ApplyAntialiasingToViewport(Viewport vp, AntialiasingMode mode)
+    {
+        switch (mode)
+        {
+            case AntialiasingMode.Fxaa:
+                vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Fxaa;
+                vp.Msaa3D = Viewport.Msaa.Disabled;
+                break;
+            case AntialiasingMode.Smaa:
+                vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Smaa;
+                vp.Msaa3D = Viewport.Msaa.Disabled;
+                break;
+            case AntialiasingMode.Msaa2X:
+                vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
+                vp.Msaa3D = Viewport.Msaa.Msaa2X;
+                break;
+            case AntialiasingMode.Msaa4X:
+                vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
+                vp.Msaa3D = Viewport.Msaa.Msaa4X;
+                break;
+            case AntialiasingMode.Msaa8X:
+                vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
+                vp.Msaa3D = Viewport.Msaa.Msaa8X;
+                break;
+            case AntialiasingMode.Off:
+            default:
+                vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
+                vp.Msaa3D = Viewport.Msaa.Disabled;
+                break;
         }
     }
 }

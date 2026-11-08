@@ -311,4 +311,74 @@ public class UserSettingsTest : GoTestBase
         TestAssert.Equal(new Vector2I(800, 600),
             ScreenSettings.ResolveWindowSize(ScreenMode.BorderlessFullscreen, 800, 600, desktop), "smaller borderless size is kept");
     }
+
+    [Test]
+    public void AntialiasingSettingsRoundTrip()
+    {
+        UserSettings previous = UserSettings.Load();
+        try
+        {
+            (previous with { Antialiasing = AntialiasingMode.Smaa }).Save();
+            TestAssert.Equal(AntialiasingMode.Smaa, UserSettings.Load().Antialiasing, "smaa persists");
+
+            (previous with { Antialiasing = AntialiasingMode.Msaa4X }).Save();
+            TestAssert.Equal(AntialiasingMode.Msaa4X, UserSettings.Load().Antialiasing, "msaa 4x persists");
+
+            (previous with { Antialiasing = AntialiasingMode.Off }).Save();
+            TestAssert.Equal(AntialiasingMode.Off, UserSettings.Load().Antialiasing, "off persists");
+        }
+        finally
+        {
+            previous.Save();
+        }
+    }
+
+    [Test]
+    public void AntialiasingTokensAndParsing()
+    {
+        TestAssert.Equal("off", UserSettings.AntialiasingToken(AntialiasingMode.Off), "off token");
+        TestAssert.Equal("fxaa", UserSettings.AntialiasingToken(AntialiasingMode.Fxaa), "fxaa token");
+        TestAssert.Equal("smaa", UserSettings.AntialiasingToken(AntialiasingMode.Smaa), "smaa token");
+        TestAssert.Equal("msaa_2x", UserSettings.AntialiasingToken(AntialiasingMode.Msaa2X), "msaa_2x token");
+        TestAssert.Equal("msaa_4x", UserSettings.AntialiasingToken(AntialiasingMode.Msaa4X), "msaa_4x token");
+        TestAssert.Equal("msaa_8x", UserSettings.AntialiasingToken(AntialiasingMode.Msaa8X), "msaa_8x token");
+
+        TestAssert.Equal(AntialiasingMode.Fxaa, UserSettings.ParseAntialiasing("  FXAA "), "fxaa parse");
+        TestAssert.Equal(AntialiasingMode.Smaa, UserSettings.ParseAntialiasing("smaa_1x"), "smaa_1x parse");
+        TestAssert.Equal(AntialiasingMode.Msaa2X, UserSettings.ParseAntialiasing("msaa_2x"), "msaa_2x parse");
+        TestAssert.Equal(AntialiasingMode.Msaa4X, UserSettings.ParseAntialiasing("msaa"), "msaa parse");
+        TestAssert.Equal(AntialiasingMode.Msaa8X, UserSettings.ParseAntialiasing("MSAA8X"), "msaa8x parse");
+        TestAssert.Equal(AntialiasingMode.Off, UserSettings.ParseAntialiasing("unknown"), "unknown parse");
+        TestAssert.Equal(AntialiasingMode.Off, UserSettings.ParseAntialiasing(""), "empty parse");
+        TestAssert.Equal(AntialiasingMode.Off, UserSettings.ParseAntialiasing(null), "null parse");
+    }
+
+    [Test]
+    public void ApplyAntialiasingToViewportConfiguresGodotModes()
+    {
+        var vp = new SubViewport();
+        TestScene.AddChild(vp);
+        try
+        {
+            ScreenSettings.ApplyAntialiasingToViewport(vp, AntialiasingMode.Fxaa);
+            TestAssert.Equal(Viewport.ScreenSpaceAAEnum.Fxaa, vp.ScreenSpaceAA, "FXAA sets ScreenSpaceAA");
+            TestAssert.Equal(Viewport.Msaa.Disabled, vp.Msaa3D, "FXAA disables MSAA");
+
+            ScreenSettings.ApplyAntialiasingToViewport(vp, AntialiasingMode.Smaa);
+            TestAssert.Equal(Viewport.ScreenSpaceAAEnum.Smaa, vp.ScreenSpaceAA, "SMAA sets ScreenSpaceAA");
+            TestAssert.Equal(Viewport.Msaa.Disabled, vp.Msaa3D, "SMAA disables MSAA");
+
+            ScreenSettings.ApplyAntialiasingToViewport(vp, AntialiasingMode.Msaa4X);
+            TestAssert.Equal(Viewport.ScreenSpaceAAEnum.Disabled, vp.ScreenSpaceAA, "MSAA disables ScreenSpaceAA");
+            TestAssert.Equal(Viewport.Msaa.Msaa4X, vp.Msaa3D, "MSAA 4X sets Msaa3D");
+
+            ScreenSettings.ApplyAntialiasingToViewport(vp, AntialiasingMode.Off);
+            TestAssert.Equal(Viewport.ScreenSpaceAAEnum.Disabled, vp.ScreenSpaceAA, "Off disables ScreenSpaceAA");
+            TestAssert.Equal(Viewport.Msaa.Disabled, vp.Msaa3D, "Off disables MSAA");
+        }
+        finally
+        {
+            vp.QueueFree();
+        }
+    }
 }
