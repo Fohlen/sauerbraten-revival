@@ -79,6 +79,57 @@ public enum SpatialShapeKind : byte
 }
 
 /// <summary>
+/// Determines how a <see cref="SpatialZone"/> tests whether a dynamic entity overlaps it.
+/// </summary>
+public enum SpatialZoneTriggerMode : byte
+{
+    /// <summary>
+    /// Tests the entity's feet position <c>(Origin.X, Origin.Y, Min.Z)</c> against the zone shape.
+    /// Matches Sauerbraten's <c>entities.cpp</c> (<c>checkitems</c>) and <c>ctf.h</c> (<c>checkitems</c> / <c>insidebase</c>).
+    /// </summary>
+    FeetPos = 0,
+
+    /// <summary>Tests the entity's <c>Origin</c> (eye/center position) against the zone shape.</summary>
+    Origin = 1,
+
+    /// <summary>Tests the entity's full 3D bounding volume [<c>Min</c>, <c>Max</c>] against the zone shape.</summary>
+    BodyBounds = 2,
+
+    /// <summary>Alias for <see cref="FeetPos"/>.</summary>
+    FeetPoint = FeetPos,
+
+    /// <summary>Alias for <see cref="Origin"/>.</summary>
+    OriginPoint = Origin,
+}
+
+/// <summary>
+/// Transition kind emitted when a dynamic entity interacts with a <see cref="SpatialZone"/> during broad-pass evaluation.
+/// </summary>
+public enum ZoneOverlapKind : byte
+{
+    Entered = 0,
+    Stayed = 1,
+    Exited = 2,
+}
+
+/// <summary>
+/// Event payload describing an interaction between a <see cref="SpatialZone"/> and a dynamic entity.
+/// </summary>
+public readonly struct ZoneOverlapEvent
+{
+    public ZoneOverlapKind Kind { get; init; }
+    public SpatialZone Zone { get; init; }
+    public SpatialHandle ZoneHandle { get; init; }
+    public SpatialHandle EntityHandle { get; init; }
+    public SpatialCategory EntityCategory { get; init; }
+    public int EntityUserId { get; init; }
+    public int EntityTeam { get; init; }
+    public Vector3 EntityOrigin { get; init; }
+    public Vector3 EntityFeetPos { get; init; }
+    public object? EntityPayload { get; init; }
+}
+
+/// <summary>
 /// Lightweight, generational handle referencing an entry in <see cref="WorldSpatialIndex"/>.
 /// Storing a monotonic generation counter prevents stale handles from referring to newly
 /// allocated entries when slot indices are recycled.
