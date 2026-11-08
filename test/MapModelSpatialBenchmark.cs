@@ -150,8 +150,8 @@ public class MapModelSpatialBenchmark : GoTestBase
         var rng = new Random(42);
 
         GD.Print("\n=== Map Model Spatial Index Benchmark (WorldSize=2048, 64u Cells) ===");
-        GD.Print("Colliders | Legacy (ms) | Spatial (ms) | Speedup | Parity Matches | Allocations");
-        GD.Print("-----------------------------------------------------------------------------");
+        GD.Print("Colliders | Legacy (ms) | Spatial (ms) | Indicative Ratio | Parity (Asserted) | Allocations (Asserted)");
+        GD.Print("--------------------------------------------------------------------------------------------------");
 
         foreach (int count in colliderCounts)
         {

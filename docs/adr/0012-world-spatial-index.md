@@ -125,17 +125,19 @@ Fixed-size stackalloc buffers risk silent truncation in dense world clusters. We
 
 ---
 
-## Measured Performance & Benchmark Results
+## Measured Performance & Benchmark Verification
 
-Benchmark results from [`MapModelSpatialBenchmark.cs`](../../test/MapModelSpatialBenchmark.cs) comparing `WorldSpatialIndex` against the legacy bespoke grid on a $2048 \times 2048$ world over 5,000 queries per scale:
+The test suite includes [`MapModelSpatialBenchmark.cs`](../../test/MapModelSpatialBenchmark.cs), which asserts:
+1. **Exact Parity Assertion**: 100% identical collision decisions (`hitLegacy == hitSpatial`) against the legacy grid across 5,000 queries per scale for both box and ellipse colliders.
+2. **Zero Heap Allocations Assertion**: Asserts 0 bytes allocated during collision queries and dynamic updates after JIT warmup.
 
-| Collider Count | Legacy Grid (ms) | `WorldSpatialIndex` (ms) | Speedup | Parity Matches | Heap Allocations |
+Timing figures below are **indicative local measurements** from a synthetic test run on Apple Silicon ($2048 \times 2048$ world, 5,000 queries, seed 42) and demonstrate comparable-to-improved query work without regression, rather than a rigid hardware-independent performance contract:
+
+| Collider Count | Legacy Grid (ms) | `WorldSpatialIndex` (ms) | Indicative Ratio | Parity Matches (Asserted) | Heap Allocations (Asserted) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **50 colliders** | 0.31 ms | 0.21 ms | **1.48x** | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
-| **250 colliders** | 0.56 ms | 0.45 ms | **1.25x** | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
-| **1,000 colliders** | 1.32 ms | 1.05 ms | **1.26x** | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
-| **2,500 colliders** | 2.82 ms | 2.23 ms | **1.26x** | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
+| **50 colliders** | ~0.31 ms | ~0.21 ms | ~1.48x | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
+| **250 colliders** | ~0.56 ms | ~0.45 ms | ~1.25x | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
+| **1,000 colliders** | ~1.32 ms | ~1.05 ms | ~1.26x | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
+| **2,500 colliders** | ~2.82 ms | ~2.23 ms | ~1.26x | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
 
-- **Zero Allocations**: Verified 0 heap allocations across all queries after JIT warmup.
-- **Dynamic In-Place Updates**: **13.52 million updates/sec** (50,000 updates in 3.70 ms, 0 bytes allocated).
-- **Exact Parity**: 100% collision decision parity verified against `OctaPhysics` narrow-phase math across both box and ellipse colliders.
+- **Dynamic In-Place Updates**: Local test executed 50,000 sub-cell movements inside the same cell in ~3.7 ms with 0 bytes allocated, verifying the intended zero-allocation $O(1)$ fast path.
