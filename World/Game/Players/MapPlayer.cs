@@ -360,7 +360,7 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         }
     }
 
-    /// <summary>Player team index (0 = neutral, 1 = blue, 2 = red).</summary>
+    /// <summary>Player team index (0 = neutral, 1 = good, 2 = evil).</summary>
     [Export]
     public int Team
     {
@@ -368,7 +368,8 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         set
         {
             Combat.Team = PlayerState.FlagTeam(value);
-            if (Hudgun != null) Hudgun.Team = value;
+            if (Hudgun != null)
+                Hudgun.Team = (Mode != null && Mode.Has(ModeFlags.Team)) ? 1 : 0;
         }
     }
 
@@ -376,7 +377,12 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public string TeamName
     {
         get => Combat.Team;
-        set => Combat.Team = value;
+        set
+        {
+            Combat.Team = value;
+            if (Hudgun != null)
+                Hudgun.Team = (Mode != null && Mode.Has(ModeFlags.Team)) ? 1 : 0;
+        }
     }
 
     /// <summary>Timestamp (ms) of the last successful hit on an enemy (engine <c>lasthit</c> in fps.cpp).</summary>

@@ -107,11 +107,11 @@ public partial class PlayerState : RefCounted
     /// <summary>Player team name (engine <c>team</c>, e.g. "good" or "evil").</summary>
     public string Team = "good";
 
-    /// <summary>Engine <c>ctfteamflag(s)</c>: "good" -> 1, "evil" -> 2, otherwise 0.</summary>
+    /// <summary>Engine <c>ctfteamflag(s)</c>: "good"/"blue" -> 1, "evil"/"red" -> 2, otherwise 0.</summary>
     public static int TeamFlag(string? team) => team?.ToLowerInvariant() switch
     {
-        "good" => 1,
-        "evil" => 2,
+        "good" or "blue" => 1,
+        "evil" or "red" => 2,
         _ => 0,
     };
 

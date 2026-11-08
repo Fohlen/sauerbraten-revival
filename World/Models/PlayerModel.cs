@@ -161,6 +161,16 @@ public partial class PlayerModel : ModelInstance
     }
 
     /// <summary>
+    /// Updates the team skin (0 = neutral/FFA, 1 = blue/friendly, 2 = red/enemy) at runtime.
+    /// If the relative team has changed, re-configures the model and material variants.
+    /// </summary>
+    public void SetTeam(int team)
+    {
+        if (Team == team && ModelLoaded) return;
+        Configure(_models, _textures, ModelIndex, team, _skinCache, _viewWeaponName);
+    }
+
+    /// <summary>
     /// Attach, swap or clear the third-person view weapon at runtime without reloading
     /// the body (engine <c>vweps[]</c>, render.cpp). <paramref name="viewWeapon"/> is an
     /// engine model name such as <c>vwep/rifle</c>; null/empty detaches the current one.

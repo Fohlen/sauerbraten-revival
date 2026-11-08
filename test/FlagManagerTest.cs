@@ -342,11 +342,35 @@ public partial class FlagManagerTest : TestClass
 
         var ctfMode = GetMode("ctf");
 
-        // Local player is team 1 (blue). Enemy flag (red) should select flags/red
+        // Local player is team 1 (good). Enemy flag (team 2) should select flags/red
         node.UpdateVisual(flag, ctfMode, 1000, localPlayerTeam: 1);
-
         TestAssert.True(node.Visible, "node is visible");
         TestAssert.Equal(flag.SpawnLoc, node.Position, "node position matches flag position");
+        TestAssert.Equal("flags/red", node.CurrentModelName, "enemy flag 2 is red when observing as team 1");
+
+        // When spectating / following a team 2 player, enemy flag (team 2) becomes friendly and turns blue!
+        node.UpdateVisual(flag, ctfMode, 1000, localPlayerTeam: 2);
+        TestAssert.Equal("flags/blue", node.CurrentModelName, "friendly flag 2 is blue when observing as team 2");
+
+        // Now test team 1 flag (good)
+        var flag1 = new FlagState
+        {
+            Id = 1,
+            Team = 1,
+            SpawnLoc = new Vector3(10, 20, 10),
+            SpawnAngle = 0f
+        };
+        var node1 = new FlagNode { FlagId = 1, Team = 1 };
+
+        // When observing as team 1, team 1 flag is blue
+        node1.UpdateVisual(flag1, ctfMode, 1000, localPlayerTeam: 1);
+        TestAssert.Equal("flags/blue", node1.CurrentModelName, "friendly flag 1 is blue when observing as team 1");
+
+        // When observing as team 2, team 1 flag is red
+        node1.UpdateVisual(flag1, ctfMode, 1000, localPlayerTeam: 2);
+        TestAssert.Equal("flags/red", node1.CurrentModelName, "enemy flag 1 is red when observing as team 2");
+
         node.Free();
+        node1.Free();
     }
 }

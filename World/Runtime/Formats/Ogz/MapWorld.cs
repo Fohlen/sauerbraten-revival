@@ -109,7 +109,17 @@ public partial class MapWorld : Node3D, IGameWorld
     /// presentation (flag colours). Set by the scene that spawns it; null in
     /// world-only contexts such as the edit viewer or tests.
     /// </summary>
-    public Game.Players.MapPlayer? LocalPlayer { get; set; }
+    private Game.Players.MapPlayer? _localPlayer;
+    public Game.Players.MapPlayer? LocalPlayer
+    {
+        get => _localPlayer;
+        set
+        {
+            if (ReferenceEquals(_localPlayer, value)) return;
+            _localPlayer = value;
+            UpdateFlagVisuals();
+        }
+    }
 
     /// <summary>Active flying projectiles (rockets) stepped centrally by this world's physics loop.</summary>
     public List<Weapons.RocketProjectile> ActiveRockets { get; } = new();
@@ -413,6 +423,7 @@ public partial class MapWorld : Node3D, IGameWorld
             }
         }
         AddChild(flagsRoot);
+        UpdateFlagVisuals();
 
         AddChild(ParticleBuilder.Build(map, textures));
         AddChild(SoundBuilder.Build(map, catalogue));
@@ -510,18 +521,29 @@ public partial class MapWorld : Node3D, IGameWorld
             }
         }
 
+        UpdateFlagVisuals(lastMillis);
+
+        Items?.UpdateVisual(lastMillis);
+    }
+
+    /// <summary>
+    /// Refreshes CTF flag models and orientations matching the observer's / local player's team.
+    /// In Sauerbraten, the local player's team flag is always blue and enemy flag is red.
+    /// </summary>
+    public void UpdateFlagVisuals(int? customLastMillis = null, int? customLocalPlayerTeam = null)
+    {
         if (Flags != null && _flagNodes.Count > 0 && Mode != null && Mode.Has(Game.ModeFlags.Ctf))
         {
+            int lastMillis = customLastMillis ?? LastMillis;
+            int team = customLocalPlayerTeam ?? (LocalPlayer?.Team != 0 ? (LocalPlayer?.Team ?? 1) : 1);
             for (int i = 0; i < _flagNodes.Count; i++)
             {
                 if (i < Flags.Flags.Count)
                 {
-                    _flagNodes[i].UpdateVisual(Flags.Flags[i], lastMillis, LocalPlayer?.Team ?? 1, getOwnerInfo: _cachedGetPlayerOwnerInfo);
+                    _flagNodes[i].UpdateVisual(Flags.Flags[i], lastMillis, team, getOwnerInfo: _cachedGetPlayerOwnerInfo);
                 }
             }
         }
-
-        Items?.UpdateVisual(lastMillis);
     }
 
     private static string DefaultPath() => ContentRoots.ResolveMap("base/church51");

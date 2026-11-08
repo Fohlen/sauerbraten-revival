@@ -18,6 +18,9 @@ public partial class FlagNode : Models.ModelInstance
 {
     private string _currentModelName = "";
 
+    /// <summary>Active model name (e.g. "flags/blue", "flags/red", "flags/neutral").</summary>
+    public string CurrentModelName => _currentModelName;
+
     /// <summary>Flag ID in the FlagManager.</summary>
     [Export] public int FlagId { get; set; }
 

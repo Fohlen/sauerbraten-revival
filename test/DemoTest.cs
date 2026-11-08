@@ -689,7 +689,8 @@ public class DemoTest : GoTestBase
         try
         {
             TestAssert.True(viewer.ActiveReplayer != null, "ActiveReplayer initialized");
-            TestAssert.True(viewer.MapSource is SauerbratenRevival.World.Runtime.IGameWorld gw && gw.Players.Count == 2, "World contains 2 players (local + remote)");
+            var gw = viewer.MapSource as SauerbratenRevival.World.Runtime.IGameWorld;
+            TestAssert.True(gw != null && gw.Players.Count == 2, "World contains 2 players (local + remote)");
 
             // Step tick 0 so the spawns are dispatched
             player.PrePhysicsStep();
@@ -712,18 +713,26 @@ public class DemoTest : GoTestBase
 
             // Verify follow system: initial followed player is local player (peer 0)
             TestAssert.True(viewer.FollowedPlayer == player, "Initially following local player (peer 0)");
+            TestAssert.True(gw.LocalPlayer == player, "gw.LocalPlayer is initially peer 0");
+            TestAssert.Equal(1, gw.LocalPlayer!.Team, "Local team is 1 (good) when following peer 0");
 
             // NextFollow(1) switches to remote player (peer 1)
             viewer.NextFollow(1);
             TestAssert.True(viewer.FollowedPlayer == remote, "NextFollow(1) switched follow target to remote player (peer 1)");
+            TestAssert.True(gw.LocalPlayer == remote, "gw.LocalPlayer shifts to peer 1");
+            TestAssert.Equal(2, gw.LocalPlayer!.Team, "Local team shifts to 2 (evil) when following peer 1");
 
             // NextFollow(1) wraps back to local player
             viewer.NextFollow(1);
             TestAssert.True(viewer.FollowedPlayer == player, "NextFollow(1) wrapped back to local player (peer 0)");
+            TestAssert.True(gw.LocalPlayer == player, "gw.LocalPlayer wrapped back to peer 0");
+            TestAssert.Equal(1, gw.LocalPlayer!.Team, "Local team restored to 1 (good)");
 
             // NextFollow(-1) goes backwards to remote player
             viewer.NextFollow(-1);
             TestAssert.True(viewer.FollowedPlayer == remote, "NextFollow(-1) switched back to remote player (peer 1)");
+            TestAssert.True(gw.LocalPlayer == remote, "gw.LocalPlayer shifts back to peer 1");
+            TestAssert.Equal(2, gw.LocalPlayer!.Team, "Local team shifts back to 2 (evil)");
 
             // Test unhandled mouse input simulation
             var leftClick = new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true };

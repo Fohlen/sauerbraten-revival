@@ -64,6 +64,7 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Currently followed player during demo playback.</summary>
     public Game.Players.MapPlayer? FollowedPlayer { get; private set; }
 
+    private Game.Players.MapPlayer? _player;
     private readonly List<Game.Players.MapPlayer> _demoPlayers = new();
     private int _followedIndex;
     private Camera3D? _playerCamera;
@@ -314,6 +315,7 @@ public partial class OgzMapViewer : Node3D
             GD.PushWarning($"[viewer] SpawnPlayer is set but no direct-child {nameof(Game.Players.MapPlayer)} node exists.");
             return;
         }
+        _player = player;
 
         player.Reparent(mapSource.WorldNode); // into the rotated Z-up world
 
@@ -539,6 +541,17 @@ public partial class OgzMapViewer : Node3D
         }
         FollowedPlayer = target;
 
+        // When following a player in spectate, the local player / team perspective shifts to that player.
+        if (MapSource is IGameWorld gw)
+        {
+            gw.LocalPlayer = target;
+        }
+
+        if (MapSource is MapWorld mw)
+        {
+            mw.UpdateFlagVisuals(customLocalPlayerTeam: target.Team != 0 ? target.Team : 1);
+        }
+
         for (int i = 0; i < _demoPlayers.Count; i++)
         {
             var p = _demoPlayers[i];
@@ -579,11 +592,16 @@ public partial class OgzMapViewer : Node3D
             }
             target.Hudgun = _sharedHudgun;
             int mdlIdx = (target.PlayerModelIndex >= 0) ? target.PlayerModelIndex : (PlayerModelIndex >= 0 ? PlayerModelIndex : 0);
-            _sharedHudgun.Configure(MapSource?.Models, MapSource?.Textures, mdlIdx, WeaponCatalog.Get((Gun)target.Combat.GunSelect).File, target.Team);
+            int hudTeam = (target.Mode != null && target.Mode.Has(Game.ModeFlags.Team)) ? 1 : 0;
+            _sharedHudgun.Configure(MapSource?.Models, MapSource?.Textures, mdlIdx, WeaponCatalog.Get((Gun)target.Combat.GunSelect).File, hudTeam);
         }
 
         target.View.SyncCamera();
         target.View.SyncTransform();
+
+        // Update 3D body models of all players relative to followed player's team:
+        // Followed player's team is always blue (1), enemy team is red (2).
+        UpdateAllPlayerTeamSkins(target);
 
         if (_hud != null)
         {
@@ -626,6 +644,36 @@ public partial class OgzMapViewer : Node3D
     }
 
     /// <summary>
+    /// Updates the team skins of all player models relative to the observer's / followed player's team:
+    /// in team modes, the observer's team is always blue (1) and enemy team is red (2) (render.cpp:314).
+    /// </summary>
+    public void UpdateAllPlayerTeamSkins(Game.Players.MapPlayer? observer = null)
+    {
+        observer ??= FollowedPlayer ?? (MapSource as IGameWorld)?.LocalPlayer ?? _player;
+        if (observer == null) return;
+
+        var mode = observer.Mode;
+        bool isTeamMode = mode != null && mode.Has(Game.ModeFlags.Team);
+        int observerTeam = observer.Team != 0 ? observer.Team : 1;
+
+        var players = _demoPlayers.Count > 0 ? (IReadOnlyList<Game.Players.MapPlayer>)_demoPlayers : (MapSource as IGameWorld)?.Players;
+        if (players == null) return;
+
+        foreach (var p in players)
+        {
+            if (p.PlayerModel == null) continue;
+
+            int relativeTeam = 0;
+            if (isTeamMode)
+            {
+                bool isFriendly = p.Team == observerTeam && observerTeam != 0;
+                relativeTeam = isFriendly ? 1 : 2;
+            }
+            p.PlayerModel.SetTeam(relativeTeam);
+        }
+    }
+
+    /// <summary>
     /// Attach a converted body model to the player (engine <c>playermodels</c>, see
 	/// render.cpp). Leaving <see cref="PlayerModelIndex"/> negative keeps the scene's
 	/// placeholder body. The model is parented under the world as a <b>sibling</b> of
@@ -637,7 +685,13 @@ public partial class OgzMapViewer : Node3D
         int mdlIdx = modelIndex >= 0 ? modelIndex : PlayerModelIndex;
         if (mdlIdx < 0) return;
 
-        ModelCache.PreloadPlayermodel(mdlIdx, mapSource.Models, mapSource.Textures, player.Team);
+        var observer = FollowedPlayer ?? (mapSource as IGameWorld)?.LocalPlayer ?? _player;
+        int observerTeam = observer?.Team != 0 ? (observer?.Team ?? 1) : 1;
+        var mode = player.Mode;
+        bool isTeamMode = mode != null && mode.Has(Game.ModeFlags.Team);
+        int relativeTeam = isTeamMode ? (player.Team == observerTeam && observerTeam != 0 ? 1 : 2) : 0;
+
+        ModelCache.PreloadPlayermodel(mdlIdx, mapSource.Models, mapSource.Textures, relativeTeam);
 
         var gun = (Gun)player.Combat.GunSelect;
 
@@ -650,19 +704,20 @@ public partial class OgzMapViewer : Node3D
         // <mdl.hudguns>/<guns[].file> and the third-person view weapon is vweps[]
         // (render.cpp:425, :158). SelectWeapon then keeps them in sync for the rest of
         // the session — it is the single source of truth for the equipped gun.
-        body.Configure(mapSource.Models, mapSource.Textures, mdlIdx, player.Team,
+        body.Configure(mapSource.Models, mapSource.Textures, mdlIdx, relativeTeam,
             viewWeapon: WeaponCatalog.Vwep(gun));
         player.SyncBodyModelNow();
         if (player.GetNodeOrNull<Camera3D>("Camera3D") is { } camera)
         {
             var hudgun = new HudgunModel { Name = "Hudgun" };
-            hudgun.Configure(mapSource.Models, mapSource.Textures, mdlIdx, WeaponCatalog.Get(gun).File, player.Team);
+            int hudTeam = isTeamMode ? 1 : 0;
+            hudgun.Configure(mapSource.Models, mapSource.Textures, mdlIdx, WeaponCatalog.Get(gun).File, hudTeam);
             camera.AddChild(hudgun);
             player.Hudgun = hudgun;
             _sharedHudgun = hudgun;
         }
         player.SelectWeapon(gun);
-        GD.Print($"[viewer] player model '{body.ModelPath}' (index {mdlIdx}, team {player.Team}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
+        GD.Print($"[viewer] player model '{body.ModelPath}' (index {mdlIdx}, relativeTeam {relativeTeam}) loaded={body.ModelLoaded} animated={body.Animated} weapon={body.ViewWeaponPath ?? "none"}");
     }
 
 
