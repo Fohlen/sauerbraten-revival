@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 using SauerbratenRevival.World.Models;
+using SauerbratenRevival.World.Spatial;
 
 namespace SauerbratenRevival.World.Physics;
 
@@ -113,9 +114,14 @@ public sealed class OctaPhysics
 {
     public Octa Octa => _octa;
     private readonly Octa _octa;
+
+    /// <summary>Unified spatial index for static mapmodels, zones, and dynamic entities (ADR 0012).</summary>
+    public WorldSpatialIndex Spatial { get; }
+
     public OctaPhysics(Octa octa)
     {
         _octa = octa;
+        Spatial = new WorldSpatialIndex(octa.WorldSize);
         for (int i = 0; i < DynEntCacheSize; i++) _dynEntCache[i] = new DynEntCacheEntry();
     }
 
@@ -126,20 +132,15 @@ public sealed class OctaPhysics
     /// <summary>Static mapmodels registered for collision (physics.cpp <c>mmcollide</c>).</summary>
     public readonly List<MapModelCollider> MapModels = new();
 
-    private const int MmGridShift = 6; // 64-unit spatial cells for static mapmodels
-    private List<MapModelCollider>?[]? _mmGrid;
-    private int _mmGridDim;
-    private int _mmGridWorldSize;
     private int _mmIndexedCount;
-    private uint _mmQueryStamp;
 
     /// <summary>
-    /// Register a mapmodel's collision volume in the physics world.
+    /// Register a mapmodel's collision volume in the physics world and spatial index.
     /// </summary>
-    public void AddMapModel(Vector3 pos, float yaw, ModelInfo? info)
+    public SpatialHandle AddMapModel(Vector3 pos, float yaw, ModelInfo? info)
     {
-        if (info == null || !info.Collide) return;
-        if (info.CollideRadius.X <= 0f && info.CollideRadius.Y <= 0f && info.CollideRadius.Z <= 0f) return;
+        if (info == null || !info.Collide) return SpatialHandle.Invalid;
+        if (info.CollideRadius.X <= 0f && info.CollideRadius.Y <= 0f && info.CollideRadius.Z <= 0f) return SpatialHandle.Invalid;
 
         var collider = new MapModelCollider
         {
@@ -152,48 +153,64 @@ public sealed class OctaPhysics
             RejectRadius = info.RejectRadius > 0 ? info.RejectRadius : (info.CollideCenter.Abs() + info.CollideRadius).Length(),
         };
         MapModels.Add(collider);
-        if (_mmGrid != null && _mmGridWorldSize == _octa.WorldSize && _mmIndexedCount == MapModels.Count - 1)
+        Spatial.EnsureWorldSize(_octa.WorldSize);
+        if (_mmIndexedCount == MapModels.Count - 1)
         {
-            InsertMapModelIntoGrid(collider);
+            var handle = Spatial.RegisterMapModel(collider, MapModels.Count - 1);
             _mmIndexedCount = MapModels.Count;
+            return handle;
         }
+
+        RebuildMapModelSpatialIndex();
+        return collider.SpatialHandle;
     }
 
-    private void RebuildMapModelGrid()
+    /// <summary>
+    /// Removes a previously registered mapmodel collider from the physics world and spatial index.
+    /// </summary>
+    public bool RemoveMapModel(MapModelCollider collider)
     {
-        _mmGridWorldSize = _octa.WorldSize;
-        _mmGridDim = Mathf.Max(1, _mmGridWorldSize >> MmGridShift);
-        _mmGrid = new List<MapModelCollider>?[_mmGridDim * _mmGridDim];
-        for (int i = 0; i < MapModels.Count; i++)
+        if (!MapModels.Remove(collider)) return false;
+        if (collider.SpatialHandle.IsValid)
         {
-            InsertMapModelIntoGrid(MapModels[i]);
+            Spatial.Remove(collider.SpatialHandle);
         }
         _mmIndexedCount = MapModels.Count;
+        return true;
     }
 
-    private void InsertMapModelIntoGrid(MapModelCollider m)
+    /// <summary>
+    /// Clears all registered mapmodel colliders from the physics world and spatial index.
+    /// </summary>
+    public void ClearMapModels()
     {
-        if (_mmGrid == null || !m.Collide) return;
-        if (m.Radius.X <= 0f && m.Radius.Y <= 0f && m.Radius.Z <= 0f) return;
-        int maxCell = _mmGridDim - 1;
-        int sx = Mathf.Clamp((int)Mathf.Floor(m.O.X - m.RejectRadius) >> MmGridShift, 0, maxCell);
-        int ex = Mathf.Clamp((int)Mathf.Floor(m.O.X + m.RejectRadius) >> MmGridShift, 0, maxCell);
-        int sy = Mathf.Clamp((int)Mathf.Floor(m.O.Y - m.RejectRadius) >> MmGridShift, 0, maxCell);
-        int ey = Mathf.Clamp((int)Mathf.Floor(m.O.Y + m.RejectRadius) >> MmGridShift, 0, maxCell);
-        for (int y = sy; y <= ey; y++)
+        for (int i = 0; i < MapModels.Count; i++)
         {
-            int rowOffset = y * _mmGridDim;
-            for (int x = sx; x <= ex; x++)
+            if (MapModels[i].SpatialHandle.IsValid)
             {
-                var bucket = _mmGrid[rowOffset + x];
-                if (bucket == null)
-                {
-                    bucket = new List<MapModelCollider>(2);
-                    _mmGrid[rowOffset + x] = bucket;
-                }
-                bucket.Add(m);
+                Spatial.Remove(MapModels[i].SpatialHandle);
             }
         }
+        MapModels.Clear();
+        _mmIndexedCount = 0;
+    }
+
+    private void RebuildMapModelSpatialIndex()
+    {
+        Spatial.EnsureWorldSize(_octa.WorldSize);
+        for (int i = 0; i < MapModels.Count; i++)
+        {
+            var m = MapModels[i];
+            if (m.SpatialHandle.IsValid && Spatial.IsValid(m.SpatialHandle))
+            {
+                Spatial.SetActive(m.SpatialHandle, m.Collide);
+            }
+            else if (m.Collide && (m.Radius.X > 0f || m.Radius.Y > 0f || m.Radius.Z > 0f))
+            {
+                Spatial.RegisterMapModel(m, i);
+            }
+        }
+        _mmIndexedCount = MapModels.Count;
     }
 
     /// <summary>engine <c>collideplayer</c>: the dynent the last collide() hit, or null.
@@ -420,76 +437,15 @@ public sealed class OctaPhysics
         return false;
     }
 
-    /// <summary>physics.cpp:738 <c>mmcollide</c> — collide with a mapmodel.</summary>
+    /// <summary>physics.cpp:738 <c>mmcollide</c> — collide with a mapmodel via <see cref="Spatial"/>.</summary>
     public bool MmCollide(PhysEnt d, Vector3 dir)
     {
-        if (MapModels.Count == 0) return false;
-        if (_mmGrid == null || _mmIndexedCount != MapModels.Count || _mmGridWorldSize != _octa.WorldSize)
+        if (MapModels.Count == 0 && Spatial.StaticCount == 0) return false;
+        if (_mmIndexedCount != MapModels.Count || Spatial.WorldSize != Math.Max(1 << Spatial.CellShift, _octa.WorldSize))
         {
-            RebuildMapModelGrid();
+            RebuildMapModelSpatialIndex();
         }
-
-        int maxCell = _mmGridDim - 1;
-        int startx = Mathf.Clamp((int)Mathf.Floor(d.O.X - d.Radius) >> MmGridShift, 0, maxCell);
-        int endx = Mathf.Clamp((int)Mathf.Floor(d.O.X + d.Radius) >> MmGridShift, 0, maxCell);
-        int starty = Mathf.Clamp((int)Mathf.Floor(d.O.Y - d.Radius) >> MmGridShift, 0, maxCell);
-        int endy = Mathf.Clamp((int)Mathf.Floor(d.O.Y + d.Radius) >> MmGridShift, 0, maxCell);
-
-        bool multiCell = startx != endx || starty != endy;
-        uint stamp = 0;
-        if (multiCell)
-        {
-            stamp = ++_mmQueryStamp;
-            if (stamp == 0)
-            {
-                for (int i = 0; i < MapModels.Count; i++) MapModels[i].LastQueryStamp = 0;
-                stamp = ++_mmQueryStamp;
-            }
-        }
-
-        float dTop = d.O.Z + d.AboveEye;
-        float dBottom = d.O.Z - d.EyeHeight;
-
-        for (int y = starty; y <= endy; y++)
-        {
-            int rowOffset = y * _mmGridDim;
-            for (int x = startx; x <= endx; x++)
-            {
-                var bucket = _mmGrid![rowOffset + x];
-                if (bucket == null) continue;
-                for (int i = 0; i < bucket.Count; i++)
-                {
-                    var m = bucket[i];
-                    if (multiCell)
-                    {
-                        if (m.LastQueryStamp == stamp) continue;
-                        m.LastQueryStamp = stamp;
-                    }
-                    if (!m.Collide) continue;
-                    float mCenterZ = m.O.Z + m.Center.Z;
-                    if (mCenterZ - m.Radius.Z >= dTop || dBottom >= mCenterZ + m.Radius.Z) continue;
-                    if (Reject(d.O, m.O, d.Radius + m.RejectRadius)) continue;
-
-                    float yaw = m.Yaw;
-                    switch (d.CollideType)
-                    {
-                        case Phys.CollideEllipse:
-                        case Phys.CollideEllipsePrecise:
-                            if (m.EllipseCollide)
-                            {
-                                if (EllipseCollide(d, dir, m.O, m.Center, yaw, m.Radius.X, m.Radius.Y, m.Radius.Z, m.Radius.Z))
-                                    return true;
-                            }
-                            else if (EllipseBoxCollide(d, dir, m.O, m.Center, yaw, m.Radius.X, m.Radius.Y, m.Radius.Z, m.Radius.Z))
-                            {
-                                return true;
-                            }
-                            break;
-                    }
-                }
-            }
-        }
-        return false;
+        return Spatial.CollideMapModels(this, d, dir);
     }
 
     /// <summary>geom.h <c>vec::rotate_around_z</c> (the engine's clockwise-around-Z form).</summary>
@@ -1372,5 +1328,5 @@ public sealed class MapModelCollider
     public Vector3 Center;
     public Vector3 Radius;
     public float RejectRadius;
-    internal uint LastQueryStamp;
+    public SpatialHandle SpatialHandle { get; internal set; } = SpatialHandle.Invalid;
 }
