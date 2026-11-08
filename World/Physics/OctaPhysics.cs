@@ -129,8 +129,15 @@ public sealed class OctaPhysics
     public Vector3 CollideWall;
     public int CollideInside;
 
-    /// <summary>Static mapmodels registered for collision (physics.cpp <c>mmcollide</c>).</summary>
-    public readonly List<MapModelCollider> MapModels = new();
+    /// <summary>Internal list of static mapmodels registered for collision.</summary>
+    private readonly List<MapModelCollider> _mapModels = new();
+
+    /// <summary>
+    /// Read-only view of static mapmodels registered for collision (physics.cpp <c>mmcollide</c>).
+    /// Mutations must be performed via <see cref="AddMapModel"/>, <see cref="RemoveMapModel"/>,
+    /// <see cref="RemoveMapModelAt"/>, or <see cref="ClearMapModels"/> to maintain spatial index consistency.
+    /// </summary>
+    public IReadOnlyList<MapModelCollider> MapModels => _mapModels;
 
     private int _mmIndexedCount;
 
@@ -152,12 +159,12 @@ public sealed class OctaPhysics
             Radius = info.CollideRadius,
             RejectRadius = info.RejectRadius > 0 ? info.RejectRadius : (info.CollideCenter.Abs() + info.CollideRadius).Length(),
         };
-        MapModels.Add(collider);
+        _mapModels.Add(collider);
         Spatial.EnsureWorldSize(_octa.WorldSize);
-        if (_mmIndexedCount == MapModels.Count - 1)
+        if (_mmIndexedCount == _mapModels.Count - 1)
         {
-            var handle = Spatial.RegisterMapModel(collider, MapModels.Count - 1);
-            _mmIndexedCount = MapModels.Count;
+            var handle = Spatial.RegisterMapModel(collider, _mapModels.Count - 1);
+            _mmIndexedCount = _mapModels.Count;
             return handle;
         }
 
@@ -170,12 +177,30 @@ public sealed class OctaPhysics
     /// </summary>
     public bool RemoveMapModel(MapModelCollider collider)
     {
-        if (!MapModels.Remove(collider)) return false;
+        if (!_mapModels.Remove(collider)) return false;
         if (collider.SpatialHandle.IsValid)
         {
             Spatial.Remove(collider.SpatialHandle);
+            collider.SpatialHandle = SpatialHandle.Invalid;
         }
-        _mmIndexedCount = MapModels.Count;
+        _mmIndexedCount = _mapModels.Count;
+        return true;
+    }
+
+    /// <summary>
+    /// Removes a previously registered mapmodel collider by index from the physics world and spatial index.
+    /// </summary>
+    public bool RemoveMapModelAt(int index)
+    {
+        if (index < 0 || index >= _mapModels.Count) return false;
+        var collider = _mapModels[index];
+        _mapModels.RemoveAt(index);
+        if (collider.SpatialHandle.IsValid)
+        {
+            Spatial.Remove(collider.SpatialHandle);
+            collider.SpatialHandle = SpatialHandle.Invalid;
+        }
+        _mmIndexedCount = _mapModels.Count;
         return true;
     }
 
@@ -184,23 +209,46 @@ public sealed class OctaPhysics
     /// </summary>
     public void ClearMapModels()
     {
-        for (int i = 0; i < MapModels.Count; i++)
+        for (int i = 0; i < _mapModels.Count; i++)
         {
-            if (MapModels[i].SpatialHandle.IsValid)
+            if (_mapModels[i].SpatialHandle.IsValid)
             {
-                Spatial.Remove(MapModels[i].SpatialHandle);
+                Spatial.Remove(_mapModels[i].SpatialHandle);
+                _mapModels[i].SpatialHandle = SpatialHandle.Invalid;
             }
         }
-        MapModels.Clear();
+        _mapModels.Clear();
         _mmIndexedCount = 0;
     }
 
     private void RebuildMapModelSpatialIndex()
     {
         Spatial.EnsureWorldSize(_octa.WorldSize);
-        for (int i = 0; i < MapModels.Count; i++)
+
+        // If the spatial index has more static map models than our active list, purge orphaned entries
+        if (Spatial.StaticCount > _mapModels.Count)
         {
-            var m = MapModels[i];
+            for (int i = 0; i < _mapModels.Count; i++)
+            {
+                if (_mapModels[i].SpatialHandle.IsValid)
+                {
+                    Spatial.Remove(_mapModels[i].SpatialHandle);
+                    _mapModels[i].SpatialHandle = SpatialHandle.Invalid;
+                }
+            }
+            for (int i = 0; i < Spatial.Count; i++)
+            {
+                ref readonly var e = ref Spatial.GetEntryById(i);
+                if (e.Allocated && e.IsStatic && (e.Category & SpatialCategory.MapModel) != 0)
+                {
+                    Spatial.Remove(e.Handle);
+                }
+            }
+        }
+
+        for (int i = 0; i < _mapModels.Count; i++)
+        {
+            var m = _mapModels[i];
             if (m.SpatialHandle.IsValid && Spatial.IsValid(m.SpatialHandle))
             {
                 Spatial.SetActive(m.SpatialHandle, m.Collide);
@@ -210,7 +258,7 @@ public sealed class OctaPhysics
                 Spatial.RegisterMapModel(m, i);
             }
         }
-        _mmIndexedCount = MapModels.Count;
+        _mmIndexedCount = _mapModels.Count;
     }
 
     /// <summary>engine <c>collideplayer</c>: the dynent the last collide() hit, or null.

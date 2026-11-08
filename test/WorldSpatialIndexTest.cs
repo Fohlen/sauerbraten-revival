@@ -81,6 +81,47 @@ public class WorldSpatialIndexTest : GoTestBase
     }
 
     [Test]
+    public void MapModelsReadOnlyOwnershipEnforcesRemovalThroughPhysicsMethods()
+    {
+        var octa = new World.Octa();
+        octa.EmptyMap(10);
+        var phys = new OctaPhysics(octa);
+
+        var lampInfo = new ModelInfo
+        {
+            Name = "objects/lantern01",
+            Collide = true,
+            EllipseCollide = false,
+            CollideCenter = new Vector3(0f, 0f, 12f),
+            CollideRadius = new Vector3(2f, 2f, 13f),
+            RejectRadius = 25f,
+        };
+
+        var h0 = phys.AddMapModel(new Vector3(200f, 200f, 512f), 0f, lampInfo);
+        var h1 = phys.AddMapModel(new Vector3(400f, 400f, 512f), 0f, lampInfo);
+
+        TestAssert.Equal(2, phys.MapModels.Count, "2 map models registered");
+        TestAssert.Equal(2, phys.Spatial.StaticCount, "2 static entries in spatial index");
+
+        // Verify MapModels is IReadOnlyList and cannot be mutated as a mutable List
+        TestAssert.True(phys.MapModels is IReadOnlyList<MapModelCollider>, "exposed as IReadOnlyList");
+
+        // Remove by index using RemoveMapModelAt
+        bool removed = phys.RemoveMapModelAt(0);
+        TestAssert.True(removed, "RemoveMapModelAt succeeded");
+        TestAssert.Equal(1, phys.MapModels.Count, "1 map model remaining");
+        TestAssert.Equal(1, phys.Spatial.StaticCount, "1 static entry remaining in spatial index");
+        TestAssert.False(phys.Spatial.IsValid(h0), "removed model's handle is invalidated");
+        TestAssert.True(phys.Spatial.IsValid(h1), "surviving model's handle is still valid");
+
+        // Clear all map models
+        phys.ClearMapModels();
+        TestAssert.Equal(0, phys.MapModels.Count, "0 models after ClearMapModels");
+        TestAssert.Equal(0, phys.Spatial.StaticCount, "0 static entries in spatial index after ClearMapModels");
+        TestAssert.False(phys.Spatial.IsValid(h1), "cleared model's handle is invalidated");
+    }
+
+    [Test]
     public void GenerationalHandlePreventsStaleHandleReuse()
     {
         var index = new WorldSpatialIndex(worldSize: 1024);
