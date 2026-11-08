@@ -249,9 +249,11 @@ public sealed class WorldSpatialIndex
     /// </summary>
     public SpatialHandle RegisterMapModel(MapModelCollider collider, int entityId = -1)
     {
-        float reject = collider.RejectRadius > 0f
-            ? collider.RejectRadius
-            : (collider.Center.Abs() + collider.Radius).Length();
+        float reject = collider.RejectRadius;
+        if (reject <= 0f)
+        {
+            reject = (collider.Center.Abs() + collider.Radius).Length();
+        }
         collider.RejectRadius = reject;
 
         float centerZ = collider.O.Z + collider.Center.Z;
@@ -520,14 +522,125 @@ public sealed class WorldSpatialIndex
 
     // ---- Spatial Queries (AABB, Radius, Segment, Map Models) ----------------
 
-    /// <summary>
-    /// Broad-phase 3D AABB overlap query.
-    /// Writes matching entry IDs into <paramref name="results"/> up to its length,
-    /// and returns a <see cref="SpatialQueryResult"/> indicating both the written count
-    /// and the total number of matches found (allowing callers to detect truncation).
-    /// Zero heap allocations.
-    /// </summary>
-    public SpatialQueryResult QueryAabb(Vector3 min, Vector3 max, SpatialCategory mask, Span<int> results)
+    private interface ISpatialFilter
+    {
+        bool Matches(ref readonly SpatialEntry entry);
+    }
+
+    private readonly struct AabbFilter : ISpatialFilter
+    {
+        private readonly Vector3 _min;
+        private readonly Vector3 _max;
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public AabbFilter(Vector3 min, Vector3 max)
+        {
+            _min = min;
+            _max = max;
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public bool Matches(ref readonly SpatialEntry e) =>
+            e.Max.Z >= _min.Z && e.Min.Z <= _max.Z &&
+            e.Max.X >= _min.X && e.Min.X <= _max.X &&
+            e.Max.Y >= _min.Y && e.Min.Y <= _max.Y;
+    }
+
+    private readonly struct RadiusFilter : ISpatialFilter
+    {
+        private readonly Vector3 _min;
+        private readonly Vector3 _max;
+        private readonly Vector3 _center;
+        private readonly float _radiusSq;
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public RadiusFilter(Vector3 center, float radius, Vector3 min, Vector3 max)
+        {
+            _center = center;
+            _radiusSq = radius * radius;
+            _min = min;
+            _max = max;
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public bool Matches(ref readonly SpatialEntry e)
+        {
+            if (e.Max.Z < _min.Z || e.Min.Z > _max.Z ||
+                e.Max.X < _min.X || e.Min.X > _max.X ||
+                e.Max.Y < _min.Y || e.Min.Y > _max.Y)
+                return false;
+
+            float cx = Math.Clamp(_center.X, e.Min.X, e.Max.X) - _center.X;
+            float cy = Math.Clamp(_center.Y, e.Min.Y, e.Max.Y) - _center.Y;
+            float cz = Math.Clamp(_center.Z, e.Min.Z, e.Max.Z) - _center.Z;
+            return (cx * cx + cy * cy + cz * cz) <= _radiusSq;
+        }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private void ScanCellEntries<TFilter>(
+        int[]? ids,
+        int count,
+        SpatialCategory mask,
+        bool multiCell,
+        uint stamp,
+        in TFilter filter,
+        Span<int> results,
+        ref int written,
+        ref int totalMatches) where TFilter : struct, ISpatialFilter
+    {
+        for (int i = 0; i < count; i++)
+        {
+            int id = ids![i];
+            if (multiCell)
+            {
+                if (_visitStamps[id] == stamp) continue;
+                _visitStamps[id] = stamp;
+            }
+            ref var e = ref _entries[id];
+            if (!e.Active || (e.Category & mask) == 0) continue;
+            if (!filter.Matches(ref e)) continue;
+
+            totalMatches++;
+            if (written < results.Length)
+            {
+                results[written++] = id;
+            }
+        }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private void ScanCellListEntries<TFilter>(
+        int[]? ids,
+        int count,
+        SpatialCategory mask,
+        bool multiCell,
+        uint stamp,
+        in TFilter filter,
+        List<int> results) where TFilter : struct, ISpatialFilter
+    {
+        for (int i = 0; i < count; i++)
+        {
+            int id = ids![i];
+            if (multiCell)
+            {
+                if (_visitStamps[id] == stamp) continue;
+                _visitStamps[id] = stamp;
+            }
+            ref var e = ref _entries[id];
+            if (!e.Active || (e.Category & mask) == 0) continue;
+            if (!filter.Matches(ref e)) continue;
+
+            results.Add(id);
+        }
+    }
+
+    private SpatialQueryResult QueryCore<TFilter>(
+        Vector3 min,
+        Vector3 max,
+        SpatialCategory mask,
+        Span<int> results,
+        in TFilter filter) where TFilter : struct, ISpatialFilter
     {
         if (mask == SpatialCategory.None || Count == 0)
             return new SpatialQueryResult(0, 0);
@@ -552,54 +665,12 @@ public sealed class WorldSpatialIndex
 
                 if (checkStatic && (cell.StaticMask & mask) != 0 && max.Z >= cell.StaticMinZ && min.Z <= cell.StaticMaxZ)
                 {
-                    int sCount = cell.StaticCount;
-                    int[]? sIds = cell.StaticIds;
-                    for (int i = 0; i < sCount; i++)
-                    {
-                        int id = sIds![i];
-                        if (multiCell)
-                        {
-                            if (_visitStamps[id] == stamp) continue;
-                            _visitStamps[id] = stamp;
-                        }
-                        ref var e = ref _entries[id];
-                        if (!e.Active || (e.Category & mask) == 0) continue;
-                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
-                            e.Max.X < min.X || e.Min.X > max.X ||
-                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
-
-                        totalMatches++;
-                        if (written < results.Length)
-                        {
-                            results[written++] = id;
-                        }
-                    }
+                    ScanCellEntries(cell.StaticIds, cell.StaticCount, mask, multiCell, stamp, in filter, results, ref written, ref totalMatches);
                 }
 
                 if (checkDynamic && (cell.DynamicMask & mask) != 0)
                 {
-                    int dCount = cell.DynamicCount;
-                    int[]? dIds = cell.DynamicIds;
-                    for (int i = 0; i < dCount; i++)
-                    {
-                        int id = dIds![i];
-                        if (multiCell)
-                        {
-                            if (_visitStamps[id] == stamp) continue;
-                            _visitStamps[id] = stamp;
-                        }
-                        ref var e = ref _entries[id];
-                        if (!e.Active || (e.Category & mask) == 0) continue;
-                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
-                            e.Max.X < min.X || e.Min.X > max.X ||
-                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
-
-                        totalMatches++;
-                        if (written < results.Length)
-                        {
-                            results[written++] = id;
-                        }
-                    }
+                    ScanCellEntries(cell.DynamicIds, cell.DynamicCount, mask, multiCell, stamp, in filter, results, ref written, ref totalMatches);
                 }
             }
         }
@@ -607,11 +678,12 @@ public sealed class WorldSpatialIndex
         return new SpatialQueryResult(written, totalMatches);
     }
 
-    /// <summary>
-    /// Convenience overload of <see cref="QueryAabb(Vector3, Vector3, SpatialCategory, Span{int})"/> appending all matches to a <see cref="List{T}"/>.
-    /// Unbounded; dynamically resizes without truncation.
-    /// </summary>
-    public int QueryAabb(Vector3 min, Vector3 max, SpatialCategory mask, List<int> results)
+    private int QueryListCore<TFilter>(
+        Vector3 min,
+        Vector3 max,
+        SpatialCategory mask,
+        List<int> results,
+        in TFilter filter) where TFilter : struct, ISpatialFilter
     {
         results.Clear();
         if (mask == SpatialCategory.None || Count == 0) return 0;
@@ -633,52 +705,35 @@ public sealed class WorldSpatialIndex
 
                 if (checkStatic && (cell.StaticMask & mask) != 0 && max.Z >= cell.StaticMinZ && min.Z <= cell.StaticMaxZ)
                 {
-                    int sCount = cell.StaticCount;
-                    int[]? sIds = cell.StaticIds;
-                    for (int i = 0; i < sCount; i++)
-                    {
-                        int id = sIds![i];
-                        if (multiCell)
-                        {
-                            if (_visitStamps[id] == stamp) continue;
-                            _visitStamps[id] = stamp;
-                        }
-                        ref var e = ref _entries[id];
-                        if (!e.Active || (e.Category & mask) == 0) continue;
-                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
-                            e.Max.X < min.X || e.Min.X > max.X ||
-                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
-
-                        results.Add(id);
-                    }
+                    ScanCellListEntries(cell.StaticIds, cell.StaticCount, mask, multiCell, stamp, in filter, results);
                 }
 
                 if (checkDynamic && (cell.DynamicMask & mask) != 0)
                 {
-                    int dCount = cell.DynamicCount;
-                    int[]? dIds = cell.DynamicIds;
-                    for (int i = 0; i < dCount; i++)
-                    {
-                        int id = dIds![i];
-                        if (multiCell)
-                        {
-                            if (_visitStamps[id] == stamp) continue;
-                            _visitStamps[id] = stamp;
-                        }
-                        ref var e = ref _entries[id];
-                        if (!e.Active || (e.Category & mask) == 0) continue;
-                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
-                            e.Max.X < min.X || e.Min.X > max.X ||
-                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
-
-                        results.Add(id);
-                    }
+                    ScanCellListEntries(cell.DynamicIds, cell.DynamicCount, mask, multiCell, stamp, in filter, results);
                 }
             }
         }
 
         return results.Count;
     }
+
+    /// <summary>
+    /// Broad-phase 3D AABB overlap query.
+    /// Writes matching entry IDs into <paramref name="results"/> up to its length,
+    /// and returns a <see cref="SpatialQueryResult"/> indicating both the written count
+    /// and the total number of matches found (allowing callers to detect truncation).
+    /// Zero heap allocations.
+    /// </summary>
+    public SpatialQueryResult QueryAabb(Vector3 min, Vector3 max, SpatialCategory mask, Span<int> results) =>
+        QueryCore(min, max, mask, results, new AabbFilter(min, max));
+
+    /// <summary>
+    /// Convenience overload of <see cref="QueryAabb(Vector3, Vector3, SpatialCategory, Span{int})"/> appending all matches to a <see cref="List{T}"/>.
+    /// Unbounded; dynamically resizes without truncation.
+    /// </summary>
+    public int QueryAabb(Vector3 min, Vector3 max, SpatialCategory mask, List<int> results) =>
+        QueryListCore(min, max, mask, results, new AabbFilter(min, max));
 
     /// <summary>
     /// Queries active entries within <paramref name="radius"/> of <paramref name="center"/> (3D sphere overlap against entry AABB).
@@ -693,93 +748,7 @@ public sealed class WorldSpatialIndex
         Vector3 rVec = new(radius, radius, radius);
         Vector3 min = center - rVec;
         Vector3 max = center + rVec;
-
-        ComputeCellSpan(min, max, out short startX, out short startY, out short endX, out short endY);
-        bool multiCell = startX != endX || startY != endY;
-        uint stamp = multiCell ? NextQueryStamp() : 0;
-
-        float rSq = radius * radius;
-        bool checkStatic = StaticCount > 0;
-        bool checkDynamic = DynamicCount > 0;
-
-        int written = 0;
-        int totalMatches = 0;
-
-        for (int y = startY; y <= endY; y++)
-        {
-            int rowOffset = y * _gridDim;
-            for (int x = startX; x <= endX; x++)
-            {
-                ref var cell = ref _cells[rowOffset + x];
-                if (((cell.StaticMask | cell.DynamicMask) & mask) == 0) continue;
-
-                if (checkStatic && (cell.StaticMask & mask) != 0 && max.Z >= cell.StaticMinZ && min.Z <= cell.StaticMaxZ)
-                {
-                    int sCount = cell.StaticCount;
-                    int[]? sIds = cell.StaticIds;
-                    for (int i = 0; i < sCount; i++)
-                    {
-                        int id = sIds![i];
-                        if (multiCell)
-                        {
-                            if (_visitStamps[id] == stamp) continue;
-                            _visitStamps[id] = stamp;
-                        }
-                        ref var e = ref _entries[id];
-                        if (!e.Active || (e.Category & mask) == 0) continue;
-                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
-                            e.Max.X < min.X || e.Min.X > max.X ||
-                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
-
-                        float cx = Math.Clamp(center.X, e.Min.X, e.Max.X) - center.X;
-                        float cy = Math.Clamp(center.Y, e.Min.Y, e.Max.Y) - center.Y;
-                        float cz = Math.Clamp(center.Z, e.Min.Z, e.Max.Z) - center.Z;
-                        if (cx * cx + cy * cy + cz * cz <= rSq)
-                        {
-                            totalMatches++;
-                            if (written < results.Length)
-                            {
-                                results[written++] = id;
-                            }
-                        }
-                    }
-                }
-
-                if (checkDynamic && (cell.DynamicMask & mask) != 0)
-                {
-                    int dCount = cell.DynamicCount;
-                    int[]? dIds = cell.DynamicIds;
-                    for (int i = 0; i < dCount; i++)
-                    {
-                        int id = dIds![i];
-                        if (multiCell)
-                        {
-                            if (_visitStamps[id] == stamp) continue;
-                            _visitStamps[id] = stamp;
-                        }
-                        ref var e = ref _entries[id];
-                        if (!e.Active || (e.Category & mask) == 0) continue;
-                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
-                            e.Max.X < min.X || e.Min.X > max.X ||
-                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
-
-                        float cx = Math.Clamp(center.X, e.Min.X, e.Max.X) - center.X;
-                        float cy = Math.Clamp(center.Y, e.Min.Y, e.Max.Y) - center.Y;
-                        float cz = Math.Clamp(center.Z, e.Min.Z, e.Max.Z) - center.Z;
-                        if (cx * cx + cy * cy + cz * cz <= rSq)
-                        {
-                            totalMatches++;
-                            if (written < results.Length)
-                            {
-                                results[written++] = id;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return new SpatialQueryResult(written, totalMatches);
+        return QueryCore(min, max, mask, results, new RadiusFilter(center, radius, min, max));
     }
 
     /// <summary>
@@ -788,88 +757,16 @@ public sealed class WorldSpatialIndex
     /// </summary>
     public int QueryRadius(Vector3 center, float radius, SpatialCategory mask, List<int> results)
     {
-        results.Clear();
-        if (radius < 0f || mask == SpatialCategory.None || Count == 0) return 0;
+        if (radius < 0f || mask == SpatialCategory.None || Count == 0)
+        {
+            results.Clear();
+            return 0;
+        }
 
         Vector3 rVec = new(radius, radius, radius);
         Vector3 min = center - rVec;
         Vector3 max = center + rVec;
-
-        ComputeCellSpan(min, max, out short startX, out short startY, out short endX, out short endY);
-        bool multiCell = startX != endX || startY != endY;
-        uint stamp = multiCell ? NextQueryStamp() : 0;
-
-        float rSq = radius * radius;
-        bool checkStatic = StaticCount > 0;
-        bool checkDynamic = DynamicCount > 0;
-
-        for (int y = startY; y <= endY; y++)
-        {
-            int rowOffset = y * _gridDim;
-            for (int x = startX; x <= endX; x++)
-            {
-                ref var cell = ref _cells[rowOffset + x];
-                if (((cell.StaticMask | cell.DynamicMask) & mask) == 0) continue;
-
-                if (checkStatic && (cell.StaticMask & mask) != 0 && max.Z >= cell.StaticMinZ && min.Z <= cell.StaticMaxZ)
-                {
-                    int sCount = cell.StaticCount;
-                    int[]? sIds = cell.StaticIds;
-                    for (int i = 0; i < sCount; i++)
-                    {
-                        int id = sIds![i];
-                        if (multiCell)
-                        {
-                            if (_visitStamps[id] == stamp) continue;
-                            _visitStamps[id] = stamp;
-                        }
-                        ref var e = ref _entries[id];
-                        if (!e.Active || (e.Category & mask) == 0) continue;
-                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
-                            e.Max.X < min.X || e.Min.X > max.X ||
-                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
-
-                        float cx = Math.Clamp(center.X, e.Min.X, e.Max.X) - center.X;
-                        float cy = Math.Clamp(center.Y, e.Min.Y, e.Max.Y) - center.Y;
-                        float cz = Math.Clamp(center.Z, e.Min.Z, e.Max.Z) - center.Z;
-                        if (cx * cx + cy * cy + cz * cz <= rSq)
-                        {
-                            results.Add(id);
-                        }
-                    }
-                }
-
-                if (checkDynamic && (cell.DynamicMask & mask) != 0)
-                {
-                    int dCount = cell.DynamicCount;
-                    int[]? dIds = cell.DynamicIds;
-                    for (int i = 0; i < dCount; i++)
-                    {
-                        int id = dIds![i];
-                        if (multiCell)
-                        {
-                            if (_visitStamps[id] == stamp) continue;
-                            _visitStamps[id] = stamp;
-                        }
-                        ref var e = ref _entries[id];
-                        if (!e.Active || (e.Category & mask) == 0) continue;
-                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
-                            e.Max.X < min.X || e.Min.X > max.X ||
-                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
-
-                        float cx = Math.Clamp(center.X, e.Min.X, e.Max.X) - center.X;
-                        float cy = Math.Clamp(center.Y, e.Min.Y, e.Max.Y) - center.Y;
-                        float cz = Math.Clamp(center.Z, e.Min.Z, e.Max.Z) - center.Z;
-                        if (cx * cx + cy * cy + cz * cz <= rSq)
-                        {
-                            results.Add(id);
-                        }
-                    }
-                }
-            }
-        }
-
-        return results.Count;
+        return QueryListCore(min, max, mask, results, new RadiusFilter(center, radius, min, max));
     }
 
     /// <summary>
@@ -878,16 +775,7 @@ public sealed class WorldSpatialIndex
     /// </summary>
     public SpatialQueryResult QuerySegment(Vector3 from, Vector3 to, float radius, SpatialCategory mask, Span<int> results)
     {
-        Vector3 rVec = new(radius, radius, radius);
-        Vector3 min = new Vector3(
-            MathF.Min(from.X, to.X),
-            MathF.Min(from.Y, to.Y),
-            MathF.Min(from.Z, to.Z)) - rVec;
-        Vector3 max = new Vector3(
-            MathF.Max(from.X, to.X),
-            MathF.Max(from.Y, to.Y),
-            MathF.Max(from.Z, to.Z)) + rVec;
-
+        ComputeSegmentBounds(from, to, radius, out Vector3 min, out Vector3 max);
         return QueryAabb(min, max, mask, results);
     }
 
@@ -896,17 +784,21 @@ public sealed class WorldSpatialIndex
     /// </summary>
     public int QuerySegment(Vector3 from, Vector3 to, float radius, SpatialCategory mask, List<int> results)
     {
+        ComputeSegmentBounds(from, to, radius, out Vector3 min, out Vector3 max);
+        return QueryAabb(min, max, mask, results);
+    }
+
+    private static void ComputeSegmentBounds(Vector3 from, Vector3 to, float radius, out Vector3 min, out Vector3 max)
+    {
         Vector3 rVec = new(radius, radius, radius);
-        Vector3 min = new Vector3(
+        min = new Vector3(
             MathF.Min(from.X, to.X),
             MathF.Min(from.Y, to.Y),
             MathF.Min(from.Z, to.Z)) - rVec;
-        Vector3 max = new Vector3(
+        max = new Vector3(
             MathF.Max(from.X, to.X),
             MathF.Max(from.Y, to.Y),
             MathF.Max(from.Z, to.Z)) + rVec;
-
-        return QueryAabb(min, max, mask, results);
     }
 
     /// <summary>
@@ -918,17 +810,14 @@ public sealed class WorldSpatialIndex
     {
         if (StaticCount == 0) return false;
 
-        int maxCell = _gridDim - 1;
-        int startX = Math.Clamp((int)MathF.Floor(d.O.X - d.Radius) >> _cellShift, 0, maxCell);
-        int endX = Math.Clamp((int)MathF.Floor(d.O.X + d.Radius) >> _cellShift, 0, maxCell);
-        int startY = Math.Clamp((int)MathF.Floor(d.O.Y - d.Radius) >> _cellShift, 0, maxCell);
-        int endY = Math.Clamp((int)MathF.Floor(d.O.Y + d.Radius) >> _cellShift, 0, maxCell);
-
-        bool multiCell = startX != endX || startY != endY;
-        uint stamp = multiCell ? NextQueryStamp() : 0;
-
         float dTop = d.O.Z + d.AboveEye;
         float dBottom = d.O.Z - d.EyeHeight;
+        Vector3 min = new(d.O.X - d.Radius, d.O.Y - d.Radius, dBottom);
+        Vector3 max = new(d.O.X + d.Radius, d.O.Y + d.Radius, dTop);
+
+        ComputeCellSpan(min, max, out short startX, out short startY, out short endX, out short endY);
+        bool multiCell = startX != endX || startY != endY;
+        uint stamp = multiCell ? NextQueryStamp() : 0;
 
         for (int y = startY; y <= endY; y++)
         {
@@ -950,33 +839,34 @@ public sealed class WorldSpatialIndex
                         _visitStamps[id] = stamp;
                     }
 
-                    ref var e = ref _entries[id];
-                    if (!e.Active || (e.Category & SpatialCategory.MapModel) == 0) continue;
-
-                    // Strict vertical & 2D XY reject parity with physics.cpp:750
-                    if (e.Min.Z >= dTop || dBottom >= e.Max.Z) continue;
-                    if (Reject2D(d.O, e.Origin, d.Radius + e.RejectRadius)) continue;
-
-                    switch (d.CollideType)
-                    {
-                        case Phys.CollideEllipse:
-                        case Phys.CollideEllipsePrecise:
-                            if (e.Shape == SpatialShapeKind.Ellipse)
-                            {
-                                if (phys.EllipseCollide(d, dir, e.Origin, e.CenterOffset, e.Yaw, e.Extents.X, e.Extents.Y, e.Extents.Z, e.Extents.Z))
-                                    return true;
-                            }
-                            else
-                            {
-                                if (phys.EllipseBoxCollide(d, dir, e.Origin, e.CenterOffset, e.Yaw, e.Extents.X, e.Extents.Y, e.Extents.Z, e.Extents.Z))
-                                    return true;
-                            }
-                            break;
-                    }
+                    if (CollideMapModelEntry(phys, d, dir, dBottom, dTop, ref _entries[id]))
+                        return true;
                 }
             }
         }
         return false;
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private static bool CollideMapModelEntry(OctaPhysics phys, PhysEnt d, Vector3 dir, float dBottom, float dTop, ref readonly SpatialEntry e)
+    {
+        if (!e.Active || (e.Category & SpatialCategory.MapModel) == 0) return false;
+
+        // Strict vertical & 2D XY reject parity with physics.cpp:750
+        if (e.Min.Z >= dTop) return false;
+        if (dBottom >= e.Max.Z) return false;
+        if (Reject2D(d.O, e.Origin, d.Radius + e.RejectRadius)) return false;
+
+        switch (d.CollideType)
+        {
+            case Phys.CollideEllipse:
+            case Phys.CollideEllipsePrecise:
+                return e.Shape == SpatialShapeKind.Ellipse
+                    ? phys.EllipseCollide(d, dir, e.Origin, e.CenterOffset, e.Yaw, e.Extents.X, e.Extents.Y, e.Extents.Z, e.Extents.Z)
+                    : phys.EllipseBoxCollide(d, dir, e.Origin, e.CenterOffset, e.Yaw, e.Extents.X, e.Extents.Y, e.Extents.Z, e.Extents.Z);
+            default:
+                return false;
+        }
     }
 
     // ---- Internal Helpers ---------------------------------------------------
