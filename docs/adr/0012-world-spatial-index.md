@@ -1,9 +1,9 @@
-# ADR 0012: Unified World Spatial Index, Zones, and Objective Primitives
+# ADR 0012: Unified World Spatial Index and Zone System
 
 ## Status
 
 **Proposed**  
-Establishes a unified, zero-allocation spatial index (`WorldSpatialIndex`) and volumetric trigger primitive (`SpatialZone`) across `World/Spatial/` and `World/Physics/`, superseding bespoke per-subsystem spatial lookups and forming the foundation for zone-based game mode objectives (CTF, Protect, Hold, Rugby, Prop Hunt, Racing).
+Establishes a unified, zero-allocation spatial index (`WorldSpatialIndex`) in `World/Spatial/` and `World/Physics/`, superseding bespoke per-subsystem spatial lookups and forming the foundation for map model collisions (MR 2) and subsequent zone-based game mode objectives (MR 3+).
 
 ---
 
@@ -25,23 +25,27 @@ A survey of the *Sauerbraten Revival* codebase revealed six separate spatial or 
 
 ---
 
-### 2. Design Requirements
+### 2. Design Requirements & Phased Delivery
 
-To unify these subsystems and power future **Zones** and **Objectives**, our spatial index must satisfy five requirements:
+To deliver this architecture safely without bloated merge requests, the implementation is divided into incremental phases:
 
-1. **Dual Lifecycle Support (Cheap Static Init + $O(1)$ Dynamic Updates)**:
-   - *Static objects* (map models, CTF base zones, item pickup zones, teleporters, jump pads) are registered once at map load and mutated only on coop-edit entity commands.
-   - *Dynamic entities* (players, monsters, grenades/bouncers, rockets, dropped flags) move at **200 Hz** (every 5 ms fixed step). Updating a moving entity must not reallocate or rebuild the index when the entity stays within the same spatial cell (~99% of ticks).
-2. **Three Execution & Consumption Models**:
-   - **Once-per-frame / once-per-tick Broad-Pass (`StepBroadphase`)**: Batch-synchronizes tracked dynamic entities and evaluates zone overlaps in a single cache-friendly pass.
-   - **Event-Based Notifications (`Entered`, `Stayed`, `Exited`)**: Automatically tracks state transitions when dynamic entities enter, remain in, or leave a `SpatialZone` (eliminating manual bitmasks like `Combat.FlagPickup`).
-   - **Polling-Based Queries**: Zero-allocation on-demand queries (`QueryAabb`, `QueryRadius`, `QuerySegment`, `QueryPointZones`, `QueryZoneOccupants`, `IsEntityInZone`) callable at any point during physics, weapon simulation, or game mode ticks.
-3. **Zero Heap Allocations on the Hot Path**:
-   - Per [ADR 0010](0010-resource-modding.md) and [ADR 0011](0011-model-preloading.md), 200 Hz simulation steps cannot allocate `List<T>`, closures, or boxed enumerators.
-4. **Strict Determinism & Engine Collision Parity**:
-   - Server-authoritative networking and A3 replay verification require deterministic candidate ordering and exact geometric parity with Sauerbraten's `mmcollide`, `plcollide`, `checkitems`, and `insidebase`.
-5. **First-Class "Zones" as Building Blocks for Objectives**:
-   - Support spheres (item pickup radius, flag touch radius), upright cylinders (CTF base radius + height), AABBs, and yaw-rotated OBBs (racing gates, rugby goals, hill zones).
+- **MR 2 (This MR): Index Foundation and Map Model Collision**:
+  - `WorldSpatialIndex` core with static/dynamic registration, removal, activation toggles, bounds updates, and categories.
+  - Generational handles (`SpatialHandle(int Id, uint Generation)`) to prevent recycled slot aliasing.
+  - Explicit query overflow handling (`SpatialQueryResult`) and unbounded `List<T>` query adapters.
+  - Supersede `OctaPhysics._mmGrid` with `WorldSpatialIndex.CollideMapModels`, preserving narrow-phase collision behavior.
+  - Comprehensive unit test suite and benchmarks validating parity, zero allocations, and query throughput.
+- **MR 3: Zones and Overlap Transitions**:
+  - `SpatialZone` primitive (Sphere, Cylinder, AABB, OBB) and trigger modes (`FeetPos`, `Origin`, `BodyBounds`).
+  - Broad-phase overlap evaluation with non-quadratic pair reconciliation.
+  - Broad-phase scaling benchmarks under increasing player, zone, and overlap counts before powering game objectives.
+- **MR 4: Dynamic Entities & Combat Queries**:
+  - Wire dynamic entity collision into `OctaPhysics` (`PlCollide`), superseding `_dynEntCache`.
+  - Wire rockets, grenades, and hitscan to query candidate targets via `Spatial.QuerySegment` and `Spatial.QueryRadius`.
+- **MR 5: Items & Triggers**:
+  - Index item pickups (`ItemZone`) and triggers (`TriggerZone`), eliminating linear distance polling.
+- **MR 6: Game Mode Objectives**:
+  - Base and flag objectives for CTF, Protect, Hold, Rugby, Prop Hunt, and Racing.
 
 ---
 
@@ -49,7 +53,7 @@ To unify these subsystems and power future **Zones** and **Objectives**, our spa
 
 | Candidate | Static Init | Dynamic Move (200 Hz) | Memory & Cache Locality | Determinism & Fit |
 | :--- | :--- | :--- | :--- | :--- |
-| **A. Flat 2D XY Grid + Inline 3D AABB & Category Masks (Chosen)** | $O(1)$ per cell overlapped | **$O(1)$ in-place AABB write** (99% of ticks); relinks only on 64-unit boundary crossing | **4–16 KB grid directory fits in L1 cache**; contiguous `SpatialEntry[]` struct array | 100% deterministic; exact match for bounded $2^N$ Sauerbraten worlds |
+| **A. Flat 2D XY Grid + Inline 3D AABB & Category Masks (Chosen)** | $O(1)$ per cell overlapped | **$O(1)$ in-place AABB write** when within same cell; relinks only on 64-unit boundary crossing | **4–16 KB grid directory fits in L1 cache**; contiguous `SpatialEntry[]` struct array | 100% deterministic; exact match for bounded $2^N$ Sauerbraten worlds |
 | **B. Full 3D Uniform Grid** | $O(1)$ per 3D cell | Frequent Z-cell crossings while jumping/falling | $64^3 = 262,144$ cells ($\sim 4\text{ MB}$) at `WorldSize = 4096`; >95% empty air/rock | Poor cache locality due to sparse 3D cell table |
 | **C. Octree-Embedded (`CubeExt.ents` / `octaentities`)** | Tree descent to `octaentsize` | Expensive tree walk & dynamic `CubeExt` allocation on movement | Pointer chasing across `Cube[]` nodes; couples gameplay zones to geometry remip/edits | Remip (`DiscardChildren`) destroys and rebuilds `CubeExt` nodes |
 | **D. Dynamic Fat-AABB BVH Tree** | $O(N \log N)$ tree build | Tree rotations & refits; $O(\log N)$ branchy traversal per query | Pointer/index tree walk ($10\text{--}14$ hops per query) vs $O(1)$ bit-shift lookup | Higher constant factor than direct grid indexing on bounded maps |
@@ -64,128 +68,74 @@ Sauerbraten worlds have known, finite power-of-two bounds ($[0, \text{WorldSize}
 
 ---
 
-## Decision
+## Decision (MR 2 Scope)
 
-We implement [`WorldSpatialIndex`](../../World/Spatial/WorldSpatialIndex.cs), [`SpatialZone`](../../World/Spatial/SpatialZone.cs), and [`SpatialEntry`](../../World/Spatial/SpatialTypes.cs) in `World/Spatial/`:
+We implement [`WorldSpatialIndex`](../../World/Spatial/WorldSpatialIndex.cs) and [`SpatialEntry`](../../World/Spatial/SpatialTypes.cs) in `World/Spatial/`:
 
 ```mermaid
 flowchart TD
     subgraph Storage["Contiguous Data-Oriented Storage (WorldSpatialIndex)"]
-        Entries["Flat Struct Table: SpatialEntry[]\n(Id, Category, Shape, Active, Origin, 3D Min/Max, CellSpan)"]
+        Entries["Flat Struct Table: SpatialEntry[]\n(Id, Generation, Category, Shape, Active, Origin, 3D Min/Max, CellSpan)"]
         Stamps["Flat Dedup Array: uint[] _visitStamps"]
         Grid["2D XY Grid Directory: GridCell[dim * dim]\n(StaticMask, DynamicMask, StaticMinZ/MaxZ, StaticIds[], DynamicIds[])"]
     end
 
-    subgraph Producers["Static Init & 200 Hz Dynamic Producers"]
-        StaticReg["Static Init (Map Load / Editor Cmd)\nMapModels, BaseZones, ItemZones, Triggers"] -->|RegisterStatic / RegisterZone| Entries
-        DynReg["Dynamic Entities (Players, Bouncers, Flags)\nRegisterPhysEnt / UpdatePosition"] -->|99% Ticks: O(1) In-Place AABB Update\n1% Ticks: Cell Boundary Relink| Entries
+    subgraph Producers["Static Init & Dynamic Producers"]
+        StaticReg["Static Init (Map Load / Editor Cmd)\nMapModels, Colliders"] -->|RegisterStatic / RegisterMapModel| Entries
+        DynReg["Dynamic Entities (Players, Bouncers)\nRegisterPhysEnt / UpdateBounds / UpdatePhysEnt"] -->|In-Place Fast Path / Boundary Relink| Entries
         Entries --> Grid
     end
 
-    subgraph Consumers["Broad-Pass, Event-Driven & Polling Consumers"]
-        BroadPass["StepBroadphase() (Once per Tick)\n1. Sync Tracked PhysEnts\n2. Diff Zone Overlaps"]
-        Events["Event-Based Dispatch\nZoneEntered / ZoneStayed / ZoneExited\n(Per-Zone & Global Events)"]
-        Polling["Zero-Alloc Polling Queries\nCollideMapModels, QueryZoneOccupants,\nQueryPointZones, QueryRadius, QuerySegment"]
+    subgraph Consumers["Collision & Spatial Queries"]
+        MmCol["OctaPhysics.MmCollide\n(Narrow-Phase Parity)"]
+        Aabb["QueryAabb (Span & List)"]
+        Radius["QueryRadius (Sphere-AABB)"]
+        Segment["QuerySegment (Swept Segments)"]
 
-        Grid --> BroadPass
-        BroadPass --> Events
-        Grid --> Polling
-        Stamps -.-> Polling
+        Grid --> MmCol
+        Grid --> Aabb
+        Grid --> Radius
+        Grid --> Segment
+        Stamps -.-> MmCol
+        Stamps -.-> Aabb
     end
 ```
 
-### 1. Contiguous `SpatialEntry` Table & `SpatialCategory` Bitmasks
-- Every registered item receives a dense `SpatialHandle(int Id)` indexing into `SpatialEntry[] _entries` (with an intrusive free-list for $O(1)$ slot recycling on removal).
-- `SpatialCategory` is a `[Flags] uint` bitmask (`MapModel`, `Geometry`, `Player`, `Monster`, `Bouncer`, `Projectile`, `FlagZone`, `BaseZone`, `ItemZone`, `TriggerZone`, plus composite masks `Actors`, `DynamicBodies`, `Zones`).
-- Every `GridCell` maintains `StaticMask` and `DynamicMask`. If `((cell.StaticMask | cell.DynamicMask) & queryMask) == 0`, the cell is skipped immediately.
+### 1. Generational Handles (`SpatialHandle`)
+To prevent recycled slot aliasing (where an invalid/stale handle held by a caller could accidentally manipulate a new entity that took over the freed slot):
+- `SpatialHandle` is defined as `readonly record struct SpatialHandle(int Id, uint Generation)`.
+- When an entry is removed, `_entries[id].Generation` is incremented and `Allocated = false`.
+- `IsValid(SpatialHandle handle)` verifies `entry.Allocated && entry.Generation == handle.Generation`.
+- Stale handles immediately fail validation and safely no-op on all mutation methods (`UpdateBounds`, `SetActive`, `Remove`).
 
-### 2. Dual Static & Dynamic Cell Lists with $O(1)$ Incremental Updates
-- **Static Layer (`cell.StaticIds`, `cell.StaticMinZ..StaticMaxZ`)**:
-  - Populated at map build; preserves deterministic entity registration order.
-  - Supports $O(1)$ `SetActive(handle, bool)` toggling (e.g. despawned items) and `Remove(handle)` for coop-edit entity deletion.
-- **Dynamic Layer (`cell.DynamicIds`, cached `CellMinX..CellMaxY`)**:
-  - Each `SpatialEntry` caches the quantized cell rectangle `(CellMinX, CellMinY, CellMaxX, CellMaxY)` it currently occupies.
-  - At $100\text{ u/s}$ player speed, a 5 ms physics step moves $0.5\text{ units}$ — meaning an entity crosses a 64-unit cell boundaryless than once every ~128 ticks.
-  - When `UpdateBounds` / `UpdatePhysEnt` runs and `newCellSpan == oldCellSpan`, **only the struct fields in `_entries[id]` are updated** (`InPlaceUpdates++`), performing zero cell array modifications.
+### 2. Explicit Query Overflow Handling (`SpatialQueryResult`)
+Fixed-size stackalloc buffers risk silent truncation in dense world clusters. We address this with explicit semantics:
+- `SpatialQueryResult` returns both `Count` (items written) and `TotalMatches` (actual matching entries found).
+- `IsTruncated => TotalMatches > Count` alerts callers when the provided buffer was insufficient, allowing them to rent a buffer of `TotalMatches` capacity and retry.
+- Complementary `List<int>` overloads (`QueryAabb`, `QueryRadius`, `QuerySegment`) grow unbounded and never truncate.
+- `QueryRadius` directly iterates candidate cells without intermediate candidate stack buffers.
 
-### 3. Broad-Pass Execution (`StepBroadphase`) + Event-Based & Polling-Based Zone Logic
-
-```mermaid
-sequenceDiagram
-    participant Sim as WorldSimulation (5ms Step)
-    participant Index as WorldSpatialIndex
-    participant Zone as SpatialZone (Flag / Base / Item)
-    participant Mode as FlagManager / Objective
-
-    Sim->>Index: StepBroadphase()
-    Index->>Index: 1. Sync tracked PhysEnts (O(1) in-place fast path)
-    Index->>Index: 2. Evaluate active SpatialZones vs DynamicMask cells
-    alt Entity just entered Zone
-        Index->>Zone: RaiseOverlapEvent(Entered)
-        Zone->>Mode: OnEntered(ZoneOverlapEvent)
-    else Entity remains in Zone
-        Index->>Zone: RaiseOverlapEvent(Stayed)
-    else Entity left Zone or died/deactivated
-        Index->>Zone: RaiseOverlapEvent(Exited)
-        Zone->>Mode: OnExited(ZoneOverlapEvent)
-    end
-    Note over Mode,Index: Mode can also poll Index.QueryZoneOccupants() or Index.IsEntityInZone() at any time
-```
-
-- **Broad-Pass (`StepBroadphase`)**:
-  1. Iterates `_trackedDynamicIds` and syncs each bound `PhysEnt` (`O`, `Radius`, `EyeHeight`, `AboveEye`, `Yaw`, and `Active = (State == CsAlive)`).
-  2. Evaluates registered `SpatialZone`s against overlapping dynamic cells using double-buffered `OverlapPair(ZoneId, EntityId)` arrays (`_prevOverlaps`, `_currOverlaps`).
-  3. Emits deterministic `ZoneEntered`, `ZoneStayed`, and `ZoneExited` events both on the specific `SpatialZone` instance and globally on `WorldSpatialIndex`.
-  4. Automatically emits `ZoneExited` if an overlapping player dies (`State != CsAlive`), if a zone is deactivated (`SetActive(false)`), or if either entry is removed (`Remove`).
-- **Polling API**:
-  - `QueryZoneOccupants(zoneHandle, entityMask, Span<int> results)`: Returns all active dynamic entities currently inside a zone.
-  - `QueryPointZones(point, zoneMask, Span<int> results)` & `QueryEntityZones(entityHandle, zoneMask, Span<int> results)`: Returns all active zones containing a point or entity.
-  - `IsEntityInZone(zoneHandle, entityHandle)`: Direct boolean check (e.g. `FlagManager.InsideBase`).
-  - `QueryAabb`, `QueryRadius`, `QuerySegment`: Broad-phase queries writing into caller-provided `Span<int>` buffers.
-
-### 4. `SpatialZone` Shapes & Trigger Modes for Objectives
-`SpatialZone` supports four narrow-phase shapes and three entity trigger modes:
-- **Shapes**:
-  - `Sphere`: `point.DistanceSquaredTo(center) < R²` (strict inequality matching `entities.cpp:334 checkitems` and `ctf.h:994` flag pickup radius $16$).
-  - `Cylinder`: `dx² + dy² <= R² && |dz| <= H` (inclusive inequality matching `ctf.h:154 insidebase` with $R=64, H=24$).
-  - `Aabb` & `Obb`: Axis-aligned and yaw-rotated 3D boxes for checkpoints, hills, and goal volumes.
-- **Trigger Modes (`SpatialZoneTriggerMode`)**:
-  - `FeetPoint` (default): Tests `entry.FeetPos` (`(O.X, O.Y, O.Z - EyeHeight)`), matching Sauerbraten's exact pickup/flag/base convention.
-  - `OriginPoint`: Tests `entry.Origin` (`O`).
-  - `BodyBounds`: Tests full 3D bounding box overlap `[Min, Max]`.
+### 3. Update Semantics & Lifecycle
+- Static objects are registered once at map load via `RegisterMapModel` / `RegisterStatic`.
+- Dynamic entities are registered via `RegisterDynamic` or `RegisterPhysEnt`.
+- When an entity moves:
+  - If its quantized cell span `(CellMinX, CellMinY, CellMaxX, CellMaxY)` has not changed, `UpdateBounds` updates `Origin`, `Min`, and `Max` in-place in $O(1)$ (`InPlaceUpdates++`) without modifying grid cell arrays.
+  - If its quantized cell span changed, it unlinks from old cells and links to new cells (`BoundaryCrossings++`).
+- Entities can be enabled or disabled in $O(1)$ via `SetActive(handle, bool)` without unlinking from cells (useful for item respawn timers or collision toggles).
 
 ---
 
-## Staged Rollout Plan
+## Measured Performance & Benchmark Results
 
-### Stage 1: Spatial Index Core & Map Model Collision POC *(This Commit)*
-- [x] Implement `SpatialTypes`, `SpatialZone`, and `WorldSpatialIndex` in `World/Spatial/`.
-- [x] Replace `OctaPhysics._mmGrid` with `OctaPhysics.Spatial` (`WorldSpatialIndex`), powering `AddMapModel`, `RemoveMapModel`, `ClearMapModels`, and `MmCollide`.
-- [x] Verify parity across existing `MapModelCollisionTest`, `A3ReplayTest`, and new `WorldSpatialIndexTest` (covering static/dynamic lifecycle, $O(1)$ in-place updates, `StepBroadphase` enter/stay/exit events, movable flag zones, and projectile queries).
+Benchmark results from [`MapModelSpatialBenchmark.cs`](../../test/MapModelSpatialBenchmark.cs) comparing `WorldSpatialIndex` against the legacy bespoke grid on a $2048 \times 2048$ world over 5,000 queries per scale:
 
-### Stage 2: Dynamic Entities, Projectiles & Hitscan Integration *(Next)*
-- [ ] Register players, monsters, and bouncers in `OctaPhysics.Spatial` and call `Spatial.StepBroadphase()` from `WorldSimulation.Step`.
-- [ ] Supersede `OctaPhysics._dynEntCache` (`PlCollide`, `OverlapsDynent`) with `Spatial`.
-- [ ] Wire `RocketProjectile.Advance`, `WeaponExplosion.ResolveExplosion`, and `WeaponHitscan.Fire` to query candidate targets from `Spatial` (`QuerySegment`, `QueryRadius`).
+| Collider Count | Legacy Grid (ms) | `WorldSpatialIndex` (ms) | Speedup | Parity Matches | Heap Allocations |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **50 colliders** | 0.31 ms | 0.21 ms | **1.48x** | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
+| **250 colliders** | 0.56 ms | 0.45 ms | **1.25x** | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
+| **1,000 colliders** | 1.32 ms | 1.05 ms | **1.26x** | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
+| **2,500 colliders** | 2.82 ms | 2.23 ms | **1.26x** | 5,000 / 5,000 (100%) | **0 bytes** (Legacy: 0 bytes) |
 
-### Stage 3: Item Pickups & Map Triggers *(Subsequent)*
-- [ ] Register `Item` pickup spheres (`ItemZone`, radius 12, toggled via `SetActive(item.Spawned)`), `Teleport` spheres (`TriggerZone`, radius 16), and `JumpPad` spheres (`TriggerZone`, radius 12) in `Spatial`.
-- [ ] Replace linear scans in `ItemManager.CheckPickups`, `MapPlayer.CheckJumpPads`, and `MapPlayer.CheckTeleports` with `Spatial` zone queries/events.
-
-### Stage 4: CTF & Composable Game Mode Objectives *(Subsequent)*
-- [ ] Back `FlagManager` bases (`BaseZone` cylinder $64 \times 24$) and flags (`FlagZone` sphere $16$, dynamically repositioned on drop and deactivated when carried) with `SpatialZone`s.
-- [ ] Build composable `Objective` definitions on top of `SpatialZone` events (`Entered`, `Stayed`, `Exited`) and polling to power CTF, Protect, Hold, Rugby, Prop Hunt, and Racing checkpoints.
-
----
-
-## Consequences
-
-### Positive
-- **Single Spatial Authority**: Eliminates duplicated grid/hash/linear-scan code across physics, weapons, items, triggers, and game modes.
-- **Zero-Allocation 200 Hz Hot Path**: Flat struct arrays, stack-allocated `Span<int>` query buffers, and $O(1)$ in-place sub-cell updates keep GC pressure at zero.
-- **Unified Event + Polling Ergonomics**: Game modes can subscribe declaratively to `zone.Entered` / `zone.Exited` or poll `QueryZoneOccupants` / `IsEntityInZone` as needed.
-- **Live Coop-Edit Ready**: Static map models and zones can now be added, moved, toggled, or removed in $O(1)$ when editor commands mutate entities.
-
-### Trade-offs & Open Questions for Refinement
-- **Cell Size Tuning (`DefaultCellShift = 6`, 64 units)**: 64 units matches both the previous map model grid and Sauerbraten's `octaentsize = 64`. Very large radius queries (e.g. spawn rating at $400\text{ u}$) span multiple cells ($13 \times 13$), though still faster than raycasting all entities; we can evaluate whether a coarse secondary mask is ever needed.
-- **Geometry Queries**: World cube geometry (`Octa`) remains in the native octree for `OctaCollide` and `OctaRaycast`, while `SpatialCategory.Geometry` in `WorldSpatialIndex` indexes dynamic/scripted geometry brushes and destructible props.
+- **Zero Allocations**: Verified 0 heap allocations across all queries after JIT warmup.
+- **Dynamic In-Place Updates**: **13.52 million updates/sec** (50,000 updates in 3.70 ms, 0 bytes allocated).
+- **Exact Parity**: 100% collision decision parity verified against `OctaPhysics` narrow-phase math across both box and ellipse colliders.

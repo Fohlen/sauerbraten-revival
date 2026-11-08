@@ -79,57 +79,28 @@ public enum SpatialShapeKind : byte
 }
 
 /// <summary>
-/// Determines how a <see cref="SpatialZone"/> tests whether a dynamic entity overlaps it.
+/// Lightweight, generational handle referencing an entry in <see cref="WorldSpatialIndex"/>.
+/// Storing a monotonic generation counter prevents stale handles from referring to newly
+/// allocated entries when slot indices are recycled.
 /// </summary>
-public enum SpatialZoneTriggerMode : byte
+public readonly record struct SpatialHandle(int Id, uint Generation)
+{
+    public static readonly SpatialHandle Invalid = new(-1, 0);
+    public bool IsValid => Id >= 0 && Generation > 0;
+}
+
+/// <summary>
+/// Explicit result for buffer-backed spatial queries.
+/// Informs the caller of both the number of items written to the buffer and whether
+/// the results were truncated due to insufficient buffer capacity.
+/// </summary>
+public readonly record struct SpatialQueryResult(int Count, int TotalMatches)
 {
     /// <summary>
-    /// Tests the entity's feet position <c>(Origin.X, Origin.Y, Min.Z)</c> against the zone shape.
-    /// Matches Sauerbraten's <c>entities.cpp</c> (<c>checkitems</c>) and <c>ctf.h</c> (<c>checkitems</c> / <c>insidebase</c>).
+    /// True if the number of matching entries exceeded the destination buffer length.
+    /// When true, <see cref="TotalMatches"/> indicates the required capacity to hold all matches.
     /// </summary>
-    FeetPoint = 0,
-
-    /// <summary>Tests the entity's <c>Origin</c> (eye/center position) against the zone shape.</summary>
-    OriginPoint = 1,
-
-    /// <summary>Tests the entity's full 3D bounding volume [<c>Min</c>, <c>Max</c>] against the zone shape.</summary>
-    BodyBounds = 2,
-}
-
-/// <summary>
-/// Transition kind emitted when a dynamic entity interacts with a <see cref="SpatialZone"/> during broad-pass evaluation.
-/// </summary>
-public enum ZoneOverlapKind : byte
-{
-    Entered = 0,
-    Stayed = 1,
-    Exited = 2,
-}
-
-/// <summary>
-/// Lightweight handle referencing an entry in <see cref="WorldSpatialIndex"/>.
-/// </summary>
-public readonly record struct SpatialHandle(int Id)
-{
-    public static readonly SpatialHandle Invalid = new(-1);
-    public bool IsValid => Id >= 0;
-}
-
-/// <summary>
-/// Event payload describing an interaction between a <see cref="SpatialZone"/> and a dynamic entity.
-/// </summary>
-public readonly struct ZoneOverlapEvent
-{
-    public ZoneOverlapKind Kind { get; init; }
-    public SpatialZone Zone { get; init; }
-    public SpatialHandle ZoneHandle { get; init; }
-    public SpatialHandle EntityHandle { get; init; }
-    public SpatialCategory EntityCategory { get; init; }
-    public int EntityUserId { get; init; }
-    public int EntityTeam { get; init; }
-    public Vector3 EntityOrigin { get; init; }
-    public Vector3 EntityFeetPos { get; init; }
-    public object? EntityPayload { get; init; }
+    public bool IsTruncated => TotalMatches > Count;
 }
 
 /// <summary>
@@ -141,6 +112,9 @@ public struct SpatialEntry
 {
     /// <summary>Dense index in the spatial index entry table.</summary>
     public int Id;
+
+    /// <summary>Monotonic generation counter for handle validation.</summary>
+    public uint Generation;
 
     /// <summary>Category bitmask for fast query filtering.</summary>
     public SpatialCategory Category;
@@ -157,7 +131,7 @@ public struct SpatialEntry
     /// <summary>True if this entry is currently allocated (false when on the free list).</summary>
     public bool Allocated;
 
-    /// <summary>Optional user/entity ID (e.g. player ID, flag ID, entity index) for zero-dereference filtering.</summary>
+    /// <summary>Optional user/entity ID (e.g. player ID, entity index) for zero-dereference filtering.</summary>
     public int UserId;
 
     /// <summary>Optional team affiliation (0 = neutral, 1 = good/blue, 2 = evil/red).</summary>
@@ -172,7 +146,7 @@ public struct SpatialEntry
     /// <summary>Tight world-space 3D AABB maximum corner.</summary>
     public Vector3 Max;
 
-    /// <summary>Local center offset relative to <see cref="Origin"/> (used by map models and offset zones).</summary>
+    /// <summary>Local center offset relative to <see cref="Origin"/> (used by map models).</summary>
     public Vector3 CenterOffset;
 
     /// <summary>Shape half-extents or radii (X = radius/xr, Y = yr, Z = half-height/zr).</summary>
@@ -187,11 +161,14 @@ public struct SpatialEntry
     /// <summary>Cached quantized grid cell bounds currently occupied by this entry.</summary>
     public short CellMinX, CellMinY, CellMaxX, CellMaxY;
 
-    /// <summary>Optional bound <see cref="PhysEnt"/> automatically synchronized during <see cref="WorldSpatialIndex.StepBroadphase"/>.</summary>
+    /// <summary>Optional bound <see cref="PhysEnt"/> for synchronization.</summary>
     public PhysEnt? TrackedPhysEnt;
 
-    /// <summary>Optional domain object reference (<c>MapModelCollider</c>, <c>PhysEnt</c>, <c>SpatialZone</c>, etc.).</summary>
+    /// <summary>Optional domain object reference (<c>MapModelCollider</c>, <c>PhysEnt</c>, etc.).</summary>
     public object? Payload;
+
+    /// <summary>Strongly typed handle for this entry.</summary>
+    public readonly SpatialHandle Handle => new(Id, Generation);
 
     /// <summary>Feet position <c>(Origin.X, Origin.Y, Min.Z)</c> matching <c>PhysEnt.FeetPos()</c>.</summary>
     public readonly Vector3 FeetPos => new(Origin.X, Origin.Y, Min.Z);

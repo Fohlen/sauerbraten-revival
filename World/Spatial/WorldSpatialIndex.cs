@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Godot;
 using SauerbratenRevival.World.Physics;
 
@@ -8,15 +9,12 @@ namespace SauerbratenRevival.World.Spatial;
 /// <summary>
 /// Unified world spatial index supporting:
 /// <list type="bullet">
-///   <item><description><b>Static init:</b> Map models, CTF bases, item pickup zones, teleporters, jump pads.</description></item>
-///   <item><description><b>Dynamic entities:</b> Players, monsters, grenades/bouncers, rockets, dropped/movable flags.</description></item>
-///   <item><description><b>Once-per-frame broad-pass updates (<see cref="StepBroadphase"/>):</b> Batch-synchronizes tracked dynamic
-///   entities using O(1) incremental cell-bound checks and evaluates zone overlaps.</description></item>
-///   <item><description><b>Event-based zone logic:</b> Emits <see cref="ZoneEntered"/>, <see cref="ZoneStayed"/>, and
-///   <see cref="ZoneExited"/> transitions (both globally and per <see cref="SpatialZone"/>) when dynamic entities cross zone boundaries.</description></item>
-///   <item><description><b>Polling-based queries:</b> Zero-allocation <see cref="QueryZoneOccupants"/>, <see cref="QueryPointZones"/>,
-///   <see cref="QueryEntityZones"/>, <see cref="IsEntityInZone"/>, <see cref="QueryAabb(Vector3, Vector3, SpatialCategory, Span{int})"/>,
-///   <see cref="QueryRadius"/>, and <see cref="QuerySegment"/>.</description></item>
+///   <item><description><b>Static init:</b> Map models and static collision volumes.</description></item>
+///   <item><description><b>Dynamic entities:</b> Players, monsters, grenades/bouncers, projectiles.</description></item>
+///   <item><description><b>Generational handles:</b> Validates slot versions to prevent stale references.</description></item>
+///   <item><description><b>O(1) incremental dynamic updates:</b> Fast-path in-place updates when within the same cell.</description></item>
+///   <item><description><b>Explicit query overflow:</b> <see cref="SpatialQueryResult"/> returns counts and truncation status.</description></item>
+///   <item><description><b>Narrow-phase map model queries:</b> <see cref="CollideMapModels"/> matching Sauerbraten's mmcollide.</description></item>
 /// </list>
 /// </summary>
 public sealed class WorldSpatialIndex
@@ -35,8 +33,6 @@ public sealed class WorldSpatialIndex
         public int DynamicCount;
     }
 
-    private readonly record struct OverlapPair(int ZoneId, int EntityId);
-
     private int _worldSize;
     private readonly int _cellShift;
     private int _gridDim;
@@ -48,26 +44,9 @@ public sealed class WorldSpatialIndex
     private int _freeHead = -1;
     private uint _queryStamp;
 
-    // Dense tracking lists for broad-pass updates & zone evaluation
+    // Dense tracking list for dynamic entity batch synchronization
     private int[] _trackedDynamicIds = new int[32];
     private int _trackedDynamicCount;
-    private int[] _registeredZoneIds = new int[32];
-    private int _registeredZoneCount;
-
-    // Double-buffered active overlap pairs for Entered / Stayed / Exited transitions
-    private OverlapPair[] _prevOverlaps = new OverlapPair[64];
-    private int _prevOverlapCount;
-    private OverlapPair[] _currOverlaps = new OverlapPair[64];
-    private int _currOverlapCount;
-
-    /// <summary>Fired when a dynamic entity enters an active <see cref="SpatialZone"/> during <see cref="StepBroadphase"/>.</summary>
-    public event Action<ZoneOverlapEvent>? ZoneEntered;
-
-    /// <summary>Fired each <see cref="StepBroadphase"/> while a dynamic entity remains inside an active <see cref="SpatialZone"/>.</summary>
-    public event Action<ZoneOverlapEvent>? ZoneStayed;
-
-    /// <summary>Fired when a dynamic entity leaves an active <see cref="SpatialZone"/> (or when either becomes inactive/removed).</summary>
-    public event Action<ZoneOverlapEvent>? ZoneExited;
 
     /// <summary>Number of active static entries currently registered.</summary>
     public int StaticCount { get; private set; }
@@ -140,7 +119,7 @@ public sealed class WorldSpatialIndex
         }
     }
 
-    /// <summary>Clears all static and dynamic entries and resets overlap tracking state.</summary>
+    /// <summary>Clears all static and dynamic entries, resets cell data and free list.</summary>
     public void Clear()
     {
         for (int i = 0; i < _cells.Length; i++)
@@ -152,15 +131,20 @@ public sealed class WorldSpatialIndex
             _cells[i].StaticCount = 0;
             _cells[i].DynamicCount = 0;
         }
-        Array.Clear(_entries, 0, _entryCount);
+        for (int i = 0; i < _entryCount; i++)
+        {
+            _entries[i].Allocated = false;
+            _entries[i].Active = false;
+            _entries[i].Generation++;
+            if (_entries[i].Generation == 0) _entries[i].Generation = 1;
+            _entries[i].TrackedPhysEnt = null;
+            _entries[i].Payload = null;
+        }
         Array.Clear(_visitStamps, 0, _entryCount);
         _entryCount = 0;
         _freeHead = -1;
         _queryStamp = 0;
         _trackedDynamicCount = 0;
-        _registeredZoneCount = 0;
-        _prevOverlapCount = 0;
-        _currOverlapCount = 0;
         StaticCount = 0;
         DynamicCount = 0;
         InPlaceUpdates = 0;
@@ -168,19 +152,27 @@ public sealed class WorldSpatialIndex
     }
 
     /// <summary>Returns a read-only reference to the entry for <paramref name="handle"/>.</summary>
-    public ref readonly SpatialEntry GetEntry(SpatialHandle handle) => ref _entries[handle.Id];
+    public ref readonly SpatialEntry GetEntry(SpatialHandle handle)
+    {
+        if (!IsValid(handle))
+            throw new ArgumentException("Invalid or stale spatial handle.", nameof(handle));
+        return ref _entries[handle.Id];
+    }
 
-    /// <summary>Returns a read-only reference to the entry at raw <paramref name="id"/>.</summary>
+    /// <summary>Returns a read-only reference to the entry at raw <paramref name="id"/> (unsafe/internal).</summary>
     public ref readonly SpatialEntry GetEntryById(int id) => ref _entries[id];
 
-    /// <summary>Checks whether <paramref name="handle"/> refers to a currently allocated entry.</summary>
+    /// <summary>Checks whether <paramref name="handle"/> refers to a currently allocated entry matching its generation.</summary>
     public bool IsValid(SpatialHandle handle) =>
-        handle.Id >= 0 && handle.Id < _entryCount && _entries[handle.Id].Allocated;
+        handle.Id >= 0 &&
+        handle.Id < _entryCount &&
+        _entries[handle.Id].Allocated &&
+        _entries[handle.Id].Generation == handle.Generation;
 
     // ---- Registration & Lifecycle -------------------------------------------
 
     /// <summary>
-    /// Registers a static entry in the spatial index (e.g. map model, base zone, item spawn, trigger).
+    /// Registers a static entry in the spatial index (e.g. map model, static collider).
     /// </summary>
     public SpatialHandle RegisterStatic(
         SpatialCategory category,
@@ -216,7 +208,7 @@ public sealed class WorldSpatialIndex
     }
 
     /// <summary>
-    /// Registers a dynamic entry in the spatial index (e.g. player, monster, bouncer, rocket, dropped flag).
+    /// Registers a dynamic entry in the spatial index (e.g. player, monster, bouncer, projectile).
     /// </summary>
     public SpatialHandle RegisterDynamic(
         SpatialCategory category,
@@ -285,36 +277,8 @@ public sealed class WorldSpatialIndex
     }
 
     /// <summary>
-    /// Registers a <see cref="SpatialZone"/> in the spatial index (static by default, or dynamic for movable zones like dropped flags).
-    /// Registered zones automatically participate in <see cref="StepBroadphase"/> overlap detection and polling queries.
-    /// </summary>
-    public SpatialHandle RegisterZone(SpatialZone zone, bool isStatic = true)
-    {
-        zone.ComputeBounds(out Vector3 min, out Vector3 max, out float rejectRadius);
-        var handle = RegisterInternal(
-            isStatic,
-            zone.Category,
-            zone.Shape,
-            zone.Origin,
-            min,
-            max,
-            zone.CenterOffset,
-            zone.Extents,
-            zone.Yaw,
-            rejectRadius,
-            trackedPhysEnt: null,
-            payload: zone,
-            userId: zone.ZoneId,
-            team: zone.Team,
-            active: zone.Active);
-        zone.Handle = handle;
-        AppendId(ref _registeredZoneIds, ref _registeredZoneCount, handle.Id);
-        return handle;
-    }
-
-    /// <summary>
     /// Registers a <see cref="PhysEnt"/> (player, monster, or bouncer) as a tracked dynamic entry.
-    /// When <see cref="StepBroadphase"/> runs, its bounds and alive state are automatically synchronized from <paramref name="ent"/>.
+    /// When <see cref="StepBroadphase"/> or <see cref="SyncDynamicEntities"/> runs, its bounds are updated.
     /// </summary>
     public SpatialHandle RegisterPhysEnt(
         PhysEnt ent,
@@ -371,9 +335,13 @@ public sealed class WorldSpatialIndex
         ComputeCellSpan(min, max, out short cMinX, out short cMinY, out short cMaxX, out short cMaxY);
 
         ref var entry = ref _entries[id];
+        uint gen = entry.Generation;
+        if (gen == 0) gen = 1;
+
         entry = new SpatialEntry
         {
             Id = id,
+            Generation = gen,
             Category = category,
             Shape = shape,
             IsStatic = isStatic,
@@ -402,10 +370,10 @@ public sealed class WorldSpatialIndex
         if (isStatic) StaticCount++;
         else DynamicCount++;
 
-        return new SpatialHandle(id);
+        return new SpatialHandle(id, gen);
     }
 
-    // ---- Dynamic Updates & Broad-Pass Execution -----------------------------
+    // ---- Dynamic Updates & Lifecycle ----------------------------------------
 
     /// <summary>
     /// Updates an entry's world-space origin and 3D AABB.
@@ -421,11 +389,6 @@ public sealed class WorldSpatialIndex
         entry.Min = min;
         entry.Max = max;
         if (yaw.HasValue) entry.Yaw = yaw.Value;
-        if (entry.Payload is SpatialZone zone)
-        {
-            zone.Origin = origin;
-            if (yaw.HasValue) zone.Yaw = yaw.Value;
-        }
 
         ComputeCellSpan(min, max, out short newMinX, out short newMinY, out short newMaxX, out short newMaxY);
         if (newMinX == entry.CellMinX &&
@@ -451,28 +414,18 @@ public sealed class WorldSpatialIndex
     }
 
     /// <summary>
-    /// Translates an entry (or movable <see cref="SpatialZone"/>, such as a dropped flag) to <paramref name="newOrigin"/>,
-    /// shifting its AABB by <c>newOrigin - oldOrigin</c>.
+    /// Translates an entry to <paramref name="newOrigin"/>, shifting its AABB by <c>newOrigin - oldOrigin</c>.
     /// </summary>
     public void UpdatePosition(SpatialHandle handle, Vector3 newOrigin, float? yaw = null)
     {
         if (!IsValid(handle)) return;
         ref var entry = ref _entries[handle.Id];
-        if (entry.Payload is SpatialZone zone)
-        {
-            zone.Origin = newOrigin;
-            if (yaw.HasValue) zone.Yaw = yaw.Value;
-            zone.ComputeBounds(out Vector3 zMin, out Vector3 zMax, out float reject);
-            entry.RejectRadius = reject;
-            UpdateBounds(handle, newOrigin, zMin, zMax, yaw);
-            return;
-        }
         Vector3 delta = newOrigin - entry.Origin;
         UpdateBounds(handle, newOrigin, entry.Min + delta, entry.Max + delta, yaw);
     }
 
     /// <summary>
-    /// Synchronizes a registered <see cref="PhysEnt"/> handle with its current <c>O</c>, <c>Radius</c>, <c>EyeHeight</c>, <c>AboveEye</c>, <c>Yaw</c>, and <c>State</c>.
+    /// Synchronizes a registered <see cref="PhysEnt"/> handle with its current coordinates.
     /// </summary>
     public void UpdatePhysEnt(SpatialHandle handle, PhysEnt? entOverride = null)
     {
@@ -498,163 +451,40 @@ public sealed class WorldSpatialIndex
         ref var entry = ref _entries[handle.Id];
         if (userId.HasValue) entry.UserId = userId.Value;
         if (team.HasValue) entry.Team = team.Value;
-        if (entry.Payload is SpatialZone zone)
-        {
-            if (userId.HasValue) zone.ZoneId = userId.Value;
-            if (team.HasValue) zone.Team = team.Value;
-        }
     }
 
     /// <summary>
     /// Enables or disables an entry in O(1) without unlinking it from its grid cells.
-    /// Useful for item despawn/respawn timers, carried flags, or dead players.
+    /// Useful for active/inactive collision toggles, item respawns, or player state changes.
     /// </summary>
     public void SetActive(SpatialHandle handle, bool active)
     {
         if (!IsValid(handle)) return;
-        ref var entry = ref _entries[handle.Id];
-        entry.Active = active;
-        if (entry.Payload is SpatialZone zone)
-        {
-            zone.Active = active;
-        }
+        _entries[handle.Id].Active = active;
     }
 
     /// <summary>
-    /// Executes a once-per-frame / once-per-tick broad-pass update:
-    /// <list type="number">
-    ///   <item><description>Synchronizes all tracked dynamic <see cref="PhysEnt"/> entries (using the O(1) in-place fast path when cell bounds are unchanged).</description></item>
-    ///   <item><description>Evaluates all active <see cref="SpatialZone"/> overlaps against dynamic entities and dispatches
-    ///   <see cref="ZoneEntered"/>, <see cref="ZoneStayed"/>, and <see cref="ZoneExited"/> events.</description></item>
-    /// </list>
-    /// Zero heap allocations.
+    /// Batch synchronizes all tracked dynamic entities with their current bounds.
     /// </summary>
-    public void StepBroadphase(bool evaluateZones = true)
+    public void SyncDynamicEntities()
     {
-        // 1. Sync all tracked dynamic PhysEnts
         for (int i = 0; i < _trackedDynamicCount; i++)
         {
             int id = _trackedDynamicIds[i];
-            if (_entries[id].Allocated && _entries[id].TrackedPhysEnt != null)
+            ref var e = ref _entries[id];
+            if (e.Allocated && e.TrackedPhysEnt != null)
             {
-                UpdatePhysEnt(new SpatialHandle(id), _entries[id].TrackedPhysEnt);
+                UpdatePhysEnt(new SpatialHandle(id, e.Generation), e.TrackedPhysEnt);
             }
         }
-
-        if (!evaluateZones || (_registeredZoneCount == 0 && _prevOverlapCount == 0))
-            return;
-
-        // 2. Collect current zone overlaps
-        _currOverlapCount = 0;
-        for (int z = 0; z < _registeredZoneCount; z++)
-        {
-            int zoneEntryId = _registeredZoneIds[z];
-            ref var zEntry = ref _entries[zoneEntryId];
-            if (!zEntry.Allocated || !zEntry.Active || zEntry.Payload is not SpatialZone zone || !zone.Active)
-                continue;
-
-            SpatialCategory targetMask = zone.TargetMask;
-            if (targetMask == SpatialCategory.None || DynamicCount == 0) continue;
-
-            bool multiCell = zEntry.CellMinX != zEntry.CellMaxX || zEntry.CellMinY != zEntry.CellMaxY;
-            uint stamp = multiCell ? NextQueryStamp() : 0;
-
-            for (int y = zEntry.CellMinY; y <= zEntry.CellMaxY; y++)
-            {
-                int rowOffset = y * _gridDim;
-                for (int x = zEntry.CellMinX; x <= zEntry.CellMaxX; x++)
-                {
-                    ref var cell = ref _cells[rowOffset + x];
-                    if ((cell.DynamicMask & targetMask) == 0) continue;
-
-                    int dCount = cell.DynamicCount;
-                    int[]? dIds = cell.DynamicIds;
-                    for (int i = 0; i < dCount; i++)
-                    {
-                        int entId = dIds![i];
-                        if (entId == zoneEntryId) continue;
-                        if (multiCell)
-                        {
-                            if (_visitStamps[entId] == stamp) continue;
-                            _visitStamps[entId] = stamp;
-                        }
-
-                        ref var dEntry = ref _entries[entId];
-                        if (!dEntry.Active || (dEntry.Category & targetMask) == 0) continue;
-
-                        if (zone.OverlapsEntry(in dEntry))
-                        {
-                            AppendOverlap(ref _currOverlaps, ref _currOverlapCount, new OverlapPair(zoneEntryId, entId));
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. Emit Exited events for previous overlaps that are no longer present
-        for (int p = 0; p < _prevOverlapCount; p++)
-        {
-            OverlapPair prev = _prevOverlaps[p];
-            if (!ContainsOverlap(_currOverlaps, _currOverlapCount, prev))
-            {
-                EmitZoneEvent(ZoneOverlapKind.Exited, prev.ZoneId, prev.EntityId);
-            }
-        }
-
-        // 4. Emit Entered and Stayed events for current overlaps
-        for (int c = 0; c < _currOverlapCount; c++)
-        {
-            OverlapPair curr = _currOverlaps[c];
-            bool wasPresent = ContainsOverlap(_prevOverlaps, _prevOverlapCount, curr);
-            EmitZoneEvent(wasPresent ? ZoneOverlapKind.Stayed : ZoneOverlapKind.Entered, curr.ZoneId, curr.EntityId);
-        }
-
-        // 5. Swap buffers
-        (_prevOverlaps, _currOverlaps) = (_currOverlaps, _prevOverlaps);
-        _prevOverlapCount = _currOverlapCount;
     }
 
-    private void EmitZoneEvent(ZoneOverlapKind kind, int zoneEntryId, int entityEntryId)
-    {
-        if (zoneEntryId < 0 || zoneEntryId >= _entryCount || entityEntryId < 0 || entityEntryId >= _entryCount)
-            return;
-
-        ref var zEntry = ref _entries[zoneEntryId];
-        if (zEntry.Payload is not SpatialZone zone) return;
-
-        ref var dEntry = ref _entries[entityEntryId];
-        var evt = new ZoneOverlapEvent
-        {
-            Kind = kind,
-            Zone = zone,
-            ZoneHandle = new SpatialHandle(zoneEntryId),
-            EntityHandle = new SpatialHandle(entityEntryId),
-            EntityCategory = dEntry.Category,
-            EntityUserId = dEntry.UserId,
-            EntityTeam = dEntry.Team,
-            EntityOrigin = dEntry.Origin,
-            EntityFeetPos = dEntry.FeetPos,
-            EntityPayload = dEntry.Payload,
-        };
-
-        zone.RaiseOverlapEvent(in evt);
-        switch (kind)
-        {
-            case ZoneOverlapKind.Entered:
-                ZoneEntered?.Invoke(evt);
-                break;
-            case ZoneOverlapKind.Stayed:
-                ZoneStayed?.Invoke(evt);
-                break;
-            case ZoneOverlapKind.Exited:
-                ZoneExited?.Invoke(evt);
-                break;
-        }
-    }
+    /// <summary>Alias for <see cref="SyncDynamicEntities"/>.</summary>
+    public void StepBroadphase(bool evaluateZones = false) => SyncDynamicEntities();
 
     /// <summary>
-    /// Removes an entry from the spatial index and recycles its handle slot.
-    /// If the removed entry had active zone overlaps, emits <see cref="ZoneExited"/> transitions cleanly.
+    /// Removes an entry from the spatial index and invalidates its handle.
+    /// Increments the slot's generation counter to guarantee stale handles cannot match recycled slots.
     /// </summary>
     public bool Remove(SpatialHandle handle)
     {
@@ -662,193 +492,45 @@ public sealed class WorldSpatialIndex
         int id = handle.Id;
         ref var entry = ref _entries[id];
 
-        // Emit Exited for any active overlaps involving this entry before clearing it
-        for (int i = _prevOverlapCount - 1; i >= 0; i--)
-        {
-            OverlapPair pair = _prevOverlaps[i];
-            if (pair.ZoneId == id || pair.EntityId == id)
-            {
-                EmitZoneEvent(ZoneOverlapKind.Exited, pair.ZoneId, pair.EntityId);
-                for (int j = i; j < _prevOverlapCount - 1; j++)
-                    _prevOverlaps[j] = _prevOverlaps[j + 1];
-                _prevOverlapCount--;
-            }
-        }
-
         UnlinkEntryFromCells(ref entry);
 
         if (entry.TrackedPhysEnt != null)
         {
             RemoveIdPreserveOrder(_trackedDynamicIds, ref _trackedDynamicCount, id);
         }
-        if (entry.Payload is SpatialZone)
-        {
-            RemoveIdPreserveOrder(_registeredZoneIds, ref _registeredZoneCount, id);
-        }
 
         if (entry.IsStatic) StaticCount--;
         else DynamicCount--;
 
         if (entry.Payload is MapModelCollider mm) mm.SpatialHandle = SpatialHandle.Invalid;
-        else if (entry.Payload is SpatialZone z) z.Handle = SpatialHandle.Invalid;
 
         entry.Allocated = false;
         entry.Active = false;
         entry.TrackedPhysEnt = null;
         entry.Payload = null;
+
+        // Bump generation to immediately invalidate existing handles
+        entry.Generation++;
+        if (entry.Generation == 0) entry.Generation = 1;
+
         entry.UserId = _freeHead;
         _freeHead = id;
         return true;
     }
 
-    // ---- Polling Queries (Zones, AABB, Radius, Segment) ---------------------
+    // ---- Spatial Queries (AABB, Radius, Segment, Map Models) ----------------
 
     /// <summary>
-    /// Polls all active dynamic entities matching <paramref name="entityMask"/> that currently overlap
-    /// the specified <paramref name="zoneHandle"/>. Writes matching entity entry IDs into <paramref name="results"/>.
+    /// Broad-phase 3D AABB overlap query.
+    /// Writes matching entry IDs into <paramref name="results"/> up to its length,
+    /// and returns a <see cref="SpatialQueryResult"/> indicating both the written count
+    /// and the total number of matches found (allowing callers to detect truncation).
     /// Zero heap allocations.
     /// </summary>
-    public int QueryZoneOccupants(SpatialHandle zoneHandle, SpatialCategory entityMask, Span<int> results)
+    public SpatialQueryResult QueryAabb(Vector3 min, Vector3 max, SpatialCategory mask, Span<int> results)
     {
-        if (results.IsEmpty || !IsValid(zoneHandle) || entityMask == SpatialCategory.None || DynamicCount == 0)
-            return 0;
-
-        ref var zEntry = ref _entries[zoneHandle.Id];
-        if (!zEntry.Active || zEntry.Payload is not SpatialZone zone || !zone.Active)
-            return 0;
-
-        bool multiCell = zEntry.CellMinX != zEntry.CellMaxX || zEntry.CellMinY != zEntry.CellMaxY;
-        uint stamp = multiCell ? NextQueryStamp() : 0;
-        int found = 0;
-
-        for (int y = zEntry.CellMinY; y <= zEntry.CellMaxY; y++)
-        {
-            int rowOffset = y * _gridDim;
-            for (int x = zEntry.CellMinX; x <= zEntry.CellMaxX; x++)
-            {
-                ref var cell = ref _cells[rowOffset + x];
-                if ((cell.DynamicMask & entityMask) == 0) continue;
-
-                int dCount = cell.DynamicCount;
-                int[]? dIds = cell.DynamicIds;
-                for (int i = 0; i < dCount; i++)
-                {
-                    int entId = dIds![i];
-                    if (entId == zoneHandle.Id) continue;
-                    if (multiCell)
-                    {
-                        if (_visitStamps[entId] == stamp) continue;
-                        _visitStamps[entId] = stamp;
-                    }
-
-                    ref var dEntry = ref _entries[entId];
-                    if (!dEntry.Active || (dEntry.Category & entityMask) == 0) continue;
-
-                    if (zone.OverlapsEntry(in dEntry))
-                    {
-                        results[found++] = entId;
-                        if (found >= results.Length) return found;
-                    }
-                }
-            }
-        }
-        return found;
-    }
-
-    /// <summary>
-    /// Polls whether a specific registered entity (<paramref name="entityHandle"/>) currently overlaps <paramref name="zoneHandle"/>.
-    /// </summary>
-    public bool IsEntityInZone(SpatialHandle zoneHandle, SpatialHandle entityHandle)
-    {
-        if (!IsValid(zoneHandle) || !IsValid(entityHandle)) return false;
-        ref var zEntry = ref _entries[zoneHandle.Id];
-        ref var dEntry = ref _entries[entityHandle.Id];
-        if (!zEntry.Active || !dEntry.Active || zEntry.Payload is not SpatialZone zone || !zone.Active)
-            return false;
-        return zone.OverlapsEntry(in dEntry);
-    }
-
-    /// <summary>
-    /// Polls all active <see cref="SpatialZone"/> entries matching <paramref name="zoneMask"/> that currently
-    /// overlap the specified dynamic entity (<paramref name="entityHandle"/>).
-    /// </summary>
-    public int QueryEntityZones(SpatialHandle entityHandle, SpatialCategory zoneMask, Span<int> results)
-    {
-        if (results.IsEmpty || !IsValid(entityHandle) || zoneMask == SpatialCategory.None)
-            return 0;
-
-        ref var dEntry = ref _entries[entityHandle.Id];
-        if (!dEntry.Active) return 0;
-
-        bool multiCell = dEntry.CellMinX != dEntry.CellMaxX || dEntry.CellMinY != dEntry.CellMaxY;
-        uint stamp = multiCell ? NextQueryStamp() : 0;
-        int found = 0;
-
-        for (int y = dEntry.CellMinY; y <= dEntry.CellMaxY; y++)
-        {
-            int rowOffset = y * _gridDim;
-            for (int x = dEntry.CellMinX; x <= dEntry.CellMaxX; x++)
-            {
-                ref var cell = ref _cells[rowOffset + x];
-                if (((cell.StaticMask | cell.DynamicMask) & zoneMask) == 0) continue;
-
-                if ((cell.StaticMask & zoneMask) != 0)
-                {
-                    int sCount = cell.StaticCount;
-                    int[]? sIds = cell.StaticIds;
-                    for (int i = 0; i < sCount; i++)
-                    {
-                        int zId = sIds![i];
-                        if (multiCell)
-                        {
-                            if (_visitStamps[zId] == stamp) continue;
-                            _visitStamps[zId] = stamp;
-                        }
-                        ref var zEntry = ref _entries[zId];
-                        if (!zEntry.Active || (zEntry.Category & zoneMask) == 0) continue;
-                        if (zEntry.Payload is SpatialZone zone && zone.OverlapsEntry(in dEntry))
-                        {
-                            results[found++] = zId;
-                            if (found >= results.Length) return found;
-                        }
-                    }
-                }
-
-                if ((cell.DynamicMask & zoneMask) != 0)
-                {
-                    int dCount = cell.DynamicCount;
-                    int[]? dIds = cell.DynamicIds;
-                    for (int i = 0; i < dCount; i++)
-                    {
-                        int zId = dIds![i];
-                        if (zId == entityHandle.Id) continue;
-                        if (multiCell)
-                        {
-                            if (_visitStamps[zId] == stamp) continue;
-                            _visitStamps[zId] = stamp;
-                        }
-                        ref var zEntry = ref _entries[zId];
-                        if (!zEntry.Active || (zEntry.Category & zoneMask) == 0) continue;
-                        if (zEntry.Payload is SpatialZone zone && zone.OverlapsEntry(in dEntry))
-                        {
-                            results[found++] = zId;
-                            if (found >= results.Length) return found;
-                        }
-                    }
-                }
-            }
-        }
-        return found;
-    }
-
-    /// <summary>
-    /// Broad-phase 3D AABB overlap query. Writes matching entry IDs into <paramref name="results"/>
-    /// and returns the number of matches written (up to <c>results.Length</c>).
-    /// Zero heap allocations.
-    /// </summary>
-    public int QueryAabb(Vector3 min, Vector3 max, SpatialCategory mask, Span<int> results)
-    {
-        if (results.IsEmpty || mask == SpatialCategory.None || Count == 0) return 0;
+        if (mask == SpatialCategory.None || Count == 0)
+            return new SpatialQueryResult(0, 0);
 
         ComputeCellSpan(min, max, out short startX, out short startY, out short endX, out short endY);
         bool multiCell = startX != endX || startY != endY;
@@ -857,7 +539,9 @@ public sealed class WorldSpatialIndex
         bool checkStatic = StaticCount > 0;
         bool checkDynamic = DynamicCount > 0;
 
-        int found = 0;
+        int written = 0;
+        int totalMatches = 0;
+
         for (int y = startY; y <= endY; y++)
         {
             int rowOffset = y * _gridDim;
@@ -884,8 +568,11 @@ public sealed class WorldSpatialIndex
                             e.Max.X < min.X || e.Min.X > max.X ||
                             e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
 
-                        results[found++] = id;
-                        if (found >= results.Length) return found;
+                        totalMatches++;
+                        if (written < results.Length)
+                        {
+                            results[written++] = id;
+                        }
                     }
                 }
 
@@ -907,127 +594,307 @@ public sealed class WorldSpatialIndex
                             e.Max.X < min.X || e.Min.X > max.X ||
                             e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
 
-                        results[found++] = id;
-                        if (found >= results.Length) return found;
+                        totalMatches++;
+                        if (written < results.Length)
+                        {
+                            results[written++] = id;
+                        }
                     }
                 }
             }
         }
-        return found;
+
+        return new SpatialQueryResult(written, totalMatches);
     }
 
     /// <summary>
-    /// Convenience overload of <see cref="QueryAabb(Vector3, Vector3, SpatialCategory, Span{int})"/> appending to a <see cref="List{T}"/>.
+    /// Convenience overload of <see cref="QueryAabb(Vector3, Vector3, SpatialCategory, Span{int})"/> appending all matches to a <see cref="List{T}"/>.
+    /// Unbounded; dynamically resizes without truncation.
     /// </summary>
-    public void QueryAabb(Vector3 min, Vector3 max, SpatialCategory mask, List<int> results)
+    public int QueryAabb(Vector3 min, Vector3 max, SpatialCategory mask, List<int> results)
     {
         results.Clear();
-        Span<int> buffer = stackalloc int[256];
-        int count = QueryAabb(min, max, mask, buffer);
-        for (int i = 0; i < count; i++) results.Add(buffer[i]);
+        if (mask == SpatialCategory.None || Count == 0) return 0;
+
+        ComputeCellSpan(min, max, out short startX, out short startY, out short endX, out short endY);
+        bool multiCell = startX != endX || startY != endY;
+        uint stamp = multiCell ? NextQueryStamp() : 0;
+
+        bool checkStatic = StaticCount > 0;
+        bool checkDynamic = DynamicCount > 0;
+
+        for (int y = startY; y <= endY; y++)
+        {
+            int rowOffset = y * _gridDim;
+            for (int x = startX; x <= endX; x++)
+            {
+                ref var cell = ref _cells[rowOffset + x];
+                if (((cell.StaticMask | cell.DynamicMask) & mask) == 0) continue;
+
+                if (checkStatic && (cell.StaticMask & mask) != 0 && max.Z >= cell.StaticMinZ && min.Z <= cell.StaticMaxZ)
+                {
+                    int sCount = cell.StaticCount;
+                    int[]? sIds = cell.StaticIds;
+                    for (int i = 0; i < sCount; i++)
+                    {
+                        int id = sIds![i];
+                        if (multiCell)
+                        {
+                            if (_visitStamps[id] == stamp) continue;
+                            _visitStamps[id] = stamp;
+                        }
+                        ref var e = ref _entries[id];
+                        if (!e.Active || (e.Category & mask) == 0) continue;
+                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
+                            e.Max.X < min.X || e.Min.X > max.X ||
+                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
+
+                        results.Add(id);
+                    }
+                }
+
+                if (checkDynamic && (cell.DynamicMask & mask) != 0)
+                {
+                    int dCount = cell.DynamicCount;
+                    int[]? dIds = cell.DynamicIds;
+                    for (int i = 0; i < dCount; i++)
+                    {
+                        int id = dIds![i];
+                        if (multiCell)
+                        {
+                            if (_visitStamps[id] == stamp) continue;
+                            _visitStamps[id] = stamp;
+                        }
+                        ref var e = ref _entries[id];
+                        if (!e.Active || (e.Category & mask) == 0) continue;
+                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
+                            e.Max.X < min.X || e.Min.X > max.X ||
+                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
+
+                        results.Add(id);
+                    }
+                }
+            }
+        }
+
+        return results.Count;
     }
 
     /// <summary>
-    /// Queries all active entries within <paramref name="radius"/> of <paramref name="center"/> (3D sphere overlap against entry AABB).
-    /// Useful for explosion blast radius queries (<c>WeaponExplosion.ResolveExplosion</c>) and <c>OverlapsDynent</c>.
+    /// Queries active entries within <paramref name="radius"/> of <paramref name="center"/> (3D sphere overlap against entry AABB).
+    /// Directly traverses candidate cells without intermediate stack buffers, writing up to <paramref name="results"/>.Length
+    /// and returning total matches to make overflow explicit.
     /// </summary>
-    public int QueryRadius(Vector3 center, float radius, SpatialCategory mask, Span<int> results)
+    public SpatialQueryResult QueryRadius(Vector3 center, float radius, SpatialCategory mask, Span<int> results)
     {
-        if (results.IsEmpty || radius < 0f || mask == SpatialCategory.None || Count == 0) return 0;
+        if (radius < 0f || mask == SpatialCategory.None || Count == 0)
+            return new SpatialQueryResult(0, 0);
 
         Vector3 rVec = new(radius, radius, radius);
         Vector3 min = center - rVec;
         Vector3 max = center + rVec;
 
-        Span<int> candidates = stackalloc int[256];
-        int candCount = QueryAabb(min, max, mask, candidates);
+        ComputeCellSpan(min, max, out short startX, out short startY, out short endX, out short endY);
+        bool multiCell = startX != endX || startY != endY;
+        uint stamp = multiCell ? NextQueryStamp() : 0;
+
         float rSq = radius * radius;
-        int found = 0;
+        bool checkStatic = StaticCount > 0;
+        bool checkDynamic = DynamicCount > 0;
 
-        for (int i = 0; i < candCount; i++)
+        int written = 0;
+        int totalMatches = 0;
+
+        for (int y = startY; y <= endY; y++)
         {
-            int id = candidates[i];
-            ref var e = ref _entries[id];
-
-            // Closest point on entry AABB to sphere center
-            float cx = Math.Clamp(center.X, e.Min.X, e.Max.X) - center.X;
-            float cy = Math.Clamp(center.Y, e.Min.Y, e.Max.Y) - center.Y;
-            float cz = Math.Clamp(center.Z, e.Min.Z, e.Max.Z) - center.Z;
-            if (cx * cx + cy * cy + cz * cz <= rSq)
+            int rowOffset = y * _gridDim;
+            for (int x = startX; x <= endX; x++)
             {
-                results[found++] = id;
-                if (found >= results.Length) return found;
+                ref var cell = ref _cells[rowOffset + x];
+                if (((cell.StaticMask | cell.DynamicMask) & mask) == 0) continue;
+
+                if (checkStatic && (cell.StaticMask & mask) != 0 && max.Z >= cell.StaticMinZ && min.Z <= cell.StaticMaxZ)
+                {
+                    int sCount = cell.StaticCount;
+                    int[]? sIds = cell.StaticIds;
+                    for (int i = 0; i < sCount; i++)
+                    {
+                        int id = sIds![i];
+                        if (multiCell)
+                        {
+                            if (_visitStamps[id] == stamp) continue;
+                            _visitStamps[id] = stamp;
+                        }
+                        ref var e = ref _entries[id];
+                        if (!e.Active || (e.Category & mask) == 0) continue;
+                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
+                            e.Max.X < min.X || e.Min.X > max.X ||
+                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
+
+                        float cx = Math.Clamp(center.X, e.Min.X, e.Max.X) - center.X;
+                        float cy = Math.Clamp(center.Y, e.Min.Y, e.Max.Y) - center.Y;
+                        float cz = Math.Clamp(center.Z, e.Min.Z, e.Max.Z) - center.Z;
+                        if (cx * cx + cy * cy + cz * cz <= rSq)
+                        {
+                            totalMatches++;
+                            if (written < results.Length)
+                            {
+                                results[written++] = id;
+                            }
+                        }
+                    }
+                }
+
+                if (checkDynamic && (cell.DynamicMask & mask) != 0)
+                {
+                    int dCount = cell.DynamicCount;
+                    int[]? dIds = cell.DynamicIds;
+                    for (int i = 0; i < dCount; i++)
+                    {
+                        int id = dIds![i];
+                        if (multiCell)
+                        {
+                            if (_visitStamps[id] == stamp) continue;
+                            _visitStamps[id] = stamp;
+                        }
+                        ref var e = ref _entries[id];
+                        if (!e.Active || (e.Category & mask) == 0) continue;
+                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
+                            e.Max.X < min.X || e.Min.X > max.X ||
+                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
+
+                        float cx = Math.Clamp(center.X, e.Min.X, e.Max.X) - center.X;
+                        float cy = Math.Clamp(center.Y, e.Min.Y, e.Max.Y) - center.Y;
+                        float cz = Math.Clamp(center.Z, e.Min.Z, e.Max.Z) - center.Z;
+                        if (cx * cx + cy * cy + cz * cz <= rSq)
+                        {
+                            totalMatches++;
+                            if (written < results.Length)
+                            {
+                                results[written++] = id;
+                            }
+                        }
+                    }
+                }
             }
         }
-        return found;
+
+        return new SpatialQueryResult(written, totalMatches);
     }
 
     /// <summary>
-    /// Queries all active <see cref="SpatialZone"/> entries matching <paramref name="zoneMask"/> whose narrow-phase
-    /// volume contains <paramref name="point"/> (e.g. player feet position for CTF flags, bases, items, teleporters, jump pads).
+    /// Convenience overload of <see cref="QueryRadius(Vector3, float, SpatialCategory, Span{int})"/> appending all matches to a <see cref="List{T}"/>.
+    /// Unbounded; dynamically resizes without truncation.
     /// </summary>
-    public int QueryPointZones(Vector3 point, SpatialCategory zoneMask, Span<int> results)
+    public int QueryRadius(Vector3 center, float radius, SpatialCategory mask, List<int> results)
     {
-        if (results.IsEmpty || zoneMask == SpatialCategory.None || Count == 0) return 0;
+        results.Clear();
+        if (radius < 0f || mask == SpatialCategory.None || Count == 0) return 0;
 
-        int cellX = Math.Clamp((int)MathF.Floor(point.X) >> _cellShift, 0, _gridDim - 1);
-        int cellY = Math.Clamp((int)MathF.Floor(point.Y) >> _cellShift, 0, _gridDim - 1);
-        ref var cell = ref _cells[cellY * _gridDim + cellX];
+        Vector3 rVec = new(radius, radius, radius);
+        Vector3 min = center - rVec;
+        Vector3 max = center + rVec;
 
-        if (((cell.StaticMask | cell.DynamicMask) & zoneMask) == 0) return 0;
+        ComputeCellSpan(min, max, out short startX, out short startY, out short endX, out short endY);
+        bool multiCell = startX != endX || startY != endY;
+        uint stamp = multiCell ? NextQueryStamp() : 0;
 
-        int found = 0;
+        float rSq = radius * radius;
+        bool checkStatic = StaticCount > 0;
+        bool checkDynamic = DynamicCount > 0;
 
-        if ((cell.StaticMask & zoneMask) != 0 && point.Z >= cell.StaticMinZ && point.Z <= cell.StaticMaxZ)
+        for (int y = startY; y <= endY; y++)
         {
-            int sCount = cell.StaticCount;
-            int[]? sIds = cell.StaticIds;
-            for (int i = 0; i < sCount; i++)
+            int rowOffset = y * _gridDim;
+            for (int x = startX; x <= endX; x++)
             {
-                int id = sIds![i];
-                ref var e = ref _entries[id];
-                if (!e.Active || (e.Category & zoneMask) == 0) continue;
-                if (point.Z < e.Min.Z || point.Z > e.Max.Z ||
-                    point.X < e.Min.X || point.X > e.Max.X ||
-                    point.Y < e.Min.Y || point.Y > e.Max.Y) continue;
+                ref var cell = ref _cells[rowOffset + x];
+                if (((cell.StaticMask | cell.DynamicMask) & mask) == 0) continue;
 
-                if (e.Payload is SpatialZone zone ? zone.ContainsPoint(point) : ContainsPointInline(ref e, point))
+                if (checkStatic && (cell.StaticMask & mask) != 0 && max.Z >= cell.StaticMinZ && min.Z <= cell.StaticMaxZ)
                 {
-                    results[found++] = id;
-                    if (found >= results.Length) return found;
+                    int sCount = cell.StaticCount;
+                    int[]? sIds = cell.StaticIds;
+                    for (int i = 0; i < sCount; i++)
+                    {
+                        int id = sIds![i];
+                        if (multiCell)
+                        {
+                            if (_visitStamps[id] == stamp) continue;
+                            _visitStamps[id] = stamp;
+                        }
+                        ref var e = ref _entries[id];
+                        if (!e.Active || (e.Category & mask) == 0) continue;
+                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
+                            e.Max.X < min.X || e.Min.X > max.X ||
+                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
+
+                        float cx = Math.Clamp(center.X, e.Min.X, e.Max.X) - center.X;
+                        float cy = Math.Clamp(center.Y, e.Min.Y, e.Max.Y) - center.Y;
+                        float cz = Math.Clamp(center.Z, e.Min.Z, e.Max.Z) - center.Z;
+                        if (cx * cx + cy * cy + cz * cz <= rSq)
+                        {
+                            results.Add(id);
+                        }
+                    }
+                }
+
+                if (checkDynamic && (cell.DynamicMask & mask) != 0)
+                {
+                    int dCount = cell.DynamicCount;
+                    int[]? dIds = cell.DynamicIds;
+                    for (int i = 0; i < dCount; i++)
+                    {
+                        int id = dIds![i];
+                        if (multiCell)
+                        {
+                            if (_visitStamps[id] == stamp) continue;
+                            _visitStamps[id] = stamp;
+                        }
+                        ref var e = ref _entries[id];
+                        if (!e.Active || (e.Category & mask) == 0) continue;
+                        if (e.Max.Z < min.Z || e.Min.Z > max.Z ||
+                            e.Max.X < min.X || e.Min.X > max.X ||
+                            e.Max.Y < min.Y || e.Min.Y > max.Y) continue;
+
+                        float cx = Math.Clamp(center.X, e.Min.X, e.Max.X) - center.X;
+                        float cy = Math.Clamp(center.Y, e.Min.Y, e.Max.Y) - center.Y;
+                        float cz = Math.Clamp(center.Z, e.Min.Z, e.Max.Z) - center.Z;
+                        if (cx * cx + cy * cy + cz * cz <= rSq)
+                        {
+                            results.Add(id);
+                        }
+                    }
                 }
             }
         }
 
-        if ((cell.DynamicMask & zoneMask) != 0)
-        {
-            int dCount = cell.DynamicCount;
-            int[]? dIds = cell.DynamicIds;
-            for (int i = 0; i < dCount; i++)
-            {
-                int id = dIds![i];
-                ref var e = ref _entries[id];
-                if (!e.Active || (e.Category & zoneMask) == 0) continue;
-                if (point.Z < e.Min.Z || point.Z > e.Max.Z ||
-                    point.X < e.Min.X || point.X > e.Max.X ||
-                    point.Y < e.Min.Y || point.Y > e.Max.Y) continue;
-
-                if (e.Payload is SpatialZone zone ? zone.ContainsPoint(point) : ContainsPointInline(ref e, point))
-                {
-                    results[found++] = id;
-                    if (found >= results.Length) return found;
-                }
-            }
-        }
-
-        return found;
+        return results.Count;
     }
 
     /// <summary>
     /// Queries candidate entries along a swept 3D line segment [<paramref name="from"/>, <paramref name="to"/>]
-    /// expanded by <paramref name="radius"/>. Used by flying rockets (<c>RocketProjectile.Advance</c>) and hitscan rays.
+    /// expanded by <paramref name="radius"/>.
     /// </summary>
-    public int QuerySegment(Vector3 from, Vector3 to, float radius, SpatialCategory mask, Span<int> results)
+    public SpatialQueryResult QuerySegment(Vector3 from, Vector3 to, float radius, SpatialCategory mask, Span<int> results)
+    {
+        Vector3 rVec = new(radius, radius, radius);
+        Vector3 min = new Vector3(
+            MathF.Min(from.X, to.X),
+            MathF.Min(from.Y, to.Y),
+            MathF.Min(from.Z, to.Z)) - rVec;
+        Vector3 max = new Vector3(
+            MathF.Max(from.X, to.X),
+            MathF.Max(from.Y, to.Y),
+            MathF.Max(from.Z, to.Z)) + rVec;
+
+        return QueryAabb(min, max, mask, results);
+    }
+
+    /// <summary>
+    /// Queries candidate entries along a swept 3D line segment into an unbounded <see cref="List{T}"/>.
+    /// </summary>
+    public int QuerySegment(Vector3 from, Vector3 to, float radius, SpatialCategory mask, List<int> results)
     {
         Vector3 rVec = new(radius, radius, radius);
         Vector3 min = new Vector3(
@@ -1116,19 +983,6 @@ public sealed class WorldSpatialIndex
 
     private static bool Reject2D(Vector3 v, Vector3 o, float r) =>
         v.X > o.X + r || v.X < o.X - r || v.Y > o.Y + r || v.Y < o.Y - r;
-
-    private static bool ContainsPointInline(ref SpatialEntry e, Vector3 point)
-    {
-        Vector3 center = e.Origin + e.CenterOffset;
-        return e.Shape switch
-        {
-            SpatialShapeKind.Sphere => point.DistanceSquaredTo(center) < e.Extents.X * e.Extents.X,
-            SpatialShapeKind.Cylinder =>
-                (center.X - point.X) * (center.X - point.X) + (center.Y - point.Y) * (center.Y - point.Y) <= e.Extents.X * e.Extents.X &&
-                MathF.Abs(center.Z - point.Z) <= e.Extents.Z,
-            _ => true,
-        };
-    }
 
     private uint NextQueryStamp()
     {
@@ -1259,7 +1113,7 @@ public sealed class WorldSpatialIndex
         cell.DynamicMask = mask;
     }
 
-    private static void AppendId([System.Diagnostics.CodeAnalysis.NotNull] ref int[]? array, ref int count, int id)
+    private static void AppendId([NotNull] ref int[]? array, ref int count, int id)
     {
         if (array == null)
         {
@@ -1287,23 +1141,5 @@ public sealed class WorldSpatialIndex
                 return;
             }
         }
-    }
-
-    private static void AppendOverlap(ref OverlapPair[] array, ref int count, OverlapPair pair)
-    {
-        if (count == array.Length)
-        {
-            Array.Resize(ref array, array.Length * 2);
-        }
-        array[count++] = pair;
-    }
-
-    private static bool ContainsOverlap(OverlapPair[] array, int count, OverlapPair target)
-    {
-        for (int i = 0; i < count; i++)
-        {
-            if (array[i] == target) return true;
-        }
-        return false;
     }
 }
