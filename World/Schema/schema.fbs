@@ -22,7 +22,8 @@ enum WorldOp : ubyte {
     PlayerSpawn = 61,
     PlayerDeath = 62,
     PlayerTeleport = 63,
-    PlayerJumpPad = 64
+    PlayerJumpPad = 64,
+    PlayerDamage = 65
 }
 
 struct Vec3i {
@@ -166,6 +167,14 @@ table PlayerJumpPadCmd {
     impulse: Vec3f;
 }
 
+table PlayerDamageCmd {
+    target_peer_id: int32;
+    actor_peer_id: int32;
+    damage: int32;
+    armour: int32;
+    health: int32;
+}
+
 union CommandPayload {
     EditFaceCmd,
     SetTextureCmd,
@@ -183,7 +192,8 @@ union CommandPayload {
     PlayerSpawnCmd,
     PlayerDeathCmd,
     PlayerTeleportCmd,
-    PlayerJumpPadCmd
+    PlayerJumpPadCmd,
+    PlayerDamageCmd
 }
 
 table Command (fs_serializer) {

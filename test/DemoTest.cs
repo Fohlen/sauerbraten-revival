@@ -116,6 +116,18 @@ public class DemoTest : GoTestBase
         TestAssert.Equal(WorldOp.PlayerJumpPad, decodedPad.Op, "Op is PlayerJumpPad");
         TestAssert.True(decodedPad.PlayerJumpPad != null, "PlayerJumpPad is present");
         TestAssert.Near(150f, decodedPad.PlayerJumpPad!.Impulse.Z, 1e-4f, "Pad impulse matches");
+
+        // 6. PlayerDamage command
+        var dmgCmd = Command.CreatePlayerDamage(targetPeerId: 1, actorPeerId: 2, damage: 35, armour: 15, health: 65, author: 2);
+        bytes = NetMessage.Encode(dmgCmd);
+        var decodedDmg = NetMessage.Decode(bytes);
+        TestAssert.Equal(WorldOp.PlayerDamage, decodedDmg.Op, "Op is PlayerDamage");
+        TestAssert.True(decodedDmg.PlayerDamage != null, "PlayerDamage is present");
+        TestAssert.Equal(1, decodedDmg.PlayerDamage!.TargetPeerId, "Target matches");
+        TestAssert.Equal(2, decodedDmg.PlayerDamage.ActorPeerId, "Actor matches");
+        TestAssert.Equal(35, decodedDmg.PlayerDamage.Damage, "Damage matches");
+        TestAssert.Equal(15, decodedDmg.PlayerDamage.Armour, "Armour matches");
+        TestAssert.Equal(65, decodedDmg.PlayerDamage.Health, "Health matches");
     }
 
     [Test]
@@ -191,8 +203,8 @@ public class DemoTest : GoTestBase
         // Record a spawn event
         recorder.RecordSpawn(player.Entity.O, 90f, lifeSequence: 1);
 
-        // Simulate 5 movement ticks
-        for (int i = 0; i < 5; i++)
+        // Simulate 3 movement ticks
+        for (int i = 0; i < 3; i++)
         {
             player.Entity.Move = 1;
             player.Entity.Yaw = 90f + i * 10f;
@@ -200,11 +212,25 @@ public class DemoTest : GoTestBase
             player.Advance(Phys.PhysFrameTime / 1000.0);
         }
 
-        // Record suicide via player.Suicide() - automatically captured via player.Died hook in Attach()
+        // Record damage via player.TakeDamage(35) at tick 3 (15ms)
+        player.Combat.Armour = 0;
+        player.TakeDamage(35);
+        TestAssert.Equal(65, player.Health, "Player health dropped to 65 after taking 35 damage with 0 armour");
+
+        // Simulate ticks 3 and 4
+        for (int i = 3; i < 5; i++)
+        {
+            player.Entity.Move = 1;
+            player.Entity.Yaw = 90f + i * 10f;
+            recorder.RecordPlayer(player, i);
+            player.Advance(Phys.PhysFrameTime / 1000.0);
+        }
+
+        // Record suicide via player.Suicide() at tick 5 (25ms)
         player.Suicide();
 
         var demo = recorder.Stop();
-        TestAssert.Equal(7, demo.TotalCommands, "7 total commands captured");
+        TestAssert.Equal(8, demo.TotalCommands, "8 total commands captured (spawn, 5 moves, damage, death)");
 
         // Now replay the demo on a second player
         var replayPlayer = new MapPlayer();
@@ -216,17 +242,32 @@ public class DemoTest : GoTestBase
         int finishedFiredCount = 0;
         replayer.PlaybackFinished += () => finishedFiredCount++;
 
-        for (int i = 0; i < 5; i++)
+        // Ticks 0..2: health is 100
+        for (int i = 0; i < 3; i++)
         {
             replayPlayer.PrePhysicsStep();
+            TestAssert.Equal(100, replayPlayer.Health, $"Replay tick {i} health is 100 before damage");
             TestAssert.Equal(1, replayPlayer.Entity.Move, $"Replay tick {i} Move matches");
             TestAssert.Near(90f + i * 10f, replayPlayer.Entity.Yaw, 1e-3f, $"Replay tick {i} Yaw matches");
             replayPlayer.Advance(Phys.PhysFrameTime / 1000.0);
         }
 
-        // Step past the death command
+        // Tick 3: damage command executed at 15ms -> health updates to 65!
+        replayPlayer.PrePhysicsStep();
+        TestAssert.Equal(65, replayPlayer.Health, "Replay player health updated to 65 from damage command at tick 3");
+        TestAssert.False(replayPlayer.Entity.Dead, "Replay player is still alive after non-lethal damage");
+        replayPlayer.Advance(Phys.PhysFrameTime / 1000.0);
+
+        // Tick 4: still alive with health 65
+        replayPlayer.PrePhysicsStep();
+        TestAssert.Equal(65, replayPlayer.Health, "Replay player health remains 65 at tick 4");
+        TestAssert.False(replayPlayer.Entity.Dead, "Replay player is still alive at tick 4");
+        replayPlayer.Advance(Phys.PhysFrameTime / 1000.0);
+
+        // Tick 5: death command executes
         replayer.GetUpdate(5, replayPlayer);
-        TestAssert.True(replayPlayer.Entity.Dead, "Replay player is now dead after suicide command");
+        TestAssert.True(replayPlayer.Entity.Dead, "Replay player is now dead after suicide command at tick 5");
+        TestAssert.Equal(0, replayPlayer.Health, "Replay player health is 0 after death");
         TestAssert.Equal(1, finishedFiredCount, "PlaybackFinished event fired exactly once");
 
         // Subsequent steps should not fire PlaybackFinished again

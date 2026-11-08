@@ -777,6 +777,28 @@ public static class DmoReader
             });
         }
 
+        // 5. Convert DamageEvents to PlayerDamage commands
+        foreach (var dmg in dmo.DamageEvents)
+        {
+            int mappedTarget = MapCn(dmg.TargetCn);
+            int mappedActor = MapCn(dmg.ActorCn);
+            commands.Add(new Command
+            {
+                Op = WorldOp.PlayerDamage,
+                PeerId = mappedTarget,
+                Timestamp = (uint)dmg.Millis,
+                Sequence = (ulong)dmg.Millis,
+                Payload = new(new PlayerDamageCmd
+                {
+                    TargetPeerId = mappedTarget,
+                    ActorPeerId = mappedActor,
+                    Damage = dmg.Damage,
+                    Armour = dmg.Armour,
+                    Health = dmg.Health
+                })
+            });
+        }
+
         // Group shots by client and tick (5 ms)
         var shotsByClientTick = new HashSet<(int cn, int tick)>();
         foreach (var shot in dmo.Shots)
@@ -937,9 +959,10 @@ public static class DmoReader
         WorldOp.PlayerSpawn => 0,
         WorldOp.PlayerTeleport => 1,
         WorldOp.PlayerJumpPad => 2,
-        WorldOp.PlayerDeath => 3,
-        WorldOp.PlayerUpdate => 4,
-        _ => 5
+        WorldOp.PlayerDamage => 3,
+        WorldOp.PlayerDeath => 4,
+        WorldOp.PlayerUpdate => 5,
+        _ => 6
     };
 
     public static Vec3f VecFromYawPitch(float yaw, float pitch, int move, int strafe)

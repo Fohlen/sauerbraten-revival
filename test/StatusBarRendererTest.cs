@@ -1095,6 +1095,66 @@ public class StatusBarRendererTest : GoTestBase
         teammate.Free();
     }
 
+    [Test]
+    public void DemoReplayer_UpdatesPlayerHealthAndArmourOnPlayerDamage_AndReflectsInHud()
+    {
+        var player = new MapPlayer { PlayerId = 0 };
+        var hud = new HudController { Player = player };
+        var canvas = new CanvasLayer();
+        TestScene.AddChild(canvas);
+        canvas.AddChild(hud);
+
+        var texSource = TestTextures();
+        hud.SetupTextures(texSource);
+
+        var healthLabel = hud.GetNodeOrNull<Label>("StatusBar/HealthLabel");
+        var armorLabel = hud.GetNodeOrNull<Label>("StatusBar/ArmorLabel");
+        var armorIcon = hud.GetNodeOrNull<TextureRect>("StatusBar/ArmorIcon");
+
+        TestAssert.True(healthLabel != null && armorLabel != null && armorIcon != null, "HUD status bar nodes exist");
+        TestAssert.Equal("100", healthLabel!.Text, "Initial health is 100");
+        TestAssert.False(armorIcon!.Visible, "Armor icon hidden at 0 armor");
+
+        var demo = new DemoPackage();
+        var replayer = new DemoReplayer(demo);
+        replayer.RegisterPlayer(player);
+
+        // 1. Dispatch non-lethal damage command: 35 damage, 50 armour remaining, 65 health remaining
+        var dmgCmd1 = Command.CreatePlayerDamage(targetPeerId: 0, actorPeerId: 1, damage: 35, armour: 50, health: 65, author: 1);
+        replayer.DispatchCommand(dmgCmd1, player);
+
+        TestAssert.Equal(65, player.Health, "Player health is 65 after damage 1");
+        TestAssert.Equal(50, player.Combat.Armour, "Player armour is 50 after damage 1");
+        TestAssert.Equal("65", healthLabel.Text, "HUD health label updated to 65");
+        TestAssert.Equal("50", armorLabel!.Text, "HUD armour label updated to 50");
+        TestAssert.True(armorIcon.Visible, "Armor icon is visible when armour > 0");
+
+        // 2. Dispatch second damage command: health drops to 25 (critical red threshold)
+        var dmgCmd2 = Command.CreatePlayerDamage(targetPeerId: 0, actorPeerId: 1, damage: 40, armour: 20, health: 25, author: 1);
+        replayer.DispatchCommand(dmgCmd2, player);
+
+        TestAssert.Equal(25, player.Health, "Player health is 25 after damage 2");
+        TestAssert.Equal(20, player.Combat.Armour, "Player armour is 20 after damage 2");
+        TestAssert.Equal("25", healthLabel.Text, "HUD health label updated to 25");
+        TestAssert.Equal("20", armorLabel.Text, "HUD armour label updated to 20");
+        Color redColor = StatusBarRenderer.GetHealthColor(25, isDead: false);
+        TestAssert.True(healthLabel.Modulate == redColor, "HUD health text modulate is red for health <= 25");
+
+        // 3. Dispatch lethal damage and death commands
+        var dmgCmd3 = Command.CreatePlayerDamage(targetPeerId: 0, actorPeerId: 1, damage: 50, armour: 0, health: 0, author: 1);
+        replayer.DispatchCommand(dmgCmd3, player);
+        var deathCmd = Command.CreatePlayerDeath(victimPeerId: 0, killerPeerId: 1, author: 1);
+        replayer.DispatchCommand(deathCmd, player);
+
+        TestAssert.Equal(0, player.Health, "Player health is 0 after death");
+        TestAssert.True(player.Entity.Dead, "Player is dead");
+        TestAssert.Equal("0", healthLabel.Text, "HUD health label is 0 on death");
+        TestAssert.False(armorIcon.Visible, "Armor icon hidden on death");
+
+        canvas.Free();
+        player.Free();
+    }
+
     /// <summary>
     /// Serves the real <c>hud/items.png</c> committed under <c>test/golden/hud/</c>.
     /// The runtime copy under <c>assets/textures/</c> is generated (and git-ignored)

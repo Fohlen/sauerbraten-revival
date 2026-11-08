@@ -15,7 +15,7 @@ public class DemoRecorder
 {
     private readonly List<Command> _commands = new();
     private readonly Dictionary<int, MapPlayer> _attachedPlayers = new();
-    private readonly Dictionary<int, (Action<PlayerUpdateCmd> UpdateCb, MapPlayer.DiedEventHandler DiedCb, MapPlayer.RespawnedEventHandler RespawnedCb)> _callbacks = new();
+    private readonly Dictionary<int, (Action<PlayerUpdateCmd> UpdateCb, MapPlayer.DiedEventHandler DiedCb, MapPlayer.RespawnedEventHandler RespawnedCb, MapPlayer.DamageTakenEventHandler DamageCb)> _callbacks = new();
     private Commands.CommandSink? _attachedSink;
 
     public bool IsRecording { get; private set; }
@@ -55,13 +55,18 @@ public class DemoRecorder
         {
             RecordSpawn(player.Entity.O, player.Entity.Yaw, lifeSequence: player.Combat.LifeSequence, gun: player.Combat.GunSelect, health: player.Health, armour: player.Combat.Armour, author: player.PlayerId, timestamp: (uint)player.LastMillis);
         };
+        MapPlayer.DamageTakenEventHandler damageCb = (dmg, hp, arm, actorId) =>
+        {
+            RecordDamage(player.PlayerId, actorId, dmg, arm, hp, author: player.PlayerId, timestamp: (uint)player.LastMillis);
+        };
 
         _attachedPlayers[player.PlayerId] = player;
-        _callbacks[player.PlayerId] = (updateCb, diedCb, respawnedCb);
+        _callbacks[player.PlayerId] = (updateCb, diedCb, respawnedCb, damageCb);
 
         player.OnUpdateCaptured += updateCb;
         player.Died += diedCb;
         player.Respawned += respawnedCb;
+        player.DamageTaken += damageCb;
     }
 
     /// <summary>
@@ -121,6 +126,7 @@ public class DemoRecorder
                 p.OnUpdateCaptured -= cbs.UpdateCb;
                 p.Died -= cbs.DiedCb;
                 p.Respawned -= cbs.RespawnedCb;
+                p.DamageTaken -= cbs.DamageCb;
             }
         }
     }
@@ -137,6 +143,7 @@ public class DemoRecorder
                 p.OnUpdateCaptured -= cbs.UpdateCb;
                 p.Died -= cbs.DiedCb;
                 p.Respawned -= cbs.RespawnedCb;
+                p.DamageTaken -= cbs.DamageCb;
             }
         }
         _attachedPlayers.Clear();
@@ -195,6 +202,26 @@ public class DemoRecorder
         if (!IsRecording) return;
         uint ts = timestamp ?? (_commands.Count > 0 ? _commands[^1].Timestamp : 0);
         var cmd = Command.CreatePlayerDeath(victimPeerId, killerPeerId, gun, isSuicide, deathPos, impulse, author);
+        cmd.Timestamp = ts;
+        cmd.Sequence = ts;
+        _commands.Add(cmd);
+    }
+
+    /// <summary>
+    /// Records a player damage event.
+    /// </summary>
+    public void RecordDamage(
+        int targetPeerId,
+        int actorPeerId,
+        int damage,
+        int armour,
+        int health,
+        int author = 0,
+        uint? timestamp = null)
+    {
+        if (!IsRecording) return;
+        uint ts = timestamp ?? (_commands.Count > 0 ? _commands[^1].Timestamp : 0);
+        var cmd = Command.CreatePlayerDamage(targetPeerId, actorPeerId, damage, armour, health, author);
         cmd.Timestamp = ts;
         cmd.Sequence = ts;
         _commands.Add(cmd);

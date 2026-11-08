@@ -5,6 +5,7 @@ global using PlayerSpawnCmd = SauerbratenRevival.Format.PlayerSpawnCmd;
 global using PlayerDeathCmd = SauerbratenRevival.Format.PlayerDeathCmd;
 global using PlayerTeleportCmd = SauerbratenRevival.Format.PlayerTeleportCmd;
 global using PlayerJumpPadCmd = SauerbratenRevival.Format.PlayerJumpPadCmd;
+global using PlayerDamageCmd = SauerbratenRevival.Format.PlayerDamageCmd;
 global using DemoPackage = SauerbratenRevival.Format.DemoPackage;
 
 using System;
@@ -53,6 +54,7 @@ public partial class Command
     public PlayerDeathCmd? PlayerDeath => Payload?.Kind == CommandPayload.ItemKind.PlayerDeathCmd ? Payload.Value.Item15 : null;
     public PlayerTeleportCmd? PlayerTeleport => Payload?.Kind == CommandPayload.ItemKind.PlayerTeleportCmd ? Payload.Value.Item16 : null;
     public PlayerJumpPadCmd? PlayerJumpPad => Payload?.Kind == CommandPayload.ItemKind.PlayerJumpPadCmd ? Payload.Value.Item17 : null;
+    public PlayerDamageCmd? PlayerDamage => Payload?.Kind == CommandPayload.ItemKind.PlayerDamageCmd ? Payload.Value.Item18 : null;
 
     /// <summary>
     /// Try to get the world-space bounding box and margin (grid size) of the geometry
@@ -282,6 +284,26 @@ public partial class Command
             Impulse = new Vec3f { X = impulse.X, Y = impulse.Y, Z = impulse.Z }
         })
     };
+
+    public static Command CreatePlayerDamage(
+        int targetPeerId,
+        int actorPeerId,
+        int damage,
+        int armour,
+        int health,
+        int author = 0) => new()
+        {
+            Op = WorldOp.PlayerDamage,
+            PeerId = author,
+            Payload = new(new PlayerDamageCmd
+            {
+                TargetPeerId = targetPeerId,
+                ActorPeerId = actorPeerId,
+                Damage = damage,
+                Armour = armour,
+                Health = health
+            })
+        };
 }
 
 public partial class SelectionBox

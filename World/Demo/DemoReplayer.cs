@@ -141,6 +141,10 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
             {
                 targetPeer = cmd.PlayerDeath.VictimPeerId;
             }
+            else if (cmd.Op == WorldOp.PlayerDamage && cmd.PlayerDamage != null)
+            {
+                targetPeer = cmd.PlayerDamage.TargetPeerId;
+            }
 
             if (IsPlayerOp(cmd.Op))
             {
@@ -165,6 +169,7 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
         WorldOp.PlayerDeath => true,
         WorldOp.PlayerTeleport => true,
         WorldOp.PlayerJumpPad => true,
+        WorldOp.PlayerDamage => true,
         _ => false
     };
 
@@ -250,6 +255,10 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
         if (cmd.Op == WorldOp.PlayerDeath && cmd.PlayerDeath != null)
         {
             peerId = cmd.PlayerDeath.VictimPeerId;
+        }
+        else if (cmd.Op == WorldOp.PlayerDamage && cmd.PlayerDamage != null)
+        {
+            peerId = cmd.PlayerDamage.TargetPeerId;
         }
 
         _players.TryGetValue(peerId, out var targetPlayer);
@@ -353,6 +362,22 @@ public partial class DemoReplayer : RefCounted, IPlayerInputSource
                     if (pad != null && targetPlayer != null && pad.Impulse != null)
                     {
                         targetPlayer.Entity.Vel += new Vector3(pad.Impulse.X, pad.Impulse.Y, pad.Impulse.Z);
+                    }
+                    break;
+                }
+            case WorldOp.PlayerDamage:
+                {
+                    var dmg = cmd.PlayerDamage;
+                    if (dmg != null && targetPlayer != null)
+                    {
+                        targetPlayer.Combat.Armour = dmg.Armour;
+                        targetPlayer.Health = dmg.Health;
+                        targetPlayer.Combat.LastPain = (int)cmd.Timestamp;
+                        targetPlayer.UpdateBodyAnim();
+                        if (dmg.Damage > 0 && targetPlayer.Health > 0)
+                        {
+                            targetPlayer.PlayPainSound();
+                        }
                     }
                     break;
                 }

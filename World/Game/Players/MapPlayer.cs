@@ -52,6 +52,9 @@ public partial class MapPlayer : Node3D, IHitscanTarget
     public delegate void DamageDealtEventHandler(int targetId, int damage);
 
     [Signal]
+    public delegate void DamageTakenEventHandler(int damage, int health, int armour, int actorId);
+
+    [Signal]
     public delegate void ModeChangedEventHandler(GameModeInfo newMode);
 
     public PhysEnt CollisionEntity => Entity;
@@ -1355,8 +1358,14 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         Combat.Pickup(itemType);
     }
 
+    /// <summary>Plays a random pain sound (Pain1 through Pain6), matching engine client.cpp damaged().</summary>
+    public void PlayPainSound()
+    {
+        PlaySound((GameSound)((int)GameSound.Pain1 + Random.Shared.Next(6)));
+    }
+
     /// <summary>Apply damage to the player, updating health and lastpain timestamp.</summary>
-    public void TakeDamage(int damage, int? nowMillis = null)
+    public void TakeDamage(int damage, int actorId = -1, int? nowMillis = null)
     {
         if (Entity.Dead) return;
 
@@ -1371,12 +1380,15 @@ public partial class MapPlayer : Node3D, IHitscanTarget
         {
             Combat.Armour -= ad;
             Combat.Health = 0;
+            EmitSignal(SignalName.DamageTaken, damage, 0, Combat.Armour, actorId);
             Die(now);
         }
         else
         {
             Combat.DoDamage(damage);
+            PlayPainSound();
             UpdateBodyAnim();
+            EmitSignal(SignalName.DamageTaken, damage, Combat.Health, Combat.Armour, actorId);
         }
     }
 

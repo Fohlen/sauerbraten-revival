@@ -593,6 +593,169 @@ public class DmoReaderTest : GoTestBase
         player1.Free();
     }
 
+    [Test]
+    public void SynthesizedDemo_DamageEvents_ParsedAndDispatchedToPlayerHealth()
+    {
+        var dmo = new DmoFile
+        {
+            MapName = "duel7",
+            GameMode = 0,
+            GameModeName = "ffa",
+            DurationMillis = 2000
+        };
+
+        var p0 = dmo.EnsurePlayer(0);
+        p0.Name = "Alice";
+        var p1 = dmo.EnsurePlayer(1);
+        p1.Name = "Bob";
+
+        // Initial spawns at t=0
+        dmo.Spawns.Add(new DmoSpawn
+        {
+            Millis = 0,
+            ClientNum = 0,
+            LifeSequence = 0,
+            SelectedGun = 4,
+            Health = 100,
+            Armour = 100
+        });
+        dmo.Spawns.Add(new DmoSpawn
+        {
+            Millis = 0,
+            ClientNum = 1,
+            LifeSequence = 0,
+            SelectedGun = 4,
+            Health = 100,
+            Armour = 100
+        });
+
+        // Positions for player 1 from 0 to 1000ms
+        for (int m = 0; m <= 1000; m += 100)
+        {
+            dmo.Positions.Add(new DmoPosition
+            {
+                Millis = m,
+                ClientNum = 1,
+                Pos = new Vec3f { X = 500f, Y = 600f, Z = 114f },
+                FeetPos = new Vec3f { X = 500f, Y = 600f, Z = 100f },
+                Yaw = 0f,
+                Move = 1,
+                PhysState = 1,
+                LifeSequence = 0,
+                SelectedGun = 4
+            });
+        }
+
+        // Damage event at t=300ms: Bob takes 35 damage -> hp=65, armour=50
+        dmo.DamageEvents.Add(new DmoDamage
+        {
+            Millis = 300,
+            TargetCn = 1,
+            ActorCn = 0,
+            Damage = 35,
+            Armour = 50,
+            Health = 65
+        });
+
+        // Damage event at t=600ms: Bob takes 40 damage -> hp=25, armour=20
+        dmo.DamageEvents.Add(new DmoDamage
+        {
+            Millis = 600,
+            TargetCn = 1,
+            ActorCn = 0,
+            Damage = 40,
+            Armour = 20,
+            Health = 25
+        });
+
+        // Death event at t=900ms: Bob dies
+        dmo.DamageEvents.Add(new DmoDamage
+        {
+            Millis = 900,
+            TargetCn = 1,
+            ActorCn = 0,
+            Damage = 50,
+            Armour = 0,
+            Health = 0
+        });
+        dmo.Deaths.Add(new DmoDeath
+        {
+            Millis = 900,
+            VictimCn = 1,
+            ActorCn = 0,
+            Frags = 1
+        });
+
+        var package = DmoReader.ToDemoPackage(dmo);
+        TestAssert.True(package.Commands != null, "Commands present");
+
+        int dmgCount = 0;
+        foreach (var cmd in package.Commands!)
+        {
+            if (cmd.Op == WorldOp.PlayerDamage) dmgCount++;
+        }
+        TestAssert.Equal(3, dmgCount, "3 PlayerDamage commands generated from DamageEvents");
+
+        // Replay through DemoReplayer
+        byte[] fbs = package.Encode();
+        var decoded = DemoPackage.Decode(fbs);
+
+        int bobPeer = decoded.Peers != null && decoded.Peers.Count > 0 ? decoded.Peers[0].PeerId : 0;
+        var playerBob = new MapPlayer { PlayerId = bobPeer };
+        var replayer = new DemoReplayer(decoded);
+        replayer.Attach(playerBob);
+
+        // Advance to 200ms (tick 40): health is still 100
+        for (int tick = 0; tick < 40; tick++)
+        {
+            playerBob.LastMillis = tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+            playerBob.PrePhysicsStep();
+            TestAssert.Equal(100, playerBob.Health, $"Tick {tick}: health is 100 before first damage");
+            playerBob.Advance(SauerbratenRevival.World.Physics.Phys.PhysFrameTime / 1000.0);
+        }
+
+        // Advance to 400ms (tick 80): damage at 300ms (tick 60) has been applied!
+        for (int tick = 40; tick < 80; tick++)
+        {
+            playerBob.LastMillis = tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+            playerBob.PrePhysicsStep();
+            if (tick >= 60)
+            {
+                TestAssert.Equal(65, playerBob.Health, $"Tick {tick}: health updated to 65 after first damage at 300ms");
+                TestAssert.Equal(50, playerBob.Combat.Armour, $"Tick {tick}: armour updated to 50");
+            }
+            playerBob.Advance(SauerbratenRevival.World.Physics.Phys.PhysFrameTime / 1000.0);
+        }
+
+        // Advance to 700ms (tick 140): damage at 600ms (tick 120) has dropped health to 25!
+        for (int tick = 80; tick < 140; tick++)
+        {
+            playerBob.LastMillis = tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+            playerBob.PrePhysicsStep();
+            if (tick >= 120)
+            {
+                TestAssert.Equal(25, playerBob.Health, $"Tick {tick}: health dropped to 25 after second damage at 600ms");
+                TestAssert.Equal(20, playerBob.Combat.Armour, $"Tick {tick}: armour dropped to 20");
+            }
+            playerBob.Advance(SauerbratenRevival.World.Physics.Phys.PhysFrameTime / 1000.0);
+        }
+
+        // Advance past 900ms (tick 180): death occurs
+        for (int tick = 140; tick <= 185; tick++)
+        {
+            playerBob.LastMillis = tick * SauerbratenRevival.World.Physics.Phys.PhysFrameTime;
+            playerBob.PrePhysicsStep();
+            if (tick >= 180)
+            {
+                TestAssert.True(playerBob.Entity.Dead, $"Tick {tick}: player died at 900ms");
+                TestAssert.Equal(0, playerBob.Health, $"Tick {tick}: health is 0 after death");
+            }
+            playerBob.Advance(SauerbratenRevival.World.Physics.Phys.PhysFrameTime / 1000.0);
+        }
+
+        playerBob.Free();
+    }
+
     private static void WriteString(BinaryWriter writer, string s)
     {
         foreach (char c in s)
