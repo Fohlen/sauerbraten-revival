@@ -470,23 +470,62 @@ max_value = 140.0
 step = 1.0
 value = 100.0
 
-[node name="Row_Lighting" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection"]
+[node name="Row_Brightness" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Lighting"]
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Brightness"]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="LightingLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Lighting/HBox"]
+[node name="BrightnessLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Brightness/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-text = "  Lighting Quality"
+text = "  Brightness"
 
-[node name="LightingModeOption" type="OptionButton" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Lighting/HBox"]
+[node name="BrightnessValue" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Brightness/HBox"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(240, 0)
+custom_minimum_size = Vector2(55, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "100%"
+horizontal_alignment = 2
+
+[node name="BrightnessSlider" type="HSlider" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_Brightness/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+size_flags_vertical = 4
+min_value = 0.5
+max_value = 1.5
+step = 0.01
+value = 1.0
+
+[node name="Row_GlobalIllumination" type="PanelContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_GlobalIllumination"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="GlobalIlluminationLabel" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_GlobalIllumination/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "  Global Illumination"
+
+[node name="GlobalIlluminationStatus" type="Label" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_GlobalIllumination/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(45, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+text = "On"
+horizontal_alignment = 2
+
+[node name="GlobalIlluminationCheck" type="CheckBox" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox/VideoSection/Row_GlobalIllumination/HBox"]
+unique_name_in_owner = true
 layout_mode = 2
 
 [node name="AudioSection" type="VBoxContainer" parent="RootMargin/MainLayout/SettingsScroll/ContentVBox"]

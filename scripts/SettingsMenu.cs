@@ -76,7 +76,10 @@ public partial class SettingsMenu : CanvasLayer
     private Label _maxFpsValue = null!;
     private HSlider _fovSlider = null!;
     private Label _fovValue = null!;
-    private OptionButton _lightingModeOption = null!;
+    private HSlider _brightnessSlider = null!;
+    private Label _brightnessValue = null!;
+    private CheckBox _globalIlluminationCheck = null!;
+    private Label _globalIlluminationStatus = null!;
 
     // Audio section controls
     private CheckBox _soundEnabledCheck = null!;
@@ -203,7 +206,10 @@ public partial class SettingsMenu : CanvasLayer
         _maxFpsValue = GetNode<Label>("%MaxFpsValue");
         _fovSlider = GetNode<HSlider>("%FovSlider");
         _fovValue = GetNode<Label>("%FovValue");
-        _lightingModeOption = GetNode<OptionButton>("%LightingModeOption");
+        _brightnessSlider = GetNode<HSlider>("%BrightnessSlider");
+        _brightnessValue = GetNode<Label>("%BrightnessValue");
+        _globalIlluminationCheck = GetNode<CheckBox>("%GlobalIlluminationCheck");
+        _globalIlluminationStatus = GetNode<Label>("%GlobalIlluminationStatus");
 
         // Audio
         _soundEnabledCheck = GetNode<CheckBox>("%SoundEnabledCheck");
@@ -225,11 +231,6 @@ public partial class SettingsMenu : CanvasLayer
         _screenModeOption.AddItem("WINDOWED", (int)ScreenMode.Windowed);
         _screenModeOption.AddItem("EXCLUSIVE FULLSCREEN", (int)ScreenMode.ExclusiveFullscreen);
         _screenModeOption.AddItem("BORDERLESS FULLSCREEN", (int)ScreenMode.BorderlessFullscreen);
-
-        // Lighting Mode
-        _lightingModeOption.Clear();
-        _lightingModeOption.AddItem("RADIANCE HINTS (HIGH QUALITY)", (int)LightingQualityMode.RadianceHints);
-        _lightingModeOption.AddItem("STATIC AMBIENT (PERFORMANCE)", (int)LightingQualityMode.StaticAmbient);
     }
 
     private void WireSignals()
@@ -311,10 +312,18 @@ public partial class SettingsMenu : CanvasLayer
             MutateSettings(s => s with { Fov = (float)val });
         };
 
-        _lightingModeOption.ItemSelected += idx =>
+        _brightnessSlider.ValueChanged += val =>
         {
             if (_suppressEvents) return;
-            var mode = (LightingQualityMode)_lightingModeOption.GetItemId((int)idx);
+            _brightnessValue.Text = $"{Mathf.RoundToInt((float)val * 100f)}%";
+            MutateSettings(s => s with { Brightness = (float)val });
+        };
+
+        _globalIlluminationCheck.Toggled += pressed =>
+        {
+            if (_suppressEvents) return;
+            _globalIlluminationStatus.Text = pressed ? "On" : "Off";
+            var mode = pressed ? LightingQualityMode.RadianceHints : LightingQualityMode.StaticAmbient;
             MutateSettings(s => s with { LightingMode = mode });
         };
 
@@ -379,9 +388,13 @@ public partial class SettingsMenu : CanvasLayer
             "Field of View", "Horizontal camera field of view in degrees.",
             _fovSlider);
 
-        SetupRow(GetNode<PanelContainer>("%Row_Lighting"), GetNode<Label>("%LightingLabel"),
-            "Lighting Quality", "World lighting mode (real-time radiance hints or lightweight static ambient).",
-            _lightingModeOption);
+        SetupRow(GetNode<PanelContainer>("%Row_Brightness"), GetNode<Label>("%BrightnessLabel"),
+            "Brightness", "Adjust overall display brightness and gamma exposure.",
+            _brightnessSlider);
+
+        SetupRow(GetNode<PanelContainer>("%Row_GlobalIllumination"), GetNode<Label>("%GlobalIlluminationLabel"),
+            "Global Illumination", "Dynamic radiance hints global illumination (sun, sky, bounce, and entity lights). Disable for flat ambient competitive lighting.",
+            _globalIlluminationCheck);
 
         SetupRow(GetNode<PanelContainer>("%Row_SoundEnabled"), GetNode<Label>("%SoundEnabledLabel"),
             "Sound Enabled", "Master toggle for game audio effects and ambient sounds.",
@@ -508,15 +521,14 @@ public partial class SettingsMenu : CanvasLayer
             _fovSlider.Value = s.Fov;
             _fovValue.Text = $"{Mathf.RoundToInt(s.Fov)}°";
 
-            // Video - Lighting Mode
-            for (int i = 0; i < _lightingModeOption.ItemCount; i++)
-            {
-                if (_lightingModeOption.GetItemId(i) == (int)s.LightingMode)
-                {
-                    _lightingModeOption.Select(i);
-                    break;
-                }
-            }
+            // Video - Brightness
+            _brightnessSlider.Value = s.Brightness;
+            _brightnessValue.Text = $"{Mathf.RoundToInt(s.Brightness * 100f)}%";
+
+            // Video - Global Illumination
+            bool giOn = s.LightingMode == LightingQualityMode.RadianceHints;
+            _globalIlluminationCheck.ButtonPressed = giOn;
+            _globalIlluminationStatus.Text = giOn ? "On" : "Off";
 
             // Audio - Sound
             _soundEnabledCheck.ButtonPressed = s.SoundEnabled;
@@ -569,6 +581,7 @@ public partial class SettingsMenu : CanvasLayer
     private void ApplyLive(UserSettings s)
     {
         ScreenSettings.Apply(s);
+        ScreenSettings.ApplyBrightness(GetTree(), s.Brightness);
         GameAudio.Apply(s.SoundEnabled, s.SoundVolume);
 
         // If MapPlayer exists in tree, push updated look settings

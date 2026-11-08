@@ -36,6 +36,7 @@ public sealed record UserSettings
     private const string WindowHeightKey = "window_height";
     private const string VsyncKey = "vsync";
     private const string MaxFpsKey = "max_fps";
+    private const string BrightnessKey = "brightness";
 
     // Engine value ranges (rendergl.cpp / main.cpp VARPs).
     private const float MinSensitivity = 0.001f;
@@ -43,11 +44,14 @@ public sealed record UserSettings
     private const float MaxMouseAccel = 1000f;
     private const float MinFov = 10f;
     private const float MaxFov = 150f;
+    private const float MinBrightness = 0.3f;
+    private const float MaxBrightness = 3.0f;
 
-    // Engine defaults (rendergl.cpp).
+    // Engine defaults (rendergl.cpp / main.cpp gamma).
     private const float DefaultSensitivity = 3f;
     private const float DefaultSensitivityScale = 1f;
     private const float DefaultFov = 100f;
+    private const float DefaultBrightness = 1.0f;
 
     private const string StaticAmbientToken = "static_ambient";
     private const string RadianceHintsToken = "radiance_hints";
@@ -98,6 +102,9 @@ public sealed record UserSettings
     /// <summary>Frame-rate cap in FPS (original <c>maxfps</c>; 0 = unlimited, default 200).</summary>
     public int MaxFps { get; init; } = ScreenSettings.DefaultMaxFps;
 
+    /// <summary>Display brightness / gamma multiplier (original engine <c>gamma</c>; default 1.0 = 100%).</summary>
+    public float Brightness { get; init; } = DefaultBrightness;
+
     /// <summary>Read the settings file; a missing file or key keeps the field defaults.</summary>
     public static UserSettings Load()
     {
@@ -118,6 +125,7 @@ public sealed record UserSettings
             WindowHeight = Mathf.Clamp(cfg.GetValue(Section, WindowHeightKey, ScreenSettings.DefaultHeight).AsInt32(), ScreenSettings.MinHeight, ScreenSettings.MaxDimension),
             Vsync = cfg.GetValue(Section, VsyncKey, ScreenSettings.DefaultVsync).AsBool(),
             MaxFps = Mathf.Clamp(cfg.GetValue(Section, MaxFpsKey, ScreenSettings.DefaultMaxFps).AsInt32(), 0, ScreenSettings.MaxFpsLimit),
+            Brightness = Mathf.Clamp(cfg.GetValue(Section, BrightnessKey, DefaultBrightness).AsSingle(), MinBrightness, MaxBrightness),
         };
     }
 
@@ -141,6 +149,7 @@ public sealed record UserSettings
         cfg.SetValue(Section, WindowHeightKey, Mathf.Clamp(WindowHeight, ScreenSettings.MinHeight, ScreenSettings.MaxDimension));
         cfg.SetValue(Section, VsyncKey, Vsync);
         cfg.SetValue(Section, MaxFpsKey, Mathf.Clamp(MaxFps, 0, ScreenSettings.MaxFpsLimit));
+        cfg.SetValue(Section, BrightnessKey, Mathf.Clamp(Brightness, MinBrightness, MaxBrightness));
         cfg.Save(SettingsPath);
     }
 
@@ -287,4 +296,21 @@ public static class ScreenSettings
 
     /// <summary>Apply the frame-rate cap; 0 leaves it unlimited (original <c>maxfps</c>).</summary>
     public static void ApplyMaxFps(int maxFps) => Engine.MaxFps = Mathf.Clamp(maxFps, 0, MaxFpsLimit);
+
+    /// <summary>
+    /// Apply display brightness (gamma adjustment) to any active <see cref="WorldEnvironment"/> in the scene tree.
+    /// </summary>
+    public static void ApplyBrightness(SceneTree tree, float brightness)
+    {
+        if (tree?.Root == null) return;
+        float b = Mathf.Clamp(brightness, 0.1f, 8.0f);
+        foreach (Node node in tree.Root.FindChildren("*", nameof(WorldEnvironment), true, false))
+        {
+            if (node is WorldEnvironment { Environment: { } env })
+            {
+                env.AdjustmentEnabled = true;
+                env.AdjustmentBrightness = b;
+            }
+        }
+    }
 }

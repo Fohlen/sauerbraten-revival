@@ -242,6 +242,44 @@ public class UserSettingsTest : GoTestBase
     }
 
     [Test]
+    public void BrightnessSettingsRoundTrip()
+    {
+        UserSettings previous = UserSettings.Load();
+        try
+        {
+            (previous with { Brightness = 1.35f }).Save();
+            UserSettings loaded = UserSettings.Load();
+            TestAssert.Near(1.35f, loaded.Brightness, 1e-4f, "brightness persists");
+        }
+        finally
+        {
+            previous.Save();
+        }
+    }
+
+    [Test]
+    public void BrightnessDefaultsAndClamping()
+    {
+        var defaults = new UserSettings();
+        TestAssert.Near(1.0f, defaults.Brightness, 1e-4f, "default brightness is 1.0 (100%)");
+
+        UserSettings previous = UserSettings.Load();
+        var cfg = new ConfigFile();
+        cfg.Load(UserSettings.SettingsPath);
+        cfg.SetValue(UserSettings.Section, "brightness", 99.0);
+        cfg.Save(UserSettings.SettingsPath);
+        try
+        {
+            UserSettings loaded = UserSettings.Load();
+            TestAssert.Near(3.0f, loaded.Brightness, 1e-4f, "brightness clamps to max");
+        }
+        finally
+        {
+            previous.Save();
+        }
+    }
+
+    [Test]
     public void ScreenModeTokensAreStableAndCaseInsensitive()
     {
         TestAssert.Equal("windowed", UserSettings.ScreenModeToken(ScreenMode.Windowed), "windowed token stable");

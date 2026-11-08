@@ -72,6 +72,7 @@ public partial class Main : Node
         // (lighting) settings when it builds.
         UserSettings settings = UserSettings.Load();
         ScreenSettings.Apply(settings);
+        ScreenSettings.ApplyBrightness(GetTree(), settings.Brightness);
         GameAudio.Apply(settings.SoundEnabled, settings.SoundVolume);
         InputBindings.Load().Apply();
 

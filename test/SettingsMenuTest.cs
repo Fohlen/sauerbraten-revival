@@ -36,6 +36,8 @@ public class SettingsMenuTest : GoTestBase
             TestAssert.True(menu.GetNodeOrNull("%SettingsScroll") != null, "SettingsScroll resolved");
             TestAssert.True(menu.GetNodeOrNull("%SensitivitySlider") != null, "SensitivitySlider resolved");
             TestAssert.True(menu.GetNodeOrNull("%ScreenModeOption") != null, "ScreenModeOption resolved");
+            TestAssert.True(menu.GetNodeOrNull("%BrightnessSlider") != null, "BrightnessSlider resolved");
+            TestAssert.True(menu.GetNodeOrNull("%GlobalIlluminationCheck") != null, "GlobalIlluminationCheck resolved");
             TestAssert.True(menu.GetNodeOrNull("%SoundVolumeSlider") != null, "SoundVolumeSlider resolved");
             TestAssert.True(menu.GetNodeOrNull("%TooltipLabel") != null, "TooltipLabel resolved");
             TestAssert.True(menu.GetNodeOrNull("%BackButton") != null, "BackButton resolved");
@@ -62,6 +64,8 @@ public class SettingsMenuTest : GoTestBase
                 Vsync = true,
                 MaxFps = 144,
                 Fov = 110f,
+                Brightness = 1.25f,
+                LightingMode = LightingQualityMode.StaticAmbient,
                 SoundEnabled = false,
                 SoundVolume = 120,
             }).Save();
@@ -84,6 +88,12 @@ public class SettingsMenuTest : GoTestBase
 
             var fovSlider = menu.GetNode<HSlider>("%FovSlider");
             TestAssert.Near(110f, (float)fovSlider.Value, 1e-3f, "fov matches disk");
+
+            var brightnessSlider = menu.GetNode<HSlider>("%BrightnessSlider");
+            TestAssert.Near(1.25f, (float)brightnessSlider.Value, 1e-3f, "brightness matches disk");
+
+            var giCheck = menu.GetNode<CheckBox>("%GlobalIlluminationCheck");
+            TestAssert.False(giCheck.ButtonPressed, "GI check is false for StaticAmbient");
 
             var soundCheck = menu.GetNode<CheckBox>("%SoundEnabledCheck");
             TestAssert.False(soundCheck.ButtonPressed, "sound enabled matches disk");
@@ -118,6 +128,18 @@ public class SettingsMenuTest : GoTestBase
 
             saved = UserSettings.Load();
             TestAssert.Equal(invertCheck.ButtonPressed, saved.InvertMouse, "mutated invert mouse persisted");
+
+            var brightSlider = menu.GetNode<HSlider>("%BrightnessSlider");
+            brightSlider.Value = 1.15f;
+
+            saved = UserSettings.Load();
+            TestAssert.Near(1.15f, saved.Brightness, 1e-3f, "mutated brightness persisted");
+
+            var giCheck = menu.GetNode<CheckBox>("%GlobalIlluminationCheck");
+            giCheck.ButtonPressed = false;
+
+            saved = UserSettings.Load();
+            TestAssert.Equal(LightingQualityMode.StaticAmbient, saved.LightingMode, "mutated GI persisted");
         }
         finally
         {

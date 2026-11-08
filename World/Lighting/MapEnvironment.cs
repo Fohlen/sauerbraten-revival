@@ -159,6 +159,9 @@ public static class MapEnvironment
         godotEnv.AmbientLightSkyContribution = 0.75f;
         godotEnv.AmbientLightEnergy = 1.0f;
 
+        godotEnv.AdjustmentEnabled = true;
+        godotEnv.AdjustmentBrightness = UserSettings.Load().Brightness;
+
         if (env.FogDistance > 0f)
         {
             godotEnv.FogEnabled = true;
