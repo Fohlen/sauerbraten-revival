@@ -98,17 +98,17 @@ public sealed class SpatialZone
         {
             case SpatialShapeKind.Sphere:
                 {
-                    float r = MathF.Max(0f, Extents.X);
+                    float r = MathF.Abs(Extents.X);
                     Vector3 rv = new(r, r, r);
                     min = center - rv;
                     max = center + rv;
-                    rejectRadius = CenterOffset.Length() + r;
+                    rejectRadius = new Vector2(CenterOffset.X, CenterOffset.Y).Length() + r;
                     break;
                 }
             case SpatialShapeKind.Cylinder:
                 {
-                    float r = MathF.Max(0f, Extents.X);
-                    float hz = MathF.Max(0f, Extents.Z);
+                    float r = MathF.Abs(Extents.X);
+                    float hz = MathF.Abs(Extents.Z);
                     Vector3 rv = new(r, r, hz);
                     min = center - rv;
                     max = center + rv;
@@ -117,16 +117,17 @@ public sealed class SpatialZone
                 }
             case SpatialShapeKind.Obb:
                 {
+                    Vector3 ext = Extents.Abs();
                     float rad = Yaw * (MathF.PI / 180f);
                     float cos = MathF.Abs(MathF.Cos(rad));
                     float sin = MathF.Abs(MathF.Sin(rad));
-                    float rx = Extents.X * cos + Extents.Y * sin;
-                    float ry = Extents.Y * cos + Extents.X * sin;
-                    float rz = Extents.Z;
+                    float rx = ext.X * cos + ext.Y * sin;
+                    float ry = ext.Y * cos + ext.X * sin;
+                    float rz = ext.Z;
                     Vector3 rotCenter = Origin + RotateAroundZ(CenterOffset, rad);
                     min = rotCenter - new Vector3(rx, ry, rz);
                     max = rotCenter + new Vector3(rx, ry, rz);
-                    rejectRadius = (CenterOffset.Abs() + Extents).Length();
+                    rejectRadius = new Vector2(CenterOffset.X, CenterOffset.Y).Length() + new Vector2(ext.X, ext.Y).Length();
                     break;
                 }
             case SpatialShapeKind.Aabb:
@@ -153,7 +154,7 @@ public sealed class SpatialZone
         {
             case SpatialShapeKind.Sphere:
                 {
-                    float r = Extents.X;
+                    float r = MathF.Abs(Extents.X);
                     return point.DistanceSquaredTo(center) < r * r;
                 }
             case SpatialShapeKind.Cylinder:
@@ -161,22 +162,25 @@ public sealed class SpatialZone
                     float dx = center.X - point.X;
                     float dy = center.Y - point.Y;
                     float dz = center.Z - point.Z;
-                    float r = Extents.X;
-                    return dx * dx + dy * dy <= r * r && MathF.Abs(dz) <= Extents.Z;
+                    float r = MathF.Abs(Extents.X);
+                    float hz = MathF.Abs(Extents.Z);
+                    return dx * dx + dy * dy <= r * r && MathF.Abs(dz) <= hz;
                 }
             case SpatialShapeKind.Obb:
                 {
                     float rad = -Yaw * (MathF.PI / 180f);
                     Vector3 local = RotateAroundZ(point - Origin, rad) - CenterOffset;
-                    return MathF.Abs(local.X) <= Extents.X &&
-                           MathF.Abs(local.Y) <= Extents.Y &&
-                           MathF.Abs(local.Z) <= Extents.Z;
+                    return MathF.Abs(local.X) <= MathF.Abs(Extents.X) &&
+                           MathF.Abs(local.Y) <= MathF.Abs(Extents.Y) &&
+                           MathF.Abs(local.Z) <= MathF.Abs(Extents.Z);
                 }
             case SpatialShapeKind.Aabb:
             default:
                 {
                     Vector3 d = (point - center).Abs();
-                    return d.X <= Extents.X && d.Y <= Extents.Y && d.Z <= Extents.Z;
+                    return d.X <= MathF.Abs(Extents.X) &&
+                           d.Y <= MathF.Abs(Extents.Y) &&
+                           d.Z <= MathF.Abs(Extents.Z);
                 }
         }
     }
@@ -208,15 +212,16 @@ public sealed class SpatialZone
                     float cx = Math.Clamp(center.X, bMin.X, bMax.X) - center.X;
                     float cy = Math.Clamp(center.Y, bMin.Y, bMax.Y) - center.Y;
                     float cz = Math.Clamp(center.Z, bMin.Z, bMax.Z) - center.Z;
-                    float r = Extents.X;
+                    float r = MathF.Abs(Extents.X);
                     return cx * cx + cy * cy + cz * cz < r * r;
                 }
             case SpatialShapeKind.Cylinder:
                 {
-                    if (bMax.Z < center.Z - Extents.Z || bMin.Z > center.Z + Extents.Z) return false;
+                    float hz = MathF.Abs(Extents.Z);
+                    if (bMax.Z < center.Z - hz || bMin.Z > center.Z + hz) return false;
                     float cx = Math.Clamp(center.X, bMin.X, bMax.X) - center.X;
                     float cy = Math.Clamp(center.Y, bMin.Y, bMax.Y) - center.Y;
-                    float r = Extents.X;
+                    float r = MathF.Abs(Extents.X);
                     return cx * cx + cy * cy <= r * r;
                 }
             default:
