@@ -947,6 +947,12 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.Equal(int.MinValue, hud.Score2, "Score2 is MinValue for single player");
         TestAssert.True(label1.Visible && label1.Text == "10", "label1 shows 10");
         TestAssert.False(label2.Visible, "label2 hidden for single player");
+        TestAssert.Equal(Colors.White, label1.Modulate, "Single player score is white");
+
+        // Free-flying in FFA DM: scores remain white
+        hud.Player = null;
+        hud.UpdateHudScore();
+        TestAssert.Equal(Colors.White, label1.Modulate, "Score1 remains white in FFA free-flying");
 
         canvas.Free();
         player1.Free();
@@ -983,6 +989,10 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.Equal(12, hud.Score1, "Good team leading frags on Score1");
         TestAssert.Equal(9, hud.Score2, "Evil team frags on Score2");
         TestAssert.True(hud.Score1IsPlayer, "Score1 is player color for friendly leading team");
+        Color playerCol = StatusBarRenderer.GetHudScoreColor(hud.HudScorePlayerColour, hud.HudScoreAlpha);
+        Color enemyCol = StatusBarRenderer.GetHudScoreColor(hud.HudScoreEnemyColour, hud.HudScoreAlpha);
+        TestAssert.Equal(playerCol, label1!.Modulate, "Score1 is colored playerCol for friendly leading team");
+        TestAssert.Equal(enemyCol, label2!.Modulate, "Score2 is colored enemyCol for trailing enemy team");
 
         // Follow Evil team player: Evil team trailing (12 vs 9): Score1 = 12 (enemy), Score2 = 9 (player)
         hud.Player = p3;
@@ -990,6 +1000,17 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.Equal(12, hud.Score1, "Leading team frags on Score1");
         TestAssert.Equal(9, hud.Score2, "Player team frags on Score2");
         TestAssert.False(hud.Score1IsPlayer, "Score1 is enemy color for trailing team");
+        TestAssert.Equal(enemyCol, label1.Modulate, "Score1 is colored enemyCol for leading enemy team");
+        TestAssert.Equal(playerCol, label2.Modulate, "Score2 is colored playerCol for followed player team");
+
+        // When free-floating (Player = null), scores stay colored and synced with last local team (evil team, team 2)
+        hud.Player = null;
+        hud.UpdateHudScore();
+        TestAssert.Equal(12, hud.Score1, "Scores stay calculated during free-floating");
+        TestAssert.Equal(9, hud.Score2, "Scores stay calculated during free-floating");
+        TestAssert.False(hud.Score1IsPlayer, "Score1IsPlayer synced with last local team (evil)");
+        TestAssert.Equal(enemyCol, label1.Modulate, "Score1 remains colored enemyCol when free-floating");
+        TestAssert.Equal(playerCol, label2.Modulate, "Score2 remains colored playerCol when free-floating");
 
         canvas.Free();
         p1.Free();
@@ -1021,6 +1042,21 @@ public class StatusBarRendererTest : GoTestBase
         TestAssert.Equal(3, hud.Score1, "CTF flag score on Score1");
         TestAssert.Equal(1, hud.Score2, "CTF enemy flag score on Score2");
         TestAssert.True(hud.Score1IsPlayer, "Score1 is friendly team flag score");
+        var label1 = hud.GetNodeOrNull<Label>("HudScoreLabel1");
+        var label2 = hud.GetNodeOrNull<Label>("HudScoreLabel2");
+        Color playerCol = StatusBarRenderer.GetHudScoreColor(hud.HudScorePlayerColour, hud.HudScoreAlpha);
+        Color enemyCol = StatusBarRenderer.GetHudScoreColor(hud.HudScoreEnemyColour, hud.HudScoreAlpha);
+        TestAssert.Equal(playerCol, label1!.Modulate, "CTF friendly score is colored playerCol");
+        TestAssert.Equal(enemyCol, label2!.Modulate, "CTF enemy score is colored enemyCol");
+
+        // When free-floating (Player = null), CTF score remains colored and synced with last local team
+        hud.Player = null;
+        hud.UpdateHudScore();
+        TestAssert.Equal(3, hud.Score1, "CTF flag score remains on Score1 during free-floating");
+        TestAssert.Equal(1, hud.Score2, "CTF enemy flag score remains on Score2 during free-floating");
+        TestAssert.True(hud.Score1IsPlayer, "Score1IsPlayer remains true during free-floating");
+        TestAssert.Equal(playerCol, label1.Modulate, "CTF score1 remains colored playerCol during free-floating");
+        TestAssert.Equal(enemyCol, label2.Modulate, "CTF score2 remains colored enemyCol during free-floating");
 
         canvas.Free();
         player.Free();

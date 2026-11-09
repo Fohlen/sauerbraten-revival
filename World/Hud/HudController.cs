@@ -51,7 +51,9 @@ public partial class HudController : Control
     private int _lastCarriedFlagVersion;
     private int _lastCarriedFlagTeam;
     private int _lastHoldRemaining = -1;
-    private int _lastPlayerTeam;
+    private int _lastPlayerTeam = 1;
+    private Game.GameModeInfo? _lastMode;
+    private Game.Ctf.FlagManager? _lastFlags;
 
     private int _lastClockSecond = -1;
     private int _lastClockMapLimit = -1;
@@ -61,6 +63,8 @@ public partial class HudController : Control
     private int _lastScore1 = int.MinValue;
     private int _lastScore2 = int.MinValue;
     private bool _lastScore1IsPlayer;
+    private bool _lastScoreIsTeam;
+    private int _lastScoreTeam;
     private Vector2 _lastScoreViewportSize;
     private int _lastScoreFontSize = -1;
 
@@ -80,11 +84,18 @@ public partial class HudController : Control
             if (ReferenceEquals(_player, value)) return;
             DisconnectPlayerSignals(_player);
             _player = value;
+            if (_player != null)
+            {
+                if (_player.Team != 0) _lastPlayerTeam = _player.Team;
+                if (_player.Mode != null) _lastMode = _player.Mode;
+                if (_player.Flags != null) _lastFlags = _player.Flags;
+            }
             ConnectPlayerSignals(_player);
             _statusBarDirty = true;
             if (IsInsideTree() && _statusBarRoot != null)
             {
-                UpdateStatusBar();
+                _statusBarRoot.Visible = _player != null;
+                if (_player != null) UpdateStatusBar();
                 UpdateCrosshair();
             }
         }
@@ -119,6 +130,7 @@ public partial class HudController : Control
 
     private void OnPlayerModeChanged(Game.GameModeInfo newMode)
     {
+        if (newMode != null) _lastMode = newMode;
         _statusBarDirty = true;
         if (!IsInstanceValid(this) || !IsInsideTree() || _statusBarRoot == null) return;
         UpdateStatusBar();
@@ -181,11 +193,21 @@ public partial class HudController : Control
     /// <summary>Candidate targets in the world (for teammate and hit detection).</summary>
     public System.Collections.Generic.IReadOnlyList<IHitscanTarget>? Targets { get; set; }
 
+    /// <summary>
+    /// The last observed local / followed player team (1 = good / blue, 2 = evil / red).
+    /// Used when free-floating or spectating without a bound player entity.
+    /// </summary>
+    public int LastLocalTeam
+    {
+        get => (_player != null && _player.Team != 0) ? _player.Team : (_lastPlayerTeam != 0 ? _lastPlayerTeam : 1);
+        set => _lastPlayerTeam = value;
+    }
+
     private bool? _isTeamPlay;
     /// <summary>Whether the current game mode is team-based. Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsTeamPlay
     {
-        get => _isTeamPlay ?? (Player?.Mode.Has(Game.ModeFlags.Team) ?? false);
+        get => _isTeamPlay ?? (Player?.Mode ?? _lastMode)?.Has(Game.ModeFlags.Team) ?? false;
         set => _isTeamPlay = value;
     }
 
@@ -196,7 +218,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is insta-gib (disables low-health coloring). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsInsta
     {
-        get => _isInsta ?? (Player?.Mode.Has(Game.ModeFlags.Insta) ?? false);
+        get => _isInsta ?? (Player?.Mode ?? _lastMode)?.Has(Game.ModeFlags.Insta) ?? false;
         set => _isInsta = value;
     }
 
@@ -204,7 +226,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is hold mode (m_hold in Sauerbraten). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsHoldMode
     {
-        get => _isHoldMode ?? (Player?.Mode.Has(Game.ModeFlags.Hold) ?? false);
+        get => _isHoldMode ?? (Player?.Mode ?? _lastMode)?.Has(Game.ModeFlags.Hold) ?? false;
         set => _isHoldMode = value;
     }
 
@@ -212,7 +234,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is efficiency mode (no pistol). Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsEfficiency
     {
-        get => _isEfficiency ?? (Player?.Mode.Has(Game.ModeFlags.Efficiency) ?? false);
+        get => _isEfficiency ?? (Player?.Mode ?? _lastMode)?.Has(Game.ModeFlags.Efficiency) ?? false;
         set => _isEfficiency = value;
     }
 
@@ -220,7 +242,7 @@ public partial class HudController : Control
     /// <summary>Whether current mode is CTF/Protect/Hold mode. Derived from <see cref="Player.Mode"/> by default.</summary>
     public bool IsCtf
     {
-        get => _isCtf ?? (Player?.Mode.Has(Game.ModeFlags.Ctf) ?? false);
+        get => _isCtf ?? (Player?.Mode ?? _lastMode)?.Has(Game.ModeFlags.Ctf) ?? false;
         set => _isCtf = value;
     }
 
@@ -342,6 +364,17 @@ public partial class HudController : Control
 
     /// <summary>Direct list of players for match score ranking.</summary>
     public IReadOnlyList<MapPlayer>? Players { get; set; }
+
+    private Game.Ctf.FlagManager? _flags;
+    /// <summary>Direct flag manager or cached reference for match score display.</summary>
+    public Game.Ctf.FlagManager? Flags
+    {
+        get => _flags ?? _player?.Flags ?? _lastFlags ?? FlagsProvider?.Invoke();
+        set => _flags = value;
+    }
+
+    /// <summary>Delegate supplying the active FlagManager for CTF match score display.</summary>
+    public Func<Game.Ctf.FlagManager?>? FlagsProvider { get; set; }
 
     // --- Spectator & Edit Mode HUD ---
 
@@ -871,7 +904,13 @@ public partial class HudController : Control
     /// <summary>Updates health icon and numeric counter in the bottom status bar.</summary>
     public void UpdateStatusBar()
     {
-        if (_statusBarRoot == null || Player == null) return;
+        if (_statusBarRoot == null) return;
+        if (Player == null)
+        {
+            _statusBarRoot.Visible = false;
+            return;
+        }
+        _statusBarRoot.Visible = true;
 
         Vector2 viewportSize = GetViewportRect().Size;
         if (viewportSize.X <= 0 || viewportSize.Y <= 0) return;
@@ -1338,13 +1377,21 @@ public partial class HudController : Control
             return;
         }
 
-        if (IsCtf && Player?.Flags != null)
+        if (_player != null)
+        {
+            if (_player.Team != 0) _lastPlayerTeam = _player.Team;
+            if (_player.Mode != null) _lastMode = _player.Mode;
+            if (_player.Flags != null) _lastFlags = _player.Flags;
+        }
+
+        var flagManager = Flags;
+        if (IsCtf && flagManager != null)
         {
             // CTF modes: show team flag scores
-            int playerTeam = Player.Team;
+            int playerTeam = LastLocalTeam;
             int enemyTeam = playerTeam == 1 ? 2 : 1;
-            int myScore = Player.Flags.GetScore(playerTeam);
-            int enemyScore = Player.Flags.GetScore(enemyTeam);
+            int myScore = flagManager.GetScore(playerTeam);
+            int enemyScore = flagManager.GetScore(enemyTeam);
 
             if (myScore >= enemyScore)
             {
@@ -1375,7 +1422,7 @@ public partial class HudController : Control
             else if (IsTeamPlay)
             {
                 // Teamplay DM: aggregate frags by team
-                int myTeam = Player?.Team ?? 1;
+                int myTeam = LastLocalTeam;
                 int enemyTeam = myTeam == 1 ? 2 : 1;
                 int myTeamFrags = 0;
                 int enemyTeamFrags = 0;
@@ -1452,11 +1499,27 @@ public partial class HudController : Control
                     {
                         Score1 = leaderFrags;
                         Score1IsPlayer = false;
-                        Score2 = Player?.Frags ?? 0;
-
-                        if (Score1 == Score2)
+                        if (Player != null)
                         {
-                            Score1IsPlayer = true;
+                            Score2 = Player.Frags;
+                            if (Score1 == Score2)
+                            {
+                                Score1IsPlayer = true;
+                            }
+                        }
+                        else
+                        {
+                            MapPlayer? second = null;
+                            for (int i = 0; i < players.Count; i++)
+                            {
+                                var p = players[i];
+                                if (p.PlayerId == leader.PlayerId || ReferenceEquals(p, leader)) continue;
+                                if (second == null || p.Frags > second.Frags)
+                                {
+                                    second = p;
+                                }
+                            }
+                            Score2 = second != null ? second.Frags : int.MinValue;
                         }
                     }
                 }
@@ -1484,9 +1547,14 @@ public partial class HudController : Control
         Vector2 viewportSize = GetViewportRect().Size;
         if (viewportSize.X <= 0 || viewportSize.Y <= 0) return;
 
+        bool isTeam = IsTeamPlay || IsCtf;
+        int currentTeam = LastLocalTeam;
+
         if (Score1 == _lastScore1 &&
             Score2 == _lastScore2 &&
             Score1IsPlayer == _lastScore1IsPlayer &&
+            isTeam == _lastScoreIsTeam &&
+            currentTeam == _lastScoreTeam &&
             viewportSize == _lastScoreViewportSize &&
             _hudScoreLabel1.Visible &&
             ((Score2 != int.MinValue) == _hudScoreLabel2.Visible))
@@ -1497,6 +1565,8 @@ public partial class HudController : Control
         _lastScore1 = Score1;
         _lastScore2 = Score2;
         _lastScore1IsPlayer = Score1IsPlayer;
+        _lastScoreIsTeam = isTeam;
+        _lastScoreTeam = currentTeam;
         _lastScoreViewportSize = viewportSize;
 
         string text1 = Score1.ToString();
@@ -1521,7 +1591,7 @@ public partial class HudController : Control
             _lastScoreFontSize = fontSize;
         }
 
-        uint rgb1 = (!IsTeamPlay && !IsCtf)
+        uint rgb1 = !isTeam
             ? 0xFFFFFF
             : (Score1IsPlayer ? HudScorePlayerColour : HudScoreEnemyColour);
         Color col1 = StatusBarRenderer.GetHudScoreColor(rgb1, HudScoreAlpha);
@@ -1535,7 +1605,7 @@ public partial class HudController : Control
 
         if (Score2 != int.MinValue)
         {
-            uint rgb2 = (!IsTeamPlay && !IsCtf)
+            uint rgb2 = !isTeam
                 ? 0xFFFFFF
                 : (!Score1IsPlayer ? HudScorePlayerColour : HudScoreEnemyColour);
             Color col2 = StatusBarRenderer.GetHudScoreColor(rgb2, HudScoreAlpha);

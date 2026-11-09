@@ -14,13 +14,22 @@ public partial class FreeFlyCamera : Camera3D
     [Export] public float SprintMultiplier { get; set; } = 3.0f;
     [Export] public float Sensitivity { get; set; } = 0.0022f;
 
+    /// <summary>When true (default), automatically becomes current and captures mouse on ready.</summary>
+    [Export] public bool AutoActivate { get; set; } = true;
+
     private bool _captured;
+
+    /// <summary>Whether mouse capture is active for this camera.</summary>
+    public bool IsCaptured => _captured;
 
     public override void _Ready()
     {
         if (Engine.IsEditorHint()) return;
-        Current = true;
-        Capture(true);
+        if (AutoActivate)
+        {
+            Current = true;
+            Capture(true);
+        }
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -29,10 +38,7 @@ public partial class FreeFlyCamera : Camera3D
 
         if (@event is InputEventMouseMotion motion && _captured)
         {
-            RotateY(-motion.Relative.X * Sensitivity);
-            Vector3 rot = Rotation;
-            rot.X = Mathf.Clamp(rot.X - motion.Relative.Y * Sensitivity, -Mathf.Pi / 2f + 0.01f, Mathf.Pi / 2f - 0.01f);
-            Rotation = rot;
+            ApplyMouse(motion.Relative);
         }
         else if (@event.IsActionPressed("ui_cancel"))
         {
@@ -50,17 +56,31 @@ public partial class FreeFlyCamera : Camera3D
 
         float forward = Input.GetAxis("move_back", "move_forward");
         float strafe = Input.GetAxis("strafe_left", "strafe_right");
-        // Godot cameras look down -Z; the basis carries the pitch, so W flies
-        // wherever you look (down when looking down).
+        bool sprint = Input.IsKeyPressed(Key.Shift);
+        Step(forward, strafe, (float)delta, sprint);
+    }
+
+    /// <summary>Rotates camera yaw and clamps pitch from mouse motion delta.</summary>
+    public void ApplyMouse(Vector2 relative)
+    {
+        RotateY(-relative.X * Sensitivity);
+        Vector3 rot = Rotation;
+        rot.X = Mathf.Clamp(rot.X - relative.Y * Sensitivity, -Mathf.Pi / 2f + 0.01f, Mathf.Pi / 2f - 0.01f);
+        Rotation = rot;
+    }
+
+    /// <summary>Moves camera position along view basis.</summary>
+    public void Step(float forward, float strafe, float delta, bool sprint = false)
+    {
         Vector3 dir = GlobalTransform.Basis * new Vector3(strafe, 0.0f, -forward);
         if (dir.LengthSquared() < 1e-6f) return;
         dir = dir.Normalized();
 
-        float speed = Speed * (Input.IsKeyPressed(Key.Shift) ? SprintMultiplier : 1.0f);
-        GlobalPosition += dir * speed * (float)delta;
+        float speed = Speed * (sprint ? SprintMultiplier : 1.0f);
+        GlobalPosition += dir * speed * delta;
     }
 
-    private void Capture(bool on)
+    public void Capture(bool on)
     {
         _captured = on;
         Input.MouseMode = on ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;

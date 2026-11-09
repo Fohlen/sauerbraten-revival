@@ -6,6 +6,7 @@ using SauerbratenRevival.World.Entities;
 using SauerbratenRevival.World.Game;
 using SauerbratenRevival.World.Game.Players;
 using SauerbratenRevival.World.Materials;
+using SauerbratenRevival.World.Physics;
 using SauerbratenRevival.World.Runtime;
 using SauerbratenRevival.World.Weapons;
 using HudgunModel = SauerbratenRevival.World.Models.HudgunModel;
@@ -64,10 +65,17 @@ public partial class OgzMapViewer : Node3D
     /// <summary>Currently followed player during demo playback.</summary>
     public Game.Players.MapPlayer? FollowedPlayer { get; private set; }
 
+    /// <summary>True when in free-flying spectator mode during demo playback.</summary>
+    public bool IsFreeFlying => DemoToPlay != null && FollowedPlayer == null;
+
+    /// <summary>Active free-fly camera node, if initialized.</summary>
+    public FreeFlyCamera? FreeFlyCam => _freeFlyCamera;
+
     private Game.Players.MapPlayer? _player;
     private readonly List<Game.Players.MapPlayer> _demoPlayers = new();
     private int _followedIndex;
     private Camera3D? _playerCamera;
+    private FreeFlyCamera? _freeFlyCamera;
     private HudgunModel? _sharedHudgun;
     private World.Hud.HudController? _hud;
 
@@ -368,7 +376,8 @@ public partial class OgzMapViewer : Node3D
             // Default 10 minute match timer (10 * 60 * 1000 = 600000 ms) matching Sauerbraten standard maplimit.
             // In editor mode (coop edit / edit viewer), there is no match timer (untimed, -1).
             MapLimit = isEdit ? -1 : (mapSource.Clock?.NowMillis ?? 0) + 10 * 60 * 1000,
-            PlayersProvider = () => mapSource is IGameWorld gw ? gw.Players : _demoPlayers
+            PlayersProvider = () => mapSource is IGameWorld gw ? gw.Players : _demoPlayers,
+            FlagsProvider = () => mapSource.Flags
         };
         hud.SetupTextures(mapSource.Textures ?? new Materials.ResourceTextureSource());
         canvas.AddChild(hud);
@@ -432,7 +441,14 @@ public partial class OgzMapViewer : Node3D
                 {
                     player.Name = primaryPeerInfo.Name;
                     if (!string.IsNullOrWhiteSpace(primaryPeerInfo.Team)) player.TeamName = primaryPeerInfo.Team;
-                    if (primaryPeerInfo.Playermodel >= 0) player.PlayerModelIndex = primaryPeerInfo.Playermodel;
+                    if (primaryPeerInfo.Playermodel >= 0)
+                    {
+                        player.PlayerModelIndex = primaryPeerInfo.Playermodel;
+                        if (player.PlayerModel == null)
+                        {
+                            AttachPlayerModel(player, mapSource, primaryPeerInfo.Playermodel);
+                        }
+                    }
                 }
             }
 
@@ -530,6 +546,14 @@ public partial class OgzMapViewer : Node3D
     public void FollowPlayer(Game.Players.MapPlayer target)
     {
         if (target == null) return;
+
+        if (_freeFlyCamera != null)
+        {
+            _freeFlyCamera.Current = false;
+            _freeFlyCamera.SetProcess(false);
+            _freeFlyCamera.SetProcessUnhandledInput(false);
+        }
+
         if (_playerCamera == null)
         {
             _playerCamera = target.GetNodeOrNull<Camera3D>("Camera3D") ?? target.View.Camera;
@@ -599,6 +623,9 @@ public partial class OgzMapViewer : Node3D
         target.View.SyncCamera();
         target.View.SyncTransform();
 
+        int idx = _demoPlayers.IndexOf(target);
+        if (idx >= 0) _followedIndex = idx;
+
         // Update 3D body models of all players relative to followed player's team:
         // Followed player's team is always blue (1), enemy team is red (2).
         UpdateAllPlayerTeamSkins(target);
@@ -614,10 +641,96 @@ public partial class OgzMapViewer : Node3D
     }
 
     /// <summary>
+    /// Activates free-flying spectating mode during demo replay (bound to Space bar, matching Sauerbraten specbind SPACE [follow]).
+    /// Reuses <see cref="FreeFlyCamera"/> to allow WASD + mouse free-flying inspection.
+    /// </summary>
+    public void ActivateFreeFlySpectating()
+    {
+        if (DemoToPlay == null || _demoPlayers.Count == 0) return;
+        if (FollowedPlayer == null) return;
+
+        var prevTarget = FollowedPlayer;
+        FollowedPlayer = null;
+
+        prevTarget.View.Camera = null;
+        prevTarget.Hudgun = null;
+        if (prevTarget.PlayerModel != null)
+        {
+            prevTarget.PlayerModel.Visible = true;
+        }
+
+        for (int i = 0; i < _demoPlayers.Count; i++)
+        {
+            var p = _demoPlayers[i];
+            if (p?.PlayerModel != null)
+            {
+                p.PlayerModel.Visible = true;
+            }
+        }
+
+        if (_sharedHudgun != null)
+        {
+            _sharedHudgun.Visible = false;
+        }
+
+        if (_freeFlyCamera == null)
+        {
+            _freeFlyCamera = GetNodeOrNull<FreeFlyCamera>("FreeFlyCamera")
+                ?? new FreeFlyCamera { Name = "FreeFlyCamera", AutoActivate = false };
+            if (_freeFlyCamera.GetParent() == null)
+            {
+                AddChild(_freeFlyCamera);
+            }
+        }
+
+        if (_playerCamera != null)
+        {
+            _freeFlyCamera.GlobalTransform = _playerCamera.GlobalTransform;
+        }
+        else if (prevTarget != null)
+        {
+            _freeFlyCamera.GlobalPosition = prevTarget.GlobalPosition;
+        }
+
+        _freeFlyCamera.Current = true;
+        _freeFlyCamera.SetProcess(true);
+        _freeFlyCamera.SetProcessUnhandledInput(true);
+        _freeFlyCamera.Capture(true);
+
+        UpdateAllPlayerTeamSkins(null);
+
+        if (_hud != null)
+        {
+            _hud.Player = null;
+            _hud.FollowingPlayerName = null;
+            _hud.IsSpectator = true;
+        }
+
+        GD.Print("[viewer] activated free-flying spectating");
+    }
+
+    /// <summary>
     /// Cycles to the next or previous followed player in the demo (matching engine nextfollow).
+    /// If currently in free-flying mode, returns to following a player.
     /// </summary>
     public void NextFollow(int dir = 1)
     {
+        if (_demoPlayers.Count == 0) return;
+
+        if (FollowedPlayer == null)
+        {
+            // Returning to following from free-flying mode.
+            // Sauerbraten fps.cpp:52: cur = following >= 0 ? following : (dir > 0 ? clients.length() - 1 : 0)
+            int cur = (_followedIndex >= 0 && _followedIndex < _demoPlayers.Count)
+                ? _followedIndex
+                : (dir > 0 ? _demoPlayers.Count - 1 : 0);
+            _followedIndex = (_demoPlayers.Count > 1 && dir != 0)
+                ? (_followedIndex + dir + _demoPlayers.Count) % _demoPlayers.Count
+                : cur;
+            FollowPlayer(_demoPlayers[_followedIndex]);
+            return;
+        }
+
         if (_demoPlayers.Count <= 1) return;
         _followedIndex = (_followedIndex + dir + _demoPlayers.Count) % _demoPlayers.Count;
         FollowPlayer(_demoPlayers[_followedIndex]);
@@ -625,20 +738,45 @@ public partial class OgzMapViewer : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (DemoToPlay != null && _demoPlayers.Count > 1)
+        if (DemoToPlay == null || _demoPlayers.Count == 0) return;
+
+        // Activate free-flying spectating via InputMap ("jump" action, matching Sauerbraten specbind SPACE [follow])
+        if (@event.IsActionPressed("jump") && !@event.IsEcho())
         {
-            if (@event is InputEventMouseButton mb && mb.Pressed)
+            ActivateFreeFlySpectating();
+            GetViewport()?.SetInputAsHandled();
+            return;
+        }
+
+        // Left / Right click or arrow keys: cycle followed players or resume following from free-fly
+        if (@event is InputEventMouseButton mb && mb.Pressed)
+        {
+            if (mb.ButtonIndex == MouseButton.Left)
             {
-                if (mb.ButtonIndex == MouseButton.Left)
-                {
-                    NextFollow(1);
-                    GetViewport()?.SetInputAsHandled();
-                }
-                else if (mb.ButtonIndex == MouseButton.Right)
-                {
-                    NextFollow(-1);
-                    GetViewport()?.SetInputAsHandled();
-                }
+                NextFollow(1);
+                GetViewport()?.SetInputAsHandled();
+                return;
+            }
+            else if (mb.ButtonIndex == MouseButton.Right)
+            {
+                NextFollow(-1);
+                GetViewport()?.SetInputAsHandled();
+                return;
+            }
+        }
+        else if (@event is InputEventKey { Pressed: true } keyArrow && !keyArrow.Echo)
+        {
+            if (keyArrow.Keycode == Key.Left || keyArrow.PhysicalKeycode == Key.Left)
+            {
+                NextFollow(-1);
+                GetViewport()?.SetInputAsHandled();
+                return;
+            }
+            else if (keyArrow.Keycode == Key.Right || keyArrow.PhysicalKeycode == Key.Right)
+            {
+                NextFollow(1);
+                GetViewport()?.SetInputAsHandled();
+                return;
             }
         }
     }

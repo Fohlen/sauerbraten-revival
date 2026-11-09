@@ -642,6 +642,29 @@ public class DemoTest : GoTestBase
             TestAssert.Near(945f, player.Entity.O.Y, 1e-3f, "Player placed at demo InitialSpawnPos Y");
             TestAssert.Near(3050f, player.Entity.O.Z, 1e-3f, "Player placed at demo InitialSpawnPos Z");
             TestAssert.Near(135f, player.Entity.Yaw, 1e-3f, "Player oriented at demo InitialSpawnYaw");
+
+            // Solo demo follow / free-fly controls:
+            TestAssert.True(viewer.FollowedPlayer == player, "Initially following solo player");
+
+            // Space bar activates free-flying
+            var spaceKey = new InputEventKey { Keycode = Key.Space, Pressed = true };
+            viewer._UnhandledInput(spaceKey);
+            TestAssert.True(viewer.IsFreeFlying, "Space bar activates free-flying in solo demo");
+            TestAssert.True(viewer.FollowedPlayer == null, "FollowedPlayer is null in free-flying mode");
+
+            // Left click resumes following solo player
+            var leftClick = new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true };
+            viewer._UnhandledInput(leftClick);
+            TestAssert.False(viewer.IsFreeFlying, "Left click resumes following in solo demo");
+            TestAssert.True(viewer.FollowedPlayer == player, "FollowedPlayer restored to solo player after left click");
+
+            // Right click resumes following solo player
+            viewer._UnhandledInput(spaceKey);
+            TestAssert.True(viewer.IsFreeFlying, "Space bar activates free-flying again in solo demo");
+            var rightClick = new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true };
+            viewer._UnhandledInput(rightClick);
+            TestAssert.False(viewer.IsFreeFlying, "Right click resumes following in solo demo");
+            TestAssert.True(viewer.FollowedPlayer == player, "FollowedPlayer restored to solo player after right click");
         }
         finally
         {
@@ -742,6 +765,49 @@ public class DemoTest : GoTestBase
             var rightClick = new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true };
             viewer._UnhandledInput(rightClick);
             TestAssert.True(viewer.FollowedPlayer == remote, "Right click cycled follow back to remote player (peer 1)");
+
+            // Space bar activates free-flying spectating
+            var spaceKey = new InputEventKey { Keycode = Key.Space, Pressed = true };
+            viewer._UnhandledInput(spaceKey);
+            TestAssert.True(viewer.IsFreeFlying, "Space bar activated free-flying spectating");
+            TestAssert.True(viewer.FollowedPlayer == null, "FollowedPlayer is null while free-flying");
+            TestAssert.True(viewer.FreeFlyCam != null && viewer.FreeFlyCam.Current, "FreeFlyCamera is current");
+            TestAssert.True(player.PlayerModel != null && player.PlayerModel.Visible, "Player model is visible while free-flying");
+            TestAssert.True(remote.PlayerModel != null && remote.PlayerModel.Visible, "Remote player model is visible while free-flying");
+
+            // Verify FreeFlyCamera movement and mouse look
+            Vector3 camPosBefore = viewer.FreeFlyCam!.GlobalPosition;
+            viewer.FreeFlyCam.Step(forward: 1f, strafe: 0f, delta: 0.1f, sprint: false);
+            TestAssert.False(viewer.FreeFlyCam.GlobalPosition.IsEqualApprox(camPosBefore), "FreeFlyCam moves along basis with Step()");
+            viewer.FreeFlyCam.ApplyMouse(new Vector2(50f, 25f));
+
+            // Pressing left click while free-flying returns to following
+            viewer._UnhandledInput(leftClick);
+            TestAssert.False(viewer.IsFreeFlying, "Left click returns from free-flying to following");
+            TestAssert.True(viewer.FollowedPlayer != null, "FollowedPlayer restored after left click");
+            TestAssert.False(viewer.FreeFlyCam.Current, "FreeFlyCamera is no longer current after resuming follow");
+
+            // Pressing space bar activates free-flying again
+            viewer._UnhandledInput(spaceKey);
+            TestAssert.True(viewer.IsFreeFlying, "Space bar activates free-flying again");
+
+            // Pressing right click while free-flying returns to following
+            viewer._UnhandledInput(rightClick);
+            TestAssert.False(viewer.IsFreeFlying, "Right click returns from free-flying to following");
+            TestAssert.True(viewer.FollowedPlayer != null, "FollowedPlayer restored after right click");
+
+            // Pressing space bar and then arrow keys returns to following
+            viewer._UnhandledInput(spaceKey);
+            TestAssert.True(viewer.IsFreeFlying, "Space bar activates free-flying");
+            var rightArrow = new InputEventKey { Keycode = Key.Right, Pressed = true };
+            viewer._UnhandledInput(rightArrow);
+            TestAssert.False(viewer.IsFreeFlying, "Right arrow key returns to following");
+
+            viewer._UnhandledInput(spaceKey);
+            TestAssert.True(viewer.IsFreeFlying, "Space bar activates free-flying");
+            var leftArrow = new InputEventKey { Keycode = Key.Left, Pressed = true };
+            viewer._UnhandledInput(leftArrow);
+            TestAssert.False(viewer.IsFreeFlying, "Left arrow key returns to following");
         }
         finally
         {
